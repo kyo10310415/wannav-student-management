@@ -13,18 +13,30 @@ function getCalendar() {
     try {
       // Try to parse credentials from environment variable
       if (process.env.GOOGLE_CREDENTIALS_JSON) {
-        // If it's base64 encoded
-        if (process.env.GOOGLE_CREDENTIALS_JSON.startsWith('eyJ')) {
-          const decoded = Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, 'base64').toString('utf-8');
-          credentials = JSON.parse(decoded);
+        const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
+        
+        // Check if it's valid JSON (starts with { or [)
+        if (credString.startsWith('{') || credString.startsWith('[')) {
+          // Direct JSON string
+          credentials = JSON.parse(credString);
         } else {
-          credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+          // Assume it's base64 encoded - decode it
+          try {
+            const decoded = Buffer.from(credString, 'base64').toString('utf-8');
+            console.log('Decoded credentials (first 100 chars):', decoded.substring(0, 100));
+            credentials = JSON.parse(decoded);
+          } catch (decodeError) {
+            console.error('Failed to decode base64:', decodeError);
+            // Try parsing as-is as fallback
+            credentials = JSON.parse(credString);
+          }
         }
       } else {
         throw new Error('GOOGLE_CREDENTIALS_JSON not found in environment variables');
       }
     } catch (error) {
       console.error('Error parsing Google credentials:', error);
+      console.error('Credentials value (first 100 chars):', process.env.GOOGLE_CREDENTIALS_JSON?.substring(0, 100));
       throw error;
     }
 
