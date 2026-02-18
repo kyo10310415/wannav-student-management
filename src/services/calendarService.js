@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { query } from '../db/connection.js';
 
 let calendar;
 
@@ -39,21 +40,48 @@ function getCalendar() {
 }
 
 /**
- * Get calendar IDs from environment
- * Supports both single ID (GOOGLE_CALENDAR_ID) and multiple IDs (GOOGLE_CALENDAR_IDS)
+ * Get calendar IDs from Notion tutor emails
+ * Fetches all tutors from database and uses their email addresses as calendar IDs
  */
-function getCalendarIds() {
-  // Check for multiple calendar IDs first
+async function getCalendarIdsFromTutors() {
+  try {
+    const result = await query('SELECT email FROM tutors WHERE email IS NOT NULL AND email != \'\'');
+    const emails = result.rows.map(row => row.email).filter(Boolean);
+    
+    if (emails.length === 0) {
+      console.warn('No tutor emails found in database. Make sure tutors are synced from Notion.');
+      throw new Error('No tutor calendar IDs available. Please sync tutors from Notion first.');
+    }
+    
+    console.log(`Found ${emails.length} tutor calendar(s): ${emails.join(', ')}`);
+    return emails;
+  } catch (error) {
+    console.error('Error fetching tutor emails:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get calendar IDs from environment or from tutor emails
+ * Priority: GOOGLE_CALENDAR_IDS > GOOGLE_CALENDAR_ID > Tutor emails from database
+ */
+async function getCalendarIds() {
+  // Check for multiple calendar IDs in environment first
   if (process.env.GOOGLE_CALENDAR_IDS) {
-    return process.env.GOOGLE_CALENDAR_IDS.split(',').map(id => id.trim());
+    const ids = process.env.GOOGLE_CALENDAR_IDS.split(',').map(id => id.trim());
+    console.log(`Using calendar IDs from environment: ${ids.join(', ')}`);
+    return ids;
   }
   
   // Fallback to single calendar ID
   if (process.env.GOOGLE_CALENDAR_ID) {
+    console.log(`Using single calendar ID from environment: ${process.env.GOOGLE_CALENDAR_ID}`);
     return [process.env.GOOGLE_CALENDAR_ID];
   }
   
-  throw new Error('No calendar IDs configured. Set either GOOGLE_CALENDAR_ID or GOOGLE_CALENDAR_IDS');
+  // Use tutor emails from database as calendar IDs
+  console.log('No calendar IDs in environment, fetching from tutor emails...');
+  return await getCalendarIdsFromTutors();
 }
 
 /**
@@ -88,12 +116,19 @@ async function fetchEventsFromCalendar(calendarId, year, month) {
  */
 export async function fetchLessonsForMonth(year, month) {
   try {
-    const calendarIds = getCalendarIds();
+    const calendarIds = await getCalendarIds();
     console.log(`Fetching lessons from ${calendarIds.length} calendar(s) for ${year}/${month}`);
     
     // Fetch events from all calendars in parallel
     const allEventsArrays = await Promise.all(
-      calendarIds.map(calendarId => fetchEventsFromCalendar(calendarId, year, month))
+      calendarIds.map(async (calendarId) => {
+        try {
+          return await fetchEventsFromCalendar(calendarId, year, month);
+        } catch (error) {
+          console.error(`Error fetching events from calendar ${calendarId}:`, error.message);
+          return []; // Return empty array if calendar fails
+        }
+      })
     );
     
     // Flatten the arrays and remove duplicates by event ID
@@ -205,7 +240,7 @@ export async function fetchLessonsForThreeMonths() {
 export async function fetchLessonsForTomorrow() {
   try {
     const calendar = getCalendar();
-    const calendarIds = getCalendarIds();
+    const calendarIds = await getCalendarIds();
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -219,14 +254,19 @@ export async function fetchLessonsForTomorrow() {
     // Fetch events from all calendars in parallel
     const allEventsArrays = await Promise.all(
       calendarIds.map(async (calendarId) => {
-        const response = await calendar.events.list({
-          calendarId: calendarId,
-          timeMin: tomorrow.toISOString(),
-          timeMax: dayAfter.toISOString(),
-          singleEvents: true,
-          orderBy: 'startTime',
-        });
-        return response.data.items || [];
+        try {
+          const response = await calendar.events.list({
+            calendarId: calendarId,
+            timeMin: tomorrow.toISOString(),
+            timeMax: dayAfter.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+          });
+          return response.data.items || [];
+        } catch (error) {
+          console.error(`Error fetching events from calendar ${calendarId}:`, error.message);
+          return []; // Return empty array if calendar fails
+        }
       })
     );
 

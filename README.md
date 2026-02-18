@@ -96,12 +96,10 @@ NOTION_TUTOR_API_TOKEN=your_tutor_token
 NOTION_STUDENT_DB_ID=your_student_db_id
 NOTION_TUTOR_DB_ID=your_tutor_db_id
 
-# Google Calendar API (複数カレンダー対応)
-# 複数のカレンダーIDをカンマ区切りで指定
-GOOGLE_CALENDAR_IDS=calendar_id_1,calendar_id_2,calendar_id_3
-# または単一カレンダーの場合
-# GOOGLE_CALENDAR_ID=your_calendar_id
-
+# Google Calendar API
+# カレンダーIDは自動的にTutorのメールアドレスから取得されます
+# 手動指定も可能（オプション）：
+# GOOGLE_CALENDAR_IDS=calendar_id_1,calendar_id_2
 GOOGLE_CREDENTIALS_JSON=your_credentials_json
 
 # Discord Bot
@@ -111,6 +109,8 @@ DISCORD_BOT_TOKEN=your_bot_token
 PORT=3000
 NODE_ENV=production
 ```
+
+**重要**: カレンダーIDの設定は不要です。システムが自動的にNotionのTutorデータベースからメールアドレスを取得し、それをカレンダーIDとして使用します。
 
 ### 2. ローカル開発
 
@@ -204,20 +204,21 @@ npm run dev
 1. [Google Cloud Console](https://console.cloud.google.com/)でプロジェクト作成
 2. Calendar APIを有効化
 3. サービスアカウント作成
-4. **各TutorのカレンダーIDを取得**
-   - 各Tutorのカレンダーを右クリック→「**設定と共有**」
-   - 「**カレンダーの統合**」セクション
-   - 「**カレンダーID**」をコピー
-   - 全TutorのカレンダーIDをカンマ区切りで環境変数に設定
-   - 例: `GOOGLE_CALENDAR_IDS=tutor1@example.com,tutor2@example.com,tutor3@example.com`
-5. **各カレンダーをサービスアカウントと共有**
-   - 各カレンダーの「設定と共有」→「特定のユーザーと共有」
+4. **各Tutorのカレンダーをサービスアカウントと共有**
+   - 各Tutorのカレンダーの「設定と共有」→「特定のユーザーと共有」
    - サービスアカウントのメールアドレスを追加
    - 権限: 「予定の表示」
-6. 認証情報JSONをBase64エンコードして環境変数に設定
+   - **カレンダーIDの手動取得は不要**です。システムがNotionから取得したTutorのメールアドレスを自動的にカレンダーIDとして使用します。
+5. 認証情報JSONをBase64エンコードして環境変数に設定
    ```bash
    cat credentials.json | base64 -w 0
    ```
+
+**自動カレンダーID取得の仕組み**:
+- システムは起動時にNotionからTutor情報を同期します
+- 各TutorのメールアドレスがGoogleカレンダーIDとして使用されます
+- 手動でカレンダーIDを設定する必要はありません
+- 環境変数 `GOOGLE_CALENDAR_IDS` や `GOOGLE_CALENDAR_ID` が設定されている場合はそちらが優先されます
 
 ### 3. Discord Bot
 
