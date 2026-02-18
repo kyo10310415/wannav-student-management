@@ -54,17 +54,23 @@ app.get('/', (c) => {
 
 // Schedule daily reminders (runs at 10:00 AM JST every day)
 // JST = UTC+9, so 10:00 JST = 01:00 UTC
-cron.schedule('0 1 * * *', async () => {
-  console.log('Running daily reminder task...');
-  try {
-    await sendDailyReminders();
-    console.log('Daily reminders sent successfully');
-  } catch (error) {
-    console.error('Error sending daily reminders:', error);
-  }
-}, {
-  timezone: 'Asia/Tokyo'
-});
+// Can be disabled by setting DISCORD_REMINDERS_ENABLED=false
+if (process.env.DISCORD_REMINDERS_ENABLED !== 'false') {
+  console.log('Discord automatic reminders: ENABLED');
+  cron.schedule('0 1 * * *', async () => {
+    console.log('Running daily reminder task...');
+    try {
+      await sendDailyReminders();
+      console.log('Daily reminders sent successfully');
+    } catch (error) {
+      console.error('Error sending daily reminders:', error);
+    }
+  }, {
+    timezone: 'Asia/Tokyo'
+  });
+} else {
+  console.log('Discord automatic reminders: DISABLED (DISCORD_REMINDERS_ENABLED=false)');
+}
 
 const port = process.env.PORT || 3000;
 

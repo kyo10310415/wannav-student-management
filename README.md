@@ -105,12 +105,17 @@ GOOGLE_CREDENTIALS_JSON=your_credentials_json
 # Discord Bot
 DISCORD_BOT_TOKEN=your_bot_token
 
+# Discord Reminders (一時的にオフにする場合は false に設定)
+DISCORD_REMINDERS_ENABLED=false
+
 # Server
 PORT=3000
 NODE_ENV=production
 ```
 
-**重要**: カレンダーIDの設定は不要です。システムが自動的にNotionのTutorデータベースからメールアドレスを取得し、それをカレンダーIDとして使用します。
+**重要**: 
+- システム完成までDiscord通知をオフにする場合は `DISCORD_REMINDERS_ENABLED=false` に設定
+- 完成後に有効化する場合は `DISCORD_REMINDERS_ENABLED=true` に変更（または削除）
 
 ### 2. ローカル開発
 
