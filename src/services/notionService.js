@@ -10,6 +10,34 @@ const tutorNotion = new Client({
 });
 
 /**
+ * Sleep function for rate limiting
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch with retry logic
+ */
+async function fetchWithRetry(fetchFunc, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetchFunc();
+    } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error.message);
+      
+      if (i < retries - 1) {
+        const waitTime = delay * (i + 1); // Exponential backoff
+        console.log(`Retrying in ${waitTime}ms...`);
+        await sleep(waitTime);
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+/**
  * Fetch all students from Notion database (with pagination support)
  */
 export async function fetchStudents() {
@@ -17,13 +45,18 @@ export async function fetchStudents() {
     let allResults = [];
     let hasMore = true;
     let startCursor = undefined;
+    let pageCount = 0;
 
     // Fetch all pages with pagination
     while (hasMore) {
-      const response = await studentNotion.databases.query({
-        database_id: process.env.NOTION_STUDENT_DB_ID,
-        start_cursor: startCursor,
-        page_size: 100, // Maximum page size
+      pageCount++;
+      
+      const response = await fetchWithRetry(async () => {
+        return await studentNotion.databases.query({
+          database_id: process.env.NOTION_STUDENT_DB_ID,
+          start_cursor: startCursor,
+          page_size: 100, // Maximum page size
+        });
       });
 
       allResults = allResults.concat(response.results);
@@ -31,6 +64,12 @@ export async function fetchStudents() {
       startCursor = response.next_cursor;
 
       console.log(`Fetched ${response.results.length} students, total so far: ${allResults.length}`);
+
+      // Add delay between requests to avoid rate limiting (every 3 pages)
+      if (hasMore && pageCount % 3 === 0) {
+        console.log('Rate limiting: waiting 1 second...');
+        await sleep(1000);
+      }
     }
 
     console.log(`Finished fetching all ${allResults.length} students from Notion`);
@@ -62,13 +101,18 @@ export async function fetchTutors() {
     let allResults = [];
     let hasMore = true;
     let startCursor = undefined;
+    let pageCount = 0;
 
     // Fetch all pages with pagination
     while (hasMore) {
-      const response = await tutorNotion.databases.query({
-        database_id: process.env.NOTION_TUTOR_DB_ID,
-        start_cursor: startCursor,
-        page_size: 100, // Maximum page size
+      pageCount++;
+      
+      const response = await fetchWithRetry(async () => {
+        return await tutorNotion.databases.query({
+          database_id: process.env.NOTION_TUTOR_DB_ID,
+          start_cursor: startCursor,
+          page_size: 100, // Maximum page size
+        });
       });
 
       allResults = allResults.concat(response.results);
@@ -76,6 +120,12 @@ export async function fetchTutors() {
       startCursor = response.next_cursor;
 
       console.log(`Fetched ${response.results.length} tutors, total so far: ${allResults.length}`);
+
+      // Add delay between requests to avoid rate limiting (every 3 pages)
+      if (hasMore && pageCount % 3 === 0) {
+        console.log('Rate limiting: waiting 1 second...');
+        await sleep(1000);
+      }
     }
 
     console.log(`Finished fetching all ${allResults.length} tutors from Notion`);
