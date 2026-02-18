@@ -36,37 +36,59 @@ app.get('/sync', async (c) => {
   try {
     const students = await fetchStudents();
     
+    // Filter out students without student_id (required field)
+    const validStudents = students.filter(student => {
+      if (!student.student_id) {
+        console.warn(`Skipping student without student_id: ${student.name || 'Unknown'}`);
+        return false;
+      }
+      return true;
+    });
+
+    console.log(`Found ${students.length} students, ${validStudents.length} valid (with student_id)`);
+    
     // Upsert students into database
-    for (const student of students) {
-      await query(
-        `INSERT INTO students 
-          (student_id, name, status, contract_plan, character_name, homeroom_tutor, notion_page_id, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-        ON CONFLICT (student_id) 
-        DO UPDATE SET
-          name = EXCLUDED.name,
-          status = EXCLUDED.status,
-          contract_plan = EXCLUDED.contract_plan,
-          character_name = EXCLUDED.character_name,
-          homeroom_tutor = EXCLUDED.homeroom_tutor,
-          notion_page_id = EXCLUDED.notion_page_id,
-          updated_at = CURRENT_TIMESTAMP`,
-        [
-          student.student_id,
-          student.name,
-          student.status,
-          student.contract_plan,
-          student.character_name,
-          student.homeroom_tutor,
-          student.notion_page_id
-        ]
-      );
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const student of validStudents) {
+      try {
+        await query(
+          `INSERT INTO students 
+            (student_id, name, status, contract_plan, character_name, homeroom_tutor, notion_page_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+          ON CONFLICT (student_id) 
+          DO UPDATE SET
+            name = EXCLUDED.name,
+            status = EXCLUDED.status,
+            contract_plan = EXCLUDED.contract_plan,
+            character_name = EXCLUDED.character_name,
+            homeroom_tutor = EXCLUDED.homeroom_tutor,
+            notion_page_id = EXCLUDED.notion_page_id,
+            updated_at = CURRENT_TIMESTAMP`,
+          [
+            student.student_id,
+            student.name,
+            student.status,
+            student.contract_plan,
+            student.character_name,
+            student.homeroom_tutor,
+            student.notion_page_id
+          ]
+        );
+        successCount++;
+      } catch (error) {
+        console.error(`Error inserting student ${student.student_id}:`, error.message);
+        errorCount++;
+      }
     }
     
     return c.json({
       success: true,
-      message: `Synced ${students.length} students from Notion`,
-      count: students.length
+      message: `Synced ${successCount} students from Notion (${errorCount} errors, ${students.length - validStudents.length} skipped)`,
+      count: successCount,
+      errors: errorCount,
+      skipped: students.length - validStudents.length
     });
   } catch (error) {
     console.error('Error syncing students:', error);

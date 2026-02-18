@@ -36,37 +36,59 @@ app.get('/sync', async (c) => {
   try {
     const tutors = await fetchTutors();
     
+    // Filter out tutors without employee_id (required field)
+    const validTutors = tutors.filter(tutor => {
+      if (!tutor.employee_id) {
+        console.warn(`Skipping tutor without employee_id: ${tutor.name || 'Unknown'}`);
+        return false;
+      }
+      return true;
+    });
+
+    console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid (with employee_id)`);
+    
     // Upsert tutors into database
-    for (const tutor of tutors) {
-      await query(
-        `INSERT INTO tutors 
-          (employee_id, name, email, team, notion_name, monthly_available_hours, notion_page_id, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-        ON CONFLICT (employee_id) 
-        DO UPDATE SET
-          name = EXCLUDED.name,
-          email = EXCLUDED.email,
-          team = EXCLUDED.team,
-          notion_name = EXCLUDED.notion_name,
-          monthly_available_hours = EXCLUDED.monthly_available_hours,
-          notion_page_id = EXCLUDED.notion_page_id,
-          updated_at = CURRENT_TIMESTAMP`,
-        [
-          tutor.employee_id,
-          tutor.name,
-          tutor.email,
-          tutor.team,
-          tutor.notion_name,
-          tutor.monthly_available_hours,
-          tutor.notion_page_id
-        ]
-      );
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const tutor of validTutors) {
+      try {
+        await query(
+          `INSERT INTO tutors 
+            (employee_id, name, email, team, notion_name, monthly_available_hours, notion_page_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+          ON CONFLICT (employee_id) 
+          DO UPDATE SET
+            name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            team = EXCLUDED.team,
+            notion_name = EXCLUDED.notion_name,
+            monthly_available_hours = EXCLUDED.monthly_available_hours,
+            notion_page_id = EXCLUDED.notion_page_id,
+            updated_at = CURRENT_TIMESTAMP`,
+          [
+            tutor.employee_id,
+            tutor.name,
+            tutor.email,
+            tutor.team,
+            tutor.notion_name,
+            tutor.monthly_available_hours,
+            tutor.notion_page_id
+          ]
+        );
+        successCount++;
+      } catch (error) {
+        console.error(`Error inserting tutor ${tutor.employee_id}:`, error.message);
+        errorCount++;
+      }
     }
     
     return c.json({
       success: true,
-      message: `Synced ${tutors.length} tutors from Notion`,
-      count: tutors.length
+      message: `Synced ${successCount} tutors from Notion (${errorCount} errors, ${tutors.length - validTutors.length} skipped)`,
+      count: successCount,
+      errors: errorCount,
+      skipped: tutors.length - validTutors.length
     });
   } catch (error) {
     console.error('Error syncing tutors:', error);
