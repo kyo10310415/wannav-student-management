@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: wannav-student-management
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NOTION_API_TOKEN
+        sync: false
+      - key: NOTION_STUDENT_DB_ID
+        sync: false
+      - key: NOTION_TUTOR_DB_ID
+        sync: false
+      - key: GOOGLE_CALENDAR_ID
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+
+databases:
+  - name: wannav-db
+    databaseName: wannav_student_management
+    plan: free
+    region: singapore
