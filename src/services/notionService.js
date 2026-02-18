@@ -18,6 +18,13 @@ export async function fetchStudents() {
       database_id: process.env.NOTION_STUDENT_DB_ID,
     });
 
+    // Debug: Log the first student's properties
+    if (response.results.length > 0) {
+      console.log('=== DEBUG: First student properties ===');
+      console.log('Available properties:', Object.keys(response.results[0].properties));
+      console.log('Property details:', JSON.stringify(response.results[0].properties, null, 2));
+    }
+
     return response.results.map(page => {
       const props = page.properties;
       
