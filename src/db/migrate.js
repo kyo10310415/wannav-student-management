@@ -77,6 +77,18 @@ const migrations = [
       );
     `,
     down: `DROP TABLE IF EXISTS migration_history;`
+  },
+  {
+    version: 5,
+    name: 'add_tutor_name_to_tutors',
+    up: `
+      ALTER TABLE tutors ADD COLUMN IF NOT EXISTS tutor_name VARCHAR(255);
+      CREATE INDEX IF NOT EXISTS idx_tutors_tutor_name ON tutors(tutor_name);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_tutors_tutor_name;
+      ALTER TABLE tutors DROP COLUMN IF EXISTS tutor_name;
+    `
   }
 ];
 
