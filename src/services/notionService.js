@@ -130,20 +130,13 @@ export async function fetchTutors() {
 
     console.log(`Finished fetching all ${allResults.length} tutors from Notion`);
 
-    // Debug: Log the first tutor's properties
-    if (allResults.length > 0) {
-      console.log('=== DEBUG: First tutor properties ===');
-      console.log('Available properties:', Object.keys(allResults[0].properties));
-      console.log('Property details:', JSON.stringify(allResults[0].properties, null, 2));
-    }
-
     return allResults.map(page => {
       const props = page.properties;
       
       return {
         notion_page_id: page.id,
         employee_id: getPropertyValue(props['従業員ID']),
-        name: getPropertyValue(props['氏名']),
+        name: getPropertyValue(props['名前']),  // 修正: '氏名' → '名前'
         email: getPropertyValue(props['メールアドレス']),
         team: getPropertyValue(props['所属チーム']),
         notion_name: getPropertyValue(props['Notion名']),
