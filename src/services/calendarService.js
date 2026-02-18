@@ -39,29 +39,75 @@ function getCalendar() {
 }
 
 /**
- * Fetch calendar events for a specific month
+ * Get calendar IDs from environment
+ * Supports both single ID (GOOGLE_CALENDAR_ID) and multiple IDs (GOOGLE_CALENDAR_IDS)
+ */
+function getCalendarIds() {
+  // Check for multiple calendar IDs first
+  if (process.env.GOOGLE_CALENDAR_IDS) {
+    return process.env.GOOGLE_CALENDAR_IDS.split(',').map(id => id.trim());
+  }
+  
+  // Fallback to single calendar ID
+  if (process.env.GOOGLE_CALENDAR_ID) {
+    return [process.env.GOOGLE_CALENDAR_ID];
+  }
+  
+  throw new Error('No calendar IDs configured. Set either GOOGLE_CALENDAR_ID or GOOGLE_CALENDAR_IDS');
+}
+
+/**
+ * Fetch calendar events for a specific month from a single calendar
+ * @param {string} calendarId - Calendar ID
+ * @param {number} year - Year
+ * @param {number} month - Month (1-12)
+ */
+async function fetchEventsFromCalendar(calendarId, year, month) {
+  const calendar = getCalendar();
+  
+  // Calculate time range for the month
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+
+  const response = await calendar.events.list({
+    calendarId: calendarId,
+    timeMin: startDate.toISOString(),
+    timeMax: endDate.toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 2500,
+  });
+
+  return response.data.items || [];
+}
+
+/**
+ * Fetch calendar events for a specific month from all configured calendars
  * @param {number} year - Year
  * @param {number} month - Month (1-12)
  */
 export async function fetchLessonsForMonth(year, month) {
   try {
-    const calendar = getCalendar();
-    const calendarId = process.env.GOOGLE_CALENDAR_ID;
-
-    // Calculate time range for the month
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59);
-
-    const response = await calendar.events.list({
-      calendarId: calendarId,
-      timeMin: startDate.toISOString(),
-      timeMax: endDate.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 2500,
+    const calendarIds = getCalendarIds();
+    console.log(`Fetching lessons from ${calendarIds.length} calendar(s) for ${year}/${month}`);
+    
+    // Fetch events from all calendars in parallel
+    const allEventsArrays = await Promise.all(
+      calendarIds.map(calendarId => fetchEventsFromCalendar(calendarId, year, month))
+    );
+    
+    // Flatten the arrays and remove duplicates by event ID
+    const allEvents = allEventsArrays.flat();
+    const uniqueEvents = new Map();
+    
+    allEvents.forEach(event => {
+      if (!uniqueEvents.has(event.id)) {
+        uniqueEvents.set(event.id, event);
+      }
     });
 
-    return response.data.items.map(event => {
+    // Convert to lesson format
+    const lessons = Array.from(uniqueEvents.values()).map(event => {
       // Extract student ID from description
       const studentId = extractStudentId(event.description || '');
       
@@ -75,6 +121,9 @@ export async function fetchLessonsForMonth(year, month) {
         meet_link: event.hangoutLink || extractMeetLink(event.description || '')
       };
     }).filter(lesson => lesson.student_id); // Only include events with student ID
+    
+    console.log(`Found ${lessons.length} lessons with student IDs`);
+    return lessons;
   } catch (error) {
     console.error('Error fetching lessons from Google Calendar:', error);
     throw error;
@@ -156,7 +205,7 @@ export async function fetchLessonsForThreeMonths() {
 export async function fetchLessonsForTomorrow() {
   try {
     const calendar = getCalendar();
-    const calendarId = process.env.GOOGLE_CALENDAR_ID;
+    const calendarIds = getCalendarIds();
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -165,15 +214,33 @@ export async function fetchLessonsForTomorrow() {
     const dayAfter = new Date(tomorrow);
     dayAfter.setDate(dayAfter.getDate() + 1);
 
-    const response = await calendar.events.list({
-      calendarId: calendarId,
-      timeMin: tomorrow.toISOString(),
-      timeMax: dayAfter.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
+    console.log(`Fetching tomorrow's lessons from ${calendarIds.length} calendar(s)`);
+
+    // Fetch events from all calendars in parallel
+    const allEventsArrays = await Promise.all(
+      calendarIds.map(async (calendarId) => {
+        const response = await calendar.events.list({
+          calendarId: calendarId,
+          timeMin: tomorrow.toISOString(),
+          timeMax: dayAfter.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+        });
+        return response.data.items || [];
+      })
+    );
+
+    // Flatten the arrays and remove duplicates
+    const allEvents = allEventsArrays.flat();
+    const uniqueEvents = new Map();
+    
+    allEvents.forEach(event => {
+      if (!uniqueEvents.has(event.id)) {
+        uniqueEvents.set(event.id, event);
+      }
     });
 
-    return response.data.items.map(event => {
+    const lessons = Array.from(uniqueEvents.values()).map(event => {
       const studentId = extractStudentId(event.description || '');
       
       return {
@@ -186,6 +253,9 @@ export async function fetchLessonsForTomorrow() {
         meet_link: event.hangoutLink || extractMeetLink(event.description || '')
       };
     }).filter(lesson => lesson.student_id);
+
+    console.log(`Found ${lessons.length} lessons for tomorrow`);
+    return lessons;
   } catch (error) {
     console.error('Error fetching tomorrow\'s lessons:', error);
     throw error;

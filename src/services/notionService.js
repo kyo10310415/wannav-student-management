@@ -1,13 +1,20 @@
 import { Client } from '@notionhq/client';
 
-const notion = new Client({ auth: process.env.NOTION_API_TOKEN });
+// Support for separate tokens for student and tutor databases
+const studentNotion = new Client({ 
+  auth: process.env.NOTION_STUDENT_API_TOKEN || process.env.NOTION_API_TOKEN 
+});
+
+const tutorNotion = new Client({ 
+  auth: process.env.NOTION_TUTOR_API_TOKEN || process.env.NOTION_API_TOKEN 
+});
 
 /**
  * Fetch all students from Notion database
  */
 export async function fetchStudents() {
   try {
-    const response = await notion.databases.query({
+    const response = await studentNotion.databases.query({
       database_id: process.env.NOTION_STUDENT_DB_ID,
     });
 
@@ -35,7 +42,7 @@ export async function fetchStudents() {
  */
 export async function fetchTutors() {
   try {
-    const response = await notion.databases.query({
+    const response = await tutorNotion.databases.query({
       database_id: process.env.NOTION_TUTOR_DB_ID,
     });
 
@@ -94,4 +101,4 @@ function getPropertyValue(property) {
   }
 }
 
-export { notion };
+export { studentNotion, tutorNotion };
