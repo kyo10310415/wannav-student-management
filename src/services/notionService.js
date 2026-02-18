@@ -10,15 +10,32 @@ const tutorNotion = new Client({
 });
 
 /**
- * Fetch all students from Notion database
+ * Fetch all students from Notion database (with pagination support)
  */
 export async function fetchStudents() {
   try {
-    const response = await studentNotion.databases.query({
-      database_id: process.env.NOTION_STUDENT_DB_ID,
-    });
+    let allResults = [];
+    let hasMore = true;
+    let startCursor = undefined;
 
-    return response.results.map(page => {
+    // Fetch all pages with pagination
+    while (hasMore) {
+      const response = await studentNotion.databases.query({
+        database_id: process.env.NOTION_STUDENT_DB_ID,
+        start_cursor: startCursor,
+        page_size: 100, // Maximum page size
+      });
+
+      allResults = allResults.concat(response.results);
+      hasMore = response.has_more;
+      startCursor = response.next_cursor;
+
+      console.log(`Fetched ${response.results.length} students, total so far: ${allResults.length}`);
+    }
+
+    console.log(`Finished fetching all ${allResults.length} students from Notion`);
+
+    return allResults.map(page => {
       const props = page.properties;
       
       return {
@@ -38,15 +55,32 @@ export async function fetchStudents() {
 }
 
 /**
- * Fetch all tutors from Notion database
+ * Fetch all tutors from Notion database (with pagination support)
  */
 export async function fetchTutors() {
   try {
-    const response = await tutorNotion.databases.query({
-      database_id: process.env.NOTION_TUTOR_DB_ID,
-    });
+    let allResults = [];
+    let hasMore = true;
+    let startCursor = undefined;
 
-    return response.results.map(page => {
+    // Fetch all pages with pagination
+    while (hasMore) {
+      const response = await tutorNotion.databases.query({
+        database_id: process.env.NOTION_TUTOR_DB_ID,
+        start_cursor: startCursor,
+        page_size: 100, // Maximum page size
+      });
+
+      allResults = allResults.concat(response.results);
+      hasMore = response.has_more;
+      startCursor = response.next_cursor;
+
+      console.log(`Fetched ${response.results.length} tutors, total so far: ${allResults.length}`);
+    }
+
+    console.log(`Finished fetching all ${allResults.length} tutors from Notion`);
+
+    return allResults.map(page => {
       const props = page.properties;
       
       return {
