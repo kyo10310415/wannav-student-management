@@ -36,16 +36,37 @@ app.get('/sync', async (c) => {
   try {
     const tutors = await fetchTutors();
     
-    // Filter out tutors without employee_id (required field)
+    // Filter out tutors without employee_id or name (required fields)
+    const skippedTutors = [];
     const validTutors = tutors.filter(tutor => {
       if (!tutor.employee_id) {
-        console.warn(`Skipping tutor without employee_id: ${tutor.name || 'Unknown'}`);
+        skippedTutors.push({
+          reason: 'no_employee_id',
+          name: tutor.name || 'Unknown',
+          email: tutor.email,
+          notion_page_id: tutor.notion_page_id
+        });
+        return false;
+      }
+      if (!tutor.name) {
+        skippedTutors.push({
+          reason: 'no_name',
+          employee_id: tutor.employee_id,
+          email: tutor.email,
+          notion_page_id: tutor.notion_page_id
+        });
         return false;
       }
       return true;
     });
 
-    console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid (with employee_id)`);
+    // Log first 10 skipped tutors for debugging
+    if (skippedTutors.length > 0) {
+      console.log('=== SKIPPED TUTORS (first 10) ===');
+      console.log(JSON.stringify(skippedTutors.slice(0, 10), null, 2));
+    }
+
+    console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid (with employee_id and name), ${skippedTutors.length} skipped`);
     
     // Upsert tutors into database
     let successCount = 0;
@@ -85,10 +106,11 @@ app.get('/sync', async (c) => {
     
     return c.json({
       success: true,
-      message: `Synced ${successCount} tutors from Notion (${errorCount} errors, ${tutors.length - validTutors.length} skipped)`,
+      message: `Synced ${successCount} tutors from Notion (${errorCount} errors, ${skippedTutors.length} skipped)`,
       count: successCount,
       errors: errorCount,
-      skipped: tutors.length - validTutors.length
+      skipped: skippedTutors.length,
+      skipped_sample: skippedTutors.slice(0, 5) // Return first 5 skipped for inspection
     });
   } catch (error) {
     console.error('Error syncing tutors:', error);
