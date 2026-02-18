@@ -123,7 +123,9 @@ export async function fetchLessonsForMonth(year, month) {
     const allEventsArrays = await Promise.all(
       calendarIds.map(async (calendarId) => {
         try {
-          return await fetchEventsFromCalendar(calendarId, year, month);
+          const events = await fetchEventsFromCalendar(calendarId, year, month);
+          console.log(`Calendar ${calendarId}: fetched ${events.length} events`);
+          return events;
         } catch (error) {
           console.error(`Error fetching events from calendar ${calendarId}:`, error.message);
           return []; // Return empty array if calendar fails
@@ -133,6 +135,8 @@ export async function fetchLessonsForMonth(year, month) {
     
     // Flatten the arrays and remove duplicates by event ID
     const allEvents = allEventsArrays.flat();
+    console.log(`Total events fetched: ${allEvents.length}`);
+    
     const uniqueEvents = new Map();
     
     allEvents.forEach(event => {
@@ -141,10 +145,25 @@ export async function fetchLessonsForMonth(year, month) {
       }
     });
 
+    console.log(`Unique events: ${uniqueEvents.size}`);
+
     // Convert to lesson format
+    let eventsWithStudentId = 0;
+    let eventsWithoutStudentId = 0;
+    
     const lessons = Array.from(uniqueEvents.values()).map(event => {
       // Extract student ID from description
       const studentId = extractStudentId(event.description || '');
+      
+      if (studentId) {
+        eventsWithStudentId++;
+      } else {
+        eventsWithoutStudentId++;
+        // Log first 5 events without student ID
+        if (eventsWithoutStudentId <= 5) {
+          console.log(`Event without student ID: "${event.summary}", description: "${(event.description || '').substring(0, 100)}..."`);
+        }
+      }
       
       return {
         calendar_event_id: event.id,
@@ -157,6 +176,7 @@ export async function fetchLessonsForMonth(year, month) {
       };
     }).filter(lesson => lesson.student_id); // Only include events with student ID
     
+    console.log(`Events with student ID: ${eventsWithStudentId}, without: ${eventsWithoutStudentId}`);
     console.log(`Found ${lessons.length} lessons with student IDs`);
     return lessons;
   } catch (error) {
