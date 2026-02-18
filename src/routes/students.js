@@ -37,15 +37,26 @@ app.get('/sync', async (c) => {
     const students = await fetchStudents();
     
     // Filter out students without student_id (required field)
+    const skippedStudents = [];
     const validStudents = students.filter(student => {
       if (!student.student_id) {
-        console.warn(`Skipping student without student_id: ${student.name || 'Unknown'}`);
+        skippedStudents.push({
+          name: student.name || 'Unknown',
+          status: student.status,
+          notion_page_id: student.notion_page_id
+        });
         return false;
       }
       return true;
     });
 
-    console.log(`Found ${students.length} students, ${validStudents.length} valid (with student_id)`);
+    // Log first 10 skipped students for debugging
+    if (skippedStudents.length > 0) {
+      console.log('=== SKIPPED STUDENTS (first 10) ===');
+      console.log(JSON.stringify(skippedStudents.slice(0, 10), null, 2));
+    }
+
+    console.log(`Found ${students.length} students, ${validStudents.length} valid (with student_id), ${skippedStudents.length} skipped`);
     
     // Upsert students into database
     let successCount = 0;
@@ -85,10 +96,11 @@ app.get('/sync', async (c) => {
     
     return c.json({
       success: true,
-      message: `Synced ${successCount} students from Notion (${errorCount} errors, ${students.length - validStudents.length} skipped)`,
+      message: `Synced ${successCount} students from Notion (${errorCount} errors, ${skippedStudents.length} skipped)`,
       count: successCount,
       errors: errorCount,
-      skipped: students.length - validStudents.length
+      skipped: skippedStudents.length,
+      skipped_sample: skippedStudents.slice(0, 5) // Return first 5 skipped for inspection
     });
   } catch (error) {
     console.error('Error syncing students:', error);
