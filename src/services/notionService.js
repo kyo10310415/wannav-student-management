@@ -130,6 +130,13 @@ export async function fetchTutors() {
 
     console.log(`Finished fetching all ${allResults.length} tutors from Notion`);
 
+    // Debug: Log the first tutor's properties
+    if (allResults.length > 0) {
+      console.log('=== DEBUG: First tutor properties ===');
+      console.log('Available properties:', Object.keys(allResults[0].properties));
+      console.log('Property details:', JSON.stringify(allResults[0].properties, null, 2));
+    }
+
     return allResults.map(page => {
       const props = page.properties;
       
