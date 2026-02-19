@@ -8,7 +8,7 @@ let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
-let currentTab = 'active'; // 'active', 'enrolled', 'graduated', 'cancelled'
+let currentTab = 'active'; // 'active', 'preparing', 'enrolled', 'graduated', 'cancelled'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent' (for active tab only)
 
 // Initialize app
@@ -196,6 +196,9 @@ function renderApp() {
         <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-check-circle mr-2"></i>アクティブ
         </button>
+        <button onclick="switchTab('preparing')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-clock mr-2"></i>レッスン準備中
+        </button>
         <button onclick="switchTab('enrolled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'enrolled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-clock mr-2"></i>在籍プラン
         </button>
@@ -367,6 +370,8 @@ function getFilteredStudents() {
     } else if (activeSubTab === 'permanent') {
       filtered = filtered.filter(s => s.contract_plan === '永久会員');
     }
+  } else if (currentTab === 'preparing') {
+    filtered = students.filter(s => s.status === 'レッスン準備中');
   } else if (currentTab === 'enrolled') {
     filtered = students.filter(s => s.status === '在籍プラン');
   } else if (currentTab === 'graduated') {
@@ -406,6 +411,7 @@ function getTutorDisplayName(notionName) {
 function getTabTitle() {
   const titles = {
     'active': 'アクティブ生徒一覧',
+    'preparing': 'レッスン準備中生徒一覧',
     'enrolled': '在籍プラン生徒一覧',
     'graduated': '正規退会生徒一覧',
     'cancelled': '無断キャンセル生徒一覧'
