@@ -85,8 +85,8 @@ app.get('/sync', async (c) => {
       try {
         await query(
           `INSERT INTO tutors 
-            (employee_id, name, tutor_name, email, team, notion_name, monthly_available_hours, notion_page_id, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+            (employee_id, name, tutor_name, email, team, notion_name, job_type, status, monthly_available_hours, notion_page_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
           ON CONFLICT (employee_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -94,6 +94,8 @@ app.get('/sync', async (c) => {
             email = EXCLUDED.email,
             team = EXCLUDED.team,
             notion_name = EXCLUDED.notion_name,
+            job_type = EXCLUDED.job_type,
+            status = EXCLUDED.status,
             monthly_available_hours = EXCLUDED.monthly_available_hours,
             notion_page_id = EXCLUDED.notion_page_id,
             updated_at = CURRENT_TIMESTAMP`,
@@ -104,6 +106,8 @@ app.get('/sync', async (c) => {
             tutor.email,
             tutor.team,
             tutor.notion_name,
+            tutor.job_type,
+            tutor.status,
             null, // monthly_available_hours not in cache
             tutor.notion_page_id
           ]

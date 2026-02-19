@@ -203,7 +203,7 @@ function syncTutorsToSheet() {
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
   
-  sheet.getRange(1, 1, 1, 8).setValues([[
+  sheet.getRange(1, 1, 1, 10).setValues([[
     'notion_page_id',
     '従業員ID',
     '名前',
@@ -211,12 +211,34 @@ function syncTutorsToSheet() {
     'メールアドレス',
     '所属チーム',
     'Notion名',
+    '職種',
+    'ステータス',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 8).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 10).setFontWeight('bold');
   
-  if (tutors.length > 0) {
-    const rows = tutors.map(t => [
+  // Filter: status='アクティブ' AND job_type contains 'Tutor'
+  const filteredTutors = tutors.filter(t => {
+    const status = t.status || '';
+    const jobType = t.job_type || '';
+    
+    // Status must be 'アクティブ'
+    if (status !== 'アクティブ') {
+      return false;
+    }
+    
+    // Job type must contain 'Tutor' (case-insensitive)
+    if (!jobType.includes('Tutor')) {
+      return false;
+    }
+    
+    return true;
+  });
+  
+  Logger.log(`フィルタリング結果: ${tutors.length}件中${filteredTutors.length}件がアクティブTutor`);
+  
+  if (filteredTutors.length > 0) {
+    const rows = filteredTutors.map(t => [
       t.notion_page_id || '',
       t.employee_id || '',
       t.name || '',
@@ -224,13 +246,15 @@ function syncTutorsToSheet() {
       t.email || '',
       t.team || '',
       t.notion_name || '',
+      t.job_type || '',
+      t.status || '',
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 8).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 10).setValues(rows);
   }
   
-  Logger.log(`${tutors.length}件のTutorデータを書き込み完了`);
+  Logger.log(`${filteredTutors.length}件のTutorデータを書き込み完了`);
 }
 
 /**
@@ -297,7 +321,9 @@ function fetchTutorsFromNotion() {
       tutor_name: getPropertyValue(props['Tutor名']),
       email: getPropertyValue(props['メールアドレス']),
       team: getPropertyValue(props['所属チーム']),
-      notion_name: getPropertyValue(props['Notion名'])
+      notion_name: getPropertyValue(props['Notion名']),
+      job_type: getPropertyValue(props['職種']),
+      status: getPropertyValue(props['ステータス'])
     };
   });
 }

@@ -55,7 +55,7 @@ export async function fetchTutorsFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Tutorデータ!A2:G', // Headers in row 1, data starts from row 2
+      range: 'Tutorデータ!A2:I', // Headers in row 1, data starts from row 2, now includes job_type and status
     });
 
     const rows = response.data.values || [];
@@ -69,6 +69,8 @@ export async function fetchTutorsFromCache(spreadsheetId) {
       email: row[4] || null,
       team: row[5] || null,
       notion_name: row[6] || null,
+      job_type: row[7] || null,
+      status: row[8] || null,
     }));
   } catch (error) {
     console.error('Error fetching tutors from cache:', error);

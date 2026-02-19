@@ -141,6 +141,8 @@ export async function fetchTutors() {
         email: getPropertyValue(props['メールアドレス']),
         team: getPropertyValue(props['所属チーム']),
         notion_name: getPropertyValue(props['Notion名']),
+        job_type: getPropertyValue(props['職種']),  // 追加: 職種
+        status: getPropertyValue(props['ステータス']),  // 追加: ステータス
         monthly_available_hours: getPropertyValue(props['月の業務可能時間'])
       };
     });
