@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchLessonsForMonth } from '../services/calendarService.js';
+import { fetchLessonsFromSheet, getLastSyncTime } from '../services/sheetsService.js';
 
 const app = new Hono();
 
@@ -273,6 +274,134 @@ app.get('/stats/:year/:month', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching lesson stats:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/lessons/sync-from-sheet
+ * Sync lessons from Google Sheets (populated by GAS)
+ */
+app.get('/sync-from-sheet', async (c) => {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+    
+    if (!spreadsheetId) {
+      return c.json({
+        success: false,
+        error: 'GOOGLE_SHEET_ID not configured in environment variables'
+      }, 400);
+    }
+    
+    // Get last sync time
+    const syncMeta = await getLastSyncTime(spreadsheetId);
+    console.log('Last GAS sync:', syncMeta);
+    
+    // Fetch lessons from sheet
+    const lessons = await fetchLessonsFromSheet(spreadsheetId);
+    console.log(`Fetched ${lessons.length} lessons from Google Sheets`);
+    
+    // Get student-tutor mapping from database
+    const studentTutorMapping = await query(`
+      SELECT 
+        s.student_id,
+        s.homeroom_tutor,
+        t.email as tutor_email,
+        t.notion_name as tutor_notion_name
+      FROM students s
+      LEFT JOIN tutors t ON s.homeroom_tutor = t.notion_name
+      WHERE s.student_id IS NOT NULL
+    `);
+    
+    const studentTutorMap = new Map();
+    studentTutorMapping.rows.forEach(row => {
+      if (row.tutor_email) {
+        studentTutorMap.set(row.student_id, {
+          email: row.tutor_email,
+          notion_name: row.tutor_notion_name,
+          homeroom_tutor: row.homeroom_tutor
+        });
+      }
+    });
+    
+    console.log(`Built student-tutor mapping for ${studentTutorMap.size} students`);
+    
+    let validLessons = 0;
+    let invalidLessons = 0;
+    let unmatchedStudents = 0;
+    let mismatchedTutors = 0;
+    
+    for (const lesson of lessons) {
+      // Check if student exists and has a tutor
+      const studentTutor = studentTutorMap.get(lesson.student_id);
+      
+      if (!studentTutor) {
+        unmatchedStudents++;
+        if (unmatchedStudents <= 5) {
+          console.log(`Student not found or no tutor assigned: ${lesson.student_id}`);
+        }
+        continue;
+      }
+      
+      // Verify tutor email matches
+      if (lesson.tutor_email && studentTutor.email) {
+        if (lesson.tutor_email.toLowerCase() !== studentTutor.email.toLowerCase()) {
+          mismatchedTutors++;
+          if (mismatchedTutors <= 5) {
+            console.log(`Tutor mismatch for ${lesson.student_id}: sheet=${lesson.tutor_email}, expected=${studentTutor.email}`);
+          }
+          continue;
+        }
+      }
+      
+      // Insert lesson
+      try {
+        await query(
+          `INSERT INTO lessons 
+            (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+          ON CONFLICT (calendar_event_id) 
+          DO UPDATE SET
+            student_id = EXCLUDED.student_id,
+            tutor_name = EXCLUDED.tutor_name,
+            lesson_date = EXCLUDED.lesson_date,
+            title = EXCLUDED.title,
+            description = EXCLUDED.description,
+            meet_link = EXCLUDED.meet_link,
+            updated_at = CURRENT_TIMESTAMP`,
+          [
+            lesson.calendar_event_id,
+            lesson.student_id,
+            lesson.tutor_name,
+            lesson.lesson_date,
+            lesson.title,
+            lesson.description,
+            lesson.meet_link
+          ]
+        );
+        validLessons++;
+      } catch (insertError) {
+        console.error(`Error inserting lesson ${lesson.calendar_event_id}:`, insertError.message);
+        invalidLessons++;
+      }
+    }
+    
+    console.log(`Validation results: ${validLessons} valid, ${invalidLessons} invalid, ${unmatchedStudents} unmatched, ${mismatchedTutors} tutor mismatches`);
+    
+    return c.json({
+      success: true,
+      message: `Synced ${validLessons} lessons from Google Sheets`,
+      count: validLessons,
+      skipped: unmatchedStudents + mismatchedTutors,
+      errors: invalidLessons,
+      lastGasSync: syncMeta?.lastSync,
+      totalEventsInSheet: lessons.length
+    });
+  } catch (error) {
+    console.error('Error syncing lessons from sheet:', error);
     return c.json({
       success: false,
       error: error.message
