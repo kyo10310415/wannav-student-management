@@ -8,8 +8,8 @@ let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
-let currentTab = 'active'; // 'active', 'preparing', 'enrolled', 'graduated', 'cancelled'
-let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent' (for active tab only)
+let currentTab = 'active'; // 'active', 'preparing', 'graduated', 'cancelled'
+let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -199,9 +199,6 @@ function renderApp() {
         <button onclick="switchTab('preparing')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-clock mr-2"></i>レッスン準備中
         </button>
-        <button onclick="switchTab('enrolled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'enrolled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-          <i class="fas fa-user-clock mr-2"></i>在籍プラン
-        </button>
         <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-graduate mr-2"></i>正規退会
         </button>
@@ -364,16 +361,20 @@ function getFilteredStudents() {
     
     // Apply sub-tab filter for active tab
     if (activeSubTab === 'lesson') {
-      filtered = filtered.filter(s => s.contract_plan !== 'PROプラン' && s.contract_plan !== '永久会員');
+      filtered = filtered.filter(s => 
+        s.contract_plan !== 'PROプラン' && 
+        s.contract_plan !== '永久会員' && 
+        s.contract_plan !== '在籍プラン'
+      );
     } else if (activeSubTab === 'pro') {
       filtered = filtered.filter(s => s.contract_plan === 'PROプラン');
     } else if (activeSubTab === 'permanent') {
       filtered = filtered.filter(s => s.contract_plan === '永久会員');
+    } else if (activeSubTab === 'enrolled') {
+      filtered = filtered.filter(s => s.contract_plan === '在籍プラン');
     }
   } else if (currentTab === 'preparing') {
     filtered = students.filter(s => s.status === 'レッスン準備中');
-  } else if (currentTab === 'enrolled') {
-    filtered = students.filter(s => s.status === '在籍プラン');
   } else if (currentTab === 'graduated') {
     filtered = students.filter(s => s.status === '正規退会');
   } else if (currentTab === 'cancelled') {
@@ -412,7 +413,6 @@ function getTabTitle() {
   const titles = {
     'active': 'アクティブ生徒一覧',
     'preparing': 'レッスン準備中生徒一覧',
-    'enrolled': '在籍プラン生徒一覧',
     'graduated': '正規退会生徒一覧',
     'cancelled': '無断キャンセル生徒一覧'
   };
@@ -424,9 +424,14 @@ function renderActiveSubTabs() {
   if (currentTab !== 'active') return '';
   
   const activeStudents = students.filter(s => s.status === 'アクティブ');
-  const lessonCount = activeStudents.filter(s => s.contract_plan !== '永久会員' && s.contract_plan !== 'PROプラン').length;
+  const lessonCount = activeStudents.filter(s => 
+    s.contract_plan !== '永久会員' && 
+    s.contract_plan !== 'PROプラン' && 
+    s.contract_plan !== '在籍プラン'
+  ).length;
   const proCount = activeStudents.filter(s => s.contract_plan === 'PROプラン').length;
   const permanentCount = activeStudents.filter(s => s.contract_plan === '永久会員').length;
+  const enrolledCount = activeStudents.filter(s => s.contract_plan === '在籍プラン').length;
   
   return `
     <div class="mt-3 pt-3 border-t border-gray-200">
@@ -439,6 +444,9 @@ function renderActiveSubTabs() {
         </button>
         <button onclick="switchActiveSubTab('permanent')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'permanent' ? 'bg-purple-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
           <i class="fas fa-crown mr-2"></i>永久会員 (${permanentCount})
+        </button>
+        <button onclick="switchActiveSubTab('enrolled')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'enrolled' ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+          <i class="fas fa-user-clock mr-2"></i>在籍プラン (${enrolledCount})
         </button>
       </div>
     </div>
