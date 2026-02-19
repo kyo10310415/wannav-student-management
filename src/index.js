@@ -4,6 +4,12 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from '@hono/node-server/serve-static';
 import cron from 'node-cron';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Routes
 import studentRoutes from './routes/students.js';
@@ -18,9 +24,12 @@ const app = new Hono();
 
 // Middleware
 app.use('*', cors());
+
 // Serve static files from public directory
-// /app.js -> public/app.js
-app.use('/*', serveStatic({ root: './public' }));
+// Use absolute path to avoid path issues
+const publicPath = path.join(__dirname, '..', 'public');
+console.log('Serving static files from:', publicPath);
+app.use('/*', serveStatic({ root: publicPath }));
 
 // Health check
 app.get('/health', (c) => {
