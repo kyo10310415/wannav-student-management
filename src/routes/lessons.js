@@ -46,37 +46,113 @@ app.get('/sync/:year/:month', async (c) => {
     
     const lessons = await fetchLessonsForMonth(year, month);
     
-    // Upsert lessons into database
+    console.log(`Fetched ${lessons.length} lessons from Google Calendar`);
+    
+    // Get student-tutor mapping from database
+    // Students table has homeroom_tutor, Tutors table has notion_name
+    // We need to match: student.homeroom_tutor == tutor.notion_name
+    const studentTutorMapping = await query(`
+      SELECT 
+        s.student_id,
+        s.homeroom_tutor,
+        t.email as tutor_email,
+        t.notion_name as tutor_notion_name
+      FROM students s
+      LEFT JOIN tutors t ON s.homeroom_tutor = t.notion_name
+      WHERE s.student_id IS NOT NULL
+    `);
+    
+    // Create lookup map: student_id -> tutor_email
+    const studentTutorMap = new Map();
+    studentTutorMapping.rows.forEach(row => {
+      if (row.tutor_email) {
+        studentTutorMap.set(row.student_id, {
+          email: row.tutor_email,
+          notion_name: row.tutor_notion_name,
+          homeroom_tutor: row.homeroom_tutor
+        });
+      }
+    });
+    
+    console.log(`Built student-tutor mapping for ${studentTutorMap.size} students`);
+    
+    // Get tutor emails for calendar ID mapping
+    const tutorEmails = await query('SELECT email, notion_name FROM tutors WHERE email IS NOT NULL');
+    const calendarIdToTutorMap = new Map();
+    tutorEmails.rows.forEach(row => {
+      calendarIdToTutorMap.set(row.email.toLowerCase(), row.notion_name);
+    });
+    
+    // Filter and upsert lessons
+    let validLessons = 0;
+    let invalidLessons = 0;
+    let unmatchedStudents = 0;
+    let mismatchedTutors = 0;
+    
     for (const lesson of lessons) {
-      await query(
-        `INSERT INTO lessons 
-          (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-        ON CONFLICT (calendar_event_id) 
-        DO UPDATE SET
-          student_id = EXCLUDED.student_id,
-          tutor_name = EXCLUDED.tutor_name,
-          lesson_date = EXCLUDED.lesson_date,
-          title = EXCLUDED.title,
-          description = EXCLUDED.description,
-          meet_link = EXCLUDED.meet_link,
-          updated_at = CURRENT_TIMESTAMP`,
-        [
-          lesson.calendar_event_id,
-          lesson.student_id,
-          lesson.tutor_name,
-          lesson.lesson_date,
-          lesson.title,
-          lesson.description,
-          lesson.meet_link
-        ]
-      );
+      // Check if this lesson belongs to the student's homeroom tutor
+      const studentTutor = studentTutorMap.get(lesson.student_id);
+      
+      if (!studentTutor) {
+        unmatchedStudents++;
+        if (unmatchedStudents <= 5) {
+          console.log(`Student not found or no tutor assigned: ${lesson.student_id}`);
+        }
+        continue;
+      }
+      
+      // Verify that the lesson's calendar matches the student's homeroom tutor
+      // lesson.tutor_calendar_id should match studentTutor.email
+      if (lesson.tutor_calendar_id && studentTutor.email) {
+        if (lesson.tutor_calendar_id.toLowerCase() !== studentTutor.email.toLowerCase()) {
+          mismatchedTutors++;
+          if (mismatchedTutors <= 5) {
+            console.log(`Tutor mismatch for ${lesson.student_id}: calendar=${lesson.tutor_calendar_id}, expected=${studentTutor.email}`);
+          }
+          continue; // Skip lessons that don't belong to the student's homeroom tutor
+        }
+      }
+      
+      // Insert the lesson
+      try {
+        await query(
+          `INSERT INTO lessons 
+            (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+          ON CONFLICT (calendar_event_id) 
+          DO UPDATE SET
+            student_id = EXCLUDED.student_id,
+            tutor_name = EXCLUDED.tutor_name,
+            lesson_date = EXCLUDED.lesson_date,
+            title = EXCLUDED.title,
+            description = EXCLUDED.description,
+            meet_link = EXCLUDED.meet_link,
+            updated_at = CURRENT_TIMESTAMP`,
+          [
+            lesson.calendar_event_id,
+            lesson.student_id,
+            lesson.tutor_name,
+            lesson.lesson_date,
+            lesson.title,
+            lesson.description,
+            lesson.meet_link
+          ]
+        );
+        validLessons++;
+      } catch (insertError) {
+        console.error(`Error inserting lesson ${lesson.calendar_event_id}:`, insertError.message);
+        invalidLessons++;
+      }
     }
+    
+    console.log(`Validation results: ${validLessons} valid, ${invalidLessons} invalid, ${unmatchedStudents} unmatched students, ${mismatchedTutors} mismatched tutors`);
     
     return c.json({
       success: true,
-      message: `Synced ${lessons.length} lessons for ${year}/${month}`,
-      count: lessons.length
+      message: `Synced ${validLessons} lessons for ${year}/${month} (${unmatchedStudents} unmatched, ${mismatchedTutors} tutor mismatches)`,
+      count: validLessons,
+      skipped: unmatchedStudents + mismatchedTutors,
+      errors: invalidLessons
     });
   } catch (error) {
     console.error('Error syncing lessons:', error);

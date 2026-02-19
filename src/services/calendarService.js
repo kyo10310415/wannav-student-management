@@ -131,13 +131,17 @@ export async function fetchLessonsForMonth(year, month) {
     const calendarIds = await getCalendarIds();
     console.log(`Fetching lessons from ${calendarIds.length} calendar(s) for ${year}/${month}`);
     
-    // Fetch events from all calendars in parallel
+    // Fetch events from all calendars in parallel and track calendar ID
     const allEventsArrays = await Promise.all(
       calendarIds.map(async (calendarId) => {
         try {
           const events = await fetchEventsFromCalendar(calendarId, year, month);
           console.log(`Calendar ${calendarId}: fetched ${events.length} events`);
-          return events;
+          // Add calendar_id to each event for tracking
+          return events.map(event => ({
+            ...event,
+            source_calendar_id: calendarId
+          }));
         } catch (error) {
           console.error(`Error fetching events from calendar ${calendarId}:`, error.message);
           return []; // Return empty array if calendar fails
@@ -181,6 +185,7 @@ export async function fetchLessonsForMonth(year, month) {
         calendar_event_id: event.id,
         student_id: studentId,
         tutor_name: extractTutorName(event.summary || ''),
+        tutor_calendar_id: event.source_calendar_id, // Track which calendar this came from
         lesson_date: event.start.dateTime || event.start.date,
         title: event.summary,
         description: event.description,
