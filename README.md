@@ -19,7 +19,9 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
    - 氏名、従業員ID、メールアドレス、所属チーム、Notion名、月の業務可能時間
 
 3. **レッスン予約状況**
-   - Googleカレンダーから生徒様の予約状況を取得
+   - Google Apps Script（GAS）が定期的にGoogleカレンダーからデータを取得
+   - Googleスプレッドシートに保存
+   - アプリはスプレッドシートから予約状況を読み込み
    - 学籍番号による照合
    - 先月・今月・来月の予約状況表示
    - 月ごとの予約回数による色分け表示
@@ -27,6 +29,7 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
      - 1回: 黄色
      - 2回: 無色
      - 3回以上: 濃い黄色
+   - **差分更新**: 16,000件以上のイベントを効率的に処理（約60秒）
 
 4. **担当Tutor絞り込み**
    - 担当Tutor別に生徒を絞り込み表示
@@ -38,8 +41,8 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
 
 #### 🚧 未実装機能
 
-1. **Google Sheets API統合**
-   - Discord送信先情報の取得（スプレッドシート連携）
+1. **Discord送信先情報の自動取得**
+   - スプレッドシート「❶RAW_生徒様情報」からDiscord URLとIDを取得
    - 現在はプレースホルダー実装
 
 ## 📋 技術スタック
@@ -47,12 +50,14 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
 - **Backend**: Node.js + Hono
 - **Database**: PostgreSQL (Render)
 - **Frontend**: Vanilla JavaScript + Tailwind CSS
+- **Calendar Sync**: Google Apps Script (GAS) + Google Sheets
 - **APIs**: 
   - Notion API
-  - Google Calendar API
+  - Google Sheets API
+  - Google Calendar API (via GAS)
   - Discord.js
-- **Deployment**: Render
-- **Cron**: node-cron
+- **Deployment**: Render (Backend) + Google Apps Script (Calendar Sync)
+- **Cron**: node-cron (Backend) + Time-based Triggers (GAS)
 
 ## 🗂️ プロジェクト構造
 
@@ -65,7 +70,8 @@ wannav-student-management/
 │   │   └── migrate.js        # データベースマイグレーション
 │   ├── services/
 │   │   ├── notionService.js  # Notion API統合
-│   │   ├── calendarService.js # Google Calendar API統合
+│   │   ├── sheetsService.js  # Google Sheets API統合
+│   │   ├── calendarService.js # Google Calendar API統合（レガシー）
 │   │   ├── discordService.js # Discord Bot統合
 │   │   └── reminderService.js # リマインド送信
 │   └── routes/
@@ -75,6 +81,7 @@ wannav-student-management/
 │       └── reminders.js      # リマインドAPI
 ├── public/
 │   └── app.js                # フロントエンドJavaScript
+├── gas-calendar-sync-incremental-complete.js # GASスクリプト（差分更新版）
 ├── package.json
 ├── render.yaml               # Render設定
 └── .env.example              # 環境変数テンプレート
@@ -96,10 +103,10 @@ NOTION_TUTOR_API_TOKEN=your_tutor_token
 NOTION_STUDENT_DB_ID=your_student_db_id
 NOTION_TUTOR_DB_ID=your_tutor_db_id
 
-# Google Calendar API
-# カレンダーIDは自動的にTutorのメールアドレスから取得されます
-# 手動指定も可能（オプション）：
-# GOOGLE_CALENDAR_IDS=calendar_id_1,calendar_id_2
+# Google Calendar API (via Google Sheets)
+# GASスクリプトがカレンダーからデータを取得してスプレッドシートに保存
+# アプリはスプレッドシートから読み取り
+GOOGLE_SHEET_ID=your_spreadsheet_id
 GOOGLE_CREDENTIALS_JSON=your_credentials_json
 
 # Discord Bot
@@ -169,7 +176,7 @@ npm run dev
 ### レッスン API
 
 - `GET /api/lessons` - 全レッスン取得
-- `GET /api/lessons/sync/:year/:month` - Googleカレンダーから同期
+- `GET /api/lessons/sync-from-sheet` - Googleスプレッドシートから同期（GAS経由）
 - `GET /api/lessons/month/:year/:month` - 月別レッスン取得
 - `GET /api/lessons/student/:studentId` - 生徒別レッスン取得
 - `GET /api/lessons/stats/:year/:month` - 月別統計情報
@@ -204,28 +211,60 @@ npm run dev
    - `database_id` の部分（32文字のハイフン付き文字列）をコピー → `NOTION_STUDENT_DB_ID`
    - Tutorデータベースも同様に取得 → `NOTION_TUTOR_DB_ID`
 
-### 2. Google Calendar API
+### 2. Google Calendar API（GAS経由）
 
 1. [Google Cloud Console](https://console.cloud.google.com/)でプロジェクト作成
-2. Calendar APIを有効化
-3. サービスアカウント作成
-4. **各Tutorのカレンダーをサービスアカウントと共有**
-   - 各Tutorのカレンダーの「設定と共有」→「特定のユーザーと共有」
-   - サービスアカウントのメールアドレスを追加
-   - 権限: 「予定の表示」
-   - **カレンダーIDの手動取得は不要**です。システムがNotionから取得したTutorのメールアドレスを自動的にカレンダーIDとして使用します。
-5. 認証情報JSONをBase64エンコードして環境変数に設定
+2. **Calendar API** と **Sheets API** を有効化
+3. サービスアカウント作成してJSONキーをダウンロード
+4. 認証情報JSONをBase64エンコードして環境変数に設定
    ```bash
    cat credentials.json | base64 -w 0
    ```
 
-**自動カレンダーID取得の仕組み**:
-- システムは起動時にNotionからTutor情報を同期します
-- 各TutorのメールアドレスがGoogleカレンダーIDとして使用されます
-- 手動でカレンダーIDを設定する必要はありません
-- 環境変数 `GOOGLE_CALENDAR_IDS` や `GOOGLE_CALENDAR_ID` が設定されている場合はそちらが優先されます
+### 3. Google Sheets + GAS セットアップ
 
-### 3. Discord Bot
+#### スプレッドシート作成
+
+1. 新しいGoogleスプレッドシートを作成: `WannaV レッスンデータ同期`
+2. URLからスプレッドシートIDをコピー
+   ```
+   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+   ```
+3. スプレッドシートをサービスアカウントと共有
+   - 「共有」ボタンをクリック
+   - サービスアカウントのメールアドレスを追加
+   - 権限: **閲覧者**
+
+#### GASスクリプト設定
+
+1. スプレッドシート内で「拡張機能」→「Apps Script」
+2. `gas-calendar-sync-incremental-complete.js` の内容をコピー&ペースト
+3. 設定を変更:
+   ```javascript
+   const SPREADSHEET_ID = 'your_spreadsheet_id';
+   const NOTION_TUTOR_API_TOKEN = 'your_tutor_notion_token';
+   const NOTION_TUTOR_DB_ID = 'your_tutor_database_id';
+   ```
+4. **初回実行**: 関数 `testIncrementalSync` を実行（権限承認）
+5. **トリガー設定**: 関数 `setupIncrementalTrigger` を実行
+   - 1時間ごとに自動同期
+
+#### GAS処理フロー
+
+```
+1. Notion API → Tutorメールアドレス取得
+2. 各Tutorのカレンダー → イベント取得
+3. Googleスプレッドシート → データ保存（差分更新）
+4. Renderアプリ → スプレッドシートから読み込み
+```
+
+**差分更新の特徴**:
+- 初回: 約90〜120秒（全件処理）
+- 2回目以降: 約30〜60秒（差分のみ）
+- 16,000件以上のイベントを効率的に処理
+- GAS実行時間制限（6分）以内に完了
+
+### 4. Discord Bot
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)でアプリケーション作成
 2. Botを作成してトークン取得
@@ -234,25 +273,36 @@ npm run dev
    - Read Message History
 4. サーバーに招待
 
-## 📅 Cronスケジュール
+## 📅 自動実行スケジュール
 
+### Renderアプリ（Backend）
 - **毎日 10:00 JST** (01:00 UTC): レッスンリマインド自動送信
+
+### Google Apps Script
+- **1時間ごと**: カレンダーデータ同期（差分更新）
+- 実行時間: 約30〜60秒（16,000件以上のイベントを効率的に処理）
 
 ## 🔧 次のステップ
 
-1. **Google Sheets API統合**
-   - Discord送信先情報の自動取得
-   - スプレッドシート「❶RAW_生徒様情報」との連携
+1. **Discord送信先情報の自動取得**
+   - スプレッドシート「❶RAW_生徒様情報」からDiscord URLとIDを自動取得
+   - 現在はプレースホルダー実装
 
 2. **追加機能実装**
    - 生徒詳細ページ
    - レッスン履歴表示
    - エクスポート機能
+   - カレンダー表示
 
 3. **UIの改善**
    - モバイル対応強化
    - ダッシュボード追加
-   - グラフ表示
+   - グラフ表示（Chart.js）
+
+4. **パフォーマンス最適化**
+   - データベースインデックス最適化
+   - キャッシュ機構追加
+   - ページネーション実装
 
 ## 📄 ライセンス
 
