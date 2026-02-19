@@ -50,18 +50,10 @@ async function loadInitialData() {
     await axios.get(`${API_BASE}/api/students/sync`);
     await axios.get(`${API_BASE}/api/tutors/sync`);
     
-    // Sync lessons for previous, current, and next month
-    const now = new Date();
-    const months = [
-      { year: now.getFullYear(), month: now.getMonth() }, // Previous month
-      { year: now.getFullYear(), month: now.getMonth() + 1 }, // Current month
-      { year: now.getFullYear(), month: now.getMonth() + 2 }  // Next month
-    ];
-    
-    for (const { year, month } of months) {
-      const date = new Date(year, month - 1, 1);
-      await axios.get(`${API_BASE}/api/lessons/sync/${date.getFullYear()}/${date.getMonth() + 1}`);
-    }
+    // Sync lessons from Google Sheets (populated by GAS)
+    console.log('Syncing lessons from Google Sheets...');
+    const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
+    console.log('Sheet sync result:', sheetSyncRes.data);
     
     // Load data
     const [studentsRes, tutorsRes] = await Promise.all([
@@ -304,12 +296,8 @@ async function changeMonth(delta) {
   // Update display
   document.getElementById('current-month-display').textContent = formatMonth(currentMonth);
   
-  // Sync lessons for the new month
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth() + 1;
-  
+  // Reload lesson stats for the new month (data is already in DB from sheet sync)
   try {
-    await axios.get(`${API_BASE}/api/lessons/sync/${year}/${month}`);
     await loadLessonStats();
     renderApp();
   } catch (error) {
