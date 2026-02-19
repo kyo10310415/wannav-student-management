@@ -168,6 +168,17 @@ export async function fetchLessonsForMonth(year, month) {
     let eventsWithoutStudentId = 0;
     
     const lessons = Array.from(uniqueEvents.values()).map(event => {
+      // Log first 3 events to debug
+      if (eventsWithStudentId + eventsWithoutStudentId < 3) {
+        console.log('Raw event data:', JSON.stringify({
+          id: event.id,
+          summary: event.summary,
+          description: event.description?.substring(0, 200),
+          start: event.start,
+          source_calendar_id: event.source_calendar_id
+        }, null, 2));
+      }
+      
       // Extract student ID from description
       const studentId = extractStudentId(event.description || '');
       
@@ -177,7 +188,7 @@ export async function fetchLessonsForMonth(year, month) {
         eventsWithoutStudentId++;
         // Log first 5 events without student ID
         if (eventsWithoutStudentId <= 5) {
-          console.log(`Event without student ID: "${event.summary}", description: "${(event.description || '').substring(0, 100)}..."`);
+          console.log(`Event without student ID: title="${event.summary}", description="${(event.description || '').substring(0, 100)}"`);
         }
       }
       
