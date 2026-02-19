@@ -9,6 +9,7 @@ let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
 let currentTab = 'active'; // 'active', 'enrolled', 'graduated', 'cancelled'
+let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent' (for active tab only)
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -147,6 +148,7 @@ function renderApp() {
           <i class="fas fa-user-times mr-2"></i>無断キャンセル
         </button>
       </div>
+      ${renderActiveSubTabs()}
     </div>
 
     <!-- Controls -->
@@ -195,11 +197,11 @@ function renderApp() {
       </div>
     </div>
 
-    <!-- Statistics (exclude 正規退会 and 無断キャンセル) -->
+    <!-- Statistics (exclude 正規退会, 無断キャンセル, and 永久会員) -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chart-bar mr-2"></i>
-        統計情報 <span class="text-sm text-gray-500">(正規退会・無断キャンセルを除く)</span>
+        統計情報 <span class="text-sm text-gray-500">(正規退会・無断キャンセル・永久会員を除く)</span>
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         ${renderStatistics()}
@@ -217,14 +219,14 @@ function renderApp() {
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">契約プラン</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラクター名</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今月の予約</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">契約プラン</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="max-width: 100px;">キャラ名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今月の予約</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -244,11 +246,13 @@ function getTutorOptions() {
   ).join('');
 }
 
-// Render statistics (exclude 正規退会 and 無断キャンセル)
+// Render statistics (exclude 正規退会, 無断キャンセル, and 永久会員)
 function renderStatistics() {
-  // Filter out graduated and cancelled students
+  // Filter out graduated, cancelled students, and permanent members
   const activeStudents = students.filter(s => 
-    s.status !== '正規退会' && s.status !== '無断キャンセル'
+    s.status !== '正規退会' && 
+    s.status !== '無断キャンセル' &&
+    s.contract_plan !== '永久会員'
   );
   
   const filteredStudents = selectedTutor === 'all' 
@@ -307,19 +311,19 @@ function renderStudentRows() {
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
-        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.character_name || '-'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${formatTutorName(student.homeroom_tutor)}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold">
-          <span class="px-3 py-1 rounded-full ${getLessonCountBadgeColor(lessonCount)}">
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">
+          <span class="px-2 py-1 rounded-full text-xs ${getLessonCountBadgeColor(lessonCount)}">
             ${lessonCount}回
           </span>
         </td>
-        <td class="px-6 py-4 text-sm text-gray-600" style="max-width: 200px;">
-          <div class="overflow-x-auto whitespace-nowrap">${datesStr}</div>
+        <td class="px-4 py-3 text-sm text-gray-600" style="max-width: 180px;">
+          <div class="overflow-x-auto whitespace-nowrap text-xs">${datesStr}</div>
         </td>
       </tr>
     `;
@@ -333,6 +337,15 @@ function getFilteredStudents() {
   
   if (currentTab === 'active') {
     filtered = students.filter(s => s.status === 'アクティブ');
+    
+    // Apply sub-tab filter for active tab
+    if (activeSubTab === 'lesson') {
+      filtered = filtered.filter(s => s.contract_plan !== 'PROプラン' && s.contract_plan !== '永久会員');
+    } else if (activeSubTab === 'pro') {
+      filtered = filtered.filter(s => s.contract_plan === 'PROプラン');
+    } else if (activeSubTab === 'permanent') {
+      filtered = filtered.filter(s => s.contract_plan === '永久会員');
+    }
   } else if (currentTab === 'enrolled') {
     filtered = students.filter(s => s.status === '在籍プラン');
   } else if (currentTab === 'graduated') {
@@ -349,16 +362,23 @@ function getFilteredStudents() {
   return filtered;
 }
 
-// Format tutor name: 先生きょうへい → きょうへい先生
-function formatTutorName(tutorName) {
-  if (!tutorName) return '-';
+// Get tutor display name from tutor_name field
+function getTutorDisplayName(notionName) {
+  if (!notionName) return '-';
   
-  // Pattern: 先生XXX → XXX先生
-  if (tutorName.startsWith('先生')) {
-    return tutorName.substring(2) + '先生';
+  // Find matching tutor by notion_name
+  const tutor = tutors.find(t => t.notion_name === notionName);
+  
+  if (tutor && tutor.tutor_name) {
+    return tutor.tutor_name;
   }
   
-  return tutorName;
+  // Fallback: format notion_name (先生XXX → XXX先生)
+  if (notionName.startsWith('先生')) {
+    return notionName.substring(2) + '先生';
+  }
+  
+  return notionName;
 }
 
 // Get tab title
@@ -372,33 +392,50 @@ function getTabTitle() {
   return titles[currentTab] || '生徒一覧';
 }
 
-// Render contract plan tabs (for active tab only)
-function renderContractPlanTabs() {
+// Render active sub-tabs (for active tab only)
+function renderActiveSubTabs() {
   if (currentTab !== 'active') return '';
   
   const activeStudents = students.filter(s => s.status === 'アクティブ');
-  const permanentCount = activeStudents.filter(s => s.contract_plan === '永久会員').length;
+  const lessonCount = activeStudents.filter(s => s.contract_plan !== '永久会員' && s.contract_plan !== 'PROプラン').length;
   const proCount = activeStudents.filter(s => s.contract_plan === 'PROプラン').length;
-  const otherCount = activeStudents.filter(s => s.contract_plan !== '永久会員' && s.contract_plan !== 'PROプラン').length;
+  const permanentCount = activeStudents.filter(s => s.contract_plan === '永久会員').length;
   
   return `
-    <div class="mb-4 flex gap-2 text-sm">
-      <div class="px-4 py-2 bg-purple-100 text-purple-800 rounded-lg font-semibold">
-        <i class="fas fa-crown mr-2"></i>永久会員: ${permanentCount}名
-      </div>
-      <div class="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-semibold">
-        <i class="fas fa-star mr-2"></i>PROプラン: ${proCount}名
-      </div>
-      <div class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg font-semibold">
-        <i class="fas fa-users mr-2"></i>その他: ${otherCount}名
+    <div class="mt-3 pt-3 border-t border-gray-200">
+      <div class="flex gap-2">
+        <button onclick="switchActiveSubTab('lesson')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'lesson' ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+          <i class="fas fa-book-open mr-2"></i>レッスン中 (${lessonCount})
+        </button>
+        <button onclick="switchActiveSubTab('pro')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'pro' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+          <i class="fas fa-star mr-2"></i>PROプラン (${proCount})
+        </button>
+        <button onclick="switchActiveSubTab('permanent')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'permanent' ? 'bg-purple-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+          <i class="fas fa-crown mr-2"></i>永久会員 (${permanentCount})
+        </button>
       </div>
     </div>
   `;
 }
 
+// Render contract plan tabs (kept for backward compatibility, now unused)
+function renderContractPlanTabs() {
+  return '';
+}
+
 // Switch tab
 function switchTab(tab) {
   currentTab = tab;
+  // Reset sub-tab when switching main tabs
+  if (tab === 'active') {
+    activeSubTab = 'lesson';
+  }
+  renderApp();
+}
+
+// Switch active sub-tab
+function switchActiveSubTab(subTab) {
+  activeSubTab = subTab;
   renderApp();
 }
 
