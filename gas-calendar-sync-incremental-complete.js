@@ -137,17 +137,23 @@ function syncLessonsToSheetIncremental() {
   
   // 既存のイベントIDとその行番号を取得
   Logger.log('既存データを読み込み中...');
-  const existingData = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
   const existingEventMap = new Map(); // eventId -> { rowNumber, lessonDate }
   
-  for (let i = 1; i < existingData.length; i++) { // ヘッダー行をスキップ
-    const eventId = existingData[i][0]; // A列: イベントID
-    const lessonDate = existingData[i][4]; // E列: レッスン日時
-    if (eventId) {
-      existingEventMap.set(eventId, {
-        rowNumber: i + 1,
-        lessonDate: lessonDate
-      });
+  if (lastRow > 1) {
+    // 必要な列だけ取得（A列とE列のみ）
+    const eventIds = sheet.getRange(2, 1, lastRow - 1, 1).getValues(); // A列
+    const lessonDates = sheet.getRange(2, 5, lastRow - 1, 1).getValues(); // E列
+    
+    for (let i = 0; i < eventIds.length; i++) {
+      const eventId = eventIds[i][0];
+      const lessonDate = lessonDates[i][0];
+      if (eventId) {
+        existingEventMap.set(eventId, {
+          rowNumber: i + 2, // ヘッダー行分+1
+          lessonDate: lessonDate
+        });
+      }
     }
   }
   
@@ -250,40 +256,130 @@ function syncLessonsToSheetIncremental() {
   
   Logger.log(`カレンダー取得完了: ${totalEvents}件（学籍番号あり: ${eventsWithStudentId}件）`);
   
-  // バッチ更新：既存行を更新
-  Logger.log(`既存イベント更新中: ${rowsToUpdate.length}件...`);
-  rowsToUpdate.forEach(item => {
-    sheet.getRange(item.rowNumber, 1, 1, 9).setValues([item.data]);
-  });
+  // 差分が多い場合は全削除・再取得のほうが速い
+  const changeRate = (newEvents + updatedEvents + deletedRows.length) / Math.max(existingEventMap.size, 1);
+  const shouldFullRewrite = changeRate > 0.3 || existingEventMap.size === 0; // 変更率30%以上または初回
   
-  // バッチ追加：新規行を追加
-  if (newRowsToAdd.length > 0) {
-    Logger.log(`新規イベント追加中: ${newRowsToAdd.length}件...`);
-    sheet.getRange(sheet.getLastRow() + 1, 1, newRowsToAdd.length, 9).setValues(newRowsToAdd);
-  }
-  
-  // 削除されたイベントを検出（期間内だが、カレンダーにないイベント）
-  Logger.log('削除されたイベントを検出中...');
-  const deletedRows = [];
-  
-  existingEventMap.forEach((info, eventId) => {
-    if (!currentEventIds.has(eventId)) {
-      const lessonDate = new Date(info.lessonDate);
-      // 取得期間内のイベントのみ削除対象
-      if (lessonDate >= startDate && lessonDate <= endDate) {
-        deletedRows.push(info.rowNumber);
+  if (shouldFullRewrite) {
+    Logger.log(`変更率が高いため全データを書き直します（変更率: ${Math.round(changeRate * 100)}%）`);
+    
+    // ヘッダー以外を全削除
+    if (sheet.getLastRow() > 1) {
+      sheet.deleteRows(2, sheet.getLastRow() - 1);
+    }
+    
+    // 全イベントを再収集
+    const allRows = [];
+    currentEventIds.forEach(eventId => {
+      // newRowsToAdd または existingEventMap から該当データを取得
+      const newRow = newRowsToAdd.find(row => row[0] === eventId);
+      if (newRow) {
+        allRows.push(newRow);
+      } else {
+        const updateRow = rowsToUpdate.find(item => item.data[0] === eventId);
+        if (updateRow) {
+          allRows.push(updateRow.data);
+        }
+      }
+    });
+    
+    // 一括書き込み
+    if (allRows.length > 0) {
+      Logger.log(`${allRows.length}件のイベントを一括書き込み中...`);
+      
+      // Spreadsheet API の制限（一度に最大10,000行）を考慮してバッチ処理
+      const BATCH_SIZE = 5000;
+      for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
+        const batch = allRows.slice(i, Math.min(i + BATCH_SIZE, allRows.length));
+        sheet.getRange(sheet.getLastRow() + 1, 1, batch.length, 9).setValues(batch);
+        
+        if (i + BATCH_SIZE < allRows.length) {
+          Logger.log(`  ${i + batch.length}/${allRows.length}件 書き込み完了...`);
+          Utilities.sleep(500); // レート制限対策
+        }
       }
     }
-  });
-  
-  // 古いイベントを削除（後ろから削除）
-  if (deletedRows.length > 0) {
-    Logger.log(`削除対象イベント: ${deletedRows.length}件`);
-    deletedRows.sort((a, b) => b - a); // 降順ソート
     
-    deletedRows.forEach(rowNumber => {
-      sheet.deleteRow(rowNumber);
+  } else {
+    // 差分更新（変更率が低い場合のみ）
+    Logger.log(`差分更新モード（変更率: ${Math.round(changeRate * 100)}%）`);
+    
+    // バッチ更新：既存行を更新
+    if (rowsToUpdate.length > 0) {
+      Logger.log(`既存イベント更新中: ${rowsToUpdate.length}件...`);
+      
+      // 効率化：連続した行をまとめて更新
+      rowsToUpdate.sort((a, b) => a.rowNumber - b.rowNumber);
+      
+      let batchStart = 0;
+      while (batchStart < rowsToUpdate.length) {
+        const currentRow = rowsToUpdate[batchStart].rowNumber;
+        let batchEnd = batchStart + 1;
+        
+        // 連続した行を探す
+        while (batchEnd < rowsToUpdate.length && 
+               rowsToUpdate[batchEnd].rowNumber === rowsToUpdate[batchEnd - 1].rowNumber + 1) {
+          batchEnd++;
+        }
+        
+        // バッチで更新
+        const batchData = rowsToUpdate.slice(batchStart, batchEnd).map(item => item.data);
+        sheet.getRange(currentRow, 1, batchData.length, 9).setValues(batchData);
+        
+        batchStart = batchEnd;
+      }
+    }
+    
+    // バッチ追加：新規行を追加
+    if (newRowsToAdd.length > 0) {
+      Logger.log(`新規イベント追加中: ${newRowsToAdd.length}件...`);
+      
+      const BATCH_SIZE = 5000;
+      for (let i = 0; i < newRowsToAdd.length; i += BATCH_SIZE) {
+        const batch = newRowsToAdd.slice(i, Math.min(i + BATCH_SIZE, newRowsToAdd.length));
+        sheet.getRange(sheet.getLastRow() + 1, 1, batch.length, 9).setValues(batch);
+        
+        if (i + BATCH_SIZE < newRowsToAdd.length) {
+          Utilities.sleep(500);
+        }
+      }
+    }
+    
+    // 削除されたイベントを検出（期間内だが、カレンダーにないイベント）
+    Logger.log('削除されたイベントを検出中...');
+    const deletedRows = [];
+    
+    existingEventMap.forEach((info, eventId) => {
+      if (!currentEventIds.has(eventId)) {
+        const lessonDate = new Date(info.lessonDate);
+        // 取得期間内のイベントのみ削除対象
+        if (lessonDate >= startDate && lessonDate <= endDate) {
+          deletedRows.push(info.rowNumber);
+        }
+      }
     });
+    
+    // 古いイベントを削除（後ろから削除）
+    if (deletedRows.length > 0) {
+      Logger.log(`削除対象イベント: ${deletedRows.length}件`);
+      deletedRows.sort((a, b) => b - a); // 降順ソート
+      
+      // バッチ削除（連続した行をまとめて削除）
+      let i = 0;
+      while (i < deletedRows.length) {
+        const startRow = deletedRows[i];
+        let count = 1;
+        
+        // 連続した行を探す
+        while (i + count < deletedRows.length && 
+               deletedRows[i + count] === startRow - count) {
+          count++;
+        }
+        
+        sheet.deleteRows(startRow - count + 1, count);
+        i += count;
+      }
+    }
   }
   
   // ソート（レッスン日時の昇順）

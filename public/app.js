@@ -5,8 +5,10 @@ const API_BASE = '';
 let students = [];
 let tutors = [];
 let lessonStats = {};
+let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
+let currentTab = 'active'; // 'active', 'enrolled', 'graduated', 'cancelled'
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -64,8 +66,9 @@ async function loadInitialData() {
     students = studentsRes.data.data;
     tutors = tutorsRes.data.data;
     
-    // Load lesson stats for current month
+    // Load lesson stats and dates for current month
     await loadLessonStats();
+    await loadLessonDates();
   } catch (error) {
     console.error('Error loading initial data:', error);
     alert('データの読み込みに失敗しました: ' + error.message);
@@ -90,6 +93,36 @@ async function loadLessonStats() {
   }
 }
 
+// Load lesson dates for current month
+async function loadLessonDates() {
+  try {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+    
+    const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${month}`);
+    
+    // Group dates by student_id
+    lessonDates = {};
+    res.data.data.forEach(lesson => {
+      if (!lessonDates[lesson.student_id]) {
+        lessonDates[lesson.student_id] = [];
+      }
+      const date = new Date(lesson.lesson_date);
+      lessonDates[lesson.student_id].push({
+        date: date,
+        formatted: `${date.getMonth() + 1}/${date.getDate()}`
+      });
+    });
+    
+    // Sort dates
+    Object.keys(lessonDates).forEach(studentId => {
+      lessonDates[studentId].sort((a, b) => a.date - b.date);
+    });
+  } catch (error) {
+    console.error('Error loading lesson dates:', error);
+  }
+}
+
 // Render main app
 function renderApp() {
   document.getElementById('loading').classList.add('hidden');
@@ -98,6 +131,24 @@ function renderApp() {
   const content = document.getElementById('content');
   
   content.innerHTML = `
+    <!-- Status Tabs -->
+    <div class="bg-white rounded-lg shadow-md p-2 mb-6">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-check-circle mr-2"></i>アクティブ
+        </button>
+        <button onclick="switchTab('enrolled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'enrolled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-clock mr-2"></i>在籍プラン
+        </button>
+        <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-graduate mr-2"></i>正規退会
+        </button>
+        <button onclick="switchTab('cancelled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-times mr-2"></i>無断キャンセル
+        </button>
+      </div>
+    </div>
+
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -144,11 +195,11 @@ function renderApp() {
       </div>
     </div>
 
-    <!-- Statistics -->
+    <!-- Statistics (exclude 正規退会 and 無断キャンセル) -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chart-bar mr-2"></i>
-        統計情報
+        統計情報 <span class="text-sm text-gray-500">(正規退会・無断キャンセルを除く)</span>
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         ${renderStatistics()}
@@ -159,8 +210,9 @@ function renderApp() {
     <div class="bg-white rounded-lg shadow-md p-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-list mr-2"></i>
-        生徒一覧
+        ${getTabTitle()}
       </h2>
+      ${renderContractPlanTabs()}
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
@@ -172,6 +224,7 @@ function renderApp() {
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラクター名</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今月の予約</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -191,9 +244,17 @@ function getTutorOptions() {
   ).join('');
 }
 
-// Render statistics
+// Render statistics (exclude 正規退会 and 無断キャンセル)
 function renderStatistics() {
-  const filteredStudents = getFilteredStudents();
+  // Filter out graduated and cancelled students
+  const activeStudents = students.filter(s => 
+    s.status !== '正規退会' && s.status !== '無断キャンセル'
+  );
+  
+  const filteredStudents = selectedTutor === 'all' 
+    ? activeStudents
+    : activeStudents.filter(s => s.homeroom_tutor === selectedTutor);
+  
   const totalStudents = filteredStudents.length;
   
   const lessonCounts = filteredStudents.map(s => lessonStats[s.student_id] || 0);
@@ -216,7 +277,7 @@ function renderStatistics() {
       <div class="text-sm text-gray-600 mt-1">予約1回</div>
     </div>
     <div class="text-center">
-      <div class="text-3xl font-bold text-yellow-500">${threePlusLessons}</div>
+      <div class="text-3xl font-bold text-green-600">${threePlusLessons}</div>
       <div class="text-sm text-gray-600 mt-1">予約3回以上</div>
     </div>
   `;
@@ -229,7 +290,7 @@ function renderStudentRows() {
   if (filteredStudents.length === 0) {
     return `
       <tr>
-        <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+        <td colspan="8" class="px-6 py-4 text-center text-gray-500">
           該当する生徒が見つかりません
         </td>
       </tr>
@@ -239,6 +300,10 @@ function renderStudentRows() {
   return filteredStudents.map(student => {
     const lessonCount = lessonStats[student.student_id] || 0;
     const colorClass = getLessonCountColor(lessonCount);
+    const dates = lessonDates[student.student_id] || [];
+    const datesStr = dates.length > 0 
+      ? dates.map(d => d.formatted).join(', ')
+      : '-';
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
@@ -247,11 +312,14 @@ function renderStudentRows() {
         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.character_name || '-'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${student.homeroom_tutor || '-'}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${formatTutorName(student.homeroom_tutor)}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold">
           <span class="px-3 py-1 rounded-full ${getLessonCountBadgeColor(lessonCount)}">
             ${lessonCount}回
           </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-600" style="max-width: 200px;">
+          <div class="overflow-x-auto whitespace-nowrap">${datesStr}</div>
         </td>
       </tr>
     `;
@@ -260,10 +328,78 @@ function renderStudentRows() {
 
 // Get filtered students
 function getFilteredStudents() {
-  if (selectedTutor === 'all') {
-    return students;
+  // Filter by status tab
+  let filtered = students;
+  
+  if (currentTab === 'active') {
+    filtered = students.filter(s => s.status === 'アクティブ');
+  } else if (currentTab === 'enrolled') {
+    filtered = students.filter(s => s.status === '在籍プラン');
+  } else if (currentTab === 'graduated') {
+    filtered = students.filter(s => s.status === '正規退会');
+  } else if (currentTab === 'cancelled') {
+    filtered = students.filter(s => s.status === '無断キャンセル');
   }
-  return students.filter(s => s.homeroom_tutor === selectedTutor);
+  
+  // Filter by tutor
+  if (selectedTutor !== 'all') {
+    filtered = filtered.filter(s => s.homeroom_tutor === selectedTutor);
+  }
+  
+  return filtered;
+}
+
+// Format tutor name: 先生きょうへい → きょうへい先生
+function formatTutorName(tutorName) {
+  if (!tutorName) return '-';
+  
+  // Pattern: 先生XXX → XXX先生
+  if (tutorName.startsWith('先生')) {
+    return tutorName.substring(2) + '先生';
+  }
+  
+  return tutorName;
+}
+
+// Get tab title
+function getTabTitle() {
+  const titles = {
+    'active': 'アクティブ生徒一覧',
+    'enrolled': '在籍プラン生徒一覧',
+    'graduated': '正規退会生徒一覧',
+    'cancelled': '無断キャンセル生徒一覧'
+  };
+  return titles[currentTab] || '生徒一覧';
+}
+
+// Render contract plan tabs (for active tab only)
+function renderContractPlanTabs() {
+  if (currentTab !== 'active') return '';
+  
+  const activeStudents = students.filter(s => s.status === 'アクティブ');
+  const permanentCount = activeStudents.filter(s => s.contract_plan === '永久会員').length;
+  const proCount = activeStudents.filter(s => s.contract_plan === 'PROプラン').length;
+  const otherCount = activeStudents.filter(s => s.contract_plan !== '永久会員' && s.contract_plan !== 'PROプラン').length;
+  
+  return `
+    <div class="mb-4 flex gap-2 text-sm">
+      <div class="px-4 py-2 bg-purple-100 text-purple-800 rounded-lg font-semibold">
+        <i class="fas fa-crown mr-2"></i>永久会員: ${permanentCount}名
+      </div>
+      <div class="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+        <i class="fas fa-star mr-2"></i>PROプラン: ${proCount}名
+      </div>
+      <div class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg font-semibold">
+        <i class="fas fa-users mr-2"></i>その他: ${otherCount}名
+      </div>
+    </div>
+  `;
+}
+
+// Switch tab
+function switchTab(tab) {
+  currentTab = tab;
+  renderApp();
 }
 
 // Get lesson count color class
@@ -296,9 +432,10 @@ async function changeMonth(delta) {
   // Update display
   document.getElementById('current-month-display').textContent = formatMonth(currentMonth);
   
-  // Reload lesson stats for the new month (data is already in DB from sheet sync)
+  // Reload lesson stats and dates for the new month
   try {
     await loadLessonStats();
+    await loadLessonDates();
     renderApp();
   } catch (error) {
     console.error('Error changing month:', error);
