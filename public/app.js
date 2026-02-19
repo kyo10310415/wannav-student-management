@@ -130,27 +130,9 @@ function renderApp() {
   document.getElementById('content').classList.remove('hidden');
   
   const content = document.getElementById('content');
+  const previousTutorFilter = selectedTutor;
   
   content.innerHTML = `
-    <!-- Status Tabs -->
-    <div class="bg-white rounded-lg shadow-md p-2 mb-6">
-      <div class="flex flex-wrap gap-2">
-        <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-          <i class="fas fa-check-circle mr-2"></i>アクティブ
-        </button>
-        <button onclick="switchTab('enrolled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'enrolled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-          <i class="fas fa-user-clock mr-2"></i>在籍プラン
-        </button>
-        <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-          <i class="fas fa-user-graduate mr-2"></i>正規退会
-        </button>
-        <button onclick="switchTab('cancelled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
-          <i class="fas fa-user-times mr-2"></i>無断キャンセル
-        </button>
-      </div>
-      ${renderActiveSubTabs()}
-    </div>
-
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -179,7 +161,7 @@ function renderApp() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <select id="tutor-filter" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
             <option value="all">すべてのTutor</option>
             ${getTutorOptions()}
           </select>
@@ -206,6 +188,25 @@ function renderApp() {
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         ${renderStatistics()}
       </div>
+    </div>
+
+    <!-- Status Tabs -->
+    <div class="bg-white rounded-lg shadow-md p-2 mb-6">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-check-circle mr-2"></i>アクティブ
+        </button>
+        <button onclick="switchTab('enrolled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'enrolled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-clock mr-2"></i>在籍プラン
+        </button>
+        <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-graduate mr-2"></i>正規退会
+        </button>
+        <button onclick="switchTab('cancelled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-times mr-2"></i>無断キャンセル
+        </button>
+      </div>
+      ${renderActiveSubTabs()}
     </div>
 
     <!-- Student List -->
@@ -236,14 +237,32 @@ function renderApp() {
       </div>
     </div>
   `;
+  
+  // Set tutor filter value after rendering
+  const tutorSelect = document.getElementById('tutor-filter');
+  if (tutorSelect) {
+    tutorSelect.value = previousTutorFilter;
+  }
 }
 
 // Get tutor options for filter
 function getTutorOptions() {
-  const uniqueTutors = [...new Set(students.map(s => s.homeroom_tutor).filter(Boolean))];
-  return uniqueTutors.map(tutor => 
-    `<option value="${tutor}">${tutor}</option>`
-  ).join('');
+  // Get unique notion_names from students
+  const uniqueNotionNames = [...new Set(students.map(s => s.homeroom_tutor).filter(Boolean))];
+  
+  // Map notion_name to tutor_name for display
+  return uniqueNotionNames
+    .map(notionName => {
+      const displayName = getTutorDisplayName(notionName);
+      return `<option value="${notionName}">${displayName}</option>`;
+    })
+    .sort((a, b) => {
+      // Sort by display name
+      const aText = a.match(/>(.*?)<\/option>/)[1];
+      const bText = b.match(/>(.*?)<\/option>/)[1];
+      return aText.localeCompare(bText, 'ja');
+    })
+    .join('');
 }
 
 // Render statistics (exclude 正規退会, 無断キャンセル, and 永久会員)
