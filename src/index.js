@@ -18,7 +18,9 @@ const app = new Hono();
 
 // Middleware
 app.use('*', cors());
-app.use('/static/*', serveStatic({ root: './public' }));
+// Serve static files from public directory
+// /app.js -> public/app.js
+app.use('/*', serveStatic({ root: './public' }));
 
 // Health check
 app.get('/health', (c) => {
@@ -46,7 +48,7 @@ app.get('/', (c) => {
     <body class="bg-gray-50">
         <div id="app"></div>
         <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
-        <script src="/static/app.js"></script>
+        <script src="/app.js"></script>
     </body>
     </html>
   `);
