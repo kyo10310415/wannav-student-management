@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchTutors } from '../services/notionService.js';
+import { fetchTutorsFromCache, getCacheSyncTime } from '../services/cacheService.js';
 
 const app = new Hono();
 
@@ -30,13 +31,27 @@ app.get('/', async (c) => {
 
 /**
  * GET /api/tutors/sync
- * Sync tutors from Notion to database
+ * Sync tutors from cache spreadsheet to database (fast)
  */
 app.get('/sync', async (c) => {
   try {
-    const tutors = await fetchTutors();
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     
-    // Filter out tutors without employee_id or name (required fields)
+    if (!cacheSpreadsheetId) {
+      return c.json({
+        success: false,
+        error: 'GOOGLE_CACHE_SHEET_ID or GOOGLE_SHEET_ID not configured'
+      }, 400);
+    }
+    
+    // Get last sync time
+    const syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
+    console.log('Cache last sync:', syncMeta);
+    
+    // Fetch tutors from cache
+    const tutors = await fetchTutorsFromCache(cacheSpreadsheetId);
+    
+    // Filter out tutors without employee_id or name
     const skippedTutors = [];
     const validTutors = tutors.filter(tutor => {
       if (!tutor.employee_id) {
@@ -60,13 +75,7 @@ app.get('/sync', async (c) => {
       return true;
     });
 
-    // Log first 10 skipped tutors for debugging
-    if (skippedTutors.length > 0) {
-      console.log('=== SKIPPED TUTORS (first 10) ===');
-      console.log(JSON.stringify(skippedTutors.slice(0, 10), null, 2));
-    }
-
-    console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid (with employee_id and name), ${skippedTutors.length} skipped`);
+    console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid, ${skippedTutors.length} skipped`);
     
     // Upsert tutors into database
     let successCount = 0;
@@ -95,7 +104,7 @@ app.get('/sync', async (c) => {
             tutor.email,
             tutor.team,
             tutor.notion_name,
-            tutor.monthly_available_hours,
+            null, // monthly_available_hours not in cache
             tutor.notion_page_id
           ]
         );
@@ -108,11 +117,11 @@ app.get('/sync', async (c) => {
     
     return c.json({
       success: true,
-      message: `Synced ${successCount} tutors from Notion (${errorCount} errors, ${skippedTutors.length} skipped)`,
+      message: `Synced ${successCount} tutors from cache (${errorCount} errors, ${skippedTutors.length} skipped)`,
       count: successCount,
       errors: errorCount,
       skipped: skippedTutors.length,
-      skipped_sample: skippedTutors.slice(0, 5) // Return first 5 skipped for inspection
+      lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {
     console.error('Error syncing tutors:', error);

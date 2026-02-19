@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
+import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
 
 const app = new Hono();
 
@@ -30,13 +31,31 @@ app.get('/', async (c) => {
 
 /**
  * GET /api/students/sync
- * Sync students from Notion to database
+ * Sync students from cache spreadsheet to database (fast)
  */
 app.get('/sync', async (c) => {
   try {
-    const students = await fetchStudents();
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     
-    // Filter out students without student_id (required field)
+    if (!cacheSpreadsheetId) {
+      return c.json({
+        success: false,
+        error: 'GOOGLE_CACHE_SHEET_ID or GOOGLE_SHEET_ID not configured'
+      }, 400);
+    }
+    
+    // Get last sync time
+    const syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
+    console.log('Cache last sync:', syncMeta);
+    
+    // Fetch students from cache
+    const students = await fetchStudentsFromCache(cacheSpreadsheetId);
+    
+    // Fetch progress data
+    const progressMap = await fetchProgressFromCache(cacheSpreadsheetId);
+    console.log(`Loaded ${Object.keys(progressMap).length} progress records`);
+    
+    // Filter out students without student_id
     const skippedStudents = [];
     const validStudents = students.filter(student => {
       if (!student.student_id) {
@@ -50,24 +69,20 @@ app.get('/sync', async (c) => {
       return true;
     });
 
-    // Log first 10 skipped students for debugging
-    if (skippedStudents.length > 0) {
-      console.log('=== SKIPPED STUDENTS (first 10) ===');
-      console.log(JSON.stringify(skippedStudents.slice(0, 10), null, 2));
-    }
-
-    console.log(`Found ${students.length} students, ${validStudents.length} valid (with student_id), ${skippedStudents.length} skipped`);
+    console.log(`Found ${students.length} students, ${validStudents.length} valid, ${skippedStudents.length} skipped`);
     
-    // Upsert students into database
+    // Upsert students into database with progress
     let successCount = 0;
     let errorCount = 0;
 
     for (const student of validStudents) {
       try {
+        const lessonProgress = progressMap[student.student_id] || null;
+        
         await query(
           `INSERT INTO students 
-            (student_id, name, status, contract_plan, character_name, homeroom_tutor, notion_page_id, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+            (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, notion_page_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -75,6 +90,7 @@ app.get('/sync', async (c) => {
             contract_plan = EXCLUDED.contract_plan,
             character_name = EXCLUDED.character_name,
             homeroom_tutor = EXCLUDED.homeroom_tutor,
+            lesson_progress = EXCLUDED.lesson_progress,
             notion_page_id = EXCLUDED.notion_page_id,
             updated_at = CURRENT_TIMESTAMP`,
           [
@@ -84,6 +100,7 @@ app.get('/sync', async (c) => {
             student.contract_plan,
             student.character_name,
             student.homeroom_tutor,
+            lessonProgress,
             student.notion_page_id
           ]
         );
@@ -96,11 +113,11 @@ app.get('/sync', async (c) => {
     
     return c.json({
       success: true,
-      message: `Synced ${successCount} students from Notion (${errorCount} errors, ${skippedStudents.length} skipped)`,
+      message: `Synced ${successCount} students from cache (${errorCount} errors, ${skippedStudents.length} skipped)`,
       count: successCount,
       errors: errorCount,
       skipped: skippedStudents.length,
-      skipped_sample: skippedStudents.slice(0, 5) // Return first 5 skipped for inspection
+      lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {
     console.error('Error syncing students:', error);
