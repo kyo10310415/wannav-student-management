@@ -2,9 +2,15 @@
 // 取得できていないTutorの原因を特定
 
 // ========== 設定 ==========
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
-const NOTION_TUTOR_API_TOKEN = 'YOUR_TUTOR_NOTION_API_TOKEN';
-const NOTION_TUTOR_DB_ID = 'YOUR_TUTOR_DATABASE_ID';
+// 注意: このスクリプトを既存のGASプロジェクトに追加する場合、
+// 既存の設定変数を使用するため、以下の変数宣言をコメントアウトしてください。
+
+// const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
+// const NOTION_TUTOR_API_TOKEN = 'YOUR_TUTOR_NOTION_API_TOKEN';
+// const NOTION_TUTOR_DB_ID = 'YOUR_TUTOR_DATABASE_ID';
+
+// 既存のスクリプトファイル（gas-calendar-sync.js など）で
+// 既に宣言されている変数を使用します
 
 // ========== 診断メイン関数 ==========
 
