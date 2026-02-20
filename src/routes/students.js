@@ -81,8 +81,8 @@ app.get('/sync', async (c) => {
         
         await query(
           `INSERT INTO students 
-            (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, notion_page_id, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+            (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, notion_page_id, discord_url, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -92,6 +92,7 @@ app.get('/sync', async (c) => {
             homeroom_tutor = EXCLUDED.homeroom_tutor,
             lesson_progress = EXCLUDED.lesson_progress,
             notion_page_id = EXCLUDED.notion_page_id,
+            discord_url = EXCLUDED.discord_url,
             updated_at = CURRENT_TIMESTAMP`,
           [
             student.student_id,
@@ -101,7 +102,8 @@ app.get('/sync', async (c) => {
             student.character_name,
             student.homeroom_tutor,
             lessonProgress,
-            student.notion_page_id
+            student.notion_page_id,
+            student.discord_url
           ]
         );
         successCount++;

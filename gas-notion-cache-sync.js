@@ -80,7 +80,7 @@ function syncStudentsToSheet() {
   }
   
   // ヘッダー行を設定
-  sheet.getRange(1, 1, 1, 8).setValues([[
+  sheet.getRange(1, 1, 1, 9).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -88,9 +88,10 @@ function syncStudentsToSheet() {
     '契約プラン',
     'キャラクター名',
     '担任Tutor',
+    'Discord URL',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 8).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 9).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -102,10 +103,11 @@ function syncStudentsToSheet() {
       s.contract_plan || '',
       s.character_name || '',
       s.homeroom_tutor || '',
+      s.discord_url || '',
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 8).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 9).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -175,7 +177,8 @@ function fetchStudentsFromNotion() {
       status: getPropertyValue(props['ステータス']),
       contract_plan: getPropertyValue(props['契約プラン']),
       character_name: getPropertyValue(props['キャラクター名']),
-      homeroom_tutor: getPropertyValue(props['担任Tutor'])
+      homeroom_tutor: getPropertyValue(props['担任Tutor']),
+      discord_url: getPropertyValue(props['Discord URL']) || getPropertyValue(props['Discord']) || getPropertyValue(props['DiscordURL']) || ''
     };
   });
 }

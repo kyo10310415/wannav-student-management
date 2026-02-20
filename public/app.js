@@ -232,6 +232,7 @@ function renderApp() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今月の予約</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -324,7 +325,7 @@ function renderStudentRows() {
   if (filteredStudents.length === 0) {
     return `
       <tr>
-        <td colspan="9" class="px-6 py-4 text-center text-gray-500">
+        <td colspan="10" class="px-6 py-4 text-center text-gray-500">
           該当する生徒が見つかりません
         </td>
       </tr>
@@ -338,6 +339,22 @@ function renderStudentRows() {
     const datesStr = dates.length > 0 
       ? dates.map(d => d.formatted).join(', ')
       : '-';
+    
+    // Generate Notion URL from notion_page_id
+    const notionUrl = student.notion_page_id 
+      ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}`
+      : null;
+    
+    // Discord URL from database
+    const discordUrl = student.discord_url;
+    
+    // Generate Notion URL from notion_page_id
+    const notionUrl = student.notion_page_id 
+      ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` 
+      : null;
+    
+    // Discord URL from data
+    const discordUrl = student.discord_url || null;
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
@@ -355,6 +372,12 @@ function renderStudentRows() {
         </td>
         <td class="px-4 py-3 text-sm text-gray-600" style="max-width: 180px;">
           <div class="overflow-x-auto whitespace-nowrap text-xs">${datesStr}</div>
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          <div class="flex gap-2 justify-center">
+            ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fab fa-neos text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-neos text-lg"></i></span>'}
+            ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
+          </div>
         </td>
       </tr>
     `;

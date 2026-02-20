@@ -25,7 +25,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: '生徒データ!A2:G', // Headers in row 1, data starts from row 2
+      range: '生徒データ!A2:H', // Headers in row 1, data starts from row 2, now includes Discord URL
     });
 
     const rows = response.data.values || [];
@@ -39,6 +39,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
       contract_plan: row[4] || null,
       character_name: row[5] || null,
       homeroom_tutor: row[6] || null,
+      discord_url: row[7] || null,
     }));
   } catch (error) {
     console.error('Error fetching students from cache:', error);
