@@ -426,6 +426,30 @@ function formatDate(date) {
 // ========== テスト関数 ==========
 
 /**
+ * テスト用ラッパー関数（引数付き関数を実行しやすくするため）
+ */
+function testTeiSensei() {
+  testSpecificTutor("てぃ先生");
+}
+
+function testKojiSensei() {
+  testSpecificTutor("こうじ先生");
+}
+
+function testKyoheiSensei() {
+  testSpecificTutor("きょうへい先生");
+}
+
+/**
+ * カスタムTutorテスト（この関数を編集して使用）
+ */
+function testCustomTutor() {
+  // ここにTutor名を入力して実行してください
+  const tutorName = "てぃ先生"; // ← ここを変更
+  testSpecificTutor(tutorName);
+}
+
+/**
  * 診断ツールの使い方
  */
 function showUsage() {
@@ -435,11 +459,19 @@ function showUsage() {
   Logger.log('   → 全Tutorのカレンダーアクセス状況を診断');
   Logger.log('   → 結果はログとスプレッドシートに保存');
   Logger.log('');
-  Logger.log('2. testSpecificTutor("てぃ先生")');
+  Logger.log('2. testCustomTutor()');
+  Logger.log('   → 関数内のtutorName変数を編集してから実行');
   Logger.log('   → 特定のTutorのカレンダーアクセスをテスト');
-  Logger.log('   → 名前、Tutor名、Notion名で検索可能');
   Logger.log('');
-  Logger.log('3. listAllAccessibleCalendars()');
+  Logger.log('3. testTeiSensei() / testKojiSensei() / testKyoheiSensei()');
+  Logger.log('   → よく使うTutor用のショートカット関数');
+  Logger.log('');
+  Logger.log('4. listAllAccessibleCalendars()');
   Logger.log('   → サービスアカウントがアクセスできる全カレンダーを表示');
+  Logger.log('');
+  Logger.log('💡 ヒント:');
+  Logger.log('   - testCustomTutor() の tutorName を変更して使用');
+  Logger.log('   - Tutor名、名前、Notion名のいずれでも検索可能');
+  Logger.log('   - 例: "てぃ先生", "先生てぃ", "てぃ" すべてOK');
   Logger.log('');
 }
