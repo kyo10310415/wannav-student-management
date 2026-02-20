@@ -342,14 +342,6 @@ function renderStudentRows() {
     
     // Generate Notion URL from notion_page_id
     const notionUrl = student.notion_page_id 
-      ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}`
-      : null;
-    
-    // Discord URL from database
-    const discordUrl = student.discord_url;
-    
-    // Generate Notion URL from notion_page_id
-    const notionUrl = student.notion_page_id 
       ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` 
       : null;
     
