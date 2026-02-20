@@ -442,38 +442,37 @@ function fetchDiscordDestinations() {
     
     // ヘッダー行を確認（1行目）
     const headers = data[0];
-    const studentIdIndex = headers.indexOf('学籍番号');
-    const discordUrlIndex = headers.indexOf('Discord送信先URL');
+    Logger.log(`ヘッダー: ${headers.join(', ')}`);
     
-    if (studentIdIndex === -1) {
-      Logger.log('⚠️ 警告: 学籍番号列が見つかりません');
-      return {};
-    }
+    // B列: 学籍番号, M列: チャットURL
+    const studentIdIndex = 1; // B列 (0-indexed)
+    const chatUrlIndex = 12;  // M列 (0-indexed)
     
-    if (discordUrlIndex === -1) {
-      Logger.log('⚠️ 警告: Discord送信先URL列が見つかりません');
-      return {};
-    }
+    Logger.log(`学籍番号列: ${headers[studentIdIndex]}, チャットURL列: ${headers[chatUrlIndex]}`);
     
     // データをマッピング（2行目以降）
     const destinations = {};
+    let validCount = 0;
+    
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       const studentId = row[studentIdIndex];
-      const discordUrl = row[discordUrlIndex];
+      const chatUrl = row[chatUrlIndex];
       
-      if (studentId && discordUrl) {
+      if (studentId && chatUrl) {
         destinations[studentId] = {
-          url: discordUrl
+          url: chatUrl
         };
+        validCount++;
       }
     }
     
-    Logger.log(`Discord送信先: ${Object.keys(destinations).length}件取得完了`);
+    Logger.log(`Discord送信先: ${validCount}件取得完了（全${data.length - 1}行中）`);
     return destinations;
     
   } catch (error) {
     Logger.log(`❌ Discord送信先取得エラー: ${error.message}`);
+    Logger.log(error.stack);
     return {};
   }
 }
