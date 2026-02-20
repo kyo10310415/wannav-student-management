@@ -6,6 +6,7 @@
 // スプレッドシート設定
 const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID'; // メインスプレッドシートのID
 const PROGRESS_SPREADSHEET_ID = '1dwqi8NvrbDDkrwIryYJrOJ2AAg4oBu6v0-CEdR2HrzE'; // レッスン進捗スプレッドシートのID
+const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM'; // Discord送信先スプレッドシートのID
 
 // シート名
 const STUDENTS_SHEET_NAME = '生徒データ';
@@ -28,15 +29,19 @@ function syncAllData() {
   const startTime = new Date();
   
   try {
-    // 1. 生徒データを同期
-    syncStudentsToSheet();
+    // 1. Discord送信先データを取得
+    const discordDestinations = fetchDiscordDestinations();
+    Logger.log(`✓ Discord送信先: ${Object.keys(discordDestinations).length}件取得`);
+    
+    // 2. 生徒データを同期（Discord URLを含む）
+    syncStudentsToSheet(discordDestinations);
     Logger.log('✓ 生徒データ同期完了');
     
-    // 2. Tutorデータを同期
+    // 3. Tutorデータを同期
     syncTutorsToSheet();
     Logger.log('✓ Tutorデータ同期完了');
     
-    // 3. レッスン進捗データを同期
+    // 4. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
     
@@ -59,11 +64,17 @@ function syncAllData() {
 /**
  * Notionから生徒データを取得してスプレッドシートに保存
  */
-function syncStudentsToSheet() {
+function syncStudentsToSheet(discordDestinations = {}) {
   Logger.log('生徒データ同期開始...');
   
   const students = fetchStudentsFromNotion();
   Logger.log(`Notionから${students.length}件の生徒データを取得`);
+  
+  // Discord URLを統合
+  students.forEach(student => {
+    const destination = discordDestinations[student.student_id];
+    student.discord_url = destination ? destination.url : '';
+  });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName(STUDENTS_SHEET_NAME);
@@ -80,7 +91,7 @@ function syncStudentsToSheet() {
   }
   
   // ヘッダー行を設定
-  sheet.getRange(1, 1, 1, 9).setValues([[
+  sheet.getRange(1, 1, 1, 10).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -88,10 +99,11 @@ function syncStudentsToSheet() {
     '契約プラン',
     'キャラクター名',
     '担任Tutor',
+    'Notion URL',
     'Discord URL',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 9).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 10).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -103,11 +115,12 @@ function syncStudentsToSheet() {
       s.contract_plan || '',
       s.character_name || '',
       s.homeroom_tutor || '',
+      s.notion_url || '',
       s.discord_url || '',
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 9).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 10).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -178,7 +191,8 @@ function fetchStudentsFromNotion() {
       contract_plan: getPropertyValue(props['契約プラン']),
       character_name: getPropertyValue(props['キャラクター名']),
       homeroom_tutor: getPropertyValue(props['担任Tutor']),
-      discord_url: getPropertyValue(props['Discord URL']) || getPropertyValue(props['Discord']) || getPropertyValue(props['DiscordURL']) || ''
+      notion_url: getPropertyValue(props['Notion URL']) || getPropertyValue(props['NotionURL']) || '',
+      discord_url: '' // Will be filled from Discord destination spreadsheet
     };
   });
 }
@@ -405,6 +419,63 @@ function syncProgressToSheet() {
   }
   
   Logger.log(`${rows.length}件の進捗データを書き込み完了`);
+}
+
+// ========== Discord送信先データ取得 ==========
+
+/**
+ * Discord送信先スプレッドシートからURLを取得
+ */
+function fetchDiscordDestinations() {
+  Logger.log('Discord送信先データ取得開始...');
+  
+  try {
+    const ss = SpreadsheetApp.openById(DISCORD_DESTINATION_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('❶RAW_生徒様情報');
+    
+    if (!sheet) {
+      Logger.log('⚠️ 警告: ❶RAW_生徒様情報シートが見つかりません');
+      return {};
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    // ヘッダー行を確認（1行目）
+    const headers = data[0];
+    const studentIdIndex = headers.indexOf('学籍番号');
+    const discordUrlIndex = headers.indexOf('Discord送信先URL');
+    
+    if (studentIdIndex === -1) {
+      Logger.log('⚠️ 警告: 学籍番号列が見つかりません');
+      return {};
+    }
+    
+    if (discordUrlIndex === -1) {
+      Logger.log('⚠️ 警告: Discord送信先URL列が見つかりません');
+      return {};
+    }
+    
+    // データをマッピング（2行目以降）
+    const destinations = {};
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const studentId = row[studentIdIndex];
+      const discordUrl = row[discordUrlIndex];
+      
+      if (studentId && discordUrl) {
+        destinations[studentId] = {
+          url: discordUrl
+        };
+      }
+    }
+    
+    Logger.log(`Discord送信先: ${Object.keys(destinations).length}件取得完了`);
+    return destinations;
+    
+  } catch (error) {
+    Logger.log(`❌ Discord送信先取得エラー: ${error.message}`);
+    return {};
+  }
 }
 
 // ========== ヘルパー関数 ==========

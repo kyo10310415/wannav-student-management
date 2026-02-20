@@ -340,12 +340,11 @@ function renderStudentRows() {
       ? dates.map(d => d.formatted).join(', ')
       : '-';
     
-    // Generate Notion URL from notion_page_id
-    const notionUrl = student.notion_page_id 
-      ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` 
-      : null;
+    // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
+    const notionUrl = student.notion_url || 
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
     
-    // Discord URL from data
+    // Discord URL from Discord destination spreadsheet
     const discordUrl = student.discord_url || null;
     
     return `
