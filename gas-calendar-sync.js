@@ -70,12 +70,14 @@ function getTutorEmailsFromNotion() {
     }
   }
   
-  // メールアドレスを抽出
+  // メールアドレスを抽出（小文字に統一）
   const emails = allResults
     .map(page => {
       try {
         const emailProp = page.properties['メールアドレス'];
-        return emailProp?.email || null;
+        const email = emailProp?.email || null;
+        // メールアドレスを小文字に変換（Googleカレンダーとの一致精度向上）
+        return email ? email.toLowerCase() : null;
       } catch (error) {
         Logger.log(`プロパティ取得エラー: ${error.message}`);
         return null;
@@ -108,9 +110,11 @@ function syncLessonsToSheet() {
   
   Logger.log(`Notionから${notionEmails.length}件のTutorメールアドレスを取得`);
   
-  // アクセス可能なカレンダーのリストを取得
+  // アクセス可能なカレンダーのリストを取得（小文字に統一）
   const accessibleCalendars = CalendarApp.getAllCalendars();
-  const accessibleEmailsSet = new Set(accessibleCalendars.map(cal => cal.getId()));
+  const accessibleEmailsSet = new Set(
+    accessibleCalendars.map(cal => cal.getId().toLowerCase())
+  );
   
   Logger.log(`アクセス可能なカレンダー: ${accessibleEmailsSet.size}件`);
   
