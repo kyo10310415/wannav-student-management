@@ -311,7 +311,7 @@ function renderStatistics() {
       <div class="text-sm text-gray-600 mt-1">予約1回</div>
     </div>
     <div class="text-center">
-      <div class="text-3xl font-bold text-green-600">${threePlusLessons}</div>
+      <div class="text-3xl font-bold text-cyan-600">${threePlusLessons}</div>
       <div class="text-sm text-gray-600 mt-1">予約3回以上</div>
     </div>
   `;
@@ -491,7 +491,7 @@ function switchActiveSubTab(subTab) {
 function getLessonCountColor(count) {
   if (count === 0) return 'bg-red-50';
   if (count === 1) return 'bg-yellow-50';
-  if (count === 3) return 'bg-yellow-100';
+  if (count >= 3) return 'bg-cyan-50'; // Changed from bg-yellow-100 to cyan
   return '';
 }
 
@@ -499,7 +499,7 @@ function getLessonCountColor(count) {
 function getLessonCountBadgeColor(count) {
   if (count === 0) return 'bg-red-200 text-red-800';
   if (count === 1) return 'bg-yellow-200 text-yellow-800';
-  if (count === 3) return 'bg-yellow-300 text-yellow-900';
+  if (count >= 3) return 'bg-cyan-200 text-cyan-800'; // Changed from yellow to cyan
   return 'bg-gray-200 text-gray-800';
 }
 
