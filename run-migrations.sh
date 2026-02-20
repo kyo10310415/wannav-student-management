@@ -18,4 +18,12 @@ CREATE INDEX IF NOT EXISTS idx_tutors_status ON tutors(status);
 CREATE INDEX IF NOT EXISTS idx_tutors_active_tutor ON tutors(status, job_type) WHERE status = 'アクティブ';
 SQL
 
+# Migration 3: Add notion_url and discord_url columns to students
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE students ADD COLUMN IF NOT EXISTS notion_url TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS discord_url TEXT;
+CREATE INDEX IF NOT EXISTS idx_students_notion_url ON students(notion_url);
+CREATE INDEX IF NOT EXISTS idx_students_discord_url ON students(discord_url);
+SQL
+
 echo "Migrations completed successfully!"
