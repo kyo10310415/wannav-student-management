@@ -314,12 +314,14 @@ function fetchTutorsFromNotion() {
   
   return allResults.map(page => {
     const props = page.properties;
+    const email = getPropertyValue(props['メールアドレス']);
+    
     return {
       notion_page_id: page.id,
       employee_id: getPropertyValue(props['従業員ID']),
       name: getPropertyValue(props['名前']),
       tutor_name: getPropertyValue(props['Tutor名']),
-      email: getPropertyValue(props['メールアドレス']),
+      email: email ? email.toLowerCase() : null, // Convert to lowercase
       team: getPropertyValue(props['所属チーム']),
       notion_name: getPropertyValue(props['Notion名']),
       job_type: getPropertyValue(props['職種']),

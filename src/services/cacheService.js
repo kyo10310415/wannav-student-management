@@ -66,7 +66,7 @@ export async function fetchTutorsFromCache(spreadsheetId) {
       employee_id: row[1] || null,
       name: row[2] || null,
       tutor_name: row[3] || null,
-      email: row[4] || null,
+      email: row[4] ? row[4].toLowerCase() : null, // Convert to lowercase
       team: row[5] || null,
       notion_name: row[6] || null,
       job_type: row[7] || null,

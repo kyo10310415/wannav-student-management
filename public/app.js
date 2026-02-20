@@ -8,7 +8,7 @@ let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
-let currentTab = 'active'; // 'active', 'preparing', 'graduated', 'cancelled'
+let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 
 // Initialize app
@@ -199,6 +199,9 @@ function renderApp() {
         <button onclick="switchTab('preparing')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-clock mr-2"></i>レッスン準備中
         </button>
+        <button onclick="switchTab('suspended')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'suspended' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-pause-circle mr-2"></i>休会
+        </button>
         <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-graduate mr-2"></i>正規退会
         </button>
@@ -246,10 +249,17 @@ function renderApp() {
   }
 }
 
-// Get tutor options for filter
+// Get tutor options for filter (only cached tutors)
 function getTutorOptions() {
-  // Get unique notion_names from students
-  const uniqueNotionNames = [...new Set(students.map(s => s.homeroom_tutor).filter(Boolean))];
+  // Get unique notion_names that exist in tutors array (cached tutors only)
+  const cachedTutorNotionNames = new Set(tutors.map(t => t.notion_name).filter(Boolean));
+  
+  // Get unique notion_names from students that are also in cached tutors
+  const uniqueNotionNames = [...new Set(
+    students
+      .map(s => s.homeroom_tutor)
+      .filter(notionName => notionName && cachedTutorNotionNames.has(notionName))
+  )];
   
   // Map notion_name to tutor_name for display
   return uniqueNotionNames
@@ -375,6 +385,8 @@ function getFilteredStudents() {
     }
   } else if (currentTab === 'preparing') {
     filtered = students.filter(s => s.status === 'レッスン準備中');
+  } else if (currentTab === 'suspended') {
+    filtered = students.filter(s => s.status === '休会');
   } else if (currentTab === 'graduated') {
     filtered = students.filter(s => s.status === '正規退会');
   } else if (currentTab === 'cancelled') {
@@ -413,6 +425,7 @@ function getTabTitle() {
   const titles = {
     'active': 'アクティブ生徒一覧',
     'preparing': 'レッスン準備中生徒一覧',
+    'suspended': '休会生徒一覧',
     'graduated': '正規退会生徒一覧',
     'cancelled': '無断キャンセル生徒一覧'
   };
