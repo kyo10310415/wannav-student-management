@@ -375,7 +375,7 @@ function renderStudentRows() {
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
-            ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fab fa-neos text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-neos text-lg"></i></span>'}
+            ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
           </div>
         </td>
