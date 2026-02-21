@@ -42,4 +42,17 @@ CREATE INDEX IF NOT EXISTS idx_students_payment_last ON students(payment_status_
 CREATE INDEX IF NOT EXISTS idx_students_payment_current ON students(payment_status_current_month);
 SQL
 
+# Migration 6: Add result score and absence count columns
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_absence TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_late TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_mission TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_payment TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_active_listening TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_understanding TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS result_overall TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS absence_count INTEGER DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_students_absence_count ON students(absence_count);
+SQL
+
 echo "Migrations completed successfully!"

@@ -751,6 +751,14 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">遅刻</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ミッション</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">支払い</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リスニング</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">理解度</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">総合</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
@@ -798,14 +806,14 @@ function renderStudentStatistics() {
   `;
 }
 
-// Render student rows (simple version without payment, reservations, dates)
+// Render student rows (simple version with result scores and absence count)
 function renderStudentRowsSimple() {
   const filtered = getFilteredStudents();
   
   if (filtered.length === 0) {
     return `
       <tr>
-        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="15" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>該当する生徒が見つかりません</p>
         </td>
@@ -825,6 +833,19 @@ function renderStudentRowsSimple() {
     // Discord URL from Discord destination spreadsheet
     const discordUrl = student.discord_url || null;
     
+    // Result scores (前月のリザルトスコア)
+    const resultAbsence = student.result_absence || '-';
+    const resultLate = student.result_late || '-';
+    const resultMission = student.result_mission || '-';
+    const resultPayment = student.result_payment || '-';
+    const resultActiveListening = student.result_active_listening || '-';
+    const resultUnderstanding = student.result_understanding || '-';
+    const resultOverall = student.result_overall || '-';
+    
+    // Absence count
+    const absenceCount = student.absence_count || 0;
+    const absenceColorClass = absenceCount > 3 ? 'text-red-600 font-bold' : absenceCount > 0 ? 'text-orange-600' : 'text-gray-600';
+    
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
@@ -834,6 +855,14 @@ function renderStudentRowsSimple() {
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultAbsence}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultLate}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultMission}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultPayment}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultActiveListening}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultUnderstanding}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-xs text-center font-semibold text-gray-700">${resultOverall}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}

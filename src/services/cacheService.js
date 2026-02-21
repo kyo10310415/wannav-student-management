@@ -25,7 +25,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: '生徒データ!A2:M', // Headers in row 1, data starts from row 2, now includes payment statuses
+      range: '生徒データ!A2:U', // 21 columns (A-U)
     });
 
     const rows = response.data.values || [];
@@ -53,6 +53,14 @@ export async function fetchStudentsFromCache(spreadsheetId) {
         payment_status_current_month: row[10] || '未払い',
         payment_year_month_last: yearMonthInfo.last || '',
         payment_year_month_current: yearMonthInfo.current || '',
+        result_absence: row[12] || '',
+        result_late: row[13] || '',
+        result_mission: row[14] || '',
+        result_payment: row[15] || '',
+        result_active_listening: row[16] || '',
+        result_understanding: row[17] || '',
+        result_overall: row[18] || '',
+        absence_count: row[19] || 0,
       };
     });
   } catch (error) {

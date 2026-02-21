@@ -84,8 +84,11 @@ app.get('/sync', async (c) => {
             (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, 
              notion_page_id, notion_url, discord_url, 
              payment_status_last_month, payment_status_current_month, 
-             payment_year_month_last, payment_year_month_current, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+             payment_year_month_last, payment_year_month_current,
+             result_absence, result_late, result_mission, result_payment,
+             result_active_listening, result_understanding, result_overall,
+             absence_count, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -101,6 +104,14 @@ app.get('/sync', async (c) => {
             payment_status_current_month = EXCLUDED.payment_status_current_month,
             payment_year_month_last = EXCLUDED.payment_year_month_last,
             payment_year_month_current = EXCLUDED.payment_year_month_current,
+            result_absence = EXCLUDED.result_absence,
+            result_late = EXCLUDED.result_late,
+            result_mission = EXCLUDED.result_mission,
+            result_payment = EXCLUDED.result_payment,
+            result_active_listening = EXCLUDED.result_active_listening,
+            result_understanding = EXCLUDED.result_understanding,
+            result_overall = EXCLUDED.result_overall,
+            absence_count = EXCLUDED.absence_count,
             updated_at = CURRENT_TIMESTAMP`,
           [
             student.student_id,
@@ -116,7 +127,15 @@ app.get('/sync', async (c) => {
             student.payment_status_last_month,
             student.payment_status_current_month,
             student.payment_year_month_last,
-            student.payment_year_month_current
+            student.payment_year_month_current,
+            student.result_absence,
+            student.result_late,
+            student.result_mission,
+            student.result_payment,
+            student.result_active_listening,
+            student.result_understanding,
+            student.result_overall,
+            student.absence_count
           ]
         );
         successCount++;
