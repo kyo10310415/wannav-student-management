@@ -200,14 +200,6 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
 }
-      new Date()
-    ]);
-    
-    sheet.getRange(2, 1, rows.length, 13).setValues(rows);
-  }
-  
-  Logger.log(`${students.length}件の生徒データを書き込み完了`);
-}
 
 /**
  * Notionから生徒データを取得
