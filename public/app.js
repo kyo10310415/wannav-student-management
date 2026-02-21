@@ -230,6 +230,7 @@ function renderApp() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="max-width: 100px;">キャラ名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">お支払い</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今月の予約</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
@@ -325,7 +326,7 @@ function renderStudentRows() {
   if (filteredStudents.length === 0) {
     return `
       <tr>
-        <td colspan="10" class="px-6 py-4 text-center text-gray-500">
+        <td colspan="11" class="px-6 py-4 text-center text-gray-500">
           該当する生徒が見つかりません
         </td>
       </tr>
@@ -347,6 +348,10 @@ function renderStudentRows() {
     // Discord URL from Discord destination spreadsheet
     const discordUrl = student.discord_url || null;
     
+    // Payment status with color coding
+    const paymentStatus = student.payment_status || '未払い';
+    const paymentColorClass = paymentStatus === '未払い' ? 'text-red-600 font-semibold' : 'text-green-600';
+    
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
@@ -356,6 +361,7 @@ function renderStudentRows() {
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${paymentStatus}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">
           <span class="px-2 py-1 rounded-full text-xs ${getLessonCountBadgeColor(lessonCount)}">
             ${lessonCount}回

@@ -26,4 +26,10 @@ CREATE INDEX IF NOT EXISTS idx_students_notion_url ON students(notion_url);
 CREATE INDEX IF NOT EXISTS idx_students_discord_url ON students(discord_url);
 SQL
 
+# Migration 4: Add payment_status column to students
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT '未払い';
+CREATE INDEX IF NOT EXISTS idx_students_payment_status ON students(payment_status);
+SQL
+
 echo "Migrations completed successfully!"

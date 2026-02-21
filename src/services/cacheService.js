@@ -25,7 +25,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: '生徒データ!A2:I', // Headers in row 1, data starts from row 2, now includes notion_url and discord_url
+      range: '生徒データ!A2:J', // Headers in row 1, data starts from row 2, now includes payment_status
     });
 
     const rows = response.data.values || [];
@@ -41,6 +41,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
       homeroom_tutor: row[6] || null,
       notion_url: row[7] || null,
       discord_url: row[8] || null,
+      payment_status: row[9] || '未払い',
     }));
   } catch (error) {
     console.error('Error fetching students from cache:', error);

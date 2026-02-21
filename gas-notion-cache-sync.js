@@ -33,15 +33,19 @@ function syncAllData() {
     const discordDestinations = fetchDiscordDestinations();
     Logger.log(`✓ Discord送信先: ${Object.keys(discordDestinations).length}件取得`);
     
-    // 2. 生徒データを同期（Discord URLを含む）
-    syncStudentsToSheet(discordDestinations);
+    // 2. お支払い状況を取得
+    const paymentStatuses = fetchPaymentStatuses();
+    Logger.log(`✓ お支払い状況: ${Object.keys(paymentStatuses).length}件取得`);
+    
+    // 3. 生徒データを同期（Discord URLとお支払い状況を含む）
+    syncStudentsToSheet(discordDestinations, paymentStatuses);
     Logger.log('✓ 生徒データ同期完了');
     
-    // 3. Tutorデータを同期
+    // 4. Tutorデータを同期
     syncTutorsToSheet();
     Logger.log('✓ Tutorデータ同期完了');
     
-    // 4. レッスン進捗データを同期
+    // 5. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
     
@@ -64,16 +68,19 @@ function syncAllData() {
 /**
  * Notionから生徒データを取得してスプレッドシートに保存
  */
-function syncStudentsToSheet(discordDestinations = {}) {
+function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
   Logger.log('生徒データ同期開始...');
   
   const students = fetchStudentsFromNotion();
   Logger.log(`Notionから${students.length}件の生徒データを取得`);
   
-  // Discord URLを統合
+  // Discord URLとお支払い状況を統合
   students.forEach(student => {
     const destination = discordDestinations[student.student_id];
     student.discord_url = destination ? destination.url : '';
+    
+    const payment = paymentStatuses[student.student_id];
+    student.payment_status = payment ? payment.status : '未払い';
   });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -91,7 +98,7 @@ function syncStudentsToSheet(discordDestinations = {}) {
   }
   
   // ヘッダー行を設定
-  sheet.getRange(1, 1, 1, 10).setValues([[
+  sheet.getRange(1, 1, 1, 11).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -101,9 +108,10 @@ function syncStudentsToSheet(discordDestinations = {}) {
     '担任Tutor',
     'Notion URL',
     'Discord URL',
+    'お支払い状況',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 10).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 11).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -117,10 +125,11 @@ function syncStudentsToSheet(discordDestinations = {}) {
       s.homeroom_tutor || '',
       s.notion_url || '',
       s.discord_url || '',
+      s.payment_status || '未払い',
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 10).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 11).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -472,6 +481,93 @@ function fetchDiscordDestinations() {
     
   } catch (error) {
     Logger.log(`❌ Discord送信先取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+    return {};
+  }
+}
+
+// ========== お支払い状況取得 ==========
+
+/**
+ * お支払い状況スプレッドシートから前月の支払い状況を取得
+ */
+function fetchPaymentStatuses() {
+  Logger.log('お支払い状況データ取得開始...');
+  
+  try {
+    const ss = SpreadsheetApp.openById(DISCORD_DESTINATION_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('RAW_支払い状況');
+    
+    if (!sheet) {
+      Logger.log('⚠️ 警告: RAW_支払い状況シートが見つかりません');
+      return {};
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    // ヘッダー行は13行目（0-indexedで12）
+    if (data.length < 13) {
+      Logger.log('⚠️ 警告: データが13行未満です');
+      return {};
+    }
+    
+    const headers = data[12]; // 13行目
+    Logger.log(`お支払い状況ヘッダー: ${headers.join(', ')}`);
+    
+    // C列: 学籍番号
+    const studentIdIndex = 2; // C列 (0-indexed)
+    
+    // 前月の年月を計算（例: 2026/2 の場合 → 2026/1）
+    const today = new Date();
+    const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const targetYearMonth = `${lastMonth.getFullYear()}/${lastMonth.getMonth() + 1}`;
+    
+    Logger.log(`前月: ${targetYearMonth}`);
+    
+    // 前月の列を検索
+    let paymentColumnIndex = -1;
+    for (let i = 0; i < headers.length; i++) {
+      if (headers[i] && headers[i].toString().trim() === targetYearMonth) {
+        paymentColumnIndex = i;
+        break;
+      }
+    }
+    
+    if (paymentColumnIndex === -1) {
+      Logger.log(`⚠️ 警告: ${targetYearMonth}の列が見つかりません`);
+      Logger.log(`利用可能な年月: ${headers.filter(h => h && h.toString().match(/\d{4}\/\d{1,2}/)).join(', ')}`);
+      return {};
+    }
+    
+    Logger.log(`お支払い状況列: ${headers[paymentColumnIndex]}（列インデックス: ${paymentColumnIndex}）`);
+    
+    // データをマッピング（14行目以降 = index 13以降）
+    const statuses = {};
+    let validCount = 0;
+    
+    for (let i = 13; i < data.length; i++) {
+      const row = data[i];
+      const studentId = row[studentIdIndex];
+      const paymentValue = row[paymentColumnIndex];
+      
+      if (studentId) {
+        // 空欄または空白の場合は「未払い」
+        const status = (paymentValue && paymentValue.toString().trim() !== '') 
+          ? paymentValue.toString().trim() 
+          : '未払い';
+        
+        statuses[studentId] = {
+          status: status
+        };
+        validCount++;
+      }
+    }
+    
+    Logger.log(`お支払い状況: ${validCount}件取得完了（全${data.length - 13}行中）`);
+    return statuses;
+    
+  } catch (error) {
+    Logger.log(`❌ お支払い状況取得エラー: ${error.message}`);
     Logger.log(error.stack);
     return {};
   }
