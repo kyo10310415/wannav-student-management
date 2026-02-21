@@ -9,6 +9,9 @@ const PROGRESS_SPREADSHEET_ID = '1dwqi8NvrbDDkrwIryYJrOJ2AAg4oBu6v0-CEdR2HrzE'; 
 const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM'; // Discord送信先スプレッドシートのID
 const RESULT_SCORE_SPREADSHEET_ID = '1t571fqZJtUjNL7_gH6G2dSNBCmS98LTnDrWEtt7J92k'; // リザルトスコアスプレッドシートのID
 
+// バックエンドAPI設定（外部DB用）
+const BACKEND_API_URL = 'https://wannav-student-management.onrender.com/api/external/lesson-start-dates'; // バックエンドAPIのURL
+
 // シート名
 const STUDENTS_SHEET_NAME = '生徒データ';
 const TUTORS_SHEET_NAME = 'Tutorデータ';
@@ -46,15 +49,19 @@ function syncAllData() {
     const absenceCounts = fetchAbsenceCounts();
     Logger.log(`✓ 欠席回数: ${Object.keys(absenceCounts).length}件取得`);
     
-    // 5. 生徒データを同期（すべての追加情報を含む）
-    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts);
+    // 5. レッスン開始日を取得（外部DB）
+    const lessonStartDates = fetchLessonStartDates();
+    Logger.log(`✓ レッスン開始日: ${Object.keys(lessonStartDates).length}件取得`);
+    
+    // 6. 生徒データを同期（すべての追加情報を含む）
+    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts, lessonStartDates);
     Logger.log('✓ 生徒データ同期完了');
     
-    // 6. Tutorデータを同期
+    // 7. Tutorデータを同期
     syncTutorsToSheet();
     Logger.log('✓ Tutorデータ同期完了');
     
-    // 7. レッスン進捗データを同期
+    // 8. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
     
@@ -77,7 +84,7 @@ function syncAllData() {
 /**
  * Notionから生徒データを取得してスプレッドシートに保存
  */
-function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}) {
+function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}, lessonStartDates = {}) {
   Logger.log('生徒データ同期開始...');
   
   const students = fetchStudentsFromNotion();
@@ -127,6 +134,9 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     
     // 欠席回数
     student.absence_count = absenceCounts[studentId] || 0;
+    
+    // レッスン開始日
+    student.lesson_start_date = lessonStartDates[studentId] || '';
   });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -143,8 +153,8 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
   
-  // ヘッダー行を設定（21列に拡張）
-  sheet.getRange(1, 1, 1, 21).setValues([[
+  // ヘッダー行を設定（22列に拡張）
+  sheet.getRange(1, 1, 1, 22).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -165,9 +175,10 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     '理解度',
     '総合評価',
     '欠席回数',
+    'レッスン開始日',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 21).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 22).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -192,10 +203,11 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
       s.result_understanding || '',
       s.result_overall || '',
       s.absence_count || 0,
+      s.lesson_start_date || '',
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 21).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 22).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -938,6 +950,47 @@ function fetchAbsenceCounts() {
     
   } catch (error) {
     Logger.log(`❌ 欠席回数取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+    return {};
+  }
+}
+
+/**
+ * 外部DBからレッスン開始日を取得
+ */
+function fetchLessonStartDates() {
+  Logger.log('レッスン開始日データ取得開始...');
+  
+  try {
+    const options = {
+      method: 'get',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(BACKEND_API_URL, options);
+    const statusCode = response.getResponseCode();
+    
+    if (statusCode !== 200) {
+      Logger.log(`⚠️ 警告: API呼び出し失敗 (status: ${statusCode})`);
+      Logger.log(`Response: ${response.getContentText()}`);
+      return {};
+    }
+    
+    const data = JSON.parse(response.getContentText());
+    
+    if (!data.success) {
+      Logger.log(`⚠️ 警告: APIエラー - ${data.error}`);
+      return {};
+    }
+    
+    Logger.log(`レッスン開始日: ${data.count}件取得完了`);
+    return data.data || {};
+    
+  } catch (error) {
+    Logger.log(`❌ レッスン開始日取得エラー: ${error.message}`);
     Logger.log(error.stack);
     return {};
   }

@@ -596,6 +596,45 @@ function getLessonCountBadgeColor(count) {
   return 'bg-gray-200 text-gray-800';
 }
 
+// Calculate continued months from lesson start date
+function calculateContinuedMonths(startDate) {
+  if (!startDate) return 0;
+  
+  try {
+    const start = new Date(startDate);
+    const now = new Date();
+    
+    const yearsDiff = now.getFullYear() - start.getFullYear();
+    const monthsDiff = now.getMonth() - start.getMonth();
+    
+    const totalMonths = yearsDiff * 12 + monthsDiff;
+    
+    // If current day is before start day, subtract one month
+    if (now.getDate() < start.getDate()) {
+      return Math.max(0, totalMonths - 1);
+    }
+    
+    return Math.max(0, totalMonths);
+  } catch (error) {
+    console.error('Error calculating continued months:', error);
+    return 0;
+  }
+}
+
+// Format date to YYYY-MM-DD
+function formatDate(dateString) {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    return dateString;
+  }
+}
+
 // Format month
 function formatMonth(date) {
   const year = date.getFullYear();
@@ -751,6 +790,8 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">開始日</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席</th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">遅刻</th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ミッション</th>
@@ -813,7 +854,7 @@ function renderStudentRowsSimple() {
   if (filtered.length === 0) {
     return `
       <tr>
-        <td colspan="15" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="17" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>該当する生徒が見つかりません</p>
         </td>
@@ -846,6 +887,10 @@ function renderStudentRowsSimple() {
     const absenceCount = student.absence_count || 0;
     const absenceColorClass = absenceCount > 3 ? 'text-red-600 font-bold' : absenceCount > 0 ? 'text-orange-600' : 'text-gray-600';
     
+    // Lesson start date and continued months
+    const lessonStartDate = student.lesson_start_date ? formatDate(student.lesson_start_date) : '-';
+    const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date) : 0;
+    
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
@@ -855,6 +900,8 @@ function renderStudentRowsSimple() {
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-xs text-center text-gray-700">${lessonStartDate}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
         <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultAbsence}</td>
         <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultLate}</td>
         <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultMission}</td>

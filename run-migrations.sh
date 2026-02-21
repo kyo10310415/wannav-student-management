@@ -55,4 +55,10 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS absence_count INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_students_absence_count ON students(absence_count);
 SQL
 
+# Migration 7: Add lesson start date column
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE students ADD COLUMN IF NOT EXISTS lesson_start_date TEXT;
+CREATE INDEX IF NOT EXISTS idx_students_lesson_start_date ON students(lesson_start_date);
+SQL
+
 echo "Migrations completed successfully!"
