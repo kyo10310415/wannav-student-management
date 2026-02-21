@@ -10,6 +10,7 @@ let currentMonth = new Date();
 let selectedTutor = 'all';
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
+let currentPage = 'reservations'; // 'reservations', 'students', 'tutors'
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -31,6 +32,19 @@ function renderHeader() {
             WannaV 生徒様管理システム
           </h1>
           <p class="text-blue-100 mt-2">VTuber育成スクール生徒管理</p>
+          
+          <!-- Navigation -->
+          <nav class="mt-6 flex gap-2">
+            <button id="nav-reservations" onclick="changePage('reservations')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'reservations' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-calendar-check mr-2"></i>予約管理
+            </button>
+            <button id="nav-students" onclick="changePage('students')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'students' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-user-graduate mr-2"></i>生徒管理
+            </button>
+            <button id="nav-tutors" onclick="changePage('tutors')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
+            </button>
+          </nav>
         </div>
       </header>
 
@@ -126,6 +140,28 @@ async function loadLessonDates() {
 
 // Render main app
 function renderApp() {
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  
+  // Render based on current page
+  if (currentPage === 'reservations') {
+    renderReservationsPage();
+  } else if (currentPage === 'students') {
+    renderStudentsPage();
+  } else if (currentPage === 'tutors') {
+    renderTutorsPage();
+  }
+}
+
+// Change page
+function changePage(page) {
+  currentPage = page;
+  renderHeader();
+  renderApp();
+}
+
+// Render Reservations Page (original page with all columns)
+function renderReservationsPage() {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
   
@@ -630,4 +666,290 @@ async function sendReminders() {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-bell mr-2"></i>リマインド送信';
   }
+}
+
+// ========== Students Page ==========
+
+// Render Students Page (without payment status, reservations, and lesson dates)
+function renderStudentsPage() {
+  const content = document.getElementById('content');
+  const previousTutorFilter = selectedTutor;
+  
+  content.innerHTML = `
+    <!-- Controls -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Tutor Filter -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-filter mr-2"></i>
+            担当Tutor絞り込み
+          </label>
+          <select id="tutor-filter" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
+            <option value="all">すべてのTutor</option>
+            ${getTutorOptions()}
+          </select>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="mt-4 flex gap-2">
+        <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+          <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+      </div>
+    </div>
+
+    <!-- Statistics (exclude 正規退会, 無断キャンセル, and 永久会員) -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-chart-bar mr-2"></i>
+        統計情報 <span class="text-sm text-gray-500">(正規退会・無断キャンセル・永久会員を除く)</span>
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        ${renderStudentStatistics()}
+      </div>
+    </div>
+
+    <!-- Status Tabs -->
+    <div class="bg-white rounded-lg shadow-md p-2 mb-6">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-check-circle mr-2"></i>アクティブ
+        </button>
+        <button onclick="switchTab('preparing')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-clock mr-2"></i>レッスン準備中
+        </button>
+        <button onclick="switchTab('suspended')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'suspended' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-pause-circle mr-2"></i>休会
+        </button>
+        <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-graduate mr-2"></i>正規退会
+        </button>
+        <button onclick="switchTab('cancelled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-user-times mr-2"></i>無断キャンセル
+        </button>
+      </div>
+      ${renderActiveSubTabs()}
+    </div>
+
+    <!-- Student List -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-list mr-2"></i>
+        ${getTabTitle()}
+      </h2>
+      ${renderContractPlanTabs()}
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">契約プラン</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${renderStudentRowsSimple()}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  
+  // Restore tutor filter value
+  const selectElement = document.getElementById('tutor-filter');
+  if (selectElement) {
+    selectElement.value = previousTutorFilter;
+  }
+}
+
+// Render student statistics (simpler version without lesson counts)
+function renderStudentStatistics() {
+  const filtered = students.filter(s => 
+    s.status !== '正規退会' && 
+    s.status !== '無断キャンセル' &&
+    s.contract_plan !== '永久会員'
+  );
+
+  const total = filtered.length;
+  const active = filtered.filter(s => s.status === 'アクティブ').length;
+  const preparing = filtered.filter(s => s.status === 'レッスン準備中').length;
+  const suspended = filtered.filter(s => s.status === '休会').length;
+
+  return `
+    <div class="bg-blue-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">総生徒数</div>
+      <div class="text-3xl font-bold text-blue-600">${total}名</div>
+    </div>
+    <div class="bg-green-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">アクティブ</div>
+      <div class="text-3xl font-bold text-green-600">${active}名</div>
+    </div>
+    <div class="bg-yellow-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">休会中</div>
+      <div class="text-3xl font-bold text-yellow-600">${suspended}名</div>
+    </div>
+  `;
+}
+
+// Render student rows (simple version without payment, reservations, dates)
+function renderStudentRowsSimple() {
+  const filtered = getFilteredStudents();
+  
+  if (filtered.length === 0) {
+    return `
+      <tr>
+        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+          <i class="fas fa-inbox text-4xl mb-2"></i>
+          <p>該当する生徒が見つかりません</p>
+        </td>
+      </tr>
+    `;
+  }
+
+  return filtered.map(student => {
+    // Determine row background color based on lesson count
+    const lessonCount = lessonStats[student.student_id] || 0;
+    const colorClass = getLessonCountColor(lessonCount);
+    
+    // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
+    const notionUrl = student.notion_url || 
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    
+    // Discord URL from Discord destination spreadsheet
+    const discordUrl = student.discord_url || null;
+    
+    return `
+      <tr class="hover:bg-gray-50 ${colorClass}">
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          <div class="flex gap-2 justify-center">
+            ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
+            ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ========== Tutors Page ==========
+
+// Render Tutors Page
+function renderTutorsPage() {
+  const content = document.getElementById('content');
+  
+  content.innerHTML = `
+    <!-- Controls -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="flex gap-2">
+        <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+          <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+      </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-chart-bar mr-2"></i>
+        統計情報
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        ${renderTutorStatistics()}
+      </div>
+    </div>
+
+    <!-- Tutor List -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-chalkboard-teacher mr-2"></i>
+        Tutor一覧
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">従業員ID</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">氏名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">メールアドレス</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">所属チーム</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notion名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">職種</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${renderTutorRows()}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// Render tutor statistics
+function renderTutorStatistics() {
+  const total = tutors.length;
+  const active = tutors.filter(t => t.status === 'アクティブ').length;
+  const tutorRole = tutors.filter(t => t.job_type && t.job_type.toLowerCase().includes('tutor')).length;
+  
+  return `
+    <div class="bg-blue-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">総Tutor数</div>
+      <div class="text-3xl font-bold text-blue-600">${total}名</div>
+    </div>
+    <div class="bg-green-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">アクティブ</div>
+      <div class="text-3xl font-bold text-green-600">${active}名</div>
+    </div>
+    <div class="bg-purple-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">Tutor職種</div>
+      <div class="text-3xl font-bold text-purple-600">${tutorRole}名</div>
+    </div>
+  `;
+}
+
+// Render tutor rows
+function renderTutorRows() {
+  if (tutors.length === 0) {
+    return `
+      <tr>
+        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+          <i class="fas fa-inbox text-4xl mb-2"></i>
+          <p>Tutorデータが見つかりません</p>
+        </td>
+      </tr>
+    `;
+  }
+
+  return tutors.map(tutor => {
+    const statusClass = tutor.status === 'アクティブ' ? 'text-green-600 font-semibold' : 'text-gray-600';
+    
+    return `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.tutor_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.email || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.notion_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.job_type || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm ${statusClass}">${tutor.status || '-'}</td>
+      </tr>
+    `;
+  }).join('');
 }
