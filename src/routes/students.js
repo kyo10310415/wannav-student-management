@@ -81,8 +81,11 @@ app.get('/sync', async (c) => {
         
         await query(
           `INSERT INTO students 
-            (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, notion_page_id, discord_url, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+            (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, 
+             notion_page_id, notion_url, discord_url, 
+             payment_status_last_month, payment_status_current_month, 
+             payment_year_month_last, payment_year_month_current, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -92,7 +95,12 @@ app.get('/sync', async (c) => {
             homeroom_tutor = EXCLUDED.homeroom_tutor,
             lesson_progress = EXCLUDED.lesson_progress,
             notion_page_id = EXCLUDED.notion_page_id,
+            notion_url = EXCLUDED.notion_url,
             discord_url = EXCLUDED.discord_url,
+            payment_status_last_month = EXCLUDED.payment_status_last_month,
+            payment_status_current_month = EXCLUDED.payment_status_current_month,
+            payment_year_month_last = EXCLUDED.payment_year_month_last,
+            payment_year_month_current = EXCLUDED.payment_year_month_current,
             updated_at = CURRENT_TIMESTAMP`,
           [
             student.student_id,
@@ -103,7 +111,12 @@ app.get('/sync', async (c) => {
             student.homeroom_tutor,
             lessonProgress,
             student.notion_page_id,
-            student.discord_url
+            student.notion_url,
+            student.discord_url,
+            student.payment_status_last_month,
+            student.payment_status_current_month,
+            student.payment_year_month_last,
+            student.payment_year_month_current
           ]
         );
         successCount++;

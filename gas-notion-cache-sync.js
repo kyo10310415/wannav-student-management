@@ -80,7 +80,17 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
     student.discord_url = destination ? destination.url : '';
     
     const payment = paymentStatuses[student.student_id];
-    student.payment_status = payment ? payment.status : '未払い';
+    if (payment) {
+      student.payment_status_last_month = payment.lastMonth || '未払い';
+      student.payment_status_current_month = payment.currentMonth || '未払い';
+      student.payment_year_month_last = payment.lastMonthYearMonth || '';
+      student.payment_year_month_current = payment.currentMonthYearMonth || '';
+    } else {
+      student.payment_status_last_month = '未払い';
+      student.payment_status_current_month = '未払い';
+      student.payment_year_month_last = '';
+      student.payment_year_month_current = '';
+    }
   });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -98,7 +108,7 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
   }
   
   // ヘッダー行を設定
-  sheet.getRange(1, 1, 1, 11).setValues([[
+  sheet.getRange(1, 1, 1, 13).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -108,10 +118,12 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
     '担任Tutor',
     'Notion URL',
     'Discord URL',
-    'お支払い状況',
+    '前月支払い状況',
+    '今月支払い状況',
+    '年月情報',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 11).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 13).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -125,11 +137,13 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
       s.homeroom_tutor || '',
       s.notion_url || '',
       s.discord_url || '',
-      s.payment_status || '未払い',
+      s.payment_status_last_month || '未払い',
+      s.payment_status_current_month || '未払い',
+      JSON.stringify({last: s.payment_year_month_last, current: s.payment_year_month_current}),
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 11).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 13).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -489,7 +503,7 @@ function fetchDiscordDestinations() {
 // ========== お支払い状況取得 ==========
 
 /**
- * お支払い状況スプレッドシートから前月の支払い状況を取得
+ * お支払い状況スプレッドシートから前月と今月の支払い状況を取得
  */
 function fetchPaymentStatuses() {
   Logger.log('お支払い状況データ取得開始...');
@@ -517,29 +531,43 @@ function fetchPaymentStatuses() {
     // C列: 学籍番号
     const studentIdIndex = 2; // C列 (0-indexed)
     
-    // 前月の年月を計算（例: 2026/2 の場合 → 2026/1）
+    // 前月と今月の年月を計算
     const today = new Date();
     const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const targetYearMonth = `${lastMonth.getFullYear()}/${lastMonth.getMonth() + 1}`;
+    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     
-    Logger.log(`前月: ${targetYearMonth}`);
+    const lastMonthYearMonth = `${lastMonth.getFullYear()}/${lastMonth.getMonth() + 1}`;
+    const currentMonthYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+    
+    Logger.log(`前月: ${lastMonthYearMonth}, 今月: ${currentMonthYearMonth}`);
     
     // 前月の列を検索
-    let paymentColumnIndex = -1;
+    let lastMonthColumnIndex = -1;
     for (let i = 0; i < headers.length; i++) {
-      if (headers[i] && headers[i].toString().trim() === targetYearMonth) {
-        paymentColumnIndex = i;
+      if (headers[i] && headers[i].toString().trim() === lastMonthYearMonth) {
+        lastMonthColumnIndex = i;
         break;
       }
     }
     
-    if (paymentColumnIndex === -1) {
-      Logger.log(`⚠️ 警告: ${targetYearMonth}の列が見つかりません`);
+    // 今月の列を検索
+    let currentMonthColumnIndex = -1;
+    for (let i = 0; i < headers.length; i++) {
+      if (headers[i] && headers[i].toString().trim() === currentMonthYearMonth) {
+        currentMonthColumnIndex = i;
+        break;
+      }
+    }
+    
+    if (lastMonthColumnIndex === -1 || currentMonthColumnIndex === -1) {
+      Logger.log(`⚠️ 警告: 前月(${lastMonthYearMonth})または今月(${currentMonthYearMonth})の列が見つかりません`);
+      Logger.log(`前月列インデックス: ${lastMonthColumnIndex}, 今月列インデックス: ${currentMonthColumnIndex}`);
       Logger.log(`利用可能な年月: ${headers.filter(h => h && h.toString().match(/\d{4}\/\d{1,2}/)).join(', ')}`);
       return {};
     }
     
-    Logger.log(`お支払い状況列: ${headers[paymentColumnIndex]}（列インデックス: ${paymentColumnIndex}）`);
+    Logger.log(`前月列: ${headers[lastMonthColumnIndex]}（インデックス: ${lastMonthColumnIndex}）`);
+    Logger.log(`今月列: ${headers[currentMonthColumnIndex]}（インデックス: ${currentMonthColumnIndex}）`);
     
     // データをマッピング（14行目以降 = index 13以降）
     const statuses = {};
@@ -548,22 +576,32 @@ function fetchPaymentStatuses() {
     for (let i = 13; i < data.length; i++) {
       const row = data[i];
       const studentId = row[studentIdIndex];
-      const paymentValue = row[paymentColumnIndex];
+      const lastMonthValue = row[lastMonthColumnIndex];
+      const currentMonthValue = row[currentMonthColumnIndex];
       
       if (studentId) {
-        // 空欄または空白の場合は「未払い」
-        const status = (paymentValue && paymentValue.toString().trim() !== '') 
-          ? paymentValue.toString().trim() 
+        // 前月: 空欄または空白の場合は「未払い」
+        const lastMonthStatus = (lastMonthValue && lastMonthValue.toString().trim() !== '') 
+          ? lastMonthValue.toString().trim() 
+          : '未払い';
+        
+        // 今月: 空欄または空白の場合は「未払い」
+        const currentMonthStatus = (currentMonthValue && currentMonthValue.toString().trim() !== '') 
+          ? currentMonthValue.toString().trim() 
           : '未払い';
         
         statuses[studentId] = {
-          status: status
+          lastMonth: lastMonthStatus,
+          currentMonth: currentMonthStatus,
+          lastMonthYearMonth: lastMonthYearMonth,
+          currentMonthYearMonth: currentMonthYearMonth
         };
         validCount++;
       }
     }
     
     Logger.log(`お支払い状況: ${validCount}件取得完了（全${data.length - 13}行中）`);
+    Logger.log(`前月(${lastMonthYearMonth}), 今月(${currentMonthYearMonth})のデータを取得`);
     return statuses;
     
   } catch (error) {

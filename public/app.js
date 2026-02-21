@@ -349,7 +349,34 @@ function renderStudentRows() {
     const discordUrl = student.discord_url || null;
     
     // Payment status with color coding
-    const paymentStatus = student.payment_status || '未払い';
+    // Show payment status for the month BEFORE the displayed month
+    const viewYear = currentMonth.getFullYear();
+    const viewMonth = currentMonth.getMonth() + 1; // JS months are 0-indexed
+    
+    // Get current real date
+    const now = new Date();
+    const realYear = now.getFullYear();
+    const realMonth = now.getMonth() + 1;
+    
+    // Parse stored year month info
+    let lastYearMonth = student.payment_year_month_last || '';
+    let currentYearMonth = student.payment_year_month_current || '';
+    
+    let paymentStatus = '未払い';
+    
+    // If viewing current month, show last month's payment
+    if (viewYear === realYear && viewMonth === realMonth) {
+      paymentStatus = student.payment_status_last_month || '未払い';
+    }
+    // If viewing next month, show current month's payment
+    else if (viewYear === realYear && viewMonth === realMonth + 1) {
+      paymentStatus = student.payment_status_current_month || '未払い';
+    }
+    // For other months, default to last month
+    else {
+      paymentStatus = student.payment_status_last_month || '未払い';
+    }
+    
     const paymentColorClass = paymentStatus === '未払い' ? 'text-red-600 font-semibold' : 'text-green-600';
     
     return `

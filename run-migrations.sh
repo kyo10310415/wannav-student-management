@@ -32,4 +32,14 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT '未�
 CREATE INDEX IF NOT EXISTS idx_students_payment_status ON students(payment_status);
 SQL
 
+# Migration 5: Add separate payment status columns for last and current month
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_status_last_month TEXT DEFAULT '未払い';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_status_current_month TEXT DEFAULT '未払い';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_year_month_last TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_year_month_current TEXT;
+CREATE INDEX IF NOT EXISTS idx_students_payment_last ON students(payment_status_last_month);
+CREATE INDEX IF NOT EXISTS idx_students_payment_current ON students(payment_status_current_month);
+SQL
+
 echo "Migrations completed successfully!"
