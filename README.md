@@ -12,12 +12,13 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
 
 **マルチページシステム**
 - **予約管理ページ**: レッスン予約状況、お支払い状況、レッスン日を含む完全な情報表示
-- **生徒管理ページ**: 基本情報とレッスン進捗に特化（お支払い、予約、レッスン日を除外）
+- **生徒管理ページ**: 基本情報、レッスン進捗、レッスン開始日・継続月数、リザルトスコア、欠席回数を表示（お支払い、予約、レッスン日を除外）
 - **Tutor管理ページ**: Tutor情報の一覧表示と統計
 
 1. **生徒一覧**
    - Notion APIから生徒情報を取得（Google Sheets経由でキャッシュ、1日1回自動更新）
    - 学籍番号、生徒名、ステータス、契約プラン、キャラクター名、担任Tutor、レッスン進捗
+   - **NEW**: レッスン開始日と継続月数（外部PostgreSQLから自動取得）
    - ステータス別タブ表示（アクティブ、在籍プラン、正規退会、無断キャンセル）
    - アクティブ内サブタブ（レッスン中、PROプラン、永久会員）
 
@@ -30,7 +31,22 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
    - Google Sheetsから進捗データを自動取得
    - 学籍番号で照合、最新のレッスン番号を表示
 
-4. **レッスン予約状況**（予約管理ページのみ）
+4. **レッスン開始日・継続月数**（生徒管理ページ）
+   - 外部PostgreSQL（wannav-extension-db）からレッスン開始日を自動取得
+   - バックエンドAPI経由でGASスクリプトがデータを取得
+   - 開始日から現在までの継続月数を自動計算して表示
+   - データソース: `notion_students_cache` テーブルの `lesson_start_date` カラム
+
+5. **リザルトスコア表示**（生徒管理ページ）
+   - 前月のリザルトスコア（7項目）を表示
+   - スプレッドシートから自動取得（シート名: 評価結果_YYYY-MM）
+   - 項目: 欠席、遅刻、ミッション、支払い、アクティブリスニング、理解度、総合評価
+
+6. **欠席回数表示**（生徒管理ページ）
+   - レッスン進捗スプレッドシートから欠席回数を集計
+   - 色分け表示: 3回超（赤/太字）、1回以上（オレンジ）、0回（グレー）
+
+7. **レッスン予約状況**（予約管理ページのみ）
    - Google Apps Script（GAS）が定期的にGoogleカレンダーからデータを取得
    - Googleスプレッドシートに保存
    - アプリはスプレッドシートから予約状況を読み込み
@@ -44,7 +60,7 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
    - **差分更新**: 16,000件以上のイベントを効率的に処理（約30〜60秒）
    - メールアドレスの大文字小文字を正規化してカレンダー照合の精度向上
 
-5. **お支払い状況表示**（予約管理ページのみ）
+8. **お支払い状況表示**（予約管理ページのみ）
    - スプレッドシート「RAW_支払い状況」から前月と今月の支払い状況を取得
    - 表示月に応じて適切な月の支払い状況を表示（例: 2月表示時は1月の支払い状況）
    - 色分け表示:
@@ -53,16 +69,16 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
      - 未払い（遅れ）: 赤色
    - 月ごとの年月情報も保存（例: 2026/1, 2026/2）
 
-6. **担当Tutor絞り込み**
+9. **担当Tutor絞り込み**
    - 担当Tutor別に生徒を絞り込み表示（Tutor名で表示）
    - 当月のレッスン日表示（予約管理ページのみ）
 
-7. **レッスンリマインド送信**（予約管理ページのみ）
+10. **レッスンリマインド送信**（予約管理ページのみ）
    - レッスン日の前日にDiscordに自動通知
    - 毎日10:00 JST（01:00 UTC）に自動実行
    - 手動送信ボタンも実装
 
-8. **NotionとDiscordへのリンク**
+11. **NotionとDiscordへのリンク**
    - 各生徒のNotionページへの直接リンク（アイコンボタン）
    - Discordチャンネルへの直接リンク（アイコンボタン）
 
@@ -73,7 +89,7 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
 ## 📋 技術スタック
 
 - **Backend**: Node.js + Hono
-- **Database**: PostgreSQL (Render)
+- **Database**: PostgreSQL (Render) + 外部PostgreSQL (wannav-extension-db)
 - **Frontend**: Vanilla JavaScript + Tailwind CSS
 - **Calendar Sync**: Google Apps Script (GAS) + Google Sheets
 - **APIs**: 
@@ -81,6 +97,7 @@ VTuber育成スクール「WannaV」の生徒様情報を一元管理するシ�
   - Google Sheets API
   - Google Calendar API (via GAS)
   - Discord.js
+  - External PostgreSQL API (レッスン開始日取得用)
 - **Deployment**: Render (Backend) + Google Apps Script (Calendar Sync)
 - **Cron**: node-cron (Backend) + Time-based Triggers (GAS)
 
@@ -92,18 +109,22 @@ wannav-student-management/
 │   ├── index.js              # メインサーバー
 │   ├── db/
 │   │   ├── connection.js     # PostgreSQL接続
+│   │   ├── externalConnection.js # 外部PostgreSQL接続
 │   │   └── migrate.js        # データベースマイグレーション
 │   ├── services/
 │   │   ├── notionService.js  # Notion API統合
 │   │   ├── sheetsService.js  # Google Sheets API統合
 │   │   ├── calendarService.js # Google Calendar API統合（レガシー）
 │   │   ├── discordService.js # Discord Bot統合
-│   │   └── reminderService.js # リマインド送信
+│   │   ├── reminderService.js # リマインド送信
+│   │   ├── cacheService.js   # キャッシュデータ取得
+│   │   └── externalDbService.js # 外部DBからレッスン開始日取得
 │   └── routes/
 │       ├── students.js       # 生徒API
 │       ├── tutors.js         # TutorAPI
 │       ├── lessons.js        # レッスンAPI
-│       └── reminders.js      # リマインドAPI
+│       ├── reminders.js      # リマインドAPI
+│       └── external.js       # 外部DBデータAPI
 ├── public/
 │   └── app.js                # フロントエンドJavaScript
 ├── gas-calendar-sync.js          # GASスクリプト（全件更新版・初回セットアップ用）
@@ -122,6 +143,9 @@ wannav-student-management/
 ```bash
 # Database (Renderが自動設定)
 DATABASE_URL=postgresql://...
+
+# External Database (レッスン開始日・継続月数取得用)
+EXTERNAL_DATABASE_URL=postgresql://wannav_user:password@dpg-d5kbgqvgi27c739nefs0-a.oregon-postgres.render.com/wannav_extension
 
 # Notion API (別々のインテグレーションを使用する場合)
 NOTION_STUDENT_API_TOKEN=your_student_token
