@@ -596,8 +596,8 @@ function getLessonCountBadgeColor(count) {
   return 'bg-gray-200 text-gray-800';
 }
 
-// Calculate continued months from lesson start date
-function calculateContinuedMonths(startDate) {
+// Calculate continued months from lesson start date (minus suspension months)
+function calculateContinuedMonths(startDate, suspensionMonths = 0) {
   if (!startDate) return 0;
   
   try {
@@ -607,12 +607,15 @@ function calculateContinuedMonths(startDate) {
     const yearsDiff = now.getFullYear() - start.getFullYear();
     const monthsDiff = now.getMonth() - start.getMonth();
     
-    const totalMonths = yearsDiff * 12 + monthsDiff;
+    let totalMonths = yearsDiff * 12 + monthsDiff;
     
     // If current day is before start day, subtract one month
     if (now.getDate() < start.getDate()) {
-      return Math.max(0, totalMonths - 1);
+      totalMonths = totalMonths - 1;
     }
+    
+    // Subtract suspension months
+    totalMonths = totalMonths - suspensionMonths;
     
     return Math.max(0, totalMonths);
   } catch (error) {
@@ -887,9 +890,10 @@ function renderStudentRowsSimple() {
     const absenceCount = student.absence_count || 0;
     const absenceColorClass = absenceCount > 3 ? 'text-red-600 font-bold' : absenceCount > 0 ? 'text-orange-600' : 'text-gray-600';
     
-    // Lesson start date and continued months
+    // Lesson start date and continued months (minus suspension months)
     const lessonStartDate = student.lesson_start_date ? formatDate(student.lesson_start_date) : '-';
-    const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date) : 0;
+    const suspensionMonths = student.suspension_months || 0;
+    const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">

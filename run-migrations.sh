@@ -61,4 +61,10 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS lesson_start_date TEXT;
 CREATE INDEX IF NOT EXISTS idx_students_lesson_start_date ON students(lesson_start_date);
 SQL
 
+# Migration 8: Add suspension months column
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE students ADD COLUMN IF NOT EXISTS suspension_months INTEGER DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_students_suspension_months ON students(suspension_months);
+SQL
+
 echo "Migrations completed successfully!"

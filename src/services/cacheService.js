@@ -25,7 +25,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: '生徒データ!A2:V', // 22 columns (A-V)
+      range: '生徒データ!A2:W', // 23 columns (A-W)
     });
 
     const rows = response.data.values || [];
@@ -62,6 +62,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
         result_overall: row[18] || '',
         absence_count: row[19] || 0,
         lesson_start_date: row[20] || '',
+        suspension_months: row[21] || 0,
       };
     });
   } catch (error) {

@@ -8,6 +8,7 @@ const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID'; // メインスプレッドシー�
 const PROGRESS_SPREADSHEET_ID = '1dwqi8NvrbDDkrwIryYJrOJ2AAg4oBu6v0-CEdR2HrzE'; // レッスン進捗スプレッドシートのID
 const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM'; // Discord送信先スプレッドシートのID
 const RESULT_SCORE_SPREADSHEET_ID = '1t571fqZJtUjNL7_gH6G2dSNBCmS98LTnDrWEtt7J92k'; // リザルトスコアスプレッドシートのID
+const SUSPENSION_SPREADSHEET_ID = '17ys2PZpDpffG3j4EQrXiLlwGbFxiNosBqMivL2quVEA'; // 休会情報スプレッドシートのID
 
 // バックエンドAPI設定（外部DB用）
 const BACKEND_API_URL = 'https://wannav-student-management.onrender.com/api/external/lesson-start-dates'; // バックエンドAPIのURL
@@ -53,15 +54,19 @@ function syncAllData() {
     const lessonStartDates = fetchLessonStartDates();
     Logger.log(`✓ レッスン開始日: ${Object.keys(lessonStartDates).length}件取得`);
     
-    // 6. 生徒データを同期（すべての追加情報を含む）
-    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts, lessonStartDates);
+    // 6. 休会期間を取得
+    const suspensionPeriods = fetchSuspensionPeriods();
+    Logger.log(`✓ 休会期間: ${Object.keys(suspensionPeriods).length}件取得`);
+    
+    // 7. 生徒データを同期（すべての追加情報を含む）
+    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts, lessonStartDates, suspensionPeriods);
     Logger.log('✓ 生徒データ同期完了');
     
-    // 7. Tutorデータを同期
+    // 8. Tutorデータを同期
     syncTutorsToSheet();
     Logger.log('✓ Tutorデータ同期完了');
     
-    // 8. レッスン進捗データを同期
+    // 9. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
     
@@ -84,7 +89,7 @@ function syncAllData() {
 /**
  * Notionから生徒データを取得してスプレッドシートに保存
  */
-function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}, lessonStartDates = {}) {
+function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}, lessonStartDates = {}, suspensionPeriods = {}) {
   Logger.log('生徒データ同期開始...');
   
   const students = fetchStudentsFromNotion();
@@ -137,6 +142,9 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     
     // レッスン開始日
     student.lesson_start_date = lessonStartDates[studentId] || '';
+    
+    // 休会期間（月数）
+    student.suspension_months = suspensionPeriods[studentId] || 0;
   });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -153,8 +161,8 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
   
-  // ヘッダー行を設定（22列に拡張）
-  sheet.getRange(1, 1, 1, 22).setValues([[
+  // ヘッダー行を設定（23列に拡張）
+  sheet.getRange(1, 1, 1, 23).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -176,9 +184,10 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     '総合評価',
     '欠席回数',
     'レッスン開始日',
+    '休会期間（月）',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 22).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 23).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -204,10 +213,11 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
       s.result_overall || '',
       s.absence_count || 0,
       s.lesson_start_date || '',
+      s.suspension_months || 0,
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 22).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 23).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -994,4 +1004,81 @@ function fetchLessonStartDates() {
     Logger.log(error.stack);
     return {};
   }
+}
+
+/**
+ * 休会期間を取得
+ * スプレッドシートから休会情報を取得し、学籍番号ごとの休会月数を計算
+ */
+function fetchSuspensionPeriods() {
+  Logger.log('休会期間データ取得開始...');
+  
+  try {
+    const ss = SpreadsheetApp.openById(SUSPENSION_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('フォームの回答 1');
+    
+    if (!sheet) {
+      Logger.log('⚠️ 警告: フォームの回答 1 シートが見つかりません');
+      return {};
+    }
+    
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('休会データがありません');
+      return {};
+    }
+    
+    // H列: 休会となる生徒様の学籍番号, K列: 休会期間
+    const studentIds = sheet.getRange(2, 8, lastRow - 1, 1).getValues(); // H列
+    const suspensionPeriods = sheet.getRange(2, 11, lastRow - 1, 1).getValues(); // K列
+    
+    const suspensionMonthsMap = {};
+    
+    for (let i = 0; i < studentIds.length; i++) {
+      const studentId = studentIds[i][0];
+      const period = suspensionPeriods[i][0];
+      
+      if (studentId && period) {
+        // 休会期間から月数を抽出（例: "3ヶ月" → 3, "1ヶ月" → 1）
+        const months = parseSuspensionPeriod(period);
+        
+        if (months > 0) {
+          // 同じ学籍番号が複数ある場合は合計する
+          if (!suspensionMonthsMap[studentId]) {
+            suspensionMonthsMap[studentId] = 0;
+          }
+          suspensionMonthsMap[studentId] += months;
+        }
+      }
+    }
+    
+    Logger.log(`休会期間: ${Object.keys(suspensionMonthsMap).length}件集計完了`);
+    return suspensionMonthsMap;
+    
+  } catch (error) {
+    Logger.log(`❌ 休会期間取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+    return {};
+  }
+}
+
+/**
+ * 休会期間文字列から月数を抽出
+ * @param {string} period - 休会期間文字列（例: "3ヶ月", "1ヶ月", "3か月", "3カ月"）
+ * @return {number} 月数
+ */
+function parseSuspensionPeriod(period) {
+  if (!period) return 0;
+  
+  const str = period.toString().trim();
+  
+  // 数字を抽出（例: "3ヶ月" → "3", "1ヶ月" → "1"）
+  const match = str.match(/(\d+)/);
+  
+  if (match && match[1]) {
+    const months = parseInt(match[1], 10);
+    return isNaN(months) ? 0 : months;
+  }
+  
+  return 0;
 }
