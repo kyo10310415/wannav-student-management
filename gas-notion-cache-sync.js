@@ -7,6 +7,7 @@
 const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID'; // メインスプレッドシートのID
 const PROGRESS_SPREADSHEET_ID = '1dwqi8NvrbDDkrwIryYJrOJ2AAg4oBu6v0-CEdR2HrzE'; // レッスン進捗スプレッドシートのID
 const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM'; // Discord送信先スプレッドシートのID
+const RESULT_SCORE_SPREADSHEET_ID = '1t571fqZJtUjNL7_gH6G2dSNBCmS98LTnDrWEtt7J92k'; // リザルトスコアスプレッドシートのID
 
 // シート名
 const STUDENTS_SHEET_NAME = '生徒データ';
@@ -37,15 +38,23 @@ function syncAllData() {
     const paymentStatuses = fetchPaymentStatuses();
     Logger.log(`✓ お支払い状況: ${Object.keys(paymentStatuses).length}件取得`);
     
-    // 3. 生徒データを同期（Discord URLとお支払い状況を含む）
-    syncStudentsToSheet(discordDestinations, paymentStatuses);
+    // 3. リザルトスコアを取得（前月）
+    const resultScores = fetchResultScores();
+    Logger.log(`✓ リザルトスコア: ${Object.keys(resultScores).length}件取得`);
+    
+    // 4. 欠席回数を取得
+    const absenceCounts = fetchAbsenceCounts();
+    Logger.log(`✓ 欠席回数: ${Object.keys(absenceCounts).length}件取得`);
+    
+    // 5. 生徒データを同期（すべての追加情報を含む）
+    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts);
     Logger.log('✓ 生徒データ同期完了');
     
-    // 4. Tutorデータを同期
+    // 6. Tutorデータを同期
     syncTutorsToSheet();
     Logger.log('✓ Tutorデータ同期完了');
     
-    // 5. レッスン進捗データを同期
+    // 7. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
     
@@ -68,18 +77,22 @@ function syncAllData() {
 /**
  * Notionから生徒データを取得してスプレッドシートに保存
  */
-function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
+function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}) {
   Logger.log('生徒データ同期開始...');
   
   const students = fetchStudentsFromNotion();
   Logger.log(`Notionから${students.length}件の生徒データを取得`);
   
-  // Discord URLとお支払い状況を統合
+  // すべての追加情報を統合
   students.forEach(student => {
-    const destination = discordDestinations[student.student_id];
+    const studentId = student.student_id;
+    
+    // Discord URL
+    const destination = discordDestinations[studentId];
     student.discord_url = destination ? destination.url : '';
     
-    const payment = paymentStatuses[student.student_id];
+    // お支払い状況
+    const payment = paymentStatuses[studentId];
     if (payment) {
       student.payment_status_last_month = payment.lastMonth || '未払い';
       student.payment_status_current_month = payment.currentMonth || '未払い';
@@ -91,6 +104,29 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
       student.payment_year_month_last = '';
       student.payment_year_month_current = '';
     }
+    
+    // リザルトスコア
+    const score = resultScores[studentId];
+    if (score) {
+      student.result_absence = score.absence || '';
+      student.result_late = score.late || '';
+      student.result_mission = score.mission || '';
+      student.result_payment = score.payment || '';
+      student.result_active_listening = score.activeListening || '';
+      student.result_understanding = score.understanding || '';
+      student.result_overall = score.overall || '';
+    } else {
+      student.result_absence = '';
+      student.result_late = '';
+      student.result_mission = '';
+      student.result_payment = '';
+      student.result_active_listening = '';
+      student.result_understanding = '';
+      student.result_overall = '';
+    }
+    
+    // 欠席回数
+    student.absence_count = absenceCounts[studentId] || 0;
   });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -107,8 +143,8 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
   
-  // ヘッダー行を設定
-  sheet.getRange(1, 1, 1, 13).setValues([[
+  // ヘッダー行を設定（21列に拡張）
+  sheet.getRange(1, 1, 1, 21).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -121,9 +157,17 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
     '前月支払い状況',
     '今月支払い状況',
     '年月情報',
+    '欠席',
+    '遅刻',
+    'ミッション',
+    '支払い',
+    'アクティブリスニング',
+    '理解度',
+    '総合評価',
+    '欠席回数',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 13).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 21).setFontWeight('bold');
   
   // データを書き込み
   if (students.length > 0) {
@@ -140,6 +184,22 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}) {
       s.payment_status_last_month || '未払い',
       s.payment_status_current_month || '未払い',
       JSON.stringify({last: s.payment_year_month_last, current: s.payment_year_month_current}),
+      s.result_absence || '',
+      s.result_late || '',
+      s.result_mission || '',
+      s.result_payment || '',
+      s.result_active_listening || '',
+      s.result_understanding || '',
+      s.result_overall || '',
+      s.absence_count || 0,
+      new Date()
+    ]);
+    
+    sheet.getRange(2, 1, rows.length, 21).setValues(rows);
+  }
+  
+  Logger.log(`${students.length}件の生徒データを書き込み完了`);
+}
       new Date()
     ]);
     
@@ -758,4 +818,135 @@ function setupDailyTrigger() {
  */
 function testSyncAllData() {
   syncAllData();
+}
+
+// ========== リザルトスコア取得 ==========
+
+/**
+ * リザルトスコアスプレッドシートから前月のデータを取得
+ */
+function fetchResultScores() {
+  Logger.log('リザルトスコアデータ取得開始...');
+  
+  try {
+    // 前月のシート名を生成（例: 評価結果_2026-01）
+    const today = new Date();
+    const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const sheetName = `評価結果_${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+    
+    Logger.log(`対象シート: ${sheetName}`);
+    
+    const ss = SpreadsheetApp.openById(RESULT_SCORE_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      Logger.log(`⚠️ 警告: ${sheetName}シートが見つかりません`);
+      return {};
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    if (data.length < 2) {
+      Logger.log('⚠️ 警告: データが不足しています');
+      return {};
+    }
+    
+    const headers = data[0]; // 1行目がヘッダー
+    Logger.log(`ヘッダー: ${headers.join(', ')}`);
+    
+    // B列: 学籍番号, D-J列: 評価データ
+    const studentIdIndex = 1; // B列
+    const absenceIndex = 3;   // D列: 欠席
+    const lateIndex = 4;      // E列: 遅刻
+    const missionIndex = 5;   // F列: ミッション
+    const paymentIndex = 6;   // G列: 支払い
+    const activeListeningIndex = 7; // H列: アクティブリスニング
+    const understandingIndex = 8;   // I列: 理解度
+    const overallIndex = 9;   // J列: 総合評価
+    
+    const scores = {};
+    let validCount = 0;
+    
+    // 2行目以降のデータをマッピング
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const studentId = row[studentIdIndex];
+      
+      if (studentId) {
+        scores[studentId] = {
+          absence: row[absenceIndex] || '',
+          late: row[lateIndex] || '',
+          mission: row[missionIndex] || '',
+          payment: row[paymentIndex] || '',
+          activeListening: row[activeListeningIndex] || '',
+          understanding: row[understandingIndex] || '',
+          overall: row[overallIndex] || ''
+        };
+        validCount++;
+      }
+    }
+    
+    Logger.log(`リザルトスコア: ${validCount}件取得完了（全${data.length - 1}行中）`);
+    return scores;
+    
+  } catch (error) {
+    Logger.log(`❌ リザルトスコア取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+    return {};
+  }
+}
+
+// ========== 欠席回数取得 ==========
+
+/**
+ * レッスン進捗スプレッドシートから欠席回数を集計
+ */
+function fetchAbsenceCounts() {
+  Logger.log('欠席回数データ取得開始...');
+  
+  try {
+    const ss = SpreadsheetApp.openById(PROGRESS_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('24_12_30_フォームの回答 2');
+    
+    if (!sheet) {
+      Logger.log('⚠️ 警告: 24_12_30_フォームの回答 2 シートが見つかりません');
+      return {};
+    }
+    
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('欠席データがありません');
+      return {};
+    }
+    
+    // F列: 学籍番号, G列: 生徒様の出欠
+    const studentIds = sheet.getRange(2, 6, lastRow - 1, 1).getValues(); // F列
+    const attendances = sheet.getRange(2, 7, lastRow - 1, 1).getValues(); // G列
+    
+    const absenceCounts = {};
+    
+    for (let i = 0; i < studentIds.length; i++) {
+      const studentId = studentIds[i][0];
+      const attendance = attendances[i][0];
+      
+      if (studentId) {
+        if (!absenceCounts[studentId]) {
+          absenceCounts[studentId] = 0;
+        }
+        
+        // 「欠席」が含まれる場合にカウント
+        if (attendance && attendance.toString().includes('欠席')) {
+          absenceCounts[studentId]++;
+        }
+      }
+    }
+    
+    Logger.log(`欠席回数: ${Object.keys(absenceCounts).length}件集計完了`);
+    return absenceCounts;
+    
+  } catch (error) {
+    Logger.log(`❌ 欠席回数取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+    return {};
+  }
 }
