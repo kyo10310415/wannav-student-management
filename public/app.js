@@ -597,6 +597,7 @@ function getLessonCountBadgeColor(count) {
 }
 
 // Calculate continued months from lesson start date (minus suspension months)
+// Start month counts as month 1
 function calculateContinuedMonths(startDate, suspensionMonths = 0) {
   if (!startDate) return 0;
   
@@ -613,6 +614,9 @@ function calculateContinuedMonths(startDate, suspensionMonths = 0) {
     if (now.getDate() < start.getDate()) {
       totalMonths = totalMonths - 1;
     }
+    
+    // Add 1 to include the start month (start month = month 1)
+    totalMonths = totalMonths + 1;
     
     // Subtract suspension months
     totalMonths = totalMonths - suspensionMonths;

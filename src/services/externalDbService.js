@@ -34,6 +34,7 @@ export async function fetchLessonStartDates() {
 
 /**
  * レッスン開始日から継続月数を計算
+ * 開始月を1ヶ月目としてカウント
  * @param {string} startDate - レッスン開始日 (YYYY-MM-DD形式)
  * @returns {number} 継続月数
  */
@@ -47,12 +48,15 @@ export function calculateContinuedMonths(startDate) {
     const yearsDiff = now.getFullYear() - start.getFullYear();
     const monthsDiff = now.getMonth() - start.getMonth();
     
-    const totalMonths = yearsDiff * 12 + monthsDiff;
+    let totalMonths = yearsDiff * 12 + monthsDiff;
     
     // 開始日が今月の日付より後の場合は1ヶ月引く
     if (now.getDate() < start.getDate()) {
-      return Math.max(0, totalMonths - 1);
+      totalMonths = totalMonths - 1;
     }
+    
+    // 開始月を1ヶ月目としてカウント（+1）
+    totalMonths = totalMonths + 1;
     
     return Math.max(0, totalMonths);
   } catch (error) {
