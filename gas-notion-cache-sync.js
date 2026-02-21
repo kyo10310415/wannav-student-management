@@ -541,19 +541,45 @@ function fetchPaymentStatuses() {
     
     Logger.log(`前月: ${lastMonthYearMonth}, 今月: ${currentMonthYearMonth}`);
     
-    // 前月の列を検索
+    // 前月の列を検索（日付オブジェクトまたは文字列に対応）
     let lastMonthColumnIndex = -1;
     for (let i = 0; i < headers.length; i++) {
-      if (headers[i] && headers[i].toString().trim() === lastMonthYearMonth) {
+      const header = headers[i];
+      if (!header) continue;
+      
+      // 日付オブジェクトの場合
+      if (header instanceof Date) {
+        const headerYear = header.getFullYear();
+        const headerMonth = header.getMonth() + 1;
+        if (headerYear === lastMonth.getFullYear() && headerMonth === lastMonth.getMonth() + 1) {
+          lastMonthColumnIndex = i;
+          break;
+        }
+      }
+      // 文字列の場合（"2026/1"形式）
+      else if (header.toString().trim() === lastMonthYearMonth) {
         lastMonthColumnIndex = i;
         break;
       }
     }
     
-    // 今月の列を検索
+    // 今月の列を検索（日付オブジェクトまたは文字列に対応）
     let currentMonthColumnIndex = -1;
     for (let i = 0; i < headers.length; i++) {
-      if (headers[i] && headers[i].toString().trim() === currentMonthYearMonth) {
+      const header = headers[i];
+      if (!header) continue;
+      
+      // 日付オブジェクトの場合
+      if (header instanceof Date) {
+        const headerYear = header.getFullYear();
+        const headerMonth = header.getMonth() + 1;
+        if (headerYear === currentMonth.getFullYear() && headerMonth === currentMonth.getMonth() + 1) {
+          currentMonthColumnIndex = i;
+          break;
+        }
+      }
+      // 文字列の場合（"2026/2"形式）
+      else if (header.toString().trim() === currentMonthYearMonth) {
         currentMonthColumnIndex = i;
         break;
       }
@@ -562,12 +588,38 @@ function fetchPaymentStatuses() {
     if (lastMonthColumnIndex === -1 || currentMonthColumnIndex === -1) {
       Logger.log(`⚠️ 警告: 前月(${lastMonthYearMonth})または今月(${currentMonthYearMonth})の列が見つかりません`);
       Logger.log(`前月列インデックス: ${lastMonthColumnIndex}, 今月列インデックス: ${currentMonthColumnIndex}`);
-      Logger.log(`利用可能な年月: ${headers.filter(h => h && h.toString().match(/\d{4}\/\d{1,2}/)).join(', ')}`);
+      
+      // 利用可能な日付列を表示
+      const availableDates = headers.map((h, idx) => {
+        if (h instanceof Date) {
+          return `${idx}: ${h.getFullYear()}/${h.getMonth() + 1}`;
+        }
+        return null;
+      }).filter(d => d !== null);
+      Logger.log(`利用可能な年月（Dateオブジェクト）: ${availableDates.join(', ')}`);
+      
+      const availableStrings = headers.map((h, idx) => {
+        if (h && !(h instanceof Date) && h.toString().match(/\d{4}\/\d{1,2}/)) {
+          return `${idx}: ${h}`;
+        }
+        return null;
+      }).filter(d => d !== null);
+      Logger.log(`利用可能な年月（文字列）: ${availableStrings.join(', ')}`);
+      
       return {};
     }
     
-    Logger.log(`前月列: ${headers[lastMonthColumnIndex]}（インデックス: ${lastMonthColumnIndex}）`);
-    Logger.log(`今月列: ${headers[currentMonthColumnIndex]}（インデックス: ${currentMonthColumnIndex}）`);
+    const lastMonthHeader = headers[lastMonthColumnIndex];
+    const currentMonthHeader = headers[currentMonthColumnIndex];
+    const lastMonthDisplay = lastMonthHeader instanceof Date 
+      ? `${lastMonthHeader.getFullYear()}/${lastMonthHeader.getMonth() + 1}` 
+      : lastMonthHeader;
+    const currentMonthDisplay = currentMonthHeader instanceof Date 
+      ? `${currentMonthHeader.getFullYear()}/${currentMonthHeader.getMonth() + 1}` 
+      : currentMonthHeader;
+    
+    Logger.log(`前月列: ${lastMonthDisplay}（インデックス: ${lastMonthColumnIndex}）`);
+    Logger.log(`今月列: ${currentMonthDisplay}（インデックス: ${currentMonthColumnIndex}）`);
     
     // データをマッピング（14行目以降 = index 13以降）
     const statuses = {};
