@@ -377,7 +377,17 @@ function renderStudentRows() {
       paymentStatus = student.payment_status_last_month || '未払い';
     }
     
-    const paymentColorClass = paymentStatus === '未払い' ? 'text-red-600 font-semibold' : 'text-green-600';
+    // Determine payment status color
+    let paymentColorClass = '';
+    if (paymentStatus === '支払い完了' || paymentStatus === '支払完了') {
+      paymentColorClass = 'text-green-600';
+    } else if (paymentStatus === '未払い（連絡なし）' || paymentStatus === '未払い') {
+      paymentColorClass = 'text-red-600 font-bold';
+    } else if (paymentStatus === '未払い（遅れ）') {
+      paymentColorClass = 'text-red-600';
+    } else {
+      paymentColorClass = 'text-gray-900'; // Default color (same as student name)
+    }
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
