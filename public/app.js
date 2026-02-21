@@ -867,7 +867,7 @@ function renderTutorsPage() {
         <i class="fas fa-chart-bar mr-2"></i>
         統計情報
       </h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-2 gap-4">
         ${renderTutorStatistics()}
       </div>
     </div>
@@ -876,7 +876,7 @@ function renderTutorsPage() {
     <div class="bg-white rounded-lg shadow-md p-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chalkboard-teacher mr-2"></i>
-        Tutor一覧
+        Tutor一覧 <span class="text-sm text-gray-500">(アクティブ・Tutor職種のみ)</span>
       </h2>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
@@ -903,40 +903,57 @@ function renderTutorsPage() {
 
 // Render tutor statistics
 function renderTutorStatistics() {
-  const total = tutors.length;
-  const active = tutors.filter(t => t.status === 'アクティブ').length;
-  const tutorRole = tutors.filter(t => t.job_type && t.job_type.toLowerCase().includes('tutor')).length;
+  // Filter: Only active tutors with 'Tutor' in job_type
+  const activeTutors = tutors.filter(t => 
+    t.status === 'アクティブ' && 
+    t.job_type && 
+    t.job_type.toLowerCase().includes('tutor')
+  );
+  
+  const total = activeTutors.length;
+  
+  // Count by team
+  const teams = {};
+  activeTutors.forEach(t => {
+    const team = t.team || '未所属';
+    teams[team] = (teams[team] || 0) + 1;
+  });
+  
+  const teamCount = Object.keys(teams).length;
   
   return `
     <div class="bg-blue-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">総Tutor数</div>
+      <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
       <div class="text-3xl font-bold text-blue-600">${total}名</div>
     </div>
     <div class="bg-green-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">アクティブ</div>
-      <div class="text-3xl font-bold text-green-600">${active}名</div>
-    </div>
-    <div class="bg-purple-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">Tutor職種</div>
-      <div class="text-3xl font-bold text-purple-600">${tutorRole}名</div>
+      <div class="text-sm text-gray-600 mb-1">所属チーム数</div>
+      <div class="text-3xl font-bold text-green-600">${teamCount}チーム</div>
     </div>
   `;
 }
 
 // Render tutor rows
 function renderTutorRows() {
-  if (tutors.length === 0) {
+  // Filter: Only show tutors with status='アクティブ' AND job_type contains 'Tutor'
+  const filteredTutors = tutors.filter(t => 
+    t.status === 'アクティブ' && 
+    t.job_type && 
+    t.job_type.toLowerCase().includes('tutor')
+  );
+  
+  if (filteredTutors.length === 0) {
     return `
       <tr>
         <td colspan="8" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
-          <p>Tutorデータが見つかりません</p>
+          <p>アクティブなTutorが見つかりません</p>
         </td>
       </tr>
     `;
   }
 
-  return tutors.map(tutor => {
+  return filteredTutors.map(tutor => {
     const statusClass = tutor.status === 'アクティブ' ? 'text-green-600 font-semibold' : 'text-gray-600';
     
     return `
