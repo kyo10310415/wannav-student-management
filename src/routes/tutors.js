@@ -275,7 +275,7 @@ app.get('/satisfaction/all', async (c) => {
         const data = tutorMonthlyData[tutorName][yearMonth];
         const average = data.scores.reduce((a, b) => a + b, 0) / data.scores.length;
         result[tutorName][yearMonth] = {
-          average: Math.round(average * 10) / 10, // 小数第1位まで
+          average: average, // 丸めない、そのまま保存
           count: data.scores.length,
           reasons: data.reasons,
           studentNames: data.studentNames
