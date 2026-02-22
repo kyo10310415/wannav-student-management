@@ -1097,8 +1097,13 @@ function renderTutorRows() {
     const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
     const currentMonthData = tutorSatisfactionData[currentYearMonth];
     
-    // レッスン満足度 (表示月の平均、小数第2位まで)
-    const satisfactionAverage = currentMonthData ? currentMonthData.average.toFixed(2) : '-';
+    // レッスン満足度 (平均 × 10、100がMAX、小数第2位まで)
+    let satisfactionAverage = '-';
+    let satisfactionValue = 0;
+    if (currentMonthData) {
+      satisfactionValue = currentMonthData.average * 10; // 0-10 → 0-100
+      satisfactionAverage = satisfactionValue.toFixed(2);
+    }
     const satisfactionCount = currentMonthData ? currentMonthData.count : 0;
     
     // 回収率 (アクティブ生徒数 / 表示月の満足度件数 × 100)
@@ -1111,11 +1116,12 @@ function renderTutorRows() {
       collectionRate = '0.0%';
     }
     
-    // 満足度スコア (レッスン満足度 × 回収率 × 100)
+    // 満足度スコア (レッスン満足度 × 回収率(数値) / 100)
+    // 例: 満足度99.63, 回収率25% → 99.63 × 25 / 100 = 24.9075 → 24.91
     let satisfactionScore = '-';
-    if (currentMonthData && collectionRateValue > 0) {
-      const score = currentMonthData.average * collectionRateValue * 100;
-      satisfactionScore = score.toFixed(0); // 整数表示
+    if (satisfactionValue > 0 && collectionRateValue > 0) {
+      const score = satisfactionValue * collectionRateValue / 100;
+      satisfactionScore = score.toFixed(2); // 小数第2位まで
     }
     
     // 満足度ボタン (表示月にデータがある場合のみ表示)
@@ -1227,14 +1233,17 @@ function showSatisfactionModal(tutorName) {
   const months = Object.keys(tutorSatisfactionData).sort();
   const chartData = months.map(m => {
     const data = tutorSatisfactionData[m];
-    // Calculate collection rate for this month
+    // レッスン満足度: 平均 × 10 (0-10 → 0-100)
+    const satisfactionValue = data.average * 10;
+    // 回収率: 件数 ÷ アクティブ生徒数 × 100
     const collectionRate = activeStudentCount > 0 ? (data.count / activeStudentCount * 100) : 0;
-    // Calculate satisfaction score
-    const satisfactionScore = data.average * collectionRate * 100;
+    // 満足度スコア: レッスン満足度 × 回収率(数値) / 100
+    const satisfactionScore = satisfactionValue * collectionRate / 100;
     
     return {
       month: m,
       average: data.average,
+      satisfactionValue: satisfactionValue, // 0-100スケール
       count: data.count,
       collectionRate: collectionRate,
       satisfactionScore: satisfactionScore
@@ -1242,13 +1251,14 @@ function showSatisfactionModal(tutorName) {
   });
   
   const chartLabels = chartData.map(d => d.month.replace('/', '年') + '月');
-  const chartAverages = chartData.map(d => d.average);
+  const chartSatisfactionValues = chartData.map(d => d.satisfactionValue); // 0-100スケールの満足度
   const chartCounts = chartData.map(d => d.count);
   const chartScores = chartData.map(d => d.satisfactionScore);
   
-  // Calculate current month collection rate and satisfaction score
+  // Calculate current month values
+  const currentSatisfactionValue = currentMonthData.average * 10; // 0-100スケール
   const currentCollectionRate = activeStudentCount > 0 ? (currentMonthData.count / activeStudentCount * 100) : 0;
-  const currentSatisfactionScore = currentMonthData.average * currentCollectionRate * 100;
+  const currentSatisfactionScore = currentSatisfactionValue * currentCollectionRate / 100;
   
   // Create modal
   const modalHtml = `
@@ -1270,8 +1280,8 @@ function showSatisfactionModal(tutorName) {
             <h4 class="font-semibold text-gray-800 mb-2">表示月 (${currentYearMonth.replace('/', '年')}月)</h4>
             <div class="grid grid-cols-4 gap-4">
               <div>
-                <div class="text-sm text-gray-600">平均満足度</div>
-                <div class="text-3xl font-bold text-purple-600">${currentMonthData.average.toFixed(2)}</div>
+                <div class="text-sm text-gray-600">レッスン満足度</div>
+                <div class="text-3xl font-bold text-purple-600">${currentSatisfactionValue.toFixed(2)}</div>
               </div>
               <div>
                 <div class="text-sm text-gray-600">回答数</div>
@@ -1283,7 +1293,7 @@ function showSatisfactionModal(tutorName) {
               </div>
               <div>
                 <div class="text-sm text-gray-600">満足度スコア</div>
-                <div class="text-3xl font-bold text-indigo-600">${currentSatisfactionScore.toFixed(0)}</div>
+                <div class="text-3xl font-bold text-indigo-600">${currentSatisfactionScore.toFixed(2)}</div>
               </div>
             </div>
           </div>
@@ -1317,8 +1327,8 @@ function showSatisfactionModal(tutorName) {
         labels: chartLabels,
         datasets: [
           {
-            label: '平均満足度',
-            data: chartAverages,
+            label: 'レッスン満足度 (0-100)',
+            data: chartSatisfactionValues,
             borderColor: 'rgb(147, 51, 234)',
             backgroundColor: 'rgba(147, 51, 234, 0.1)',
             yAxisID: 'y',
@@ -1337,7 +1347,7 @@ function showSatisfactionModal(tutorName) {
             data: chartScores,
             borderColor: 'rgb(99, 102, 241)',
             backgroundColor: 'rgba(99, 102, 241, 0.1)',
-            yAxisID: 'y2',
+            yAxisID: 'y',
             tension: 0.3
           }
         ]
@@ -1355,10 +1365,10 @@ function showSatisfactionModal(tutorName) {
             position: 'left',
             title: {
               display: true,
-              text: '平均満足度'
+              text: 'レッスン満足度 / 満足度スコア'
             },
             min: 0,
-            max: 10
+            max: 100
           },
           y1: {
             type: 'linear',
@@ -1371,11 +1381,6 @@ function showSatisfactionModal(tutorName) {
             grid: {
               drawOnChartArea: false
             }
-          },
-          y2: {
-            type: 'linear',
-            display: false, // Hide axis but use for scaling
-            min: 0
           }
         }
       }
