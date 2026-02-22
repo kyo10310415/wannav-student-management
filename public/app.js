@@ -1100,28 +1100,45 @@ function renderTutorRows() {
     // レッスン満足度 (平均 × 10、100がMAX、小数第2位まで)
     let satisfactionAverage = '-';
     let satisfactionValue = 0;
+    let satisfactionColor = 'text-purple-600'; // デフォルト色
     if (currentMonthData) {
       satisfactionValue = currentMonthData.average * 10; // 0-10 → 0-100
       satisfactionAverage = satisfactionValue.toFixed(2);
+      // 80未満は赤文字
+      if (satisfactionValue < 80) {
+        satisfactionColor = 'text-red-600';
+      }
     }
     const satisfactionCount = currentMonthData ? currentMonthData.count : 0;
     
     // 回収率 (アクティブ生徒数 / 表示月の満足度件数 × 100)
     let collectionRate = '-';
     let collectionRateValue = 0;
+    let collectionRateColor = 'text-green-600'; // デフォルト色
     if (activeStudentCount > 0 && satisfactionCount > 0) {
       collectionRateValue = (satisfactionCount / activeStudentCount * 100);
       collectionRate = `${collectionRateValue.toFixed(1)}%`;
+      // 50未満は赤文字
+      if (collectionRateValue < 50) {
+        collectionRateColor = 'text-red-600';
+      }
     } else if (activeStudentCount > 0 && satisfactionCount === 0) {
       collectionRate = '0.0%';
+      collectionRateColor = 'text-red-600'; // 0%は赤文字
     }
     
     // 満足度スコア (レッスン満足度 × 回収率(数値) / 100)
     // 例: 満足度99.63, 回収率25% → 99.63 × 25 / 100 = 24.9075 → 24.91
     let satisfactionScore = '-';
+    let satisfactionScoreValue = 0;
+    let satisfactionScoreColor = 'text-indigo-600'; // デフォルト色
     if (satisfactionValue > 0 && collectionRateValue > 0) {
-      const score = satisfactionValue * collectionRateValue / 100;
-      satisfactionScore = score.toFixed(2); // 小数第2位まで
+      satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
+      satisfactionScore = satisfactionScoreValue.toFixed(2); // 小数第2位まで
+      // 60未満は赤文字
+      if (satisfactionScoreValue < 60) {
+        satisfactionScoreColor = 'text-red-600';
+      }
     }
     
     // 満足度ボタン (表示月にデータがある場合のみ表示)
@@ -1152,11 +1169,11 @@ function renderTutorRows() {
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">${remainingCapacity}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
-          <span class="font-semibold text-purple-600">${satisfactionAverage}</span>
+          <span class="font-semibold ${satisfactionColor}">${satisfactionAverage}</span>
           ${satisfactionButton}
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${collectionRate}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold text-indigo-600">${satisfactionScore}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold ${collectionRateColor}">${collectionRate}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${satisfactionScore}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm ${statusClass}">${tutor.status || '-'}</td>
       </tr>
     `;
@@ -1298,6 +1315,11 @@ function showSatisfactionModal(tutorName) {
   const currentCollectionRate = activeStudentCount > 0 ? (currentMonthData.count / activeStudentCount * 100) : 0;
   const currentSatisfactionScore = currentSatisfactionValue * currentCollectionRate / 100;
   
+  // Color coding for modal summary
+  const modalSatisfactionColor = currentSatisfactionValue < 80 ? 'text-red-600' : 'text-purple-600';
+  const modalCollectionRateColor = currentCollectionRate < 50 ? 'text-red-600' : 'text-green-600';
+  const modalSatisfactionScoreColor = currentSatisfactionScore < 60 ? 'text-red-600' : 'text-indigo-600';
+  
   // Create modal
   const modalHtml = `
     <div id="satisfactionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeSatisfactionModal(event)">
@@ -1319,7 +1341,7 @@ function showSatisfactionModal(tutorName) {
             <div class="grid grid-cols-4 gap-4">
               <div>
                 <div class="text-sm text-gray-600">レッスン満足度</div>
-                <div class="text-3xl font-bold text-purple-600">${currentSatisfactionValue.toFixed(2)}</div>
+                <div class="text-3xl font-bold ${modalSatisfactionColor}">${currentSatisfactionValue.toFixed(2)}</div>
               </div>
               <div>
                 <div class="text-sm text-gray-600">回答数</div>
@@ -1327,11 +1349,11 @@ function showSatisfactionModal(tutorName) {
               </div>
               <div>
                 <div class="text-sm text-gray-600">回収率</div>
-                <div class="text-3xl font-bold text-green-600">${currentCollectionRate.toFixed(1)}%</div>
+                <div class="text-3xl font-bold ${modalCollectionRateColor}">${currentCollectionRate.toFixed(1)}%</div>
               </div>
               <div>
                 <div class="text-sm text-gray-600">満足度スコア</div>
-                <div class="text-3xl font-bold text-indigo-600">${currentSatisfactionScore.toFixed(2)}</div>
+                <div class="text-3xl font-bold ${modalSatisfactionScoreColor}">${currentSatisfactionScore.toFixed(2)}</div>
               </div>
             </div>
           </div>
