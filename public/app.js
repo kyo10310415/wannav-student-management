@@ -1043,11 +1043,13 @@ function renderTutorRows() {
     // Calculate active student count for this tutor
     // IMPORTANT: Matching by tutor.notion_name (Notion名で照合)
     // homeroom_tutor field in students contains Notion名 (e.g., "Satomi", "Macky")
-    // Count only students with status='アクティブ' and contract_plan != '永久会員'
+    // Count only students with status='アクティブ'
+    // Exclude contract_plan: '永久会員' and '在籍プラン'
     const activeStudentCount = students.filter(s => 
       s.homeroom_tutor === tutor.notion_name &&
       s.status === 'アクティブ' &&
-      s.contract_plan !== '永久会員'
+      s.contract_plan !== '永久会員' &&
+      s.contract_plan !== '在籍プラン'
     ).length;
     
     // Student capacity (手入力、デフォルトは未設定)
