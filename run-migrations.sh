@@ -67,4 +67,10 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS suspension_months INTEGER DEFAULT 
 CREATE INDEX IF NOT EXISTS idx_students_suspension_months ON students(suspension_months);
 SQL
 
+# Migration 9: Add student capacity column to tutors
+psql $DATABASE_URL << 'SQL'
+ALTER TABLE tutors ADD COLUMN IF NOT EXISTS student_capacity INTEGER;
+CREATE INDEX IF NOT EXISTS idx_tutors_student_capacity ON tutors(student_capacity);
+SQL
+
 echo "Migrations completed successfully!"

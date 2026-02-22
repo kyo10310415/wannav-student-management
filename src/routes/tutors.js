@@ -169,4 +169,49 @@ app.get('/:id', async (c) => {
   }
 });
 
+/**
+ * PUT /api/tutors/:id/capacity
+ * Update tutor student capacity
+ */
+app.put('/:id/capacity', async (c) => {
+  try {
+    const employeeId = c.req.param('id');
+    const { student_capacity } = await c.req.json();
+    
+    // Validate student_capacity
+    if (student_capacity !== null && (isNaN(student_capacity) || student_capacity < 0)) {
+      return c.json({
+        success: false,
+        error: 'Invalid student_capacity value'
+      }, 400);
+    }
+    
+    const result = await query(
+      `UPDATE tutors 
+       SET student_capacity = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE employee_id = $2 
+       RETURNING *`,
+      [student_capacity, employeeId]
+    );
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Tutor not found'
+      }, 404);
+    }
+    
+    return c.json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating tutor capacity:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

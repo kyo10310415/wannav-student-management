@@ -967,12 +967,12 @@ function renderTutorsPage() {
           <thead class="bg-gray-50">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">従業員ID</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">氏名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">メールアドレス</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">所属チーム</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notion名</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">職種</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">アクティブ生徒数</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">生徒数上限</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">残り受入可能数</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
             </tr>
           </thead>
@@ -1040,17 +1040,82 @@ function renderTutorRows() {
   return filteredTutors.map(tutor => {
     const statusClass = tutor.status === 'アクティブ' ? 'text-green-600 font-semibold' : 'text-gray-600';
     
+    // Calculate active student count for this tutor
+    // Count only students with status='アクティブ' and contract_plan != '永久会員'
+    const activeStudentCount = students.filter(s => 
+      s.homeroom_tutor === tutor.tutor_name &&
+      s.status === 'アクティブ' &&
+      s.contract_plan !== '永久会員'
+    ).length;
+    
+    // Student capacity (手入力、デフォルトは未設定)
+    const studentCapacity = tutor.student_capacity || '-';
+    
+    // Remaining capacity
+    let remainingCapacity = '-';
+    if (tutor.student_capacity && !isNaN(tutor.student_capacity)) {
+      const remaining = tutor.student_capacity - activeStudentCount;
+      remainingCapacity = remaining;
+      
+      // Color code based on remaining capacity
+      if (remaining <= 0) {
+        remainingCapacity = `<span class="text-red-600 font-bold">${remaining}</span>`;
+      } else if (remaining <= 2) {
+        remainingCapacity = `<span class="text-orange-600 font-semibold">${remaining}</span>`;
+      } else {
+        remainingCapacity = `<span class="text-green-600">${remaining}</span>`;
+      }
+    }
+    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.tutor_name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.email || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.notion_name || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.job_type || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${activeStudentCount}名</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+          <input 
+            type="number" 
+            value="${tutor.student_capacity || ''}" 
+            placeholder="-"
+            class="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onchange="updateTutorCapacity('${tutor.employee_id}', this.value)"
+            min="0"
+          />
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">${remainingCapacity}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm ${statusClass}">${tutor.status || '-'}</td>
       </tr>
     `;
   }).join('');
+}
+
+// Update tutor student capacity
+async function updateTutorCapacity(employeeId, capacity) {
+  try {
+    const capacityValue = capacity === '' ? null : parseInt(capacity, 10);
+    
+    const response = await axios.put(`${API_BASE}/api/tutors/${employeeId}/capacity`, {
+      student_capacity: capacityValue
+    });
+    
+    if (response.data.success) {
+      // Update local tutor data
+      const tutor = tutors.find(t => t.employee_id === employeeId);
+      if (tutor) {
+        tutor.student_capacity = capacityValue;
+      }
+      
+      // Re-render tutors page to update remaining capacity
+      renderTutorsPage();
+      
+      console.log('生徒数上限を更新しました');
+    } else {
+      alert('生徒数上限の更新に失敗しました');
+    }
+  } catch (error) {
+    console.error('Error updating tutor capacity:', error);
+    alert('生徒数上限の更新中にエラーが発生しました');
+  }
 }
