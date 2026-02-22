@@ -1218,16 +1218,54 @@ function showSatisfactionModal(tutorName) {
     s.contract_plan !== '在籍プラン'
   ).length;
   
-  // Build reasons list
-  const reasonsHtml = currentMonthData.reasons.map(r => `
+  // Build reasons list, separated by score
+  const highScoreReasons = currentMonthData.reasons.filter(r => r.score >= 9);
+  const lowScoreReasons = currentMonthData.reasons.filter(r => r.score <= 8);
+  
+  const highScoreHtml = highScoreReasons.map(r => `
     <div class="border-b border-gray-200 py-3">
       <div class="flex justify-between items-start mb-1">
         <span class="font-semibold text-gray-800">${r.studentName}</span>
-        <span class="text-sm text-purple-600 font-semibold">評価: ${r.score}</span>
+        <span class="text-sm text-green-600 font-semibold">評価: ${r.score}</span>
       </div>
       <p class="text-sm text-gray-600">${r.reason}</p>
     </div>
   `).join('');
+  
+  const lowScoreHtml = lowScoreReasons.map(r => `
+    <div class="border-b border-gray-200 py-3">
+      <div class="flex justify-between items-start mb-1">
+        <span class="font-semibold text-gray-800">${r.studentName}</span>
+        <span class="text-sm text-orange-600 font-semibold">評価: ${r.score}</span>
+      </div>
+      <p class="text-sm text-gray-600">${r.reason}</p>
+    </div>
+  `).join('');
+  
+  const reasonsHtml = `
+    ${highScoreReasons.length > 0 ? `
+      <div class="mb-4">
+        <h5 class="font-semibold text-green-700 mb-2 flex items-center">
+          <i class="fas fa-smile mr-2"></i>
+          高評価（9以上）${highScoreReasons.length}件
+        </h5>
+        <div class="border border-green-200 rounded-lg p-3 bg-green-50">
+          ${highScoreHtml}
+        </div>
+      </div>
+    ` : ''}
+    ${lowScoreReasons.length > 0 ? `
+      <div>
+        <h5 class="font-semibold text-orange-700 mb-2 flex items-center">
+          <i class="fas fa-meh mr-2"></i>
+          改善余地（8以下）${lowScoreReasons.length}件
+        </h5>
+        <div class="border border-orange-200 rounded-lg p-3 bg-orange-50">
+          ${lowScoreHtml}
+        </div>
+      </div>
+    ` : ''}
+  `;
   
   // Build historical chart data (all months with data)
   const months = Object.keys(tutorSatisfactionData).sort();
@@ -1307,7 +1345,7 @@ function showSatisfactionModal(tutorName) {
           <!-- Reasons list -->
           <div>
             <h4 class="font-semibold text-gray-800 mb-3">表示月のフィードバック (${currentMonthData.count}件)</h4>
-            <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4">
+            <div class="max-h-96 overflow-y-auto">
               ${reasonsHtml}
             </div>
           </div>
