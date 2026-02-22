@@ -1041,12 +1041,17 @@ function renderTutorRows() {
     const statusClass = tutor.status === 'アクティブ' ? 'text-green-600 font-semibold' : 'text-gray-600';
     
     // Calculate active student count for this tutor
+    // IMPORTANT: Matching by tutor.tutor_name (NOT notion_name or name)
+    // homeroom_tutor field in students should contain the Tutor名 (e.g., "さとみん", "まっきー")
     // Count only students with status='アクティブ' and contract_plan != '永久会員'
-    const activeStudentCount = students.filter(s => 
-      s.homeroom_tutor === tutor.tutor_name &&
-      s.status === 'アクティブ' &&
-      s.contract_plan !== '永久会員'
-    ).length;
+    const activeStudentCount = students.filter(s => {
+      const match = s.homeroom_tutor === tutor.tutor_name;
+      // Debug: Log if there's a mismatch
+      if (s.homeroom_tutor && !match && s.status === 'アクティブ' && s.contract_plan !== '永久会員') {
+        console.log(`Student ${s.student_id} homeroom_tutor="${s.homeroom_tutor}" does not match tutor_name="${tutor.tutor_name}"`);
+      }
+      return match && s.status === 'アクティブ' && s.contract_plan !== '永久会員';
+    }).length;
     
     // Student capacity (手入力、デフォルトは未設定)
     const studentCapacity = tutor.student_capacity || '-';
