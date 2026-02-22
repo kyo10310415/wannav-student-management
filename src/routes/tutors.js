@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchTutors } from '../services/notionService.js';
-import { fetchTutorsFromCache, getCacheSyncTime } from '../services/cacheService.js';
+import { fetchTutorsFromCache, fetchSatisfactionFromCache, getCacheSyncTime } from '../services/cacheService.js';
 
 const app = new Hono();
 
@@ -207,6 +207,88 @@ app.put('/:id/capacity', async (c) => {
     });
   } catch (error) {
     console.error('Error updating tutor capacity:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/tutors/satisfaction/all
+ * Get satisfaction data for all tutors with monthly averages
+ */
+app.get('/satisfaction/all', async (c) => {
+  try {
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    
+    if (!cacheSpreadsheetId) {
+      return c.json({
+        success: false,
+        error: 'GOOGLE_CACHE_SHEET_ID or GOOGLE_SHEET_ID not configured'
+      }, 400);
+    }
+    
+    // Fetch satisfaction data from cache
+    const satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
+    
+    // Group by tutor and month, calculate averages
+    const tutorMonthlyData = {};
+    
+    satisfactionData.forEach(record => {
+      const tutorName = record.tutor_name;
+      const yearMonth = record.year_month; // YYYY/M format
+      const score = parseFloat(record.satisfaction_score);
+      
+      if (!tutorName || !yearMonth || isNaN(score)) return;
+      
+      if (!tutorMonthlyData[tutorName]) {
+        tutorMonthlyData[tutorName] = {};
+      }
+      
+      if (!tutorMonthlyData[tutorName][yearMonth]) {
+        tutorMonthlyData[tutorName][yearMonth] = {
+          scores: [],
+          reasons: [],
+          studentNames: []
+        };
+      }
+      
+      tutorMonthlyData[tutorName][yearMonth].scores.push(score);
+      if (record.reason) {
+        tutorMonthlyData[tutorName][yearMonth].reasons.push({
+          studentName: record.student_name,
+          reason: record.reason,
+          score: score
+        });
+      }
+      if (record.student_name) {
+        tutorMonthlyData[tutorName][yearMonth].studentNames.push(record.student_name);
+      }
+    });
+    
+    // Calculate averages
+    const result = {};
+    for (const tutorName in tutorMonthlyData) {
+      result[tutorName] = {};
+      for (const yearMonth in tutorMonthlyData[tutorName]) {
+        const data = tutorMonthlyData[tutorName][yearMonth];
+        const average = data.scores.reduce((a, b) => a + b, 0) / data.scores.length;
+        result[tutorName][yearMonth] = {
+          average: Math.round(average * 10) / 10, // 小数第1位まで
+          count: data.scores.length,
+          reasons: data.reasons,
+          studentNames: data.studentNames
+        };
+      }
+    }
+    
+    return c.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error fetching satisfaction data:', error);
     return c.json({
       success: false,
       error: error.message

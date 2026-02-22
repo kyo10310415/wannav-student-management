@@ -9,6 +9,7 @@ const PROGRESS_SPREADSHEET_ID = '1dwqi8NvrbDDkrwIryYJrOJ2AAg4oBu6v0-CEdR2HrzE'; 
 const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM'; // Discord送信先スプレッドシートのID
 const RESULT_SCORE_SPREADSHEET_ID = '1t571fqZJtUjNL7_gH6G2dSNBCmS98LTnDrWEtt7J92k'; // リザルトスコアスプレッドシートのID
 const SUSPENSION_SPREADSHEET_ID = '17ys2PZpDpffG3j4EQrXiLlwGbFxiNosBqMivL2quVEA'; // 休会情報スプレッドシートのID
+const SATISFACTION_SPREADSHEET_ID = '1qJAZWsuhA68IEDaw0NBciapZhWsmhmXKIDi7979-S7A'; // レッスン満足度スプレッドシートのID
 
 // バックエンドAPI設定（外部DB用）
 const BACKEND_API_URL = 'https://wannav-student-management.onrender.com/api/external/lesson-start-dates'; // バックエンドAPIのURL
@@ -69,6 +70,10 @@ function syncAllData() {
     // 9. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
+    
+    // 10. レッスン満足度データを同期
+    syncSatisfactionData();
+    Logger.log('✓ レッスン満足度データ同期完了');
     
     const endTime = new Date();
     const executionTime = Math.round((endTime - startTime) / 1000);
@@ -1081,4 +1086,103 @@ function parseSuspensionPeriod(period) {
   }
   
   return 0;
+}
+
+/**
+ * レッスン満足度を取得してスプレッドシートに保存
+ * フォームの回答 1シートから全件取得し、別シートに保存
+ */
+function syncSatisfactionData() {
+  Logger.log('レッスン満足度データ取得開始...');
+  
+  try {
+    const sourceSs = SpreadsheetApp.openById(SATISFACTION_SPREADSHEET_ID);
+    const sourceSheet = sourceSs.getSheetByName('フォームの回答 1');
+    
+    if (!sourceSheet) {
+      Logger.log('⚠️ 警告: フォームの回答 1 シートが見つかりません');
+      return;
+    }
+    
+    const lastRow = sourceSheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('満足度データがありません');
+      return;
+    }
+    
+    // A列: タイムスタンプ, C列: 名前（本名）, D列: 担任の先生の名前, L列: 担任の先生の対応, M列: 理由
+    const timestamps = sourceSheet.getRange(2, 1, lastRow - 1, 1).getValues(); // A列
+    const studentNames = sourceSheet.getRange(2, 3, lastRow - 1, 1).getValues(); // C列
+    const tutorNames = sourceSheet.getRange(2, 4, lastRow - 1, 1).getValues(); // D列
+    const satisfactionScores = sourceSheet.getRange(2, 12, lastRow - 1, 1).getValues(); // L列
+    const reasons = sourceSheet.getRange(2, 13, lastRow - 1, 1).getValues(); // M列
+    
+    // データを保存するスプレッドシート
+    const destSs = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let destSheet = destSs.getSheetByName('レッスン満足度データ');
+    
+    if (!destSheet) {
+      destSheet = destSs.insertSheet('レッスン満足度データ');
+      Logger.log('シート「レッスン満足度データ」を作成しました');
+    }
+    
+    // ヘッダー以外を全削除
+    if (destSheet.getLastRow() > 1) {
+      destSheet.deleteRows(2, destSheet.getLastRow() - 1);
+    }
+    
+    // ヘッダー行を設定
+    destSheet.getRange(1, 1, 1, 6).setValues([[
+      'タイムスタンプ',
+      '年月',
+      '生徒名',
+      'Tutor名',
+      '満足度',
+      '理由'
+    ]]);
+    destSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+    
+    // データを整形
+    const rows = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const timestamp = timestamps[i][0];
+      const studentName = studentNames[i][0];
+      const tutorName = tutorNames[i][0];
+      const score = satisfactionScores[i][0];
+      const reason = reasons[i][0];
+      
+      if (timestamp && tutorName) {
+        // タイムスタンプから年月を抽出 (YYYY/MM形式)
+        let yearMonth = '';
+        try {
+          const date = new Date(timestamp);
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1;
+          yearMonth = `${year}/${month}`;
+        } catch (e) {
+          yearMonth = '';
+        }
+        
+        rows.push([
+          timestamp,
+          yearMonth,
+          studentName || '',
+          tutorName || '',
+          score || '',
+          reason || ''
+        ]);
+      }
+    }
+    
+    // データを書き込み
+    if (rows.length > 0) {
+      destSheet.getRange(2, 1, rows.length, 6).setValues(rows);
+    }
+    
+    Logger.log(`${rows.length}件の満足度データを書き込み完了`);
+    
+  } catch (error) {
+    Logger.log(`❌ 満足度データ取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+  }
 }

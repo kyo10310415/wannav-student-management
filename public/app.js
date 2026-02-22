@@ -4,6 +4,7 @@ const API_BASE = '';
 // State
 let students = [];
 let tutors = [];
+let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
@@ -81,6 +82,9 @@ async function loadInitialData() {
     students = studentsRes.data.data;
     tutors = tutorsRes.data.data;
     
+    // Load satisfaction data
+    await loadSatisfactionData();
+    
     // Load lesson stats and dates for current month
     await loadLessonStats();
     await loadLessonDates();
@@ -105,6 +109,18 @@ async function loadLessonStats() {
     });
   } catch (error) {
     console.error('Error loading lesson stats:', error);
+  }
+}
+
+// Load satisfaction data
+async function loadSatisfactionData() {
+  try {
+    const res = await axios.get(`${API_BASE}/api/tutors/satisfaction/all`);
+    satisfactionData = res.data.data || {};
+    console.log('Loaded satisfaction data:', Object.keys(satisfactionData).length, 'tutors');
+  } catch (error) {
+    console.error('Error loading satisfaction data:', error);
+    satisfactionData = {};
   }
 }
 
@@ -973,6 +989,8 @@ function renderTutorsPage() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">アクティブ生徒数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">生徒数上限</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">残り受入可能数</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
             </tr>
           </thead>
@@ -1029,13 +1047,16 @@ function renderTutorRows() {
   if (filteredTutors.length === 0) {
     return `
       <tr>
-        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="10" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>アクティブなTutorが見つかりません</p>
         </td>
       </tr>
     `;
   }
+
+  // Get current month in YYYY/M format
+  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
 
   return filteredTutors.map(tutor => {
     const statusClass = tutor.status === 'アクティブ' ? 'text-green-600 font-semibold' : 'text-gray-600';
@@ -1071,6 +1092,32 @@ function renderTutorRows() {
       }
     }
     
+    // Get satisfaction data for this tutor
+    const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+    const currentMonthData = tutorSatisfactionData[currentYearMonth];
+    
+    // レッスン満足度 (表示月の平均)
+    const satisfactionAverage = currentMonthData ? currentMonthData.average.toFixed(1) : '-';
+    const satisfactionCount = currentMonthData ? currentMonthData.count : 0;
+    
+    // 回収率 (アクティブ生徒数 / 表示月の満足度件数 × 100)
+    let collectionRate = '-';
+    if (activeStudentCount > 0 && satisfactionCount > 0) {
+      const rate = (satisfactionCount / activeStudentCount * 100).toFixed(1);
+      collectionRate = `${rate}%`;
+    } else if (activeStudentCount > 0 && satisfactionCount === 0) {
+      collectionRate = '0.0%';
+    }
+    
+    // 満足度ボタン (表示月にデータがある場合のみ表示)
+    const satisfactionButton = currentMonthData ? 
+      `<button 
+        onclick="showSatisfactionModal('${tutor.tutor_name}')" 
+        class="text-blue-600 hover:text-blue-800 ml-2"
+        title="満足度詳細を表示">
+        <i class="fas fa-chart-line"></i>
+      </button>` : '';
+    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
@@ -1089,6 +1136,11 @@ function renderTutorRows() {
           />
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">${remainingCapacity}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+          <span class="font-semibold text-purple-600">${satisfactionAverage}</span>
+          ${satisfactionButton}
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${collectionRate}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm ${statusClass}">${tutor.status || '-'}</td>
       </tr>
     `;
@@ -1121,5 +1173,163 @@ async function updateTutorCapacity(employeeId, capacity) {
   } catch (error) {
     console.error('Error updating tutor capacity:', error);
     alert('生徒数上限の更新中にエラーが発生しました');
+  }
+}
+
+// Show satisfaction modal for a tutor
+function showSatisfactionModal(tutorName) {
+  const tutorSatisfactionData = satisfactionData[tutorName] || {};
+  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+  const currentMonthData = tutorSatisfactionData[currentYearMonth];
+  
+  if (!currentMonthData) {
+    alert('表示月の満足度データがありません');
+    return;
+  }
+  
+  // Build reasons list
+  const reasonsHtml = currentMonthData.reasons.map(r => `
+    <div class="border-b border-gray-200 py-3">
+      <div class="flex justify-between items-start mb-1">
+        <span class="font-semibold text-gray-800">${r.studentName}</span>
+        <span class="text-sm text-purple-600 font-semibold">評価: ${r.score}</span>
+      </div>
+      <p class="text-sm text-gray-600">${r.reason}</p>
+    </div>
+  `).join('');
+  
+  // Build historical chart data (all months with data)
+  const months = Object.keys(tutorSatisfactionData).sort();
+  const chartData = months.map(m => {
+    const data = tutorSatisfactionData[m];
+    return {
+      month: m,
+      average: data.average,
+      count: data.count
+    };
+  });
+  
+  const chartLabels = chartData.map(d => d.month.replace('/', '年') + '月');
+  const chartAverages = chartData.map(d => d.average);
+  const chartCounts = chartData.map(d => d.count);
+  
+  // Create modal
+  const modalHtml = `
+    <div id="satisfactionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeSatisfactionModal(event)">
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+        <div class="p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-2xl font-bold text-gray-800">
+              <i class="fas fa-chart-line mr-2"></i>
+              ${tutorName} - レッスン満足度
+            </h3>
+            <button onclick="closeSatisfactionModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+          
+          <!-- Current month summary -->
+          <div class="bg-purple-50 rounded-lg p-4 mb-6">
+            <h4 class="font-semibold text-gray-800 mb-2">表示月 (${currentYearMonth.replace('/', '年')}月)</h4>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-sm text-gray-600">平均満足度</div>
+                <div class="text-3xl font-bold text-purple-600">${currentMonthData.average.toFixed(1)}</div>
+              </div>
+              <div>
+                <div class="text-sm text-gray-600">回答数</div>
+                <div class="text-3xl font-bold text-blue-600">${currentMonthData.count}件</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Historical chart -->
+          <div class="mb-6">
+            <h4 class="font-semibold text-gray-800 mb-3">過去の満足度推移</h4>
+            <canvas id="satisfactionChart"></canvas>
+          </div>
+          
+          <!-- Reasons list -->
+          <div>
+            <h4 class="font-semibold text-gray-800 mb-3">表示月のフィードバック (${currentMonthData.count}件)</h4>
+            <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4">
+              ${reasonsHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  
+  // Render chart
+  setTimeout(() => {
+    const ctx = document.getElementById('satisfactionChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartLabels,
+        datasets: [
+          {
+            label: '平均満足度',
+            data: chartAverages,
+            borderColor: 'rgb(147, 51, 234)',
+            backgroundColor: 'rgba(147, 51, 234, 0.1)',
+            yAxisID: 'y',
+            tension: 0.3
+          },
+          {
+            label: '回答数',
+            data: chartCounts,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            yAxisID: 'y1',
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: {
+              display: true,
+              text: '平均満足度'
+            },
+            min: 0,
+            max: 10
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            title: {
+              display: true,
+              text: '回答数'
+            },
+            grid: {
+              drawOnChartArea: false
+            }
+          }
+        }
+      }
+    });
+  }, 100);
+}
+
+// Close satisfaction modal
+function closeSatisfactionModal(event) {
+  if (event && event.target.id !== 'satisfactionModal') return;
+  const modal = document.getElementById('satisfactionModal');
+  if (modal) {
+    modal.remove();
   }
 }

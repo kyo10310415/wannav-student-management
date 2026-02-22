@@ -136,6 +136,35 @@ export async function fetchProgressFromCache(spreadsheetId) {
 }
 
 /**
+ * Fetch satisfaction data from cache spreadsheet
+ */
+export async function fetchSatisfactionFromCache(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'レッスン満足度データ!A2:F', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由
+    });
+
+    const rows = response.data.values || [];
+    console.log(`Fetched ${rows.length} satisfaction records from cache spreadsheet`);
+
+    return rows.map(row => ({
+      timestamp: row[0] || null,
+      year_month: row[1] || null,  // YYYY/M 形式
+      student_name: row[2] || null,
+      tutor_name: row[3] || null,
+      satisfaction_score: row[4] || null,
+      reason: row[5] || null,
+    }));
+  } catch (error) {
+    console.error('Error fetching satisfaction from cache:', error);
+    throw error;
+  }
+}
+
+/**
  * Get last sync time from meta sheet
  */
 export async function getCacheSyncTime(spreadsheetId) {
