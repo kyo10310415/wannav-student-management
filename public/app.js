@@ -1042,102 +1042,7 @@ function handleTeamFilterChange(team) {
 
 // Render tutor statistics
 function renderTutorStatistics() {
-  // Filter: Only active tutors with 'Tutor' in job_type
-  let activeTutors = tutors.filter(t => 
-    t.status === 'アクティブ' && 
-    t.job_type && 
-    t.job_type.toLowerCase().includes('tutor')
-  );
-  
-  // Apply team filter
-  if (selectedTeam !== 'all') {
-    activeTutors = activeTutors.filter(t => (t.team || '未所属') === selectedTeam);
-  }
-  
-  const total = activeTutors.length;
-  
-  // Count by team
-  const teams = {};
-  activeTutors.forEach(t => {
-    const team = t.team || '未所属';
-    teams[team] = (teams[team] || 0) + 1;
-  });
-  
-  const teamCount = Object.keys(teams).length;
-  
-  // Calculate satisfaction metrics
-  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
-  let totalSatisfaction = 0;
-  let totalCollectionRate = 0;
-  let totalSatisfactionScore = 0;
-  let validCount = 0;
-  
-  activeTutors.forEach(tutor => {
-    // Get active student count for this tutor
-    const activeStudentCount = students.filter(s => 
-      s.homeroom_tutor === tutor.notion_name &&
-      s.status === 'アクティブ' &&
-      s.contract_plan !== '永久会員' &&
-      s.contract_plan !== '在籍プラン'
-    ).length;
-    
-    // Get satisfaction data
-    const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
-    const currentMonthData = tutorSatisfactionData[currentYearMonth];
-    
-    if (currentMonthData && activeStudentCount > 0) {
-      const satisfactionValue = currentMonthData.average * 10; // 0-100スケール
-      const satisfactionCount = currentMonthData.count;
-      const collectionRateValue = (satisfactionCount / activeStudentCount * 100);
-      const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
-      
-      totalSatisfaction += satisfactionValue;
-      totalCollectionRate += collectionRateValue;
-      totalSatisfactionScore += satisfactionScoreValue;
-      validCount++;
-    }
-  });
-  
-  // Calculate averages
-  const avgSatisfaction = validCount > 0 ? (totalSatisfaction / validCount).toFixed(2) : '-';
-  const avgCollectionRate = validCount > 0 ? (totalCollectionRate / validCount).toFixed(1) : '-';
-  const avgSatisfactionScore = validCount > 0 ? (totalSatisfactionScore / validCount).toFixed(2) : '-';
-  
-  // Color coding for averages
-  const satisfactionColor = avgSatisfaction !== '-' && parseFloat(avgSatisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
-  const collectionRateColor = avgCollectionRate !== '-' && parseFloat(avgCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
-  const satisfactionScoreColor = avgSatisfactionScore !== '-' && parseFloat(avgSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
-  
-  return `
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-      <div class="bg-blue-50 p-4 rounded-lg">
-        <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
-        <div class="text-3xl font-bold text-blue-600">${total}名</div>
-      </div>
-      <div class="bg-green-50 p-4 rounded-lg">
-        <div class="text-sm text-gray-600 mb-1">所属チーム数</div>
-        <div class="text-3xl font-bold text-green-600">${teamCount}チーム</div>
-      </div>
-      <div class="bg-purple-50 p-4 rounded-lg">
-        <div class="text-sm text-gray-600 mb-1">満足度平均</div>
-        <div class="text-3xl font-bold ${satisfactionColor}">${avgSatisfaction}</div>
-      </div>
-      <div class="bg-green-50 p-4 rounded-lg">
-        <div class="text-sm text-gray-600 mb-1">回収率平均</div>
-        <div class="text-3xl font-bold ${collectionRateColor}">${avgCollectionRate}${avgCollectionRate !== '-' ? '%' : ''}</div>
-      </div>
-      <div class="bg-indigo-50 p-4 rounded-lg">
-        <div class="text-sm text-gray-600 mb-1">満足度スコア平均</div>
-        <div class="text-3xl font-bold ${satisfactionScoreColor}">${avgSatisfactionScore}</div>
-      </div>
-    </div>
-    ${selectedTeam !== 'all' ? renderTeamComparison() : ''}
-  `;
-}
-
-// Render team comparison (when team is selected)
-function renderTeamComparison() {
-  // Calculate overall (all teams) statistics
+  // Always use all active tutors for statistics (no filter applied)
   const allActiveTutors = tutors.filter(t => 
     t.status === 'アクティブ' && 
     t.job_type && 
@@ -1145,6 +1050,11 @@ function renderTeamComparison() {
   );
   
   const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+  
+  // Get unique teams
+  const uniqueTeams = [...new Set(allActiveTutors.map(t => t.team || '未所属'))].sort();
+  
+  // Calculate overall statistics
   let overallSatisfaction = 0;
   let overallCollectionRate = 0;
   let overallSatisfactionScore = 0;
@@ -1178,22 +1088,117 @@ function renderTeamComparison() {
   const overallAvgCollectionRate = overallValidCount > 0 ? (overallCollectionRate / overallValidCount).toFixed(1) : '-';
   const overallAvgSatisfactionScore = overallValidCount > 0 ? (overallSatisfactionScore / overallValidCount).toFixed(2) : '-';
   
+  // Color coding for overall
+  const overallSatisfactionColor = overallAvgSatisfaction !== '-' && parseFloat(overallAvgSatisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
+  const overallCollectionRateColor = overallAvgCollectionRate !== '-' && parseFloat(overallAvgCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+  const overallSatisfactionScoreColor = overallAvgSatisfactionScore !== '-' && parseFloat(overallAvgSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+  
+  // Calculate team-specific statistics
+  const teamStats = {};
+  uniqueTeams.forEach(team => {
+    const teamTutors = allActiveTutors.filter(t => (t.team || '未所属') === team);
+    let teamSatisfaction = 0;
+    let teamCollectionRate = 0;
+    let teamSatisfactionScore = 0;
+    let teamValidCount = 0;
+    
+    teamTutors.forEach(tutor => {
+      const activeStudentCount = students.filter(s => 
+        s.homeroom_tutor === tutor.notion_name &&
+        s.status === 'アクティブ' &&
+        s.contract_plan !== '永久会員' &&
+        s.contract_plan !== '在籍プラン'
+      ).length;
+      
+      const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+      const currentMonthData = tutorSatisfactionData[currentYearMonth];
+      
+      if (currentMonthData && activeStudentCount > 0) {
+        const satisfactionValue = currentMonthData.average * 10;
+        const satisfactionCount = currentMonthData.count;
+        const collectionRateValue = (satisfactionCount / activeStudentCount * 100);
+        const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
+        
+        teamSatisfaction += satisfactionValue;
+        teamCollectionRate += collectionRateValue;
+        teamSatisfactionScore += satisfactionScoreValue;
+        teamValidCount++;
+      }
+    });
+    
+    teamStats[team] = {
+      tutorCount: teamTutors.length,
+      satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
+      collectionRate: teamValidCount > 0 ? (teamCollectionRate / teamValidCount).toFixed(1) : '-',
+      satisfactionScore: teamValidCount > 0 ? (teamSatisfactionScore / teamValidCount).toFixed(2) : '-'
+    };
+  });
+  
   return `
-    <div class="border-t pt-4 mt-2">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">全体との比較</h3>
-      <div class="grid grid-cols-3 gap-4">
-        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-          <div class="text-xs text-gray-600 mb-1">全体平均 満足度</div>
-          <div class="text-2xl font-bold text-gray-700">${overallAvgSatisfaction}</div>
+    <!-- Overall Statistics -->
+    <div class="mb-6">
+      <h3 class="text-lg font-semibold text-gray-800 mb-3">
+        <i class="fas fa-globe mr-2"></i>全体統計
+      </h3>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+          <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
+          <div class="text-3xl font-bold text-blue-600">${allActiveTutors.length}名</div>
         </div>
-        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-          <div class="text-xs text-gray-600 mb-1">全体平均 回収率</div>
-          <div class="text-2xl font-bold text-gray-700">${overallAvgCollectionRate}${overallAvgCollectionRate !== '-' ? '%' : ''}</div>
+        <div class="bg-green-50 p-4 rounded-lg border-2 border-green-200">
+          <div class="text-sm text-gray-600 mb-1">所属チーム数</div>
+          <div class="text-3xl font-bold text-green-600">${uniqueTeams.length}チーム</div>
         </div>
-        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-          <div class="text-xs text-gray-600 mb-1">全体平均 スコア</div>
-          <div class="text-2xl font-bold text-gray-700">${overallAvgSatisfactionScore}</div>
+        <div class="bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
+          <div class="text-sm text-gray-600 mb-1">満足度平均</div>
+          <div class="text-3xl font-bold ${overallSatisfactionColor}">${overallAvgSatisfaction}</div>
         </div>
+        <div class="bg-green-50 p-4 rounded-lg border-2 border-green-200">
+          <div class="text-sm text-gray-600 mb-1">回収率平均</div>
+          <div class="text-3xl font-bold ${overallCollectionRateColor}">${overallAvgCollectionRate}${overallAvgCollectionRate !== '-' ? '%' : ''}</div>
+        </div>
+        <div class="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
+          <div class="text-sm text-gray-600 mb-1">満足度スコア平均</div>
+          <div class="text-3xl font-bold ${overallSatisfactionScoreColor}">${overallAvgSatisfactionScore}</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Team-by-Team Statistics -->
+    <div>
+      <h3 class="text-lg font-semibold text-gray-800 mb-3">
+        <i class="fas fa-users mr-2"></i>チーム別統計
+      </h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チーム名</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor数</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度平均</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率平均</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア平均</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${uniqueTeams.map(team => {
+              const stats = teamStats[team];
+              const satisfactionColor = stats.satisfaction !== '-' && parseFloat(stats.satisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
+              const collectionRateColor = stats.collectionRate !== '-' && parseFloat(stats.collectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+              const satisfactionScoreColor = stats.satisfactionScore !== '-' && parseFloat(stats.satisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+              
+              return `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${team}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-blue-600 font-semibold">${stats.tutorCount}名</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionColor}">${stats.satisfaction}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${collectionRateColor}">${stats.collectionRate}${stats.collectionRate !== '-' ? '%' : ''}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${stats.satisfactionScore}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
       </div>
     </div>
   `;
