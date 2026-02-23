@@ -9,6 +9,7 @@ let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
+let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 let currentPage = 'reservations'; // 'reservations', 'students', 'tutors'
@@ -954,10 +955,22 @@ function renderTutorsPage() {
   content.innerHTML = `
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
+        
+        <!-- Team Filter -->
+        <div class="flex items-center gap-2 ml-4">
+          <label class="text-sm font-medium text-gray-700">チーム絞り込み:</label>
+          <select 
+            id="teamFilter" 
+            onchange="handleTeamFilterChange(this.value)"
+            class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            ${renderTeamFilterOptions()}
+          </select>
+        </div>
       </div>
     </div>
 
@@ -965,11 +978,9 @@ function renderTutorsPage() {
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chart-bar mr-2"></i>
-        統計情報
+        統計情報 ${selectedTeam !== 'all' ? `<span class="text-sm text-blue-600">(${selectedTeam}チーム)</span>` : '<span class="text-sm text-gray-500">(全体)</span>'}
       </h2>
-      <div class="grid grid-cols-2 md:grid-cols-2 gap-4">
-        ${renderTutorStatistics()}
-      </div>
+      ${renderTutorStatistics()}
     </div>
 
     <!-- Tutor List -->
@@ -1004,14 +1015,44 @@ function renderTutorsPage() {
   `;
 }
 
-// Render tutor statistics
-function renderTutorStatistics() {
-  // Filter: Only active tutors with 'Tutor' in job_type
+// Render team filter options
+function renderTeamFilterOptions() {
+  // Get unique teams from active tutors
   const activeTutors = tutors.filter(t => 
     t.status === 'アクティブ' && 
     t.job_type && 
     t.job_type.toLowerCase().includes('tutor')
   );
+  
+  const teams = [...new Set(activeTutors.map(t => t.team || '未所属'))].sort();
+  
+  return `
+    <option value="all" ${selectedTeam === 'all' ? 'selected' : ''}>全体</option>
+    ${teams.map(team => `
+      <option value="${team}" ${selectedTeam === team ? 'selected' : ''}>${team}</option>
+    `).join('')}
+  `;
+}
+
+// Handle team filter change
+function handleTeamFilterChange(team) {
+  selectedTeam = team;
+  renderTutorsPage();
+}
+
+// Render tutor statistics
+function renderTutorStatistics() {
+  // Filter: Only active tutors with 'Tutor' in job_type
+  let activeTutors = tutors.filter(t => 
+    t.status === 'アクティブ' && 
+    t.job_type && 
+    t.job_type.toLowerCase().includes('tutor')
+  );
+  
+  // Apply team filter
+  if (selectedTeam !== 'all') {
+    activeTutors = activeTutors.filter(t => (t.team || '未所属') === selectedTeam);
+  }
   
   const total = activeTutors.length;
   
@@ -1024,14 +1065,136 @@ function renderTutorStatistics() {
   
   const teamCount = Object.keys(teams).length;
   
+  // Calculate satisfaction metrics
+  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+  let totalSatisfaction = 0;
+  let totalCollectionRate = 0;
+  let totalSatisfactionScore = 0;
+  let validCount = 0;
+  
+  activeTutors.forEach(tutor => {
+    // Get active student count for this tutor
+    const activeStudentCount = students.filter(s => 
+      s.homeroom_tutor === tutor.notion_name &&
+      s.status === 'アクティブ' &&
+      s.contract_plan !== '永久会員' &&
+      s.contract_plan !== '在籍プラン'
+    ).length;
+    
+    // Get satisfaction data
+    const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+    const currentMonthData = tutorSatisfactionData[currentYearMonth];
+    
+    if (currentMonthData && activeStudentCount > 0) {
+      const satisfactionValue = currentMonthData.average * 10; // 0-100スケール
+      const satisfactionCount = currentMonthData.count;
+      const collectionRateValue = (satisfactionCount / activeStudentCount * 100);
+      const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
+      
+      totalSatisfaction += satisfactionValue;
+      totalCollectionRate += collectionRateValue;
+      totalSatisfactionScore += satisfactionScoreValue;
+      validCount++;
+    }
+  });
+  
+  // Calculate averages
+  const avgSatisfaction = validCount > 0 ? (totalSatisfaction / validCount).toFixed(2) : '-';
+  const avgCollectionRate = validCount > 0 ? (totalCollectionRate / validCount).toFixed(1) : '-';
+  const avgSatisfactionScore = validCount > 0 ? (totalSatisfactionScore / validCount).toFixed(2) : '-';
+  
+  // Color coding for averages
+  const satisfactionColor = avgSatisfaction !== '-' && parseFloat(avgSatisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
+  const collectionRateColor = avgCollectionRate !== '-' && parseFloat(avgCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+  const satisfactionScoreColor = avgSatisfactionScore !== '-' && parseFloat(avgSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+  
   return `
-    <div class="bg-blue-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
-      <div class="text-3xl font-bold text-blue-600">${total}名</div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div class="bg-blue-50 p-4 rounded-lg">
+        <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
+        <div class="text-3xl font-bold text-blue-600">${total}名</div>
+      </div>
+      <div class="bg-green-50 p-4 rounded-lg">
+        <div class="text-sm text-gray-600 mb-1">所属チーム数</div>
+        <div class="text-3xl font-bold text-green-600">${teamCount}チーム</div>
+      </div>
+      <div class="bg-purple-50 p-4 rounded-lg">
+        <div class="text-sm text-gray-600 mb-1">満足度平均</div>
+        <div class="text-3xl font-bold ${satisfactionColor}">${avgSatisfaction}</div>
+      </div>
+      <div class="bg-green-50 p-4 rounded-lg">
+        <div class="text-sm text-gray-600 mb-1">回収率平均</div>
+        <div class="text-3xl font-bold ${collectionRateColor}">${avgCollectionRate}${avgCollectionRate !== '-' ? '%' : ''}</div>
+      </div>
+      <div class="bg-indigo-50 p-4 rounded-lg">
+        <div class="text-sm text-gray-600 mb-1">満足度スコア平均</div>
+        <div class="text-3xl font-bold ${satisfactionScoreColor}">${avgSatisfactionScore}</div>
+      </div>
     </div>
-    <div class="bg-green-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">所属チーム数</div>
-      <div class="text-3xl font-bold text-green-600">${teamCount}チーム</div>
+    ${selectedTeam !== 'all' ? renderTeamComparison() : ''}
+  `;
+}
+
+// Render team comparison (when team is selected)
+function renderTeamComparison() {
+  // Calculate overall (all teams) statistics
+  const allActiveTutors = tutors.filter(t => 
+    t.status === 'アクティブ' && 
+    t.job_type && 
+    t.job_type.toLowerCase().includes('tutor')
+  );
+  
+  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+  let overallSatisfaction = 0;
+  let overallCollectionRate = 0;
+  let overallSatisfactionScore = 0;
+  let overallValidCount = 0;
+  
+  allActiveTutors.forEach(tutor => {
+    const activeStudentCount = students.filter(s => 
+      s.homeroom_tutor === tutor.notion_name &&
+      s.status === 'アクティブ' &&
+      s.contract_plan !== '永久会員' &&
+      s.contract_plan !== '在籍プラン'
+    ).length;
+    
+    const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+    const currentMonthData = tutorSatisfactionData[currentYearMonth];
+    
+    if (currentMonthData && activeStudentCount > 0) {
+      const satisfactionValue = currentMonthData.average * 10;
+      const satisfactionCount = currentMonthData.count;
+      const collectionRateValue = (satisfactionCount / activeStudentCount * 100);
+      const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
+      
+      overallSatisfaction += satisfactionValue;
+      overallCollectionRate += collectionRateValue;
+      overallSatisfactionScore += satisfactionScoreValue;
+      overallValidCount++;
+    }
+  });
+  
+  const overallAvgSatisfaction = overallValidCount > 0 ? (overallSatisfaction / overallValidCount).toFixed(2) : '-';
+  const overallAvgCollectionRate = overallValidCount > 0 ? (overallCollectionRate / overallValidCount).toFixed(1) : '-';
+  const overallAvgSatisfactionScore = overallValidCount > 0 ? (overallSatisfactionScore / overallValidCount).toFixed(2) : '-';
+  
+  return `
+    <div class="border-t pt-4 mt-2">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">全体との比較</h3>
+      <div class="grid grid-cols-3 gap-4">
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <div class="text-xs text-gray-600 mb-1">全体平均 満足度</div>
+          <div class="text-2xl font-bold text-gray-700">${overallAvgSatisfaction}</div>
+        </div>
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <div class="text-xs text-gray-600 mb-1">全体平均 回収率</div>
+          <div class="text-2xl font-bold text-gray-700">${overallAvgCollectionRate}${overallAvgCollectionRate !== '-' ? '%' : ''}</div>
+        </div>
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <div class="text-xs text-gray-600 mb-1">全体平均 スコア</div>
+          <div class="text-2xl font-bold text-gray-700">${overallAvgSatisfactionScore}</div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -1039,11 +1202,16 @@ function renderTutorStatistics() {
 // Render tutor rows
 function renderTutorRows() {
   // Filter: Only show tutors with status='アクティブ' AND job_type contains 'Tutor'
-  const filteredTutors = tutors.filter(t => 
+  let filteredTutors = tutors.filter(t => 
     t.status === 'アクティブ' && 
     t.job_type && 
     t.job_type.toLowerCase().includes('tutor')
   );
+  
+  // Apply team filter
+  if (selectedTeam !== 'all') {
+    filteredTutors = filteredTutors.filter(t => (t.team || '未所属') === selectedTeam);
+  }
   
   if (filteredTutors.length === 0) {
     return `
