@@ -585,8 +585,20 @@ function getFilteredStudents() {
       const filterValue = columnFilters[column];
       if (filterValue && filterValue !== 'all') {
         filtered = filtered.filter(s => {
-          const value = s[column];
-          return value && value.toString() === filterValue;
+          let value = s[column];
+          
+          // Convert homeroom_tutor to display name for comparison
+          if (column === 'homeroom_tutor') {
+            value = getTutorDisplayName(value);
+          }
+          
+          if (!value) return false;
+          
+          // Support partial match (case-insensitive)
+          const valueStr = value.toString().toLowerCase();
+          const filterStr = filterValue.toString().toLowerCase();
+          
+          return valueStr.includes(filterStr);
         });
       }
     });
@@ -2178,14 +2190,27 @@ function toggleFilter(column) {
   // Generate filter options
   const currentFilter = columnFilters[column];
   content.innerHTML = `
-    <div class="space-y-2 max-h-96 overflow-y-auto">
+    <!-- Search input -->
+    <div class="mb-3">
+      <input 
+        type="text" 
+        id="filter-search-input" 
+        placeholder="検索または入力..." 
+        value="${currentFilter && currentFilter !== 'all' ? currentFilter : ''}"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        oninput="filterOptions()"
+      >
+    </div>
+    
+    <!-- Filter options -->
+    <div id="filter-options-list" class="space-y-2 max-h-72 overflow-y-auto border-t pt-2">
       <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-        <input type="radio" name="filter-value" value="all" ${!currentFilter || currentFilter === 'all' ? 'checked' : ''} class="text-blue-600">
+        <input type="radio" name="filter-value" value="all" ${!currentFilter || currentFilter === 'all' ? 'checked' : ''} class="text-blue-600" onchange="updateSearchInput('')">
         <span class="text-sm text-gray-700">すべて表示</span>
       </label>
       ${uniqueValues.map(value => `
-        <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-          <input type="radio" name="filter-value" value="${value}" ${currentFilter === value ? 'checked' : ''} class="text-blue-600">
+        <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer" data-filter-option="${value}">
+          <input type="radio" name="filter-value" value="${value}" ${currentFilter === value ? 'checked' : ''} class="text-blue-600" onchange="updateSearchInput('${value.replace(/'/g, "\\'")}')">
           <span class="text-sm text-gray-700">${value}</span>
         </label>
       `).join('')}
@@ -2193,6 +2218,11 @@ function toggleFilter(column) {
   `;
   
   modal.classList.remove('hidden');
+  
+  // Focus on search input
+  setTimeout(() => {
+    document.getElementById('filter-search-input')?.focus();
+  }, 100);
 }
 
 // Close filter modal
@@ -2204,18 +2234,23 @@ function closeFilterModal() {
 
 // Apply filter
 function applyFilter() {
+  // Get value from search input or selected radio
+  const searchInput = document.getElementById('filter-search-input')?.value.trim();
   const selectedValue = document.querySelector('input[name="filter-value"]:checked')?.value;
   
-  if (currentFilterColumn && selectedValue) {
-    if (selectedValue === 'all') {
+  // Prefer search input if it has a value, otherwise use selected radio
+  const filterValue = searchInput || selectedValue;
+  
+  if (currentFilterColumn && filterValue) {
+    if (filterValue === 'all' || filterValue === '') {
       delete columnFilters[currentFilterColumn];
     } else {
       // Convert display name back to notion_name for homeroom_tutor
       if (currentFilterColumn === 'homeroom_tutor') {
-        const tutor = tutors.find(t => getTutorDisplayName(t.notion_name) === selectedValue);
-        columnFilters[currentFilterColumn] = tutor ? tutor.notion_name : selectedValue;
+        const tutor = tutors.find(t => getTutorDisplayName(t.notion_name) === filterValue);
+        columnFilters[currentFilterColumn] = tutor ? tutor.notion_name : filterValue;
       } else {
-        columnFilters[currentFilterColumn] = selectedValue;
+        columnFilters[currentFilterColumn] = filterValue;
       }
     }
   }
@@ -2239,4 +2274,28 @@ function clearAllFilters() {
   sortColumn = null;
   sortDirection = 'asc';
   renderApp();
+}
+
+// Filter options based on search input
+function filterOptions() {
+  const searchInput = document.getElementById('filter-search-input');
+  const searchValue = searchInput?.value.toLowerCase().trim() || '';
+  const optionsList = document.querySelectorAll('[data-filter-option]');
+  
+  optionsList.forEach(option => {
+    const optionText = option.getAttribute('data-filter-option').toLowerCase();
+    if (optionText.includes(searchValue)) {
+      option.style.display = '';
+    } else {
+      option.style.display = 'none';
+    }
+  });
+}
+
+// Update search input when radio is selected
+function updateSearchInput(value) {
+  const searchInput = document.getElementById('filter-search-input');
+  if (searchInput) {
+    searchInput.value = value;
+  }
 }
