@@ -158,6 +158,39 @@ async function loadLessonDates() {
   }
 }
 
+// Load lesson dates for today (always loads current month)
+async function loadTodayLessonDates() {
+  try {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    
+    const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${month}`);
+    
+    // Group dates by student_id
+    lessonDates = {};
+    res.data.data.forEach(lesson => {
+      if (!lessonDates[lesson.student_id]) {
+        lessonDates[lesson.student_id] = [];
+      }
+      const date = new Date(lesson.lesson_date);
+      lessonDates[lesson.student_id].push({
+        date: date,
+        formatted: `${date.getMonth() + 1}/${date.getDate()}`
+      });
+    });
+    
+    // Sort dates
+    Object.keys(lessonDates).forEach(studentId => {
+      lessonDates[studentId].sort((a, b) => a.date - b.date);
+    });
+    
+    console.log(`Loaded ${Object.keys(lessonDates).length} students' lesson dates for today's page`);
+  } catch (error) {
+    console.error('Error loading today lesson dates:', error);
+  }
+}
+
 // Render main app
 function renderApp() {
   document.getElementById('loading').classList.add('hidden');
@@ -1655,9 +1688,12 @@ function getResultOverallColor(result) {
 // ========== Today's Lessons Page ==========
 
 // Render Today's Lessons Page
-function renderTodayLessonsPage() {
+async function renderTodayLessonsPage() {
   const content = document.getElementById('content');
   const previousTutorFilter = selectedTutor;
+  
+  // Load today's lesson dates (always loads current month)
+  await loadTodayLessonDates();
   
   // Get today's date
   const today = new Date();
