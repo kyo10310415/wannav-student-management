@@ -419,22 +419,28 @@ npm run dev
 
 ## 📝 最新の更新履歴
 
-### 2026-02-26 (3): タイムゾーン問題の修正
+### 2026-02-26 (3): タイムゾーン問題の修正（最終版）
 - **問題**: レッスン日が1日ずれて表示される（DBの2/26が画面では2/27と表示）
-- **根本原因**: UTCとJSTのタイムゾーン変換問題
-  - データベース: `2026-02-26T19:00:00.000Z` (UTC)
-  - JavaScriptのDate変換: ブラウザのローカル時刻（JST）に変換され2/27 04:00になる
-  - 表示: `date.getMonth() + 1` / `date.getDate()` でJST日付を取得し、2/27と表示
-- **修正内容**:
-  - `loadLessonDates()` と `loadTodayLessonDates()` でUTC時刻にJSTオフセット（+9時間）を追加
-  - 変換後の日付を `getUTCDate()` / `getUTCMonth()` で取得してJST日付を表示
-  - デバッグログを追加して読み込み状況を追跡
-- **変換例**:
+- **根本原因**: JavaScript Date オブジェクトのタイムゾーン自動変換
+  - データベース: `2026-02-26T19:00:00.000Z` (UTC形式で保存)
+  - JavaScriptで `new Date('2026-02-26T19:00:00.000Z')` すると、ブラウザのローカル時刻（JST）に自動変換
+  - `date.getDate()` → 27日と表示（JST: 2/27 04:00）
+- **修正方法**: ISO日付文字列から直接日付部分を抽出
+  ```javascript
+  // Before
+  const date = new Date(lesson.lesson_date);
+  const formatted = `${date.getMonth() + 1}/${date.getDate()}`;  // 2/27
+
+  // After  
+  const dateStr = lesson.lesson_date.split('T')[0];  // "2026-02-26"
+  const [year, month, day] = dateStr.split('-');
+  const formatted = `${parseInt(month)}/${parseInt(day)}`;  // 2/26 ✅
   ```
-  UTC: 2026-02-26T19:00:00.000Z
-  → +9時間: 2026-02-27T04:00:00.000Z (内部的にはUTCだがJST値を保持)
-  → getUTCDate(): 27ではなく26を表示 ✅
-  ```
+- **変更内容**:
+  - `loadLessonDates()`: ISO文字列から日付部分を抽出して表示
+  - `loadTodayLessonDates()`: 同様の処理を追加
+  - 今日のレッスンフィルター: 文字列比較に変更
+  - デバッグログ追加（学籍番号 OLTS240499-HK の日付表示を追跡）
 
 ### 2026-02-26 (2): データ更新機能の修正
 - **問題**: 「データ更新」ボタンを押してもアプリの表示が更新されない
