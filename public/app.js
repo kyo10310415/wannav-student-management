@@ -245,7 +245,6 @@ function renderReservationsPage() {
   document.getElementById('content').classList.remove('hidden');
   
   const content = document.getElementById('content');
-  const previousTutorFilter = selectedTutor;
   
   content.innerHTML = `
     <!-- Controls -->
@@ -276,7 +275,7 @@ function renderReservationsPage() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
+          <select id="tutor-filter-reservations" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
             <option value="all">すべてのTutor</option>
             ${getTutorOptions()}
           </select>
@@ -359,10 +358,13 @@ function renderReservationsPage() {
     </div>
   `;
   
-  // Set tutor filter value after rendering
-  const tutorSelect = document.getElementById('tutor-filter');
+  // Set tutor filter and add event listener
+  const tutorSelect = document.getElementById('tutor-filter-reservations');
   if (tutorSelect) {
-    tutorSelect.value = previousTutorFilter;
+    tutorSelect.value = selectedTutor;
+    tutorSelect.addEventListener('change', async (e) => {
+      await filterByTutor(e.target.value);
+    });
   }
 }
 
@@ -798,7 +800,6 @@ async function sendReminders() {
 // Render Students Page (without payment status, reservations, and lesson dates)
 function renderStudentsPage() {
   const content = document.getElementById('content');
-  const previousTutorFilter = selectedTutor;
   
   content.innerHTML = `
     <!-- Controls -->
@@ -810,7 +811,7 @@ function renderStudentsPage() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
+          <select id="tutor-filter-students" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
             <option value="all">すべてのTutor</option>
             ${getTutorOptions()}
           </select>
@@ -891,10 +892,13 @@ function renderStudentsPage() {
     </div>
   `;
   
-  // Restore tutor filter value
-  const selectElement = document.getElementById('tutor-filter');
+  // Set tutor filter and add event listener
+  const selectElement = document.getElementById('tutor-filter-students');
   if (selectElement) {
-    selectElement.value = previousTutorFilter;
+    selectElement.value = selectedTutor;
+    selectElement.addEventListener('change', async (e) => {
+      await filterByTutor(e.target.value);
+    });
   }
 }
 
@@ -1784,7 +1788,7 @@ async function renderTodayLessonsPage() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter-today" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
+          <select id="tutor-filter-today" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
             <option value="all">すべてのTutor</option>
             ${getTutorOptions()}
           </select>
@@ -1833,6 +1837,12 @@ async function renderTodayLessonsPage() {
   if (selectElement) {
     selectElement.value = selectedTutor;
     console.log('Set select element value to:', selectedTutor);
+    
+    // Add event listener for filter changes
+    selectElement.addEventListener('change', async (e) => {
+      console.log('Filter changed to:', e.target.value);
+      await filterByTutor(e.target.value);
+    });
   }
 }
 
