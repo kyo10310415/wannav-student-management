@@ -1869,13 +1869,8 @@ function renderTodayStudentRows(todayStudents) {
     const suspensionMonths = student.suspension_months || 0;
     const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
     
-    // Lesson progress status
-    const lessonProgress = student.lesson_progress || 0;
-    const progressStatus = getLessonProgressStatus(lessonProgress, continuedMonths);
-    const rowBgColor = progressStatus.color;
-    
     return `
-      <tr class="hover:bg-gray-50 ${rowBgColor}">
+      <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
