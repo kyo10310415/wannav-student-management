@@ -920,7 +920,7 @@ function renderStudentsPage() {
           </div>
           <div>
             <div class="font-semibold text-gray-800">正常</div>
-            <div class="text-xs text-gray-600">レッスン進捗 ≧ 継続月数×2</div>
+            <div class="text-xs text-gray-600">進捗目安の80%以上</div>
           </div>
         </div>
         <div class="flex items-center gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -929,7 +929,7 @@ function renderStudentsPage() {
           </div>
           <div>
             <div class="font-semibold text-gray-800">遅い</div>
-            <div class="text-xs text-gray-600">進捗目安の50%～99%</div>
+            <div class="text-xs text-gray-600">進捗目安の50%～79%</div>
           </div>
         </div>
         <div class="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -945,7 +945,7 @@ function renderStudentsPage() {
       <div class="mt-3 text-sm text-gray-600 bg-gray-50 p-3 rounded">
         <i class="fas fa-lightbulb mr-2 text-yellow-500"></i>
         <span class="font-semibold">進捗目安の計算式:</span> 継続月数 × 2
-        <span class="ml-2 text-gray-500">（例: 3ヶ月継続 → 6レッスンが目安）</span>
+        <span class="ml-2 text-gray-500">（例: 3ヶ月継続 → 6レッスンが目安、5レッスン = 83% = 正常）</span>
       </div>
     </div>
 
@@ -1933,7 +1933,7 @@ function getLessonProgressStatus(lessonProgress, continuedMonths) {
   const expectedProgress = continuedMonths * 2;
   const progressRate = lessonProgress / expectedProgress;
   
-  if (progressRate >= 1.0) {
+  if (progressRate >= 0.8) {
     return { color: 'bg-blue-100', label: '正常' };
   } else if (progressRate >= 0.5) {
     return { color: 'bg-yellow-100', label: '遅い' };
