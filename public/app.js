@@ -18,7 +18,7 @@ let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today'
 document.addEventListener('DOMContentLoaded', async () => {
   renderHeader();
   await loadInitialData();
-  renderApp();
+  await renderApp();
 });
 
 // Render header
@@ -192,7 +192,7 @@ async function loadTodayLessonDates() {
 }
 
 // Render main app
-function renderApp() {
+async function renderApp() {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
   
@@ -204,15 +204,15 @@ function renderApp() {
   } else if (currentPage === 'tutors') {
     renderTutorsPage();
   } else if (currentPage === 'today') {
-    renderTodayLessonsPage();
+    await renderTodayLessonsPage();
   }
 }
 
 // Change page
-function changePage(page) {
+async function changePage(page) {
   currentPage = page;
   renderHeader();
-  renderApp();
+  await renderApp();
 }
 
 // Render Reservations Page (original page with all columns)
@@ -1700,6 +1700,13 @@ async function renderTodayLessonsPage() {
   const todayDay = today.getDate();
   const todayMonth = today.getMonth() + 1;
   
+  console.log(`Today: ${todayMonth}/${todayDay}`);
+  console.log('Total students:', students.length);
+  console.log('Lesson dates sample:', Object.keys(lessonDates).slice(0, 5).map(id => ({
+    id,
+    dates: lessonDates[id].map(d => `${d.date.getMonth()+1}/${d.date.getDate()}`)
+  })));
+  
   // Filter students who have lessons today
   let todayStudents = students.filter(student => {
     const dates = lessonDates[student.student_id] || [];
@@ -1711,6 +1718,8 @@ async function renderTodayLessonsPage() {
     });
     return hasLessonToday;
   });
+  
+  console.log('Today students count:', todayStudents.length);
   
   // Apply tutor filter
   if (selectedTutor !== 'all') {
