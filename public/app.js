@@ -293,11 +293,11 @@ function renderReservationsPage() {
       </div>
     </div>
 
-    <!-- Statistics (exclude 正規退会, 無断キャンセル, and 永久会員) -->
+    <!-- Statistics (only Active students with レッスン中 or PROプラン) -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chart-bar mr-2"></i>
-        統計情報 <span class="text-sm text-gray-500">(正規退会・無断キャンセル・永久会員を除く)</span>
+        統計情報 <span class="text-sm text-gray-500">(アクティブ・レッスン中/PROプランのみ)</span>
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         ${renderStatistics()}
@@ -397,11 +397,13 @@ function getTutorOptions() {
 
 // Render statistics (exclude 正規退会, 無断キャンセル, and 永久会員)
 function renderStatistics() {
-  // Filter out graduated, cancelled students, and permanent members
+  // Only count students with status "アクティブ" AND contract plan "レッスン中" (neither PROプラン nor 永久会員 nor 在籍プラン) OR "PROプラン"
   const activeStudents = students.filter(s => 
-    s.status !== '正規退会' && 
-    s.status !== '無断キャンセル' &&
-    s.contract_plan !== '永久会員'
+    s.status === 'アクティブ' && 
+    (
+      s.contract_plan === 'PROプラン' ||
+      (s.contract_plan !== 'PROプラン' && s.contract_plan !== '永久会員' && s.contract_plan !== '在籍プラン')
+    )
   );
   
   const filteredStudents = selectedTutor === 'all' 
