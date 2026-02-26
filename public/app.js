@@ -14,6 +14,11 @@ let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', '
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today'
 
+// Column filters and sort state for student management page
+let columnFilters = {}; // { columnName: selectedValue }
+let sortColumn = null; // Current sort column name
+let sortDirection = 'asc'; // 'asc' or 'desc'
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
   renderHeader();
@@ -574,6 +579,54 @@ function getFilteredStudents() {
     filtered = filtered.filter(s => s.homeroom_tutor === selectedTutor);
   }
   
+  // Apply column filters (only on students page)
+  if (currentPage === 'students') {
+    Object.keys(columnFilters).forEach(column => {
+      const filterValue = columnFilters[column];
+      if (filterValue && filterValue !== 'all') {
+        filtered = filtered.filter(s => {
+          const value = s[column];
+          return value && value.toString() === filterValue;
+        });
+      }
+    });
+    
+    // Apply sorting
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal = a[sortColumn];
+        let bVal = b[sortColumn];
+        
+        // Handle null/undefined values
+        if (aVal === null || aVal === undefined) aVal = '';
+        if (bVal === null || bVal === undefined) bVal = '';
+        
+        // Special handling for numeric fields
+        if (['lesson_progress', 'result_absence'].includes(sortColumn)) {
+          aVal = parseInt(aVal) || 0;
+          bVal = parseInt(bVal) || 0;
+        }
+        
+        // Special handling for date fields
+        if (sortColumn === 'lesson_start_date') {
+          aVal = aVal ? new Date(aVal) : new Date(0);
+          bVal = bVal ? new Date(bVal) : new Date(0);
+        }
+        
+        // Calculate continued_months for sorting
+        if (sortColumn === 'continued_months') {
+          aVal = calculateContinuedMonths(a.lesson_start_date, a.suspension_months || 0);
+          bVal = calculateContinuedMonths(b.lesson_start_date, b.suspension_months || 0);
+        }
+        
+        // Compare
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+  }
+  
   return filtered;
 }
 
@@ -825,6 +878,9 @@ function renderStudentsPage() {
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
+        <button onclick="clearAllFilters()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" id="clear-filters-btn">
+          <i class="fas fa-times-circle mr-2"></i>フィルター・ソートをクリア
+        </button>
       </div>
     </div>
 
@@ -914,17 +970,115 @@ function renderStudentsPage() {
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">契約プラン</th>
-              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
-              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
-              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">開始日</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
-              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center gap-2">
+                  <span>学籍番号</span>
+                  <button onclick="toggleSort('student_id')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'student_id' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('student_id')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.student_id ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center gap-2">
+                  <span>生徒名</span>
+                  <button onclick="toggleSort('name')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'name' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('name')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.name ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center gap-2">
+                  <span>ステータス</span>
+                  <button onclick="toggleSort('status')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'status' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('status')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.status ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center gap-2">
+                  <span>契約プラン</span>
+                  <button onclick="toggleSort('contract_plan')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'contract_plan' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('contract_plan')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.contract_plan ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center gap-2">
+                  <span>キャラ名</span>
+                  <button onclick="toggleSort('character_name')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'character_name' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('character_name')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.character_name ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center gap-2">
+                  <span>担任Tutor</span>
+                  <button onclick="toggleSort('homeroom_tutor')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'homeroom_tutor' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('homeroom_tutor')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.homeroom_tutor ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <span>レッスン進捗</span>
+                  <button onclick="toggleSort('lesson_progress')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'lesson_progress' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <span>開始日</span>
+                  <button onclick="toggleSort('lesson_start_date')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'lesson_start_date' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <span>継続月数</span>
+                  <button onclick="toggleSort('continued_months')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'continued_months' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <span>リザルト総合</span>
+                  <button onclick="toggleSort('result_overall')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'result_overall' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                  <button onclick="toggleFilter('result_overall')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-filter ${columnFilters.result_overall ? 'text-blue-600' : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <span>欠席回数</span>
+                  <button onclick="toggleSort('result_absence')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'result_absence' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
@@ -932,6 +1086,27 @@ function renderStudentsPage() {
             ${renderStudentRowsSimple()}
           </tbody>
         </table>
+      </div>
+      
+      <!-- Filter Modals -->
+      <div id="filter-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onclick="if(event.target.id === 'filter-modal') closeFilterModal()">
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-gray-800" id="filter-modal-title">フィルター</h3>
+            <button onclick="closeFilterModal()" class="text-gray-400 hover:text-gray-600">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+          <div id="filter-modal-content"></div>
+          <div class="flex gap-2 mt-4">
+            <button onclick="applyFilter()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              <i class="fas fa-check mr-2"></i>適用
+            </button>
+            <button onclick="clearFilter()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+              <i class="fas fa-times mr-2"></i>クリア
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -1942,3 +2117,126 @@ function renderTodayStudentRows(todayStudents) {
     `;
   }).join('');
 }
+}
+
+// ===== Column Filter and Sort Functions =====
+
+let currentFilterColumn = null;
+
+// Toggle sort for a column
+function toggleSort(column) {
+  if (sortColumn === column) {
+    // Toggle direction
+    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    // Set new column
+    sortColumn = column;
+    sortDirection = 'asc';
+  }
+  renderApp();
+}
+
+// Toggle filter modal for a column
+function toggleFilter(column) {
+  currentFilterColumn = column;
+  const modal = document.getElementById('filter-modal');
+  const title = document.getElementById('filter-modal-title');
+  const content = document.getElementById('filter-modal-content');
+  
+  // Get column display name
+  const columnNames = {
+    'student_id': '学籍番号',
+    'name': '生徒名',
+    'status': 'ステータス',
+    'contract_plan': '契約プラン',
+    'character_name': 'キャラ名',
+    'homeroom_tutor': '担任Tutor',
+    'result_overall': 'リザルト総合'
+  };
+  
+  title.textContent = `${columnNames[column] || column}でフィルター`;
+  
+  // Temporarily remove this column's filter to get all available values
+  const savedFilter = columnFilters[column];
+  delete columnFilters[column];
+  
+  // Get unique values for this column
+  const filtered = getFilteredStudents();
+  const uniqueValues = [...new Set(filtered.map(s => {
+    let value = s[column];
+    // Convert homeroom_tutor to display name
+    if (column === 'homeroom_tutor') {
+      value = getTutorDisplayName(value);
+    }
+    return value;
+  }).filter(v => v))].sort();
+  
+  // Restore the filter
+  if (savedFilter) {
+    columnFilters[column] = savedFilter;
+  }
+  
+  // Generate filter options
+  const currentFilter = columnFilters[column];
+  content.innerHTML = `
+    <div class="space-y-2 max-h-96 overflow-y-auto">
+      <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+        <input type="radio" name="filter-value" value="all" ${!currentFilter || currentFilter === 'all' ? 'checked' : ''} class="text-blue-600">
+        <span class="text-sm text-gray-700">すべて表示</span>
+      </label>
+      ${uniqueValues.map(value => `
+        <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+          <input type="radio" name="filter-value" value="${value}" ${currentFilter === value ? 'checked' : ''} class="text-blue-600">
+          <span class="text-sm text-gray-700">${value}</span>
+        </label>
+      `).join('')}
+    </div>
+  `;
+  
+  modal.classList.remove('hidden');
+}
+
+// Close filter modal
+function closeFilterModal() {
+  const modal = document.getElementById('filter-modal');
+  modal.classList.add('hidden');
+  currentFilterColumn = null;
+}
+
+// Apply filter
+function applyFilter() {
+  const selectedValue = document.querySelector('input[name="filter-value"]:checked')?.value;
+  
+  if (currentFilterColumn && selectedValue) {
+    if (selectedValue === 'all') {
+      delete columnFilters[currentFilterColumn];
+    } else {
+      // Convert display name back to notion_name for homeroom_tutor
+      if (currentFilterColumn === 'homeroom_tutor') {
+        const tutor = tutors.find(t => getTutorDisplayName(t.notion_name) === selectedValue);
+        columnFilters[currentFilterColumn] = tutor ? tutor.notion_name : selectedValue;
+      } else {
+        columnFilters[currentFilterColumn] = selectedValue;
+      }
+    }
+  }
+  
+  closeFilterModal();
+  renderApp();
+}
+
+// Clear filter for current column
+function clearFilter() {
+  if (currentFilterColumn) {
+    delete columnFilters[currentFilterColumn];
+  }
+  closeFilterModal();
+  renderApp();
+}
+
+// Clear all filters and sort
+function clearAllFilters() {
+  columnFilters = {};
+  sortColumn = null;
+  sortDirection = 'asc';
+  renderApp();
