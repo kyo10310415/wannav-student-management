@@ -144,15 +144,23 @@ async function loadLessonDates() {
       if (!lessonDates[lesson.student_id]) {
         lessonDates[lesson.student_id] = [];
       }
-      const date = new Date(lesson.lesson_date);
       
-      // Convert UTC to JST for display
-      const jstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      // Parse UTC date from database
+      const utcDate = new Date(lesson.lesson_date);
+      
+      // Format as JST date string (YYYY/MM/DD)
+      // Note: Database stores JST times as UTC, so we need to extract the date part
+      const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
+      const [yearStr, monthStr, dayStr] = dateStr.split('-');
       
       lessonDates[lesson.student_id].push({
-        date: jstDate,
-        formatted: `${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()}`
+        date: utcDate,
+        formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`
       });
+      
+      if (lesson.student_id === 'OLTS240499-HK') {
+        console.log(`Student ${lesson.student_id}: DB=${lesson.lesson_date}, formatted=${parseInt(monthStr)}/${parseInt(dayStr)}`);
+      }
     });
     
     // Sort dates
@@ -181,14 +189,18 @@ async function loadTodayLessonDates() {
       if (!lessonDates[lesson.student_id]) {
         lessonDates[lesson.student_id] = [];
       }
-      const date = new Date(lesson.lesson_date);
       
-      // Convert UTC to JST for display
-      const jstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      // Parse UTC date from database
+      const utcDate = new Date(lesson.lesson_date);
+      
+      // Format as JST date string (YYYY/MM/DD)
+      // Note: Database stores JST times as UTC, so we need to extract the date part
+      const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
+      const [yearStr, monthStr, dayStr] = dateStr.split('-');
       
       lessonDates[lesson.student_id].push({
-        date: jstDate,
-        formatted: `${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()}`
+        date: utcDate,
+        formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`
       });
     });
     
@@ -1723,10 +1735,9 @@ async function renderTodayLessonsPage() {
   let todayStudents = students.filter(student => {
     const dates = lessonDates[student.student_id] || [];
     const hasLessonToday = dates.some(d => {
-      // d.date is JST Date object, use getUTCDate/getUTCMonth to get JST values
-      const lessonDay = d.date.getUTCDate();
-      const lessonMonth = d.date.getUTCMonth() + 1;
-      return lessonDay === todayDay && lessonMonth === todayMonth;
+      // Compare formatted date strings (M/D format)
+      const todayFormatted = `${todayMonth}/${todayDay}`;
+      return d.formatted === todayFormatted;
     });
     return hasLessonToday;
   });
