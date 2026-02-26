@@ -2239,3 +2239,4 @@ function clearAllFilters() {
   sortColumn = null;
   sortDirection = 'asc';
   renderApp();
+}
