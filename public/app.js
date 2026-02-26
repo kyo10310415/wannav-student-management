@@ -1750,9 +1750,8 @@ async function renderTodayLessonsPage() {
   
   // Apply tutor filter
   if (selectedTutor !== 'all') {
-    const tutorName = getTutorNotionName(selectedTutor);
-    console.log('Filtering by tutor:', tutorName);
-    todayStudents = todayStudents.filter(s => s.homeroom_tutor === tutorName);
+    console.log('Filtering by tutor:', selectedTutor);
+    todayStudents = todayStudents.filter(s => s.homeroom_tutor === selectedTutor);
     console.log('Today students count (after filter):', todayStudents.length);
   }
   
