@@ -419,6 +419,33 @@ npm run dev
 
 ## 📝 最新の更新履歴
 
+### 2026-02-26 (6): Tutorフィルターが反応しない問題の根本修正
+- **問題**: すべてのページ（予約管理、生徒管理、今日のレッスン）でTutorフィルターのドロップダウンが反応しない
+- **根本原因**: HTMLの `onchange` 属性は async 関数と正しく連携しない
+  - `onchange="filterByTutor(this.value)"` は async 関数の完了を待たない
+  - ブラウザが Promise を無視してしまう
+- **修正方法**: 
+  - すべての select 要素から `onchange` 属性を削除
+  - レンダリング後に `addEventListener` で非同期イベントハンドラーを追加
+  - 各ページごとに一意のIDを付与
+    - `tutor-filter-reservations` (予約管理ページ)
+    - `tutor-filter-students` (生徒管理ページ)
+    - `tutor-filter-today` (今日のレッスンページ)
+- **コード例**:
+  ```javascript
+  // Before (動作しない)
+  <select onchange="filterByTutor(this.value)">...</select>
+  
+  // After (正しく動作)
+  <select id="tutor-filter-today">...</select>
+  <script>
+  selectElement.addEventListener('change', async (e) => {
+    await filterByTutor(e.target.value);
+  });
+  </script>
+  ```
+- **結果**: すべてのページでTutorフィルターが正常に動作するようになった
+
 ### 2026-02-26 (5): 今日のレッスンページの背景色を削除
 - **要望**: 今日のレッスンビューでは背景色を指定しないでいい
 - **変更内容**: 
