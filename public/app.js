@@ -747,9 +747,9 @@ async function changeMonth(delta) {
 }
 
 // Filter by tutor
-function filterByTutor(tutor) {
+async function filterByTutor(tutor) {
   selectedTutor = tutor;
-  renderApp();
+  await renderApp();
 }
 
 // Refresh data
@@ -1714,7 +1714,6 @@ function getResultOverallColor(result) {
 // Render Today's Lessons Page
 async function renderTodayLessonsPage() {
   const content = document.getElementById('content');
-  const previousTutorFilter = selectedTutor;
   
   // Load today's lesson dates (always loads current month)
   await loadTodayLessonDates();
@@ -1728,7 +1727,7 @@ async function renderTodayLessonsPage() {
   console.log('Total students:', students.length);
   console.log('Lesson dates sample:', Object.keys(lessonDates).slice(0, 5).map(id => ({
     id,
-    dates: lessonDates[id].map(d => `${d.date.getMonth()+1}/${d.date.getDate()}`)
+    dates: lessonDates[id].map(d => d.formatted)
   })));
   
   // Filter students who have lessons today
@@ -1742,12 +1741,15 @@ async function renderTodayLessonsPage() {
     return hasLessonToday;
   });
   
-  console.log('Today students count:', todayStudents.length);
+  console.log('Today students count (before filter):', todayStudents.length);
+  console.log('Selected tutor:', selectedTutor);
   
   // Apply tutor filter
   if (selectedTutor !== 'all') {
     const tutorName = getTutorNotionName(selectedTutor);
+    console.log('Filtering by tutor:', tutorName);
     todayStudents = todayStudents.filter(s => s.homeroom_tutor === tutorName);
+    console.log('Today students count (after filter):', todayStudents.length);
   }
   
   content.innerHTML = `
@@ -1826,10 +1828,11 @@ async function renderTodayLessonsPage() {
     </div>
   `;
   
-  // Restore tutor filter value
+  // Set tutor filter value to current selection
   const selectElement = document.getElementById('tutor-filter-today');
   if (selectElement) {
-    selectElement.value = previousTutorFilter;
+    selectElement.value = selectedTutor;
+    console.log('Set select element value to:', selectedTutor);
   }
 }
 
