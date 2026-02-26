@@ -12,7 +12,7 @@ let selectedTutor = 'all';
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'reservations'; // 'reservations', 'students', 'tutors'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today'
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1657,16 +1657,30 @@ function getResultOverallColor(result) {
 // Render Today's Lessons Page
 function renderTodayLessonsPage() {
   const content = document.getElementById('content');
+  const previousTutorFilter = selectedTutor;
   
-  // Get today's date in YYYY-MM-DD format (JST timezone)
+  // Get today's date
   const today = new Date();
-  const todayStr = formatDateForComparison(today);
+  const todayDay = today.getDate();
+  const todayMonth = today.getMonth() + 1;
   
   // Filter students who have lessons today
-  const todayStudents = students.filter(student => {
+  let todayStudents = students.filter(student => {
     const dates = lessonDates[student.student_id] || [];
-    return dates.some(d => d.date === todayStr);
+    const hasLessonToday = dates.some(d => {
+      // d.date is already a Date object
+      const lessonDay = d.date.getDate();
+      const lessonMonth = d.date.getMonth() + 1;
+      return lessonDay === todayDay && lessonMonth === todayMonth;
+    });
+    return hasLessonToday;
   });
+  
+  // Apply tutor filter
+  if (selectedTutor !== 'all') {
+    const tutorName = getTutorNotionName(selectedTutor);
+    todayStudents = todayStudents.filter(s => s.homeroom_tutor === tutorName);
+  }
   
   content.innerHTML = `
     <!-- Header with Lesson Report Link -->
@@ -1693,7 +1707,22 @@ function renderTodayLessonsPage() {
 
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div class="flex gap-2">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Tutor Filter -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-filter mr-2"></i>
+            担当Tutor絞り込み
+          </label>
+          <select id="tutor-filter-today" onchange="filterByTutor(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
+            <option value="all">すべてのTutor</option>
+            ${getTutorOptions()}
+          </select>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="mt-4 flex gap-2">
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
@@ -1728,6 +1757,12 @@ function renderTodayLessonsPage() {
       </div>
     </div>
   `;
+  
+  // Restore tutor filter value
+  const selectElement = document.getElementById('tutor-filter-today');
+  if (selectElement) {
+    selectElement.value = previousTutorFilter;
+  }
 }
 
 // Render today's student rows
@@ -1787,12 +1822,4 @@ function renderTodayStudentRows(todayStudents) {
       </tr>
     `;
   }).join('');
-}
-
-// Format date for comparison (YYYY-MM-DD)
-function formatDateForComparison(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
