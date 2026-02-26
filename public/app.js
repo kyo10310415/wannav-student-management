@@ -736,7 +736,7 @@ async function refreshData() {
   
   try {
     await loadInitialData();
-    renderApp();
+    await renderApp();
     alert('データを更新しました');
   } catch (error) {
     console.error('Error refreshing data:', error);
