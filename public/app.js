@@ -10,7 +10,7 @@ let lessonDates = {}; // student_id -> [dates]
 let currentMonth = new Date();
 let selectedTutor = 'all';
 let selectedTeam = 'all'; // チームフィルター用
-let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled'
+let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 let currentPage = 'reservations'; // 'reservations', 'students', 'tutors'
 
@@ -45,6 +45,9 @@ function renderHeader() {
             </button>
             <button id="nav-tutors" onclick="changePage('tutors')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
+            </button>
+            <button id="nav-today" onclick="changePage('today')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-calendar-day mr-2"></i>今日のレッスン
             </button>
           </nav>
         </div>
@@ -167,6 +170,8 @@ function renderApp() {
     renderStudentsPage();
   } else if (currentPage === 'tutors') {
     renderTutorsPage();
+  } else if (currentPage === 'today') {
+    renderTodayLessonsPage();
   }
 }
 
@@ -816,13 +821,7 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">開始日</th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">遅刻</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ミッション</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">支払い</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リスニング</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">理解度</th>
-              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">総合</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
@@ -878,7 +877,7 @@ function renderStudentRowsSimple() {
   if (filtered.length === 0) {
     return `
       <tr>
-        <td colspan="17" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="13" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>該当する生徒が見つかりません</p>
         </td>
@@ -887,10 +886,6 @@ function renderStudentRowsSimple() {
   }
 
   return filtered.map(student => {
-    // Determine row background color based on lesson count
-    const lessonCount = lessonStats[student.student_id] || 0;
-    const colorClass = getLessonCountColor(lessonCount);
-    
     // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
     const notionUrl = student.notion_url || 
       (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
@@ -898,14 +893,9 @@ function renderStudentRowsSimple() {
     // Discord URL from Discord destination spreadsheet
     const discordUrl = student.discord_url || null;
     
-    // Result scores (前月のリザルトスコア)
-    const resultAbsence = student.result_absence || '-';
-    const resultLate = student.result_late || '-';
-    const resultMission = student.result_mission || '-';
-    const resultPayment = student.result_payment || '-';
-    const resultActiveListening = student.result_active_listening || '-';
-    const resultUnderstanding = student.result_understanding || '-';
+    // Result scores (総合のみ)
     const resultOverall = student.result_overall || '-';
+    const resultOverallColor = getResultOverallColor(resultOverall);
     
     // Absence count
     const absenceCount = student.absence_count || 0;
@@ -916,8 +906,13 @@ function renderStudentRowsSimple() {
     const suspensionMonths = student.suspension_months || 0;
     const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
     
+    // Lesson progress status
+    const lessonProgress = student.lesson_progress || 0;
+    const progressStatus = getLessonProgressStatus(lessonProgress, continuedMonths);
+    const rowBgColor = progressStatus.color;
+    
     return `
-      <tr class="hover:bg-gray-50 ${colorClass}">
+      <tr class="hover:bg-gray-50 ${rowBgColor}">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
@@ -927,13 +922,7 @@ function renderStudentRowsSimple() {
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
         <td class="px-3 py-3 whitespace-nowrap text-xs text-center text-gray-700">${lessonStartDate}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultAbsence}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultLate}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultMission}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultPayment}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultActiveListening}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-600">${resultUnderstanding}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-xs text-center font-semibold text-gray-700">${resultOverall}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
@@ -1628,4 +1617,182 @@ function closeSatisfactionModal(event) {
   if (modal) {
     modal.remove();
   }
+}
+
+// ========== Helper Functions ==========
+
+// Get lesson progress status color
+function getLessonProgressStatus(lessonProgress, continuedMonths) {
+  if (!lessonProgress || !continuedMonths || continuedMonths === 0) {
+    return { color: '', label: '' };
+  }
+  
+  const expectedProgress = continuedMonths * 2;
+  const progressRate = lessonProgress / expectedProgress;
+  
+  if (progressRate >= 1.0) {
+    return { color: 'bg-blue-100', label: '正常' };
+  } else if (progressRate >= 0.5) {
+    return { color: 'bg-yellow-100', label: '遅い' };
+  } else {
+    return { color: 'bg-red-100', label: '非常に遅い' };
+  }
+}
+
+// Get result overall color class
+function getResultOverallColor(result) {
+  if (!result || result === '-') return 'text-gray-600';
+  
+  const upper = result.toUpperCase();
+  if (upper === 'S') return 'text-purple-600 font-bold';
+  if (upper === 'A') return 'text-blue-600 font-bold';
+  if (upper === 'B') return 'text-green-600';
+  if (upper === 'C') return 'text-yellow-600';
+  if (upper === 'D') return 'text-red-600';
+  return 'text-gray-600';
+}
+
+// ========== Today's Lessons Page ==========
+
+// Render Today's Lessons Page
+function renderTodayLessonsPage() {
+  const content = document.getElementById('content');
+  
+  // Get today's date in YYYY-MM-DD format (JST timezone)
+  const today = new Date();
+  const todayStr = formatDateForComparison(today);
+  
+  // Filter students who have lessons today
+  const todayStudents = students.filter(student => {
+    const dates = lessonDates[student.student_id] || [];
+    return dates.some(d => d.date === todayStr);
+  });
+  
+  content.innerHTML = `
+    <!-- Header with Lesson Report Link -->
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 mb-6 text-white">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold mb-2">
+            <i class="fas fa-calendar-day mr-2"></i>
+            今日のレッスン (${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日)
+          </h2>
+          <p class="text-blue-100">今日レッスンがある生徒様: ${todayStudents.length}名</p>
+        </div>
+        <div>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSfT2_mAhf3_ZwZAaOUrIADgGXD4BxWpVeh9DIZ-tJkIfD3ZSg/viewform" 
+             target="_blank" 
+             rel="noopener noreferrer"
+             class="inline-flex items-center px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition shadow-lg">
+            <i class="fas fa-file-alt mr-2"></i>
+            レッスン報告フォーム
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="flex gap-2">
+        <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+          <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+      </div>
+    </div>
+
+    <!-- Today's Students List -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-list mr-2"></i>
+        本日レッスンの生徒様一覧
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${renderTodayStudentRows(todayStudents)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// Render today's student rows
+function renderTodayStudentRows(todayStudents) {
+  if (todayStudents.length === 0) {
+    return `
+      <tr>
+        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+          <i class="fas fa-calendar-times text-4xl mb-2"></i>
+          <p>今日レッスンの生徒様はいません</p>
+        </td>
+      </tr>
+    `;
+  }
+
+  return todayStudents.map(student => {
+    // Use pre-fetched Notion URL from cache
+    const notionUrl = student.notion_url || 
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    
+    // Discord URL
+    const discordUrl = student.discord_url || null;
+    
+    // Result overall
+    const resultOverall = student.result_overall || '-';
+    const resultOverallColor = getResultOverallColor(resultOverall);
+    
+    // Absence count
+    const absenceCount = student.absence_count || 0;
+    const absenceColorClass = absenceCount > 3 ? 'text-red-600 font-bold' : absenceCount > 0 ? 'text-orange-600' : 'text-gray-600';
+    
+    // Lesson start date and continued months
+    const suspensionMonths = student.suspension_months || 0;
+    const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
+    
+    // Lesson progress status
+    const lessonProgress = student.lesson_progress || 0;
+    const progressStatus = getLessonProgressStatus(lessonProgress, continuedMonths);
+    const rowBgColor = progressStatus.color;
+    
+    return `
+      <tr class="hover:bg-gray-50 ${rowBgColor}">
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          <div class="flex gap-2 justify-center">
+            ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
+            ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// Format date for comparison (YYYY-MM-DD)
+function formatDateForComparison(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
