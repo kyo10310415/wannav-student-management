@@ -419,6 +419,25 @@ npm run dev
 
 ## 📝 最新の更新履歴
 
+### 2026-02-26 (7): getTutorNotionName未定義エラーの修正
+- **問題**: Tutorフィルターを変更するとエラーが発生
+- **エラー**: `ReferenceError: getTutorNotionName is not defined`
+- **根本原因**: 
+  - 今日のレッスンページで存在しない `getTutorNotionName()` 関数を呼び出していた
+  - この関数は定義されていなかった
+- **修正方法**: 
+  - `getTutorNotionName(selectedTutor)` の呼び出しを削除
+  - 他のページと同様に `selectedTutor` を直接使用
+  ```javascript
+  // Before (エラー)
+  const tutorName = getTutorNotionName(selectedTutor);
+  todayStudents = todayStudents.filter(s => s.homeroom_tutor === tutorName);
+  
+  // After (正常動作)
+  todayStudents = todayStudents.filter(s => s.homeroom_tutor === selectedTutor);
+  ```
+- **結果**: Tutorフィルターが正常に動作するようになった
+
 ### 2026-02-26 (6): Tutorフィルターが反応しない問題の根本修正
 - **問題**: すべてのページ（予約管理、生徒管理、今日のレッスン）でTutorフィルターのドロップダウンが反応しない
 - **根本原因**: HTMLの `onchange` 属性は async 関数と正しく連携しない
