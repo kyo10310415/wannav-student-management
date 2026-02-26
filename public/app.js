@@ -2117,7 +2117,6 @@ function renderTodayStudentRows(todayStudents) {
     `;
   }).join('');
 }
-}
 
 // ===== Column Filter and Sort Functions =====
 
