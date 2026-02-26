@@ -896,11 +896,11 @@ function renderStudentsPage() {
       </div>
     </div>
 
-    <!-- Statistics (exclude 正規退会, 無断キャンセル, and 永久会員) -->
+    <!-- Statistics (only Active students with レッスン中 or PROプラン) -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chart-bar mr-2"></i>
-        統計情報 <span class="text-sm text-gray-500">(正規退会・無断キャンセル・永久会員を除く)</span>
+        統計情報 <span class="text-sm text-gray-500">(アクティブ・レッスン中/PROプランのみ)</span>
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         ${renderStudentStatistics()}
@@ -1135,29 +1135,40 @@ function renderStudentsPage() {
 
 // Render student statistics (simpler version without lesson counts)
 function renderStudentStatistics() {
-  const filtered = students.filter(s => 
-    s.status !== '正規退会' && 
-    s.status !== '無断キャンセル' &&
-    s.contract_plan !== '永久会員'
+  // Only count students with status "アクティブ" AND contract plan "レッスン中" (neither PROプラン nor 永久会員 nor 在籍プラン) OR "PROプラン"
+  const activeStudents = students.filter(s => 
+    s.status === 'アクティブ' && 
+    (
+      s.contract_plan === 'PROプラン' ||
+      (s.contract_plan !== 'PROプラン' && s.contract_plan !== '永久会員' && s.contract_plan !== '在籍プラン')
+    )
   );
 
-  const total = filtered.length;
-  const active = filtered.filter(s => s.status === 'アクティブ').length;
-  const preparing = filtered.filter(s => s.status === 'レッスン準備中').length;
-  const suspended = filtered.filter(s => s.status === '休会').length;
+  const total = activeStudents.length;
+  
+  // Count by contract plan subcategories
+  const lessonStudents = activeStudents.filter(s => 
+    s.contract_plan !== 'PROプラン' && 
+    s.contract_plan !== '永久会員' && 
+    s.contract_plan !== '在籍プラン'
+  ).length;
+  const proStudents = activeStudents.filter(s => s.contract_plan === 'PROプラン').length;
 
   return `
     <div class="bg-blue-50 p-4 rounded-lg">
       <div class="text-sm text-gray-600 mb-1">総生徒数</div>
       <div class="text-3xl font-bold text-blue-600">${total}名</div>
+      <div class="text-xs text-gray-500 mt-1">アクティブ・レッスン中/PROプラン</div>
     </div>
     <div class="bg-green-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">アクティブ</div>
-      <div class="text-3xl font-bold text-green-600">${active}名</div>
+      <div class="text-sm text-gray-600 mb-1">レッスン中</div>
+      <div class="text-3xl font-bold text-green-600">${lessonStudents}名</div>
+      <div class="text-xs text-gray-500 mt-1">PROプラン・永久会員・在籍プラン除く</div>
     </div>
-    <div class="bg-yellow-50 p-4 rounded-lg">
-      <div class="text-sm text-gray-600 mb-1">休会中</div>
-      <div class="text-3xl font-bold text-yellow-600">${suspended}名</div>
+    <div class="bg-purple-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">PROプラン</div>
+      <div class="text-3xl font-bold text-purple-600">${proStudents}名</div>
+      <div class="text-xs text-gray-500 mt-1">アクティブのみ</div>
     </div>
   `;
 }
