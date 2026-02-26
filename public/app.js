@@ -837,6 +837,48 @@ function renderStudentsPage() {
       </div>
     </div>
 
+    <!-- Progress Status Legend -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-lg font-bold text-gray-800 mb-3">
+        <i class="fas fa-info-circle mr-2"></i>
+        レッスン進捗状況の色分け
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div class="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
+            <i class="fas fa-check text-blue-600"></i>
+          </div>
+          <div>
+            <div class="font-semibold text-gray-800">正常</div>
+            <div class="text-xs text-gray-600">レッスン進捗 ≧ 継続月数×2</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div class="w-8 h-8 bg-yellow-100 rounded flex items-center justify-center">
+            <i class="fas fa-exclamation text-yellow-600"></i>
+          </div>
+          <div>
+            <div class="font-semibold text-gray-800">遅い</div>
+            <div class="text-xs text-gray-600">進捗目安の50%～99%</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div class="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+            <i class="fas fa-exclamation-triangle text-red-600"></i>
+          </div>
+          <div>
+            <div class="font-semibold text-gray-800">非常に遅い</div>
+            <div class="text-xs text-gray-600">進捗目安の50%未満</div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3 text-sm text-gray-600 bg-gray-50 p-3 rounded">
+        <i class="fas fa-lightbulb mr-2 text-yellow-500"></i>
+        <span class="font-semibold">進捗目安の計算式:</span> 継続月数 × 2
+        <span class="ml-2 text-gray-500">（例: 3ヶ月継続 → 6レッスンが目安）</span>
+      </div>
+    </div>
+
     <!-- Status Tabs -->
     <div class="bg-white rounded-lg shadow-md p-2 mb-6">
       <div class="flex flex-wrap gap-2">
