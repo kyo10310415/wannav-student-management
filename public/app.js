@@ -134,6 +134,8 @@ async function loadLessonDates() {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
     
+    console.log(`Loading lesson dates for: ${year}/${month}`);
+    
     const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${month}`);
     
     // Group dates by student_id
@@ -143,9 +145,13 @@ async function loadLessonDates() {
         lessonDates[lesson.student_id] = [];
       }
       const date = new Date(lesson.lesson_date);
+      
+      // Convert UTC to JST for display
+      const jstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      
       lessonDates[lesson.student_id].push({
-        date: date,
-        formatted: `${date.getMonth() + 1}/${date.getDate()}`
+        date: jstDate,
+        formatted: `${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()}`
       });
     });
     
@@ -153,6 +159,8 @@ async function loadLessonDates() {
     Object.keys(lessonDates).forEach(studentId => {
       lessonDates[studentId].sort((a, b) => a.date - b.date);
     });
+    
+    console.log(`Loaded lesson dates for ${Object.keys(lessonDates).length} students`);
   } catch (error) {
     console.error('Error loading lesson dates:', error);
   }
@@ -174,9 +182,13 @@ async function loadTodayLessonDates() {
         lessonDates[lesson.student_id] = [];
       }
       const date = new Date(lesson.lesson_date);
+      
+      // Convert UTC to JST for display
+      const jstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      
       lessonDates[lesson.student_id].push({
-        date: date,
-        formatted: `${date.getMonth() + 1}/${date.getDate()}`
+        date: jstDate,
+        formatted: `${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()}`
       });
     });
     
@@ -1711,9 +1723,9 @@ async function renderTodayLessonsPage() {
   let todayStudents = students.filter(student => {
     const dates = lessonDates[student.student_id] || [];
     const hasLessonToday = dates.some(d => {
-      // d.date is already a Date object
-      const lessonDay = d.date.getDate();
-      const lessonMonth = d.date.getMonth() + 1;
+      // d.date is JST Date object, use getUTCDate/getUTCMonth to get JST values
+      const lessonDay = d.date.getUTCDate();
+      const lessonMonth = d.date.getUTCMonth() + 1;
       return lessonDay === todayDay && lessonMonth === todayMonth;
     });
     return hasLessonToday;
