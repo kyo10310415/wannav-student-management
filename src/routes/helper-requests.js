@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
+import { notifyHelperRequestCreated, notifyHelperRequestAccepted, notifyHelperRequestsRescheduled } from '../services/helperNotificationService.js';
 
 const app = new Hono();
 
@@ -83,6 +84,9 @@ app.post('/', async (c) => {
       WHERE employee_id = $1
     `, [data.requesting_tutor_id]);
     
+    // Send Discord notification
+    await notifyHelperRequestCreated(result.rows[0]);
+    
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error creating helper request:', error);
@@ -119,6 +123,9 @@ app.post('/:id/accept', async (c) => {
       WHERE employee_id = $1
     `, [tutor_id]);
     
+    // Send Discord notification
+    await notifyHelperRequestAccepted(result.rows[0]);
+    
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error accepting helper request:', error);
@@ -154,6 +161,9 @@ app.post('/check-expired', async (c) => {
         WHERE employee_id = $1
       `, [request.requesting_tutor_id]);
     }
+    
+    // Send Discord notification
+    await notifyHelperRequestsRescheduled(expiredResult.rows);
     
     return c.json({ 
       success: true, 

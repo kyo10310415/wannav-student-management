@@ -88,6 +88,23 @@ if (process.env.DISCORD_REMINDERS_ENABLED !== 'false') {
   console.log('Discord automatic reminders: DISABLED (DISCORD_REMINDERS_ENABLED=false)');
 }
 
+// Schedule helper request expiration check (runs every hour)
+console.log('Helper request expiration check: ENABLED (runs every hour)');
+cron.schedule('0 * * * *', async () => {
+  console.log('Running helper request expiration check...');
+  try {
+    const response = await fetch(`http://localhost:${port}/api/helper-requests/check-expired`, {
+      method: 'POST'
+    });
+    const result = await response.json();
+    console.log('Helper request expiration check completed:', result.message);
+  } catch (error) {
+    console.error('Error checking expired helper requests:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
 const port = process.env.PORT || 3000;
 
 console.log(`Server is running on port ${port}`);
