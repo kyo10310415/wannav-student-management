@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
-import pool from '../db.js';
+import { query } from '../db/connection.js';
 
 const app = new Hono();
 
 // Get all helper requests
 app.get('/', async (c) => {
   try {
-    const result = await pool.query(`
+    const result = await query(`
       SELECT 
         hr.*,
         rt.tutor_name as requesting_tutor_display_name,
@@ -28,7 +28,7 @@ app.get('/', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const { id } = c.req.param();
-    const result = await pool.query(`
+    const result = await query(`
       SELECT 
         hr.*,
         rt.tutor_name as requesting_tutor_display_name,
@@ -55,7 +55,7 @@ app.post('/', async (c) => {
   try {
     const data = await c.req.json();
     
-    const result = await pool.query(`
+    const result = await query(`
       INSERT INTO helper_requests (
         lesson_date, lesson_time, student_id, student_name, notion_url,
         requesting_tutor_id, requesting_tutor_name, lesson_progress,
@@ -77,7 +77,7 @@ app.post('/', async (c) => {
     ]);
     
     // Increment requesting tutor's helper_request_count
-    await pool.query(`
+    await query(`
       UPDATE tutors 
       SET helper_request_count = COALESCE(helper_request_count, 0) + 1
       WHERE employee_id = $1
@@ -97,7 +97,7 @@ app.post('/:id/accept', async (c) => {
     const { tutor_id, tutor_name } = await c.req.json();
     
     // Update request status
-    const result = await pool.query(`
+    const result = await query(`
       UPDATE helper_requests
       SET 
         status = 'accepted',
@@ -113,7 +113,7 @@ app.post('/:id/accept', async (c) => {
     }
     
     // Increment accepting tutor's helper_accepted_count
-    await pool.query(`
+    await query(`
       UPDATE tutors 
       SET helper_accepted_count = COALESCE(helper_accepted_count, 0) + 1
       WHERE employee_id = $1
@@ -130,7 +130,7 @@ app.post('/:id/accept', async (c) => {
 app.post('/check-expired', async (c) => {
   try {
     // Find pending requests that are past their deadline
-    const expiredResult = await pool.query(`
+    const expiredResult = await query(`
       SELECT * FROM helper_requests
       WHERE status = 'pending' AND deadline < NOW()
     `);
@@ -140,7 +140,7 @@ app.post('/check-expired', async (c) => {
     }
     
     // Update all expired requests to rescheduled
-    await pool.query(`
+    await query(`
       UPDATE helper_requests
       SET status = 'rescheduled'
       WHERE status = 'pending' AND deadline < NOW()
@@ -148,7 +148,7 @@ app.post('/check-expired', async (c) => {
     
     // Increment reschedule_count for each requesting tutor
     for (const request of expiredResult.rows) {
-      await pool.query(`
+      await query(`
         UPDATE tutors
         SET reschedule_count = COALESCE(reschedule_count, 0) + 1
         WHERE employee_id = $1
