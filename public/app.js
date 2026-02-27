@@ -2490,12 +2490,26 @@ async function loadLessonsForDate() {
   container.classList.remove('hidden');
   
   // Filter students who have lessons on this date
+  // Convert selectedDate (YYYY-MM-DD) to M/D format for comparison
+  const [year, month, day] = selectedDate.split('-');
+  const formattedSelectedDate = `${parseInt(month)}/${parseInt(day)}`;
+  
+  console.log('Selected date:', selectedDate, 'Formatted:', formattedSelectedDate);
+  
   const lessonsOnDate = students.filter(student => {
-    const lessonDatesStr = lessonDates[student.student_id];
-    if (!lessonDatesStr) return false;
+    const lessonDatesArray = lessonDates[student.student_id];
+    if (!lessonDatesArray || !Array.isArray(lessonDatesArray)) return false;
     
-    const dates = lessonDatesStr.split(',').map(d => d.trim());
-    return dates.includes(selectedDate);
+    // Check if any lesson date matches the selected date
+    const hasLesson = lessonDatesArray.some(lessonDate => {
+      return lessonDate.formatted === formattedSelectedDate;
+    });
+    
+    if (hasLesson) {
+      console.log(`Student ${student.student_id} has lesson on ${formattedSelectedDate}`);
+    }
+    
+    return hasLesson;
   });
   
   // Display lessons
@@ -2545,12 +2559,19 @@ function filterLessons() {
   const searchInput = document.getElementById('lesson-search-input');
   const searchTerm = searchInput.value.toLowerCase();
   
+  // Convert selectedDate (YYYY-MM-DD) to M/D format for comparison
+  const [year, month, day] = helperRequestData.selectedDate.split('-');
+  const formattedSelectedDate = `${parseInt(month)}/${parseInt(day)}`;
+  
   const lessonsOnDate = students.filter(student => {
-    const lessonDatesStr = lessonDates[student.student_id];
-    if (!lessonDatesStr) return false;
+    const lessonDatesArray = lessonDates[student.student_id];
+    if (!lessonDatesArray || !Array.isArray(lessonDatesArray)) return false;
     
-    const dates = lessonDatesStr.split(',').map(d => d.trim());
-    const hasDate = dates.includes(helperRequestData.selectedDate);
+    // Check if any lesson date matches the selected date
+    const hasDate = lessonDatesArray.some(lessonDate => {
+      return lessonDate.formatted === formattedSelectedDate;
+    });
+    
     const matchesSearch = !searchTerm || student.name.toLowerCase().includes(searchTerm);
     
     return hasDate && matchesSearch;
