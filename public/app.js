@@ -2558,6 +2558,13 @@ async function loadLessonsForDate() {
     });
     
     console.log(`Loaded ${res.data.data.length} lessons for ${year}/${month}`);
+    console.log(`📊 lessonsData now has ${Object.keys(lessonsData).length} students with lesson times`);
+    
+    // Debug: Show sample lessonsData
+    const sampleStudentIds = Object.keys(lessonsData).slice(0, 2);
+    sampleStudentIds.forEach(id => {
+      console.log(`Sample - Student ${id}:`, lessonsData[id]);
+    });
   } catch (error) {
     console.error('Error loading lesson dates:', error);
   }
@@ -2673,8 +2680,17 @@ function selectLesson(studentId) {
   const [year, month, day] = helperRequestData.selectedDate.split('-');
   const formattedSelectedDate = `${parseInt(month)}/${parseInt(day)}`;
   
+  console.log('🔍 selectLesson Debug:');
+  console.log('- Student ID:', studentId);
+  console.log('- Selected Date:', helperRequestData.selectedDate);
+  console.log('- Formatted Date:', formattedSelectedDate);
+  console.log('- lessonsData keys:', Object.keys(lessonsData).length);
+  
   const studentLessons = lessonsData[studentId] || [];
+  console.log('- Student Lessons:', studentLessons.length, studentLessons);
+  
   const lessonOnDate = studentLessons.find(lesson => lesson.formatted === formattedSelectedDate);
+  console.log('- Lesson on date:', lessonOnDate);
   
   if (lessonOnDate && lessonOnDate.lesson_date) {
     // Extract time from lesson_date (format: 2026-02-08T17:00:00.000Z)
@@ -2685,8 +2701,10 @@ function selectLesson(studentId) {
     // Format as HH:MM
     const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     helperRequestData.autoExtractedTime = timeString;
+    console.log('✅ Auto-extracted time:', timeString);
   } else {
     helperRequestData.autoExtractedTime = null;
+    console.log('❌ No lesson time found');
   }
   
   // Show form input modal
