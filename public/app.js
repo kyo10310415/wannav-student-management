@@ -3168,6 +3168,9 @@ function renderHelperRequestsList() {
             <i class="fas fa-check mr-2"></i>この依頼を受諾する
           </button>
           ` : ''}
+          <button onclick="deleteHelperRequest(${request.id})" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">
+            <i class="fas fa-trash mr-2"></i>削除
+          </button>
         </div>
       </div>
     `;
@@ -3262,5 +3265,26 @@ async function confirmAcceptHelperRequest(requestId) {
   } catch (error) {
     console.error('助っ人依頼の受諾エラー:', error);
     alert('助っ人依頼の受諾に失敗しました');
+  }
+}
+
+// Delete helper request
+async function deleteHelperRequest(requestId) {
+  if (!confirm('この助っ人依頼を削除しますか？\n\nこの操作は取り消せません。')) {
+    return;
+  }
+  
+  try {
+    const res = await axios.delete(`${API_BASE}/api/helper-requests/${requestId}`);
+    
+    if (res.data.success) {
+      alert('助っ人依頼を削除しました');
+      await renderHelpersPage();
+    } else {
+      alert('エラーが発生しました: ' + (res.data.error || '不明なエラー'));
+    }
+  } catch (error) {
+    console.error('助っ人依頼の削除エラー:', error);
+    alert('助っ人依頼の削除に失敗しました');
   }
 }

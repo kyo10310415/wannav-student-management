@@ -175,4 +175,48 @@ app.post('/check-expired', async (c) => {
   }
 });
 
+// Delete helper request
+app.delete('/:id', async (c) => {
+  try {
+    const { id } = c.req.param();
+    
+    // Get request details before deletion
+    const requestResult = await query(`
+      SELECT * FROM helper_requests WHERE id = $1
+    `, [id]);
+    
+    if (requestResult.rows.length === 0) {
+      return c.json({ success: false, error: 'Helper request not found' }, 404);
+    }
+    
+    const request = requestResult.rows[0];
+    
+    // Delete the request
+    await query(`
+      DELETE FROM helper_requests WHERE id = $1
+    `, [id]);
+    
+    // Decrement requesting tutor's helper_request_count
+    await query(`
+      UPDATE tutors 
+      SET helper_request_count = GREATEST(COALESCE(helper_request_count, 1) - 1, 0)
+      WHERE employee_id = $1
+    `, [request.requesting_tutor_id]);
+    
+    // If the request was accepted, decrement accepted tutor's helper_accepted_count
+    if (request.status === 'accepted' && request.accepted_by_tutor_id) {
+      await query(`
+        UPDATE tutors 
+        SET helper_accepted_count = GREATEST(COALESCE(helper_accepted_count, 1) - 1, 0)
+        WHERE employee_id = $1
+      `, [request.accepted_by_tutor_id]);
+    }
+    
+    return c.json({ success: true, message: 'Helper request deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting helper request:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
 export default app;
