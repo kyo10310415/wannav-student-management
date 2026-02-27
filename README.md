@@ -814,6 +814,7 @@ Render.comのダッシュボードで以下の環境変数を設定してくだ�
 
 ```bash
 DISCORD_HELPER_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
+APP_URL=https://wannav-student-management.onrender.com
 ```
 
 **Discord Webhookの作成方法:**
@@ -823,6 +824,13 @@ DISCORD_HELPER_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
 4. 通知先チャンネルを選択
 5. Webhook URLをコピー
 6. Render.comの環境変数 `DISCORD_HELPER_WEBHOOK_URL` に設定
+
+**Discord通知の内容:**
+- @everyone メンション付きで通知
+- レッスン日、時間（「17時～」形式）、生徒名、依頼Tutor、依頼理由、期限
+- 助っ人待ち一覧ページへのリンク
+- Notionページへのリンク
+- アイコンを最小限にして見やすく表示
 
 ⚠️ **注意**: 
 - Discord Webhook URLが設定されていない場合、通知はスキップされますが、助っ人依頼機能は正常に動作します。

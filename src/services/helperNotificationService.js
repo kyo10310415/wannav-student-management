@@ -20,53 +20,50 @@ export async function notifyHelperRequestCreated(request) {
     });
 
     const deadline = new Date(request.deadline).toLocaleString('ja-JP');
+    
+    // Format lesson time as "17時～"
+    let lessonTimeFormatted = '未設定';
+    if (request.lesson_time) {
+      const [hours] = request.lesson_time.split(':');
+      lessonTimeFormatted = `${parseInt(hours)}時～`;
+    }
 
     const embed = {
       title: '🆘 新しい助っ人Tutor依頼',
       color: 0xFF9800, // Orange
       fields: [
         {
-          name: '📅 レッスン日',
+          name: 'レッスン日',
           value: lessonDate,
           inline: true
         },
         {
-          name: '⏰ レッスン時間',
-          value: request.lesson_time || '未設定',
+          name: 'レッスン時間',
+          value: lessonTimeFormatted,
           inline: true
         },
         {
-          name: '👤 生徒名',
-          value: request.student_name,
-          inline: true
+          name: '生徒名',
+          value: `${request.student_name} (${request.student_id})`,
+          inline: false
         },
         {
-          name: '🆔 学籍番号',
-          value: request.student_id,
-          inline: true
-        },
-        {
-          name: '📊 レッスン進捗',
-          value: `${request.lesson_progress}回`,
-          inline: true
-        },
-        {
-          name: '👨‍🏫 依頼Tutor',
+          name: '依頼Tutor',
           value: request.requesting_tutor_name,
           inline: true
         },
         {
-          name: '📝 依頼理由',
+          name: 'レッスン進捗',
+          value: `${request.lesson_progress}回`,
+          inline: true
+        },
+        {
+          name: '依頼理由',
           value: request.reason.substring(0, 1000) // Discord limit
         },
         {
-          name: '⏳ 依頼期限',
-          value: `**${deadline}**`,
-          inline: false
-        },
-        {
-          name: '🔗 Notionページ',
-          value: request.notion_url,
+          name: '依頼期限',
+          value: deadline,
           inline: false
         }
       ],
@@ -77,13 +74,29 @@ export async function notifyHelperRequestCreated(request) {
     };
 
     if (request.notes) {
-      embed.fields.splice(7, 0, {
-        name: '📌 備考',
+      embed.fields.splice(6, 0, {
+        name: '備考',
         value: request.notes.substring(0, 1000)
       });
     }
+    
+    // Add helper requests list URL
+    const helpersPageUrl = process.env.APP_URL || 'https://wannav-student-management.onrender.com';
+    embed.fields.push({
+      name: '📋 助っ人待ち一覧',
+      value: `${helpersPageUrl}/#helpers`,
+      inline: false
+    });
+    
+    // Add Notion page URL
+    embed.fields.push({
+      name: 'Notionページ',
+      value: request.notion_url,
+      inline: false
+    });
 
     await axios.post(WEBHOOK_URL, {
+      content: '@everyone',
       embeds: [embed]
     });
 
@@ -189,10 +202,12 @@ export async function notifyHelperRequestsRescheduled(requests) {
   if (requests.length === 0) return;
 
   try {
+    const helpersPageUrl = process.env.APP_URL || 'https://wannav-student-management.onrender.com';
+    
     const embed = {
       title: '📅 期限切れ依頼がリスケジュールされました',
       color: 0xF44336, // Red
-      description: `${requests.length}件の依頼が期限切れによりリスケジュールされました。`,
+      description: `${requests.length}件の依頼が期限切れによりリスケジュールされました。\n\n[助っ人待ち一覧を開く](${helpersPageUrl}/#helpers)`,
       fields: requests.slice(0, 10).map(req => ({
         name: `#${req.id} - ${req.student_name}`,
         value: `依頼Tutor: ${req.requesting_tutor_name}\nレッスン日: ${new Date(req.lesson_date).toLocaleDateString('ja-JP')}\n期限: ${new Date(req.deadline).toLocaleString('ja-JP')}`,
@@ -205,6 +220,7 @@ export async function notifyHelperRequestsRescheduled(requests) {
     };
 
     await axios.post(WEBHOOK_URL, {
+      content: '@everyone',
       embeds: [embed]
     });
 
