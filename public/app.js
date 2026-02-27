@@ -1292,6 +1292,7 @@ function renderTutorsPage() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">アクティブ生徒数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">生徒数上限</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">残り受入可能数</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア</th>
@@ -1513,7 +1514,7 @@ function renderTutorRows() {
   if (filteredTutors.length === 0) {
     return `
       <tr>
-        <td colspan="11" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="12" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>アクティブなTutorが見つかりません</p>
         </td>
@@ -1615,6 +1616,15 @@ function renderTutorRows() {
         <i class="fas fa-chart-line"></i>
       </button>` : '';
     
+    // レッスン進捗ステータス
+    const progressStatus = getTutorLessonProgressStatus(tutor.notion_name);
+    const progressCircle = progressStatus.count > 0
+      ? `<div 
+          class="w-8 h-8 rounded-full ${progressStatus.color} mx-auto cursor-pointer"
+          title="正常: ${progressStatus.normal}名, 遅い: ${progressStatus.slow}名 (${progressStatus.slowRate}%), 非常に遅い: ${progressStatus.verySlow}名 (${progressStatus.verySlowRate}%)"
+        ></div>`
+      : `<div class="w-8 h-8 rounded-full bg-gray-200 mx-auto" title="データなし"></div>`;
+    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
@@ -1633,6 +1643,7 @@ function renderTutorRows() {
           />
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">${remainingCapacity}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center">${progressCircle}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <span class="font-semibold ${satisfactionColor}">${satisfactionAverage}</span>
           ${satisfactionButton}
@@ -2309,4 +2320,81 @@ function updateSearchInput(value) {
   if (searchInput) {
     searchInput.value = value;
   }
+}
+
+// Calculate tutor's lesson progress status
+function getTutorLessonProgressStatus(tutorNotionName) {
+  // Get active students for this tutor (excluding 永久会員 and 在籍プラン)
+  const activeStudents = students.filter(s => 
+    s.homeroom_tutor === tutorNotionName &&
+    s.status === 'アクティブ' &&
+    s.contract_plan !== '永久会員' &&
+    s.contract_plan !== '在籍プラン'
+  );
+  
+  if (activeStudents.length === 0) {
+    return { color: 'bg-gray-200', count: 0, slow: 0, verySlow: 0 };
+  }
+  
+  // Count students by progress status
+  let normalCount = 0;
+  let slowCount = 0;
+  let verySlowCount = 0;
+  
+  activeStudents.forEach(student => {
+    const lessonProgress = student.lesson_progress || 0;
+    const suspensionMonths = student.suspension_months || 0;
+    const continuedMonths = student.lesson_start_date 
+      ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths)
+      : 0;
+    
+    if (continuedMonths > 0 && lessonProgress > 0) {
+      const expectedProgress = continuedMonths * 2;
+      const progressRate = lessonProgress / expectedProgress;
+      
+      if (progressRate >= 0.7) {
+        normalCount++;
+      } else if (progressRate >= 0.4) {
+        slowCount++;
+      } else {
+        verySlowCount++;
+      }
+    }
+  });
+  
+  const totalCount = activeStudents.length;
+  const slowRate = (slowCount / totalCount) * 100;
+  const verySlowRate = (verySlowCount / totalCount) * 100;
+  const combinedRate = ((slowCount + verySlowCount) / totalCount) * 100;
+  
+  // Determine color based on criteria
+  let color = 'bg-blue-500'; // Default: blue
+  
+  // Red criteria
+  if (
+    slowRate >= 70 ||
+    verySlowRate >= 50 ||
+    combinedRate >= 80
+  ) {
+    color = 'bg-red-500';
+  }
+  // Yellow criteria
+  else if (
+    slowRate >= 50 ||
+    verySlowRate >= 20 ||
+    combinedRate >= 50
+  ) {
+    color = 'bg-yellow-500';
+  }
+  
+  return {
+    color: color,
+    count: totalCount,
+    normal: normalCount,
+    slow: slowCount,
+    verySlow: verySlowCount,
+    slowRate: slowRate.toFixed(1),
+    verySlowRate: verySlowRate.toFixed(1),
+    combinedRate: combinedRate.toFixed(1)
+  };
 }
