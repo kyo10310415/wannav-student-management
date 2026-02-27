@@ -2557,11 +2557,17 @@ async function loadLessonsForDate() {
           title: lesson.title,
           meet_link: lesson.meet_link
         });
+        console.log(`✅ Added lesson for ${lesson.student_id} on ${formatted} at ${lesson.lesson_date}`);
       }
     });
     
     console.log(`Loaded ${res.data.data.length} lessons for ${year}/${month}`);
     console.log(`📊 lessonsData now has ${Object.keys(lessonsData).length} students with lesson times`);
+    
+    // Debug: Check specific student
+    if (lessonsData['OLTS240499-HK']) {
+      console.log(`🔍 OLTS240499-HK lessons:`, lessonsData['OLTS240499-HK']);
+    }
     
     // Debug: Show sample lessonsData
     const sampleStudentIds = Object.keys(lessonsData).slice(0, 2);
