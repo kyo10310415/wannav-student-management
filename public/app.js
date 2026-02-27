@@ -7,6 +7,7 @@ let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
+let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
 let selectedTutor = 'all';
 let selectedTeam = 'all'; // チームフィルター用
@@ -90,6 +91,15 @@ async function loadInitialData() {
     
     students = studentsRes.data.data;
     tutors = tutorsRes.data.data;
+    
+    // Cache Notion URLs for students
+    students.forEach(student => {
+      if (student.notion_url) {
+        cachedNotionUrls[student.student_id] = student.notion_url;
+      }
+    });
+    
+    console.log(`Cached ${Object.keys(cachedNotionUrls).length} Notion URLs`);
     
     // Load satisfaction data
     await loadSatisfactionData();
