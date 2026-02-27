@@ -7,7 +7,6 @@ let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
-let lessonsData = {}; // student_id -> [lesson objects with time info]
 let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
 let selectedTutor = 'all';
@@ -2528,9 +2527,6 @@ async function loadLessonsForDate() {
       if (!lessonDates[lesson.student_id]) {
         lessonDates[lesson.student_id] = [];
       }
-      if (!lessonsData[lesson.student_id]) {
-        lessonsData[lesson.student_id] = [];
-      }
       
       // Parse UTC date from database
       const dateStr = lesson.lesson_date.split('T')[0];
@@ -2543,19 +2539,6 @@ async function loadLessonsForDate() {
         lessonDates[lesson.student_id].push({
           date: new Date(lesson.lesson_date),
           formatted: formatted
-        });
-      }
-      
-      // Check if this lesson is already in lessonsData (check by lesson_date to avoid duplicates)
-      const existsInData = lessonsData[lesson.student_id].some(l => l.lesson_date === lesson.lesson_date);
-      if (!existsInData) {
-        lessonsData[lesson.student_id].push({
-          lesson_date: lesson.lesson_date,
-          formatted: formatted,
-          student_id: lesson.student_id,
-          tutor_name: lesson.tutor_name,
-          title: lesson.title,
-          meet_link: lesson.meet_link
         });
       }
     });
@@ -2672,29 +2655,7 @@ function selectLesson(studentId) {
   
   helperRequestData.selectedLesson = student;
   
-  // Extract lesson time from lessonsData
-  const [year, month, day] = helperRequestData.selectedDate.split('-');
-  const formattedSelectedDate = `${parseInt(month)}/${parseInt(day)}`;
-  
-  const studentLessons = lessonsData[studentId] || [];
-  const lessonOnDate = studentLessons.find(lesson => lesson.formatted === formattedSelectedDate);
-  
-  if (lessonOnDate && lessonOnDate.lesson_date) {
-    // Extract time from lesson_date (format: 2026-02-08T17:00:00.000Z)
-    const lessonDateTime = new Date(lessonOnDate.lesson_date);
-    const hours = lessonDateTime.getHours();
-    const minutes = lessonDateTime.getMinutes();
-    
-    // Format as HH:MM
-    const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-    helperRequestData.autoExtractedTime = timeString;
-    console.log(`✅ Auto-extracted time: ${timeString} for student ${studentId}`);
-  } else {
-    helperRequestData.autoExtractedTime = null;
-    console.log(`⚠️ No lesson time found for student ${studentId} on ${formattedSelectedDate}`);
-  }
-  
-  // Show form input modal
+  // Show form input modal (time will be manually entered)
   showHelperRequestForm();
 }
 
@@ -2778,16 +2739,6 @@ function showHelperRequestForm() {
       </div>
     </div>
   `;
-  
-  // Auto-fill lesson time if available
-  if (helperRequestData.autoExtractedTime) {
-    setTimeout(() => {
-      const timeInput = document.getElementById('helper-lesson-time-input');
-      if (timeInput) {
-        timeInput.value = helperRequestData.autoExtractedTime;
-      }
-    }, 100);
-  }
 }
 
 // Show confirmation screen (Step 3: Confirmation)
