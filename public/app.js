@@ -2489,12 +2489,46 @@ async function loadLessonsForDate() {
   const container = document.getElementById('lessons-list-container');
   container.classList.remove('hidden');
   
-  // Filter students who have lessons on this date
-  // Convert selectedDate (YYYY-MM-DD) to M/D format for comparison
+  // Extract year and month from selected date
   const [year, month, day] = selectedDate.split('-');
+  
+  // Load lesson dates for the selected month if not already loaded
+  try {
+    console.log(`Loading lesson dates for ${year}/${month}`);
+    const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${parseInt(month)}`);
+    
+    // Update lessonDates with the selected month's data
+    res.data.data.forEach(lesson => {
+      if (!lessonDates[lesson.student_id]) {
+        lessonDates[lesson.student_id] = [];
+      }
+      
+      // Parse UTC date from database
+      const dateStr = lesson.lesson_date.split('T')[0];
+      const [yearStr, monthStr, dayStr] = dateStr.split('-');
+      const formatted = `${parseInt(monthStr)}/${parseInt(dayStr)}`;
+      
+      // Check if this date is already in the array
+      const exists = lessonDates[lesson.student_id].some(d => d.formatted === formatted);
+      if (!exists) {
+        lessonDates[lesson.student_id].push({
+          date: new Date(lesson.lesson_date),
+          formatted: formatted
+        });
+      }
+    });
+    
+    console.log(`Loaded ${res.data.data.length} lessons for ${year}/${month}`);
+  } catch (error) {
+    console.error('Error loading lesson dates:', error);
+  }
+  
+  // Filter students who have lessons on this date
   const formattedSelectedDate = `${parseInt(month)}/${parseInt(day)}`;
   
   console.log('Selected date:', selectedDate, 'Formatted:', formattedSelectedDate);
+  console.log('Total students:', students.length);
+  console.log('Students with lesson dates:', Object.keys(lessonDates).length);
   
   const lessonsOnDate = students.filter(student => {
     const lessonDatesArray = lessonDates[student.student_id];
@@ -2506,11 +2540,13 @@ async function loadLessonsForDate() {
     });
     
     if (hasLesson) {
-      console.log(`Student ${student.student_id} has lesson on ${formattedSelectedDate}`);
+      console.log(`Student ${student.student_id} (${student.name}) has lesson on ${formattedSelectedDate}`);
     }
     
     return hasLesson;
   });
+  
+  console.log(`Found ${lessonsOnDate.length} students with lessons on ${formattedSelectedDate}`);
   
   // Display lessons
   displayLessonsList(lessonsOnDate);
