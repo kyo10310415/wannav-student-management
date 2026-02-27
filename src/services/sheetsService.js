@@ -66,9 +66,11 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
         // Parse date as JST (Japan Standard Time, UTC+9)
         // Input format: "2026/02/26 19:00:00"
         const dateStr = row[4];
+        console.log(`📅 Parsing date string: "${dateStr}"`);
         const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
         if (match) {
           const [, year, month, day, hour, minute, second] = match;
+          console.log(`  - Parsed: ${year}-${month}-${day} ${hour}:${minute}:${second} JST`);
           // Create date in JST by subtracting 9 hours to get UTC
           lessonDate = new Date(Date.UTC(
             parseInt(year),
@@ -78,7 +80,9 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
             parseInt(minute),
             parseInt(second)
           ));
+          console.log(`  - Converted to UTC: ${lessonDate.toISOString()}`);
         } else {
+          console.log(`  ⚠️ Date format didn't match regex, using fallback`);
           // Fallback to original behavior if format doesn't match
           lessonDate = new Date(dateStr);
         }
