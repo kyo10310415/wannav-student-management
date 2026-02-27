@@ -749,6 +749,7 @@ node run-migration.js
   - 依頼理由・備考・依頼期限
   - Notionで開くボタン
   - 受諾ボタン（pending状態のみ表示）
+  - **削除ボタン（すべての状態で表示、確認ダイアログあり）**
 
 **3. 助っ人受諾機能**
 - 待機中の依頼に「この依頼を受諾する」ボタン表示
@@ -757,6 +758,14 @@ node run-migration.js
 - データベース更新: status → 'accepted', accepted_by_tutor_id, accepted_at
 - カウンター更新: 受諾Tutorの helper_accepted_count をインクリメント
 - **Discord通知**: 受諾時に自動でDiscord Webhookへ通知
+
+**4. 助っ人依頼削除機能**
+- すべての状態の依頼で削除ボタンを表示
+- 削除ボタンクリック → 確認ダイアログ表示
+- 確認後、データベースから削除
+- カウンター更新:
+  - 依頼Tutorの helper_request_count をデクリメント
+  - 受諾済みの場合、受諾Tutorの helper_accepted_count をデクリメント
 
 **4. Discord Webhook通知**
 - 依頼作成時: オレンジ色のEmbed（詳細情報表示）
@@ -814,7 +823,9 @@ DISCORD_HELPER_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
 3. Webhook名を設定（例: 助っ人Tutor通知）
 4. 通知先チャンネルを選択
 5. Webhook URLをコピー
-6. Render.comの環境変数に設定
+6. Render.comの環境変数 `DISCORD_HELPER_WEBHOOK_URL` に設定
+
+⚠️ **注意**: Discord Webhook URLが設定されていない場合、通知はスキップされますが、助っ人依頼機能は正常に動作します。
 
 #### 📊 使用フロー
 
