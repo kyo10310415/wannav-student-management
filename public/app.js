@@ -2497,6 +2497,16 @@ async function loadLessonsForDate() {
     console.log(`Loading lesson dates for ${year}/${month}`);
     const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${parseInt(month)}`);
     
+    console.log(`API Response: ${res.data.data.length} lessons found`);
+    
+    // Debug: Show first 3 lessons
+    if (res.data.data.length > 0) {
+      res.data.data.slice(0, 3).forEach(lesson => {
+        const dateStr = lesson.lesson_date.split('T')[0];
+        console.log(`Sample lesson - Student: ${lesson.student_id}, Date: ${dateStr}`);
+      });
+    }
+    
     // Update lessonDates with the selected month's data
     res.data.data.forEach(lesson => {
       if (!lessonDates[lesson.student_id]) {
@@ -2530,6 +2540,13 @@ async function loadLessonsForDate() {
   console.log('Total students:', students.length);
   console.log('Students with lesson dates:', Object.keys(lessonDates).length);
   
+  // Debug: Show first 3 students with lesson dates
+  const studentIdsWithDates = Object.keys(lessonDates).slice(0, 3);
+  studentIdsWithDates.forEach(studentId => {
+    const dates = lessonDates[studentId].map(d => d.formatted).join(', ');
+    console.log(`Sample - Student ${studentId}: [${dates}]`);
+  });
+  
   const lessonsOnDate = students.filter(student => {
     const lessonDatesArray = lessonDates[student.student_id];
     if (!lessonDatesArray || !Array.isArray(lessonDatesArray)) return false;
@@ -2540,7 +2557,7 @@ async function loadLessonsForDate() {
     });
     
     if (hasLesson) {
-      console.log(`Student ${student.student_id} (${student.name}) has lesson on ${formattedSelectedDate}`);
+      console.log(`✓ Student ${student.student_id} (${student.name}) has lesson on ${formattedSelectedDate}`);
     }
     
     return hasLesson;
