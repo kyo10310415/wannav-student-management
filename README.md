@@ -712,3 +712,124 @@ node run-migration.js
 
 ---
 
+
+### 助っ人Tutor依頼機能（完全版）
+
+#### ✅ 実装済み機能
+
+**1. 助っ人依頼作成**
+- 予約管理ページから「助っ人Tutor依頼」ボタンをクリック
+- 日付選択 → レッスン一覧表示 → 生徒名検索
+- レッスン選択 → 依頼理由・備考・期限入力
+- 確認画面 → 依頼確定
+- **Discord通知**: 依頼作成時に自動でDiscord Webhookへ通知
+
+**2. 助っ人待ち一覧ページ**
+- ナビゲーションに「助っ人待ち」ボタンを追加
+- 統計情報表示（総依頼数・待機中・受諾済み・リスケジュール）
+- ステータス別タブフィルター
+  - すべて
+  - 待機中（pending）- オレンジ
+  - 受諾済み（accepted）- 緑
+  - リスケジュール（rescheduled）- 赤
+- 依頼一覧表示
+  - ステータスバッジ（色分け＋アイコン）
+  - 期限切れ警告（赤文字＋警告バッジ）
+  - レッスン情報・生徒情報・依頼Tutor・受諾Tutor
+  - 依頼理由・備考・依頼期限
+  - Notionで開くボタン
+  - 受諾ボタン（pending状態のみ表示）
+
+**3. 助っ人受諾機能**
+- 待機中の依頼に「この依頼を受諾する」ボタン表示
+- ボタンクリック → アクティブなTutor選択モーダル
+- Tutor選択 → 受諾確定
+- データベース更新: status → 'accepted', accepted_by_tutor_id, accepted_at
+- カウンター更新: 受諾Tutorの helper_accepted_count をインクリメント
+- **Discord通知**: 受諾時に自動でDiscord Webhookへ通知
+
+**4. Discord Webhook通知**
+- 依頼作成時: オレンジ色のEmbed（詳細情報表示）
+- 依頼受諾時: 緑色のEmbed（受諾Tutor情報表示）
+- リスケジュール時: 赤色のEmbed（期限切れ依頼の一覧）
+- 環境変数: `DISCORD_HELPER_WEBHOOK_URL`
+
+**5. 期限切れ自動処理（Cron Job）**
+- 毎時0分に自動実行
+- pending状態で期限（deadline）を過ぎた依頼を自動検出
+- status → 'rescheduled' に更新
+- 依頼Tutorの reschedule_count をインクリメント
+- Discord通知送信
+
+**6. データベーステーブル: helper_requests**
+```sql
+CREATE TABLE helper_requests (
+  id SERIAL PRIMARY KEY,
+  lesson_date DATE NOT NULL,
+  lesson_time VARCHAR(50),
+  student_id VARCHAR(100) NOT NULL,
+  student_name VARCHAR(200) NOT NULL,
+  notion_url TEXT,
+  requesting_tutor_id VARCHAR(100),
+  requesting_tutor_name VARCHAR(200),
+  lesson_progress INTEGER,
+  reason TEXT NOT NULL,
+  notes TEXT,
+  deadline TIMESTAMP NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  accepted_by_tutor_id VARCHAR(100),
+  accepted_by_tutor_name VARCHAR(200),
+  accepted_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**7. Tutorテーブルのカウンター**
+- `helper_request_count`: 助っ人依頼回数
+- `helper_accepted_count`: 助っ人受諾回数
+- `reschedule_count`: リスケジュール回数
+
+#### 🔧 環境変数設定
+
+Render.comのダッシュボードで以下の環境変数を設定してください：
+
+```bash
+DISCORD_HELPER_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
+```
+
+**Discord Webhookの作成方法:**
+1. Discordサーバーの設定 → 連携サービス → Webhook
+2. 「新しいWebhook」をクリック
+3. Webhook名を設定（例: 助っ人Tutor通知）
+4. 通知先チャンネルを選択
+5. Webhook URLをコピー
+6. Render.comの環境変数に設定
+
+#### 📊 使用フロー
+
+**依頼側（Tutorが休む場合）:**
+1. 予約管理ページへ移動
+2. 「助っ人Tutor依頼」ボタンをクリック
+3. レッスン日を選択
+4. 該当する生徒のレッスンを選択
+5. 依頼理由・備考・期限を入力
+6. 確認画面で内容を確認
+7. 「依頼を確定する」ボタンで送信
+8. → Discord通知が自動送信される
+
+**受諾側（助っ人Tutorになる場合）:**
+1. 助っ人待ちページへ移動
+2. 待機中タブで未受諾の依頼を確認
+3. 「この依頼を受諾する」ボタンをクリック
+4. 自分（または他のTutor）を選択
+5. 「確定する」ボタンで受諾
+6. → Discord通知が自動送信される
+
+**管理側:**
+- 助っ人待ちページで全体状況を確認
+- 受諾済み・リスケジュールされた依頼も追跡可能
+- 期限切れは自動でリスケジュールされる（毎時チェック）
+
+---
+

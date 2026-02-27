@@ -2690,6 +2690,15 @@ function showHelperRequestForm() {
         <div class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">
+              レッスン時間 <span class="text-red-500">*</span>
+            </label>
+            <input type="time" id="helper-lesson-time-input"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              placeholder="例：10:00">
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
               依頼理由 <span class="text-red-500">*</span>
             </label>
             <textarea id="helper-reason-input" 
@@ -2734,11 +2743,17 @@ function showHelperRequestForm() {
 
 // Show confirmation screen (Step 3: Confirmation)
 function showHelperRequestConfirmation() {
+  const lessonTime = document.getElementById('helper-lesson-time-input').value.trim();
   const reason = document.getElementById('helper-reason-input').value.trim();
   const notes = document.getElementById('helper-notes-input').value.trim();
   const deadline = document.getElementById('helper-deadline-input').value;
   
   // Validation
+  if (!lessonTime) {
+    alert('レッスン時間を入力してください');
+    return;
+  }
+  
   if (!reason) {
     alert('依頼理由を入力してください');
     return;
@@ -2749,6 +2764,7 @@ function showHelperRequestConfirmation() {
     return;
   }
   
+  helperRequestData.lessonTime = lessonTime;
   helperRequestData.reason = reason;
   helperRequestData.notes = notes;
   helperRequestData.deadline = deadline;
@@ -2779,7 +2795,7 @@ function showHelperRequestConfirmation() {
             </div>
             <div>
               <p class="text-sm text-gray-600">レッスン時間</p>
-              <p class="font-semibold">未設定</p>
+              <p class="font-semibold">${lessonTime}</p>
             </div>
           </div>
           
@@ -2867,7 +2883,7 @@ async function submitHelperRequest() {
   
   const requestData = {
     lesson_date: helperRequestData.selectedDate,
-    lesson_time: '未設定', // TODO: Add lesson time if available
+    lesson_time: helperRequestData.lessonTime,
     student_id: student.student_id,
     student_name: student.name,
     notion_url: notionUrl,
