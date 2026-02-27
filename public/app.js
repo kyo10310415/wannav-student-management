@@ -295,6 +295,9 @@ function renderReservationsPage() {
         <button onclick="sendReminders()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
           <i class="fas fa-bell mr-2"></i>リマインド送信
         </button>
+        <button onclick="openHelperRequestModal()" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
+          <i class="fas fa-hand-paper mr-2"></i>助っ人Tutor依頼
+        </button>
       </div>
     </div>
 
@@ -2397,4 +2400,415 @@ function getTutorLessonProgressStatus(tutorNotionName) {
     verySlowRate: verySlowRate.toFixed(1),
     combinedRate: combinedRate.toFixed(1)
   };
+}
+
+// ==================== Helper Tutor Request Feature ====================
+
+// Global variables for helper request
+let helperRequestData = {
+  selectedDate: null,
+  selectedLesson: null,
+  reason: '',
+  notes: '',
+  deadline: null
+};
+
+// Open helper request modal - Step 1: Date selection
+function openHelperRequestModal() {
+  const modal = document.createElement('div');
+  modal.id = 'helper-request-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 my-8">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-hand-paper mr-2 text-orange-600"></i>助っ人Tutor依頼
+        </h2>
+        <button onclick="closeHelperRequestModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            レッスン日を選択してください
+          </label>
+          <input type="date" id="helper-date-input" 
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            onchange="loadLessonsForDate()">
+        </div>
+        <div id="lessons-list-container" class="hidden">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              生徒名で検索
+            </label>
+            <input type="text" id="lesson-search-input" 
+              placeholder="生徒名を入力..."
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              oninput="filterLessons()">
+          </div>
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">レッスン一覧</h3>
+            <div id="lessons-list" class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+              <!-- Lessons will be loaded here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+// Close helper request modal
+function closeHelperRequestModal() {
+  const modal = document.getElementById('helper-request-modal');
+  if (modal) {
+    modal.remove();
+  }
+  // Reset data
+  helperRequestData = {
+    selectedDate: null,
+    selectedLesson: null,
+    reason: '',
+    notes: '',
+    deadline: null
+  };
+}
+
+// Load lessons for selected date
+async function loadLessonsForDate() {
+  const dateInput = document.getElementById('helper-date-input');
+  const selectedDate = dateInput.value;
+  
+  if (!selectedDate) return;
+  
+  helperRequestData.selectedDate = selectedDate;
+  
+  // Show lessons list container
+  const container = document.getElementById('lessons-list-container');
+  container.classList.remove('hidden');
+  
+  // Filter students who have lessons on this date
+  const lessonsOnDate = students.filter(student => {
+    const lessonDatesStr = lessonDates[student.student_id];
+    if (!lessonDatesStr) return false;
+    
+    const dates = lessonDatesStr.split(',').map(d => d.trim());
+    return dates.includes(selectedDate);
+  });
+  
+  // Display lessons
+  displayLessonsList(lessonsOnDate);
+}
+
+// Display lessons list
+function displayLessonsList(lessons) {
+  const listContainer = document.getElementById('lessons-list');
+  
+  if (lessons.length === 0) {
+    listContainer.innerHTML = `
+      <div class="p-6 text-center text-gray-500">
+        <i class="fas fa-info-circle text-3xl mb-2"></i>
+        <p>この日のレッスンはありません</p>
+      </div>
+    `;
+    return;
+  }
+  
+  listContainer.innerHTML = lessons.map(student => {
+    const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
+    return `
+      <div class="lesson-item p-4 border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition"
+        onclick="selectLesson('${student.student_id}')">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="font-semibold text-gray-800">${student.name}</div>
+            <div class="text-sm text-gray-600">学籍番号: ${student.student_id}</div>
+            <div class="text-sm text-gray-600">担任Tutor: ${getTutorDisplayName(student.homeroom_tutor)}</div>
+            <div class="text-sm text-gray-600">レッスン進捗: ${student.lesson_progress || 0}回</div>
+          </div>
+          <div class="flex gap-2">
+            <a href="${notionUrl}" target="_blank" onclick="event.stopPropagation()" 
+              class="text-blue-600 hover:text-blue-800">
+              <i class="fas fa-external-link-alt"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Filter lessons by search input
+function filterLessons() {
+  const searchInput = document.getElementById('lesson-search-input');
+  const searchTerm = searchInput.value.toLowerCase();
+  
+  const lessonsOnDate = students.filter(student => {
+    const lessonDatesStr = lessonDates[student.student_id];
+    if (!lessonDatesStr) return false;
+    
+    const dates = lessonDatesStr.split(',').map(d => d.trim());
+    const hasDate = dates.includes(helperRequestData.selectedDate);
+    const matchesSearch = !searchTerm || student.name.toLowerCase().includes(searchTerm);
+    
+    return hasDate && matchesSearch;
+  });
+  
+  displayLessonsList(lessonsOnDate);
+}
+
+// Select a lesson and proceed to form input
+function selectLesson(studentId) {
+  const student = students.find(s => s.student_id === studentId);
+  if (!student) return;
+  
+  helperRequestData.selectedLesson = student;
+  
+  // Show form input modal
+  showHelperRequestForm();
+}
+
+// Show helper request form (Step 2: Reason, Notes, Deadline)
+function showHelperRequestForm() {
+  const student = helperRequestData.selectedLesson;
+  const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
+  
+  const modal = document.getElementById('helper-request-modal');
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 my-8">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-hand-paper mr-2 text-orange-600"></i>助っ人Tutor依頼 - 詳細入力
+        </h2>
+        <button onclick="closeHelperRequestModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <div class="bg-blue-50 p-4 rounded-lg mb-6">
+          <h3 class="font-semibold text-gray-800 mb-2">選択されたレッスン</h3>
+          <div class="text-sm">
+            <p><span class="font-medium">レッスン日:</span> ${helperRequestData.selectedDate}</p>
+            <p><span class="font-medium">生徒名:</span> ${student.name}</p>
+            <p><span class="font-medium">学籍番号:</span> ${student.student_id}</p>
+            <p><span class="font-medium">担任Tutor:</span> ${getTutorDisplayName(student.homeroom_tutor)}</p>
+            <p><span class="font-medium">レッスン進捗:</span> ${student.lesson_progress || 0}回</p>
+          </div>
+        </div>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              依頼理由 <span class="text-red-500">*</span>
+            </label>
+            <textarea id="helper-reason-input" 
+              rows="3"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              placeholder="例：体調不良のため欠席"></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              備考
+            </label>
+            <textarea id="helper-notes-input" 
+              rows="3"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              placeholder="その他の情報があれば入力してください"></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              依頼期限 <span class="text-red-500">*</span>
+            </label>
+            <input type="datetime-local" id="helper-deadline-input"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+          </div>
+        </div>
+        
+        <div class="mt-6 flex gap-3 justify-end">
+          <button onclick="showHelperRequestConfirmation()" 
+            class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
+            <i class="fas fa-check mr-2"></i>確認画面へ
+          </button>
+          <button onclick="closeHelperRequestModal()" 
+            class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+            <i class="fas fa-times mr-2"></i>キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Show confirmation screen (Step 3: Confirmation)
+function showHelperRequestConfirmation() {
+  const reason = document.getElementById('helper-reason-input').value.trim();
+  const notes = document.getElementById('helper-notes-input').value.trim();
+  const deadline = document.getElementById('helper-deadline-input').value;
+  
+  // Validation
+  if (!reason) {
+    alert('依頼理由を入力してください');
+    return;
+  }
+  
+  if (!deadline) {
+    alert('依頼期限を入力してください');
+    return;
+  }
+  
+  helperRequestData.reason = reason;
+  helperRequestData.notes = notes;
+  helperRequestData.deadline = deadline;
+  
+  const student = helperRequestData.selectedLesson;
+  const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
+  const formattedDeadline = new Date(deadline).toLocaleString('ja-JP');
+  
+  const modal = document.getElementById('helper-request-modal');
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 my-8">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-hand-paper mr-2 text-orange-600"></i>助っ人Tutor依頼 - 確認
+        </h2>
+        <button onclick="closeHelperRequestModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <div class="bg-gray-50 p-6 rounded-lg mb-6 space-y-3">
+          <h3 class="font-bold text-lg text-gray-800 mb-4">依頼内容の確認</h3>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm text-gray-600">レッスン日</p>
+              <p class="font-semibold">${helperRequestData.selectedDate}</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-600">レッスン時間</p>
+              <p class="font-semibold">未設定</p>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm text-gray-600">生徒名</p>
+              <p class="font-semibold">${student.name}</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-600">学籍番号</p>
+              <p class="font-semibold">${student.student_id}</p>
+            </div>
+          </div>
+          
+          <div>
+            <p class="text-sm text-gray-600">NotionページURL</p>
+            <a href="${notionUrl}" target="_blank" class="text-blue-600 hover:underline break-all">
+              ${notionUrl}
+            </a>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm text-gray-600">依頼Tutor</p>
+              <p class="font-semibold">${getTutorDisplayName(student.homeroom_tutor)}</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-600">レッスン進捗</p>
+              <p class="font-semibold">${student.lesson_progress || 0}回</p>
+            </div>
+          </div>
+          
+          <div>
+            <p class="text-sm text-gray-600">依頼理由</p>
+            <p class="font-semibold whitespace-pre-wrap">${reason}</p>
+          </div>
+          
+          ${notes ? `
+          <div>
+            <p class="text-sm text-gray-600">備考</p>
+            <p class="font-semibold whitespace-pre-wrap">${notes}</p>
+          </div>
+          ` : ''}
+          
+          <div>
+            <p class="text-sm text-gray-600">依頼期限</p>
+            <p class="font-semibold text-red-600">${formattedDeadline}</p>
+          </div>
+        </div>
+        
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <p class="text-sm text-yellow-800">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            この内容で助っ人Tutor依頼を送信します。よろしいですか？
+          </p>
+        </div>
+        
+        <div class="flex gap-3 justify-end">
+          <button onclick="submitHelperRequest()" 
+            class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
+            <i class="fas fa-paper-plane mr-2"></i>依頼を確定する
+          </button>
+          <button onclick="showHelperRequestForm()" 
+            class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+            <i class="fas fa-arrow-left mr-2"></i>戻る
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Submit helper request (Step 4: Submit to API)
+async function submitHelperRequest() {
+  const student = helperRequestData.selectedLesson;
+  const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
+  
+  // Find requesting tutor from tutors array
+  const requestingTutor = tutors.find(t => t.notion_name === student.homeroom_tutor);
+  
+  if (!requestingTutor) {
+    alert('担任Tutorの情報が見つかりません');
+    return;
+  }
+  
+  const requestData = {
+    lesson_date: helperRequestData.selectedDate,
+    lesson_time: '未設定', // TODO: Add lesson time if available
+    student_id: student.student_id,
+    student_name: student.name,
+    notion_url: notionUrl,
+    requesting_tutor_id: requestingTutor.employee_id,
+    requesting_tutor_name: requestingTutor.tutor_name,
+    lesson_progress: student.lesson_progress || 0,
+    reason: helperRequestData.reason,
+    notes: helperRequestData.notes || null,
+    deadline: helperRequestData.deadline
+  };
+  
+  try {
+    const response = await fetch(`${API_BASE}/api/helper-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      alert('助っ人Tutor依頼を送信しました！');
+      closeHelperRequestModal();
+    } else {
+      alert('エラーが発生しました: ' + (result.error || '不明なエラー'));
+    }
+  } catch (error) {
+    console.error('助っ人Tutor依頼の送信エラー:', error);
+    alert('助っ人Tutor依頼の送信に失敗しました');
+  }
 }
