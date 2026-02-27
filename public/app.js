@@ -13,7 +13,7 @@ let selectedTutor = 'all';
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers'
 
 // Column filters and sort state for student management page
 let columnFilters = {}; // { columnName: selectedValue }
@@ -42,7 +42,10 @@ function renderHeader() {
           <p class="text-blue-100 mt-2">VTuber育成スクール生徒管理</p>
           
           <!-- Navigation -->
-          <nav class="mt-6 flex gap-2">
+          <nav class="mt-6 flex gap-2 flex-wrap">
+            <button id="nav-today" onclick="changePage('today')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-calendar-day mr-2"></i>今日のレッスン
+            </button>
             <button id="nav-reservations" onclick="changePage('reservations')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'reservations' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-calendar-check mr-2"></i>予約管理
             </button>
@@ -52,8 +55,8 @@ function renderHeader() {
             <button id="nav-tutors" onclick="changePage('tutors')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
             </button>
-            <button id="nav-today" onclick="changePage('today')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-calendar-day mr-2"></i>今日のレッスン
+            <button id="nav-helpers" onclick="changePage('helpers')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
             </button>
           </nav>
         </div>
@@ -244,6 +247,8 @@ async function renderApp() {
     renderTutorsPage();
   } else if (currentPage === 'today') {
     await renderTodayLessonsPage();
+  } else if (currentPage === 'helpers') {
+    await renderHelpersPage();
   }
 }
 
@@ -2894,5 +2899,345 @@ async function submitHelperRequest() {
   } catch (error) {
     console.error('助っ人Tutor依頼の送信エラー:', error);
     alert('助っ人Tutor依頼の送信に失敗しました');
+  }
+}
+
+// ==================== Helper Requests List Page ====================
+
+let helperRequests = [];
+let helperStatusFilter = 'all'; // 'all', 'pending', 'accepted', 'rescheduled'
+
+// Render helpers page
+async function renderHelpersPage() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('content').classList.add('hidden');
+  
+  // Load helper requests
+  await loadHelperRequests();
+  
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  
+  const content = document.getElementById('content');
+  
+  content.innerHTML = `
+    <div class="mb-6">
+      <h1 class="text-3xl font-bold text-gray-800">
+        <i class="fas fa-hands-helping mr-3 text-orange-600"></i>
+        助っ人Tutor待ち一覧
+      </h1>
+      <p class="text-gray-600 mt-2">助っ人依頼の管理と受諾</p>
+    </div>
+    
+    <!-- Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-chart-bar mr-2"></i>統計情報
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        ${renderHelperStatistics()}
+      </div>
+    </div>
+    
+    <!-- Status Filter Tabs -->
+    <div class="bg-white rounded-lg shadow-md p-2 mb-6">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="filterHelpersByStatus('all')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-list mr-2"></i>すべて
+        </button>
+        <button onclick="filterHelpersByStatus('pending')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'pending' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-clock mr-2"></i>待機中
+        </button>
+        <button onclick="filterHelpersByStatus('accepted')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'accepted' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-check-circle mr-2"></i>受諾済み
+        </button>
+        <button onclick="filterHelpersByStatus('rescheduled')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'rescheduled' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+          <i class="fas fa-calendar-times mr-2"></i>リスケジュール
+        </button>
+      </div>
+    </div>
+    
+    <!-- Helper Requests List -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-list mr-2"></i>
+        ${getHelperStatusTitle()}
+      </h2>
+      <div id="helper-requests-list">
+        ${renderHelperRequestsList()}
+      </div>
+    </div>
+  `;
+}
+
+// Load helper requests from API
+async function loadHelperRequests() {
+  try {
+    const res = await axios.get(`${API_BASE}/api/helper-requests`);
+    helperRequests = res.data.data || [];
+    console.log(`Loaded ${helperRequests.length} helper requests`);
+  } catch (error) {
+    console.error('Error loading helper requests:', error);
+    helperRequests = [];
+  }
+}
+
+// Render helper statistics
+function renderHelperStatistics() {
+  const pending = helperRequests.filter(r => r.status === 'pending').length;
+  const accepted = helperRequests.filter(r => r.status === 'accepted').length;
+  const rescheduled = helperRequests.filter(r => r.status === 'rescheduled').length;
+  const total = helperRequests.length;
+  
+  return `
+    <div class="bg-blue-50 p-4 rounded-lg">
+      <div class="text-sm text-blue-600 font-semibold">総依頼数</div>
+      <div class="text-2xl font-bold text-blue-800 mt-1">${total}件</div>
+    </div>
+    <div class="bg-orange-50 p-4 rounded-lg">
+      <div class="text-sm text-orange-600 font-semibold">待機中</div>
+      <div class="text-2xl font-bold text-orange-800 mt-1">${pending}件</div>
+    </div>
+    <div class="bg-green-50 p-4 rounded-lg">
+      <div class="text-sm text-green-600 font-semibold">受諾済み</div>
+      <div class="text-2xl font-bold text-green-800 mt-1">${accepted}件</div>
+    </div>
+    <div class="bg-red-50 p-4 rounded-lg">
+      <div class="text-sm text-red-600 font-semibold">リスケジュール</div>
+      <div class="text-2xl font-bold text-red-800 mt-1">${rescheduled}件</div>
+    </div>
+  `;
+}
+
+// Get status title
+function getHelperStatusTitle() {
+  const titles = {
+    'all': 'すべての依頼',
+    'pending': '待機中の依頼',
+    'accepted': '受諾済みの依頼',
+    'rescheduled': 'リスケジュールされた依頼'
+  };
+  return titles[helperStatusFilter] || 'すべての依頼';
+}
+
+// Filter helpers by status
+async function filterHelpersByStatus(status) {
+  helperStatusFilter = status;
+  await renderHelpersPage();
+}
+
+// Render helper requests list
+function renderHelperRequestsList() {
+  let filteredRequests = helperRequests;
+  
+  if (helperStatusFilter !== 'all') {
+    filteredRequests = helperRequests.filter(r => r.status === helperStatusFilter);
+  }
+  
+  // Sort by created_at descending
+  filteredRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  
+  if (filteredRequests.length === 0) {
+    return `
+      <div class="text-center py-12 text-gray-500">
+        <i class="fas fa-inbox text-4xl mb-3"></i>
+        <p>該当する依頼はありません</p>
+      </div>
+    `;
+  }
+  
+  return filteredRequests.map(request => {
+    const statusColor = {
+      'pending': 'bg-orange-100 text-orange-800',
+      'accepted': 'bg-green-100 text-green-800',
+      'rescheduled': 'bg-red-100 text-red-800'
+    }[request.status] || 'bg-gray-100 text-gray-800';
+    
+    const statusIcon = {
+      'pending': 'fa-clock',
+      'accepted': 'fa-check-circle',
+      'rescheduled': 'fa-calendar-times'
+    }[request.status] || 'fa-question-circle';
+    
+    const statusText = {
+      'pending': '待機中',
+      'accepted': '受諾済み',
+      'rescheduled': 'リスケジュール'
+    }[request.status] || request.status;
+    
+    const lessonDate = new Date(request.lesson_date).toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'short'
+    });
+    
+    const deadline = new Date(request.deadline);
+    const now = new Date();
+    const isExpired = deadline < now && request.status === 'pending';
+    const deadlineClass = isExpired ? 'text-red-600 font-bold' : 'text-gray-600';
+    
+    return `
+      <div class="border border-gray-200 rounded-lg p-4 mb-4 hover:shadow-md transition">
+        <div class="flex justify-between items-start mb-3">
+          <div>
+            <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold ${statusColor}">
+              <i class="fas ${statusIcon} mr-1"></i>${statusText}
+            </span>
+            ${isExpired ? '<span class="ml-2 inline-block px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800"><i class="fas fa-exclamation-triangle mr-1"></i>期限切れ</span>' : ''}
+          </div>
+          <div class="text-sm text-gray-500">
+            依頼ID: #${request.id}
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+          <div>
+            <div class="text-sm text-gray-600 mb-1">レッスン情報</div>
+            <div class="font-semibold text-gray-800">${lessonDate}</div>
+            <div class="text-sm text-gray-600">時間: ${request.lesson_time || '未設定'}</div>
+          </div>
+          <div>
+            <div class="text-sm text-gray-600 mb-1">生徒情報</div>
+            <div class="font-semibold text-gray-800">${request.student_name}</div>
+            <div class="text-sm text-gray-600">学籍番号: ${request.student_id}</div>
+            <div class="text-sm text-gray-600">進捗: ${request.lesson_progress}回</div>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+          <div>
+            <div class="text-sm text-gray-600 mb-1">依頼Tutor</div>
+            <div class="font-semibold text-gray-800">${request.requesting_tutor_name || '-'}</div>
+          </div>
+          ${request.status === 'accepted' ? `
+          <div>
+            <div class="text-sm text-gray-600 mb-1">受諾Tutor</div>
+            <div class="font-semibold text-green-700">${request.accepted_by_tutor_name || '-'}</div>
+            <div class="text-sm text-gray-500">受諾日時: ${new Date(request.accepted_at).toLocaleString('ja-JP')}</div>
+          </div>
+          ` : ''}
+        </div>
+        
+        <div class="mb-3">
+          <div class="text-sm text-gray-600 mb-1">依頼理由</div>
+          <div class="text-gray-800 whitespace-pre-wrap">${request.reason}</div>
+        </div>
+        
+        ${request.notes ? `
+        <div class="mb-3">
+          <div class="text-sm text-gray-600 mb-1">備考</div>
+          <div class="text-gray-800 whitespace-pre-wrap">${request.notes}</div>
+        </div>
+        ` : ''}
+        
+        <div class="mb-3">
+          <div class="text-sm text-gray-600 mb-1">依頼期限</div>
+          <div class="${deadlineClass}">${deadline.toLocaleString('ja-JP')}</div>
+        </div>
+        
+        <div class="flex gap-2 mt-4">
+          <a href="${request.notion_url}" target="_blank" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+            <i class="fas fa-external-link-alt mr-2"></i>Notionで開く
+          </a>
+          ${request.status === 'pending' ? `
+          <button onclick="acceptHelperRequest(${request.id})" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+            <i class="fas fa-check mr-2"></i>この依頼を受諾する
+          </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Accept helper request
+async function acceptHelperRequest(requestId) {
+  // Show tutor selection modal
+  showTutorSelectionModal(requestId);
+}
+
+// Show tutor selection modal
+function showTutorSelectionModal(requestId) {
+  const modal = document.createElement('div');
+  modal.id = 'tutor-selection-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-user-check mr-2 text-green-600"></i>受諾Tutor選択
+        </h2>
+        <button onclick="closeTutorSelectionModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            受諾するTutorを選択してください
+          </label>
+          <select id="accepting-tutor-select" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            <option value="">Tutorを選択...</option>
+            ${tutors.filter(t => t.status === 'アクティブ' && t.job_type && t.job_type.includes('Tutor')).map(t => 
+              `<option value="${t.employee_id}">${t.tutor_name}</option>`
+            ).join('')}
+          </select>
+        </div>
+        
+        <div class="flex gap-3 justify-end">
+          <button onclick="confirmAcceptHelperRequest(${requestId})" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+            <i class="fas fa-check mr-2"></i>確定する
+          </button>
+          <button onclick="closeTutorSelectionModal()" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+            <i class="fas fa-times mr-2"></i>キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+// Close tutor selection modal
+function closeTutorSelectionModal() {
+  const modal = document.getElementById('tutor-selection-modal');
+  if (modal) {
+    modal.remove();
+  }
+}
+
+// Confirm accept helper request
+async function confirmAcceptHelperRequest(requestId) {
+  const tutorSelect = document.getElementById('accepting-tutor-select');
+  const tutorId = tutorSelect.value;
+  
+  if (!tutorId) {
+    alert('Tutorを選択してください');
+    return;
+  }
+  
+  const tutor = tutors.find(t => t.employee_id === tutorId);
+  if (!tutor) {
+    alert('選択されたTutorが見つかりません');
+    return;
+  }
+  
+  try {
+    const res = await axios.post(`${API_BASE}/api/helper-requests/${requestId}/accept`, {
+      tutor_id: tutor.employee_id,
+      tutor_name: tutor.tutor_name
+    });
+    
+    if (res.data.success) {
+      alert('助っ人依頼を受諾しました！');
+      closeTutorSelectionModal();
+      await renderHelpersPage();
+    } else {
+      alert('エラーが発生しました: ' + (res.data.error || '不明なエラー'));
+    }
+  } catch (error) {
+    console.error('助っ人依頼の受諾エラー:', error);
+    alert('助っ人依頼の受諾に失敗しました');
   }
 }
