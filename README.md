@@ -614,3 +614,101 @@ MIT
 ## 👥 開発者
 
 WannaV Development Team
+
+### 2026-02-27: 助っ人Tutor依頼機能の追加
+
+**新機能**: 予約管理ページから助っ人Tutorを依頼できる機能を追加しました。
+
+#### 実装内容
+
+**① 予約管理ページに「助っ人Tutor依頼」ボタンを追加**
+- レッスンリマインド送信ボタンの右に配置
+- オレンジ色のボタンで視覚的に分かりやすく表示
+
+**② 日付選択モーダル**
+- ボタンをクリックすると日付選択フォームが表示
+- カレンダーから助っ人が必要なレッスン日を選択
+
+**③ レッスン一覧表示**
+- 選択した日付のレッスン一覧を表示
+- 生徒名、学籍番号、担任Tutor、レッスン進捗を表示
+- NotionページへのリンクをクリックでNotion詳細ページに移動可能
+
+**④ 生徒名検索機能**
+- レッスン一覧の上に検索ボックスを配置
+- 生徒名を入力してリアルタイムで絞り込み
+
+**⑤ レッスン選択と詳細入力フォーム**
+- レッスン一覧から依頼したいレッスンをクリック
+- 依頼理由（必須）、備考、依頼期限（必須）を入力
+
+**⑥ 確認画面の表示**
+- 入力内容を確認画面で表示
+  - レッスン日
+  - レッスン時間（現在は「未設定」と表示）
+  - 生徒名、学籍番号
+  - NotionページURL
+  - 依頼Tutor
+  - レッスン進捗
+  - 依頼理由
+  - 備考
+  - 依頼期限（赤文字で強調表示）
+- 確認後「依頼を確定する」ボタンで送信
+
+**⑦ バックエンドAPI実装**
+- `POST /api/helper-requests`: 新しい助っ人依頼を作成
+- `GET /api/helper-requests`: 全ての助っ人依頼を取得
+- `GET /api/helper-requests/:id`: 特定の助っ人依頼を取得
+- `POST /api/helper-requests/:id/accept`: 助っ人依頼を受諾
+- `POST /api/helper-requests/check-expired`: 期限切れ依頼の自動処理
+
+**⑧ データベーステーブル: helper_requests**
+- `id`: 依頼ID（PRIMARY KEY）
+- `lesson_date`: レッスン日
+- `lesson_time`: レッスン時間
+- `student_id`: 生徒ID
+- `student_name`: 生徒名
+- `notion_url`: NotionページURL
+- `requesting_tutor_id`: 依頼TutorのID
+- `requesting_tutor_name`: 依頼Tutor名
+- `lesson_progress`: レッスン進捗
+- `reason`: 依頼理由（必須）
+- `notes`: 備考
+- `deadline`: 依頼期限
+- `status`: ステータス（pending / accepted / rescheduled）
+- `accepted_by_tutor_id`: 受諾TutorのID
+- `accepted_by_tutor_name`: 受諾Tutor名
+- `accepted_at`: 受諾日時
+- `created_at`, `updated_at`: 作成日時、更新日時
+
+**⑨ Tutorテーブルへのカウンター追加**
+- `helper_request_count`: 助っ人依頼回数
+- `helper_accepted_count`: 助っ人受諾回数
+- `reschedule_count`: リスケジュール回数
+
+#### データベースマイグレーション
+
+**IMPORTANT**: Render.comの本番環境でマイグレーションを手動実行してください：
+
+```bash
+# Render.com のダッシュボードから Shell を開く
+cd /opt/render/project/src
+node run-migration.js
+```
+
+または、Shellから直接SQLを実行：
+
+```sql
+-- migrations/20260227063539_add_helper_requests.sql の内容を実行
+```
+
+#### 今後の実装予定
+
+- 助っ人待ち一覧ページの作成（ステータス別表示）
+- 助っ人受諾ボタンと受諾処理
+- Discord Webhook通知の実装
+- 期限切れ依頼の自動リスケジュール（cron job）
+- レッスン時間の取得と表示（Google Calendar APIまたはスプレッドシートから）
+
+---
+
