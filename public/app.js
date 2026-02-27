@@ -22,6 +22,19 @@ let sortDirection = 'asc'; // 'asc' or 'desc'
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
+  // Check URL hash for direct navigation
+  const hash = window.location.hash.substring(1); // Remove '#'
+  if (hash === 'helpers') {
+    currentPage = 'helpers';
+  } else if (hash === 'students') {
+    currentPage = 'students';
+  } else if (hash === 'reservations') {
+    currentPage = 'reservations';
+  } else if (hash === 'tutors') {
+    currentPage = 'tutors';
+  }
+  // Default is 'today' (already set)
+  
   renderHeader();
   await loadInitialData();
   await renderApp();
@@ -2885,6 +2898,12 @@ async function submitHelperRequest() {
     return;
   }
   
+  // Convert deadline to ISO string (treat as JST)
+  // datetime-local returns "YYYY-MM-DDTHH:MM" in local timezone (JST)
+  // We need to send it as ISO string to preserve the exact time
+  const deadlineDate = new Date(helperRequestData.deadline);
+  const deadlineISO = deadlineDate.toISOString();
+  
   const requestData = {
     lesson_date: helperRequestData.selectedDate,
     lesson_time: helperRequestData.lessonTime,
@@ -2896,7 +2915,7 @@ async function submitHelperRequest() {
     lesson_progress: student.lesson_progress || 0,
     reason: helperRequestData.reason,
     notes: helperRequestData.notes || null,
-    deadline: helperRequestData.deadline
+    deadline: deadlineISO
   };
   
   try {
