@@ -2537,15 +2537,18 @@ async function loadLessonsForDate() {
       const [yearStr, monthStr, dayStr] = dateStr.split('-');
       const formatted = `${parseInt(monthStr)}/${parseInt(dayStr)}`;
       
-      // Check if this date is already in the array
-      const exists = lessonDates[lesson.student_id].some(d => d.formatted === formatted);
-      if (!exists) {
+      // Check if this date is already in lessonDates
+      const existsInDates = lessonDates[lesson.student_id].some(d => d.formatted === formatted);
+      if (!existsInDates) {
         lessonDates[lesson.student_id].push({
           date: new Date(lesson.lesson_date),
           formatted: formatted
         });
-        
-        // Store full lesson data with time info
+      }
+      
+      // Check if this lesson is already in lessonsData (check by lesson_date to avoid duplicates)
+      const existsInData = lessonsData[lesson.student_id].some(l => l.lesson_date === lesson.lesson_date);
+      if (!existsInData) {
         lessonsData[lesson.student_id].push({
           lesson_date: lesson.lesson_date,
           formatted: formatted,
