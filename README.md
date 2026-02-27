@@ -757,7 +757,6 @@ node run-migration.js
 - Tutor選択 → 受諾確定
 - データベース更新: status → 'accepted', accepted_by_tutor_id, accepted_at
 - カウンター更新: 受諾Tutorの helper_accepted_count をインクリメント
-- **Discord通知**: 受諾時に自動でDiscord Webhookへ通知
 
 **4. 助っ人依頼削除機能**
 - すべての状態の依頼で削除ボタンを表示
@@ -825,7 +824,9 @@ DISCORD_HELPER_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
 5. Webhook URLをコピー
 6. Render.comの環境変数 `DISCORD_HELPER_WEBHOOK_URL` に設定
 
-⚠️ **注意**: Discord Webhook URLが設定されていない場合、通知はスキップされますが、助っ人依頼機能は正常に動作します。
+⚠️ **注意**: 
+- Discord Webhook URLが設定されていない場合、通知はスキップされますが、助っ人依頼機能は正常に動作します。
+- **Discord通知は依頼作成時のみ送信されます**（受諾時の通知は送信されません）。
 
 #### 📊 使用フロー
 
@@ -846,7 +847,6 @@ DISCORD_HELPER_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_URL
 3. 「この依頼を受諾する」ボタンをクリック
 4. 自分（または他のTutor）を選択
 5. 「確定する」ボタンで受諾
-6. → Discord通知が自動送信される
 
 **管理側:**
 - 助っ人待ちページで全体状況を確認

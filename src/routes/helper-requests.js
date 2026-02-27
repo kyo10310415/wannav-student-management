@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
-import { notifyHelperRequestCreated, notifyHelperRequestAccepted, notifyHelperRequestsRescheduled } from '../services/helperNotificationService.js';
+import { notifyHelperRequestCreated, notifyHelperRequestsRescheduled } from '../services/helperNotificationService.js';
 
 const app = new Hono();
 
@@ -123,8 +123,7 @@ app.post('/:id/accept', async (c) => {
       WHERE employee_id = $1
     `, [tutor_id]);
     
-    // Send Discord notification
-    await notifyHelperRequestAccepted(result.rows[0]);
+    // Note: Discord notification for acceptance removed as per user request
     
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
