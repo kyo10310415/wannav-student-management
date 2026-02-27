@@ -1318,11 +1318,13 @@ function renderTutorsPage() {
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">従業員ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">メールアドレス</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">所属チーム</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">アクティブ生徒数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">生徒数上限</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">残り受入可能数</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">助っ人依頼</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">助っ人受諾</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リスケ回数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率</th>
@@ -1545,7 +1547,7 @@ function renderTutorRows() {
   if (filteredTutors.length === 0) {
     return `
       <tr>
-        <td colspan="12" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="14" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>アクティブなTutorが見つかりません</p>
         </td>
@@ -1660,7 +1662,6 @@ function renderTutorRows() {
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.tutor_name || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.email || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${activeStudentCount}名</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
@@ -1674,6 +1675,9 @@ function renderTutorRows() {
           />
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">${remainingCapacity}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-orange-600">${tutor.helper_request_count || 0}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${tutor.helper_accepted_count || 0}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-red-600">${tutor.reschedule_count || 0}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">${progressCircle}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <span class="font-semibold ${satisfactionColor}">${satisfactionAverage}</span>
@@ -3182,9 +3186,14 @@ function renderHelperRequestsList() {
           <a href="${request.notion_url}" target="_blank" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
             <i class="fas fa-external-link-alt mr-2"></i>Notionで開く
           </a>
-          ${request.status === 'pending' ? `
+          ${request.status === 'pending' && !isExpired ? `
           <button onclick="acceptHelperRequest(${request.id})" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
             <i class="fas fa-check mr-2"></i>この依頼を受諾する
+          </button>
+          ` : ''}
+          ${request.status === 'pending' && isExpired ? `
+          <button disabled class="px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed text-sm">
+            <i class="fas fa-times mr-2"></i>期限切れのため受諾不可
           </button>
           ` : ''}
           <button onclick="deleteHelperRequest(${request.id})" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">

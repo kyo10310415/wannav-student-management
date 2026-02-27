@@ -100,6 +100,24 @@ app.post('/:id/accept', async (c) => {
     const { id } = c.req.param();
     const { tutor_id, tutor_name } = await c.req.json();
     
+    // Check if request exists and is not expired
+    const checkResult = await query(`
+      SELECT * FROM helper_requests 
+      WHERE id = $1 AND status = 'pending'
+    `, [id]);
+    
+    if (checkResult.rows.length === 0) {
+      return c.json({ success: false, error: 'Request not found or already processed' }, 404);
+    }
+    
+    const request = checkResult.rows[0];
+    const deadline = new Date(request.deadline);
+    const now = new Date();
+    
+    if (deadline < now) {
+      return c.json({ success: false, error: 'この依頼は期限切れのため受諾できません' }, 400);
+    }
+    
     // Update request status
     const result = await query(`
       UPDATE helper_requests

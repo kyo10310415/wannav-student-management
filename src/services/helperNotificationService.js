@@ -16,10 +16,19 @@ export async function notifyHelperRequestCreated(request) {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-      weekday: 'short'
+      weekday: 'short',
+      timeZone: 'Asia/Tokyo'
     });
 
-    const deadline = new Date(request.deadline).toLocaleString('ja-JP');
+    const deadline = new Date(request.deadline).toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
     
     // Format lesson time as "17時～"
     let lessonTimeFormatted = '未設定';
@@ -210,7 +219,15 @@ export async function notifyHelperRequestsRescheduled(requests) {
       description: `${requests.length}件の依頼が期限切れによりリスケジュールされました。\n\n[助っ人待ち一覧を開く](${helpersPageUrl}/#helpers)`,
       fields: requests.slice(0, 10).map(req => ({
         name: `#${req.id} - ${req.student_name}`,
-        value: `依頼Tutor: ${req.requesting_tutor_name}\nレッスン日: ${new Date(req.lesson_date).toLocaleDateString('ja-JP')}\n期限: ${new Date(req.deadline).toLocaleString('ja-JP')}`,
+        value: `依頼Tutor: ${req.requesting_tutor_name}\nレッスン日: ${new Date(req.lesson_date).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n期限: ${new Date(req.deadline).toLocaleString('ja-JP', { 
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })}`,
         inline: false
       })),
       footer: {

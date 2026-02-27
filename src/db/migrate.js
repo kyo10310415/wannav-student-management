@@ -89,6 +89,20 @@ const migrations = [
       DROP INDEX IF EXISTS idx_tutors_tutor_name;
       ALTER TABLE tutors DROP COLUMN IF EXISTS tutor_name;
     `
+  },
+  {
+    version: 6,
+    name: 'add_helper_counters_to_tutors',
+    up: `
+      ALTER TABLE tutors ADD COLUMN IF NOT EXISTS helper_request_count INTEGER DEFAULT 0;
+      ALTER TABLE tutors ADD COLUMN IF NOT EXISTS helper_accepted_count INTEGER DEFAULT 0;
+      ALTER TABLE tutors ADD COLUMN IF NOT EXISTS reschedule_count INTEGER DEFAULT 0;
+    `,
+    down: `
+      ALTER TABLE tutors DROP COLUMN IF EXISTS helper_request_count;
+      ALTER TABLE tutors DROP COLUMN IF EXISTS helper_accepted_count;
+      ALTER TABLE tutors DROP COLUMN IF EXISTS reschedule_count;
+    `
   }
 ];
 
