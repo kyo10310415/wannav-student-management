@@ -7,6 +7,7 @@ let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
+let lessonsData = {}; // student_id -> [lesson objects with time info]
 let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
 let selectedTutor = 'all';
@@ -2527,6 +2528,9 @@ async function loadLessonsForDate() {
       if (!lessonDates[lesson.student_id]) {
         lessonDates[lesson.student_id] = [];
       }
+      if (!lessonsData[lesson.student_id]) {
+        lessonsData[lesson.student_id] = [];
+      }
       
       // Parse UTC date from database
       const dateStr = lesson.lesson_date.split('T')[0];
@@ -2539,6 +2543,16 @@ async function loadLessonsForDate() {
         lessonDates[lesson.student_id].push({
           date: new Date(lesson.lesson_date),
           formatted: formatted
+        });
+        
+        // Store full lesson data with time info
+        lessonsData[lesson.student_id].push({
+          lesson_date: lesson.lesson_date,
+          formatted: formatted,
+          student_id: lesson.student_id,
+          tutor_name: lesson.tutor_name,
+          title: lesson.title,
+          meet_link: lesson.meet_link
         });
       }
     });
@@ -2655,6 +2669,26 @@ function selectLesson(studentId) {
   
   helperRequestData.selectedLesson = student;
   
+  // Extract lesson time from lessonsData
+  const [year, month, day] = helperRequestData.selectedDate.split('-');
+  const formattedSelectedDate = `${parseInt(month)}/${parseInt(day)}`;
+  
+  const studentLessons = lessonsData[studentId] || [];
+  const lessonOnDate = studentLessons.find(lesson => lesson.formatted === formattedSelectedDate);
+  
+  if (lessonOnDate && lessonOnDate.lesson_date) {
+    // Extract time from lesson_date (format: 2026-02-08T17:00:00.000Z)
+    const lessonDateTime = new Date(lessonOnDate.lesson_date);
+    const hours = lessonDateTime.getHours();
+    const minutes = lessonDateTime.getMinutes();
+    
+    // Format as HH:MM
+    const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    helperRequestData.autoExtractedTime = timeString;
+  } else {
+    helperRequestData.autoExtractedTime = null;
+  }
+  
   // Show form input modal
   showHelperRequestForm();
 }
@@ -2739,6 +2773,16 @@ function showHelperRequestForm() {
       </div>
     </div>
   `;
+  
+  // Auto-fill lesson time if available
+  if (helperRequestData.autoExtractedTime) {
+    setTimeout(() => {
+      const timeInput = document.getElementById('helper-lesson-time-input');
+      if (timeInput) {
+        timeInput.value = helperRequestData.autoExtractedTime;
+      }
+    }, 100);
+  }
 }
 
 // Show confirmation screen (Step 3: Confirmation)
@@ -2769,6 +2813,10 @@ function showHelperRequestConfirmation() {
   helperRequestData.notes = notes;
   helperRequestData.deadline = deadline;
   
+  // Format lesson time as "17時～"
+  const [hours, minutes] = lessonTime.split(':');
+  const formattedTime = `${parseInt(hours)}時～`;
+  
   const student = helperRequestData.selectedLesson;
   const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
   const formattedDeadline = new Date(deadline).toLocaleString('ja-JP');
@@ -2795,7 +2843,7 @@ function showHelperRequestConfirmation() {
             </div>
             <div>
               <p class="text-sm text-gray-600">レッスン時間</p>
-              <p class="font-semibold">${lessonTime}</p>
+              <p class="font-semibold">${formattedTime}</p>
             </div>
           </div>
           
@@ -3111,7 +3159,10 @@ function renderHelperRequestsList() {
           <div>
             <div class="text-sm text-gray-600 mb-1">レッスン情報</div>
             <div class="font-semibold text-gray-800">${lessonDate}</div>
-            <div class="text-sm text-gray-600">時間: ${request.lesson_time || '未設定'}</div>
+            <div class="text-sm text-gray-600">時間: ${request.lesson_time ? (() => {
+              const [h, m] = request.lesson_time.split(':');
+              return `${parseInt(h)}時～`;
+            })() : '未設定'}</div>
           </div>
           <div>
             <div class="text-sm text-gray-600 mb-1">生徒情報</div>
