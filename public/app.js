@@ -10,6 +10,7 @@ let lessonDates = {}; // student_id -> [dates]
 let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
 let selectedTutor = 'all';
+let reservationCountFilter = 'all'; // 'all', 'above2', 'below2'
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
@@ -282,7 +283,7 @@ function renderReservationsPage() {
   content.innerHTML = `
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Month Navigation -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
@@ -311,6 +312,19 @@ function renderReservationsPage() {
           <select id="tutor-filter-reservations" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
             <option value="all">すべてのTutor</option>
             ${getTutorOptions()}
+          </select>
+        </div>
+
+        <!-- Reservation Count Filter -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-calendar-check mr-2"></i>
+            予約回数絞り込み
+          </label>
+          <select id="reservation-count-filter" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="all">すべて</option>
+            <option value="above2">2回以上</option>
+            <option value="below2">2回未満</option>
           </select>
         </div>
       </div>
@@ -400,6 +414,16 @@ function renderReservationsPage() {
     tutorSelect.value = selectedTutor;
     tutorSelect.addEventListener('change', async (e) => {
       await filterByTutor(e.target.value);
+    });
+  }
+  
+  // Set reservation count filter and add event listener
+  const reservationCountSelect = document.getElementById('reservation-count-filter');
+  if (reservationCountSelect) {
+    reservationCountSelect.value = reservationCountFilter;
+    reservationCountSelect.addEventListener('change', (e) => {
+      reservationCountFilter = e.target.value;
+      renderReservationsPage();
     });
   }
 }
@@ -608,6 +632,19 @@ function getFilteredStudents() {
   // Filter by tutor
   if (selectedTutor !== 'all') {
     filtered = filtered.filter(s => s.homeroom_tutor === selectedTutor);
+  }
+  
+  // Filter by reservation count (only for reservations page)
+  if (currentPage === 'reservations' && reservationCountFilter !== 'all') {
+    filtered = filtered.filter(s => {
+      const lessonCount = lessonStats[s.student_id] || 0;
+      if (reservationCountFilter === 'above2') {
+        return lessonCount >= 2;
+      } else if (reservationCountFilter === 'below2') {
+        return lessonCount < 2;
+      }
+      return true;
+    });
   }
   
   // Apply column filters (only on students page)
@@ -1658,6 +1695,20 @@ function renderTutorRows() {
         ></div>`
       : `<div class="w-8 h-8 rounded-full bg-gray-200 mx-auto" title="データなし"></div>`;
     
+    // カウンター色を計算（助っ人依頼とリスケ回数）
+    const getCounterColor = (count) => {
+      if (count >= 10) return 'text-red-600';
+      if (count >= 5) return 'text-orange-600';
+      return 'text-gray-900';
+    };
+    
+    const helperRequestCount = tutor.helper_request_count || 0;
+    const helperAcceptedCount = tutor.helper_accepted_count || 0;
+    const rescheduleCount = tutor.reschedule_count || 0;
+    
+    const requestColor = getCounterColor(helperRequestCount);
+    const rescheduleColor = getCounterColor(rescheduleCount);
+    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
@@ -1675,9 +1726,9 @@ function renderTutorRows() {
           />
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">${remainingCapacity}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-orange-600">${tutor.helper_request_count || 0}回</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${tutor.helper_accepted_count || 0}回</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-red-600">${tutor.reschedule_count || 0}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold ${requestColor}">${helperRequestCount}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-gray-900">${helperAcceptedCount}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold ${rescheduleColor}">${rescheduleCount}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">${progressCircle}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <span class="font-semibold ${satisfactionColor}">${satisfactionAverage}</span>
