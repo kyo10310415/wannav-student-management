@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
-import { notifyHelperRequestCreated, notifyHelperRequestsRescheduled } from '../services/helperNotificationService.js';
+import { notifyHelperRequestCreated } from '../services/helperNotificationService.js';
 
 const app = new Hono();
 
@@ -179,8 +179,7 @@ app.post('/check-expired', async (c) => {
       `, [request.requesting_tutor_id]);
     }
     
-    // Send Discord notification
-    await notifyHelperRequestsRescheduled(expiredResult.rows);
+    // Note: Discord notification for expired requests removed as per user request
     
     return c.json({ 
       success: true, 
