@@ -4636,7 +4636,11 @@ async function handleChangePassword(e, isFirstTime) {
     if (response.data.success) {
       alert('パスワードを変更しました');
       currentUser.mustChangePassword = false;
-      renderApp();
+      
+      // Reload app with header and data
+      renderHeader();
+      await loadInitialData();
+      await renderApp();
     } else {
       errorDiv.textContent = response.data.error || 'パスワード変更に失敗しました';
       errorDiv.classList.remove('hidden');
