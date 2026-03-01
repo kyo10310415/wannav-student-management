@@ -17,6 +17,14 @@ let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for ac
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules'
 let schedules = []; // Tutor schedules data
 
+// Schedule filters
+let selectedScheduleYear = new Date().getFullYear();
+let selectedScheduleMonth = new Date().getMonth() + 1; // 1-12
+let selectedKeyword = 'all'; // all, ロープレ, 1on1, チームMTG, チーム研修
+let selectedDateRange = 'all'; // all, this_week, next_week, this_month, next_month
+let selectedLeader = 'all'; // all or tutor_name
+let scheduleViewMode = 'list'; // list or calendar
+
 // Column filters and sort state for student management page
 let columnFilters = {}; // { columnName: selectedValue }
 let sortColumn = null; // Current sort column name
@@ -3429,10 +3437,65 @@ function renderSchedulesContent() {
   content.innerHTML = `
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div class="flex gap-2">
-        <button onclick="renderSchedulesPage()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-          <i class="fas fa-sync-alt mr-2"></i>データ更新
-        </button>
+      <div class="flex flex-col gap-4">
+        <!-- Top row: Month navigation -->
+        <div class="flex items-center justify-between">
+          <button onclick="changeScheduleMonth(-1)" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+            <i class="fas fa-chevron-left mr-2"></i>前月
+          </button>
+          <h2 class="text-2xl font-bold text-gray-800">
+            ${selectedScheduleYear}年${selectedScheduleMonth}月
+          </h2>
+          <button onclick="changeScheduleMonth(1)" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+            来月<i class="fas fa-chevron-right ml-2"></i>
+          </button>
+        </div>
+        
+        <!-- Second row: Filters -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <!-- Keyword filter -->
+          <select id="keyword-filter" onchange="handleKeywordFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            <option value="all">すべてのキーワード</option>
+            <option value="ロープレ">ロープレ</option>
+            <option value="1on1">1on1</option>
+            <option value="チームMTG">チームMTG</option>
+            <option value="チーム研修">チーム研修</option>
+          </select>
+          
+          <!-- Date range filter -->
+          <select id="date-range-filter" onchange="handleDateRangeFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            <option value="all">すべての日付</option>
+            <option value="this_week">今週</option>
+            <option value="next_week">来週</option>
+            <option value="this_month">今月</option>
+            <option value="next_month">来月</option>
+          </select>
+          
+          <!-- Leader filter -->
+          <select id="leader-filter" onchange="handleLeaderFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            ${renderLeaderFilterOptions()}
+          </select>
+          
+          <!-- View mode toggle -->
+          <div class="flex gap-2">
+            <button onclick="toggleScheduleViewMode('list')" class="flex-1 px-3 py-2 ${scheduleViewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} rounded-lg hover:opacity-80 transition">
+              <i class="fas fa-list mr-1"></i>リスト
+            </button>
+            <button onclick="toggleScheduleViewMode('calendar')" class="flex-1 px-3 py-2 ${scheduleViewMode === 'calendar' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} rounded-lg hover:opacity-80 transition">
+              <i class="fas fa-calendar mr-1"></i>カレンダー
+            </button>
+          </div>
+        </div>
+        
+        <!-- Third row: Actions -->
+        <div class="flex gap-2">
+          <button onclick="renderSchedulesPage()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+            <i class="fas fa-sync-alt mr-2"></i>データ更新
+          </button>
+          <button onclick="clearScheduleFilters()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">
+            <i class="fas fa-times mr-2"></i>フィルタークリア
+          </button>
+        </div>
       </div>
     </div>
 
@@ -3446,24 +3509,30 @@ function renderSchedulesContent() {
       </div>
     </div>
 
-    <!-- Schedules List -->
+    <!-- Schedules List or Calendar -->
     <div class="bg-white rounded-lg shadow-md p-6">
+      ${scheduleViewMode === 'list' ? renderSchedulesList() : renderSchedulesCalendar()}
+    </div>
+    
+    <!-- Attendance Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6 mt-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
-        <i class="fas fa-calendar-check mr-2"></i>スケジュール一覧
+        <i class="fas fa-user-check mr-2"></i>参加者別出席回数統計
       </h2>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">リーダー名</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">スケジュール名</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参加者</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ロープレ</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">1on1</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チームMTG</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チーム研修</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合計</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            ${renderScheduleRows()}
+            ${renderAttendanceStatistics()}
           </tbody>
         </table>
       </div>
@@ -3475,11 +3544,13 @@ function renderSchedulesContent() {
  * Render schedule statistics
  */
 function renderScheduleStatistics() {
-  const total = schedules.length;
+  // Get filtered schedules
+  const filteredSchedules = getFilteredSchedules();
+  const total = filteredSchedules.length;
   
   // Count by keyword
   const keywords = {};
-  schedules.forEach(schedule => {
+  filteredSchedules.forEach(schedule => {
     const keyword = schedule.matched_keyword || '不明';
     keywords[keyword] = (keywords[keyword] || 0) + 1;
   });
@@ -3515,39 +3586,6 @@ function renderScheduleStatistics() {
   return statsHtml;
 }
 
-/**
- * Render schedule rows
- */
-function renderScheduleRows() {
-  if (schedules.length === 0) {
-    return `
-      <tr>
-        <td colspan="5" class="px-6 py-8 text-center text-gray-500">
-          <i class="fas fa-inbox text-4xl mb-2"></i>
-          <p>スケジュールが見つかりません</p>
-        </td>
-      </tr>
-    `;
-  }
-  
-  // Sort by date (ascending)
-  const sortedSchedules = [...schedules].sort((a, b) => {
-    if (!a.start_time) return 1;
-    if (!b.start_time) return -1;
-    return new Date(a.start_time) - new Date(b.start_time);
-  });
-  
-  return sortedSchedules.map(schedule => {
-    const leaderName = schedule.leader_name || '-';
-    const title = schedule.title || '-';
-    const scheduleDate = schedule.schedule_date || '-';
-    const scheduleTime = schedule.schedule_time || '-';
-    
-    // Attendee names
-    const attendeeNames = schedule.attendee_names && schedule.attendee_names.length > 0
-      ? schedule.attendee_names.join(', ')
-      : '-';
-    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${leaderName}</td>
@@ -3559,4 +3597,368 @@ function renderScheduleRows() {
     `;
   }).join('');
 }
+
+// ==================== Schedule Filter & Navigation Functions ====================
+
+/**
+ * Change schedule month
+ */
+function changeScheduleMonth(offset) {
+  selectedScheduleMonth += offset;
+  if (selectedScheduleMonth > 12) {
+    selectedScheduleMonth = 1;
+    selectedScheduleYear++;
+  } else if (selectedScheduleMonth < 1) {
+    selectedScheduleMonth = 12;
+    selectedScheduleYear--;
+  }
+  renderSchedulesContent();
+}
+
+/**
+ * Handle keyword filter change
+ */
+function handleKeywordFilterChange(value) {
+  selectedKeyword = value;
+  renderSchedulesContent();
+}
+
+/**
+ * Handle date range filter change
+ */
+function handleDateRangeFilterChange(value) {
+  selectedDateRange = value;
+  renderSchedulesContent();
+}
+
+/**
+ * Handle leader filter change
+ */
+function handleLeaderFilterChange(value) {
+  selectedLeader = value;
+  renderSchedulesContent();
+}
+
+/**
+ * Toggle schedule view mode
+ */
+function toggleScheduleViewMode(mode) {
+  scheduleViewMode = mode;
+  renderSchedulesContent();
+}
+
+/**
+ * Clear all schedule filters
+ */
+function clearScheduleFilters() {
+  selectedKeyword = 'all';
+  selectedDateRange = 'all';
+  selectedLeader = 'all';
+  renderSchedulesContent();
+}
+
+/**
+ * Render leader filter options
+ */
+function renderLeaderFilterOptions() {
+  // Get unique leaders from schedules
+  const leaders = [...new Set(schedules.map(s => s.leader_name).filter(Boolean))];
+  leaders.sort();
+  
+  let html = '<option value="all">すべてのリーダー</option>';
+  leaders.forEach(leader => {
+    html += `<option value="${leader}">${leader}</option>`;
+  });
+  
+  return html;
+}
+
+/**
+ * Get filtered schedules based on current filters
+ */
+function getFilteredSchedules() {
+  return schedules.filter(schedule => {
+    // Month filter (always applied)
+    const scheduleDate = new Date(schedule.start_time);
+    const scheduleYear = scheduleDate.getFullYear();
+    const scheduleMonth = scheduleDate.getMonth() + 1;
+    
+    if (scheduleYear !== selectedScheduleYear || scheduleMonth !== selectedScheduleMonth) {
+      return false;
+    }
+    
+    // Keyword filter
+    if (selectedKeyword !== 'all' && schedule.matched_keyword !== selectedKeyword) {
+      return false;
+    }
+    
+    // Date range filter
+    if (selectedDateRange !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const scheduleDay = new Date(scheduleYear, scheduleMonth - 1, scheduleDate.getDate());
+      
+      const dayOfWeek = today.getDay();
+      const thisWeekStart = new Date(today);
+      thisWeekStart.setDate(today.getDate() - dayOfWeek);
+      const thisWeekEnd = new Date(thisWeekStart);
+      thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+      
+      const nextWeekStart = new Date(thisWeekStart);
+      nextWeekStart.setDate(thisWeekStart.getDate() + 7);
+      const nextWeekEnd = new Date(nextWeekStart);
+      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+      
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+      
+      switch(selectedDateRange) {
+        case 'this_week':
+          if (scheduleDay < thisWeekStart || scheduleDay > thisWeekEnd) return false;
+          break;
+        case 'next_week':
+          if (scheduleDay < nextWeekStart || scheduleDay > nextWeekEnd) return false;
+          break;
+        case 'this_month':
+          if (scheduleDay < thisMonthStart || scheduleDay > thisMonthEnd) return false;
+          break;
+        case 'next_month':
+          if (scheduleDay < nextMonthStart || scheduleDay > nextMonthEnd) return false;
+          break;
+      }
+    }
+    
+    // Leader filter
+    if (selectedLeader !== 'all' && schedule.leader_name !== selectedLeader) {
+      return false;
+    }
+    
+    return true;
+  });
+}
+
+/**
+ * Render schedules list view
+ */
+function renderSchedulesList() {
+  const filteredSchedules = getFilteredSchedules();
+  
+  if (filteredSchedules.length === 0) {
+    return `
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-calendar-check mr-2"></i>スケジュール一覧
+      </h2>
+      <div class="text-center py-8">
+        <i class="fas fa-inbox text-4xl text-gray-400 mb-2"></i>
+        <p class="text-gray-500">表示するスケジュールがありません</p>
+      </div>
+    `;
+  }
+  
+  // Sort by date (ascending)
+  const sortedSchedules = [...filteredSchedules].sort((a, b) => {
+    if (!a.start_time) return 1;
+    if (!b.start_time) return -1;
+    return new Date(a.start_time) - new Date(b.start_time);
+  });
+  
+  return `
+    <h2 class="text-xl font-bold text-gray-800 mb-4">
+      <i class="fas fa-calendar-check mr-2"></i>スケジュール一覧 (${filteredSchedules.length}件)
+    </h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キーワード</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">リーダー名</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">スケジュール名</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参加者</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          ${sortedSchedules.map(schedule => {
+            const keyword = schedule.matched_keyword || '-';
+            const leaderName = schedule.leader_name || '-';
+            const title = schedule.title || '-';
+            const scheduleDate = schedule.schedule_date || '-';
+            const scheduleTime = schedule.schedule_time || '-';
+            const attendeeNames = schedule.attendee_names && schedule.attendee_names.length > 0
+              ? schedule.attendee_names.join(', ')
+              : '-';
+            
+            // Keyword badge colors
+            const keywordColors = {
+              'ロープレ': 'bg-blue-100 text-blue-800',
+              '1on1': 'bg-green-100 text-green-800',
+              'チームMTG': 'bg-orange-100 text-orange-800',
+              'チーム研修': 'bg-purple-100 text-purple-800'
+            };
+            const colorClass = keywordColors[keyword] || 'bg-gray-100 text-gray-800';
+            
+            return `
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <span class="px-2 py-1 text-xs font-semibold rounded-full ${colorClass}">
+                    ${keyword}
+                  </span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${leaderName}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">${title}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleDate}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleTime}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${attendeeNames}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/**
+ * Render schedules calendar view
+ */
+function renderSchedulesCalendar() {
+  const filteredSchedules = getFilteredSchedules();
+  
+  // Get days in selected month
+  const firstDay = new Date(selectedScheduleYear, selectedScheduleMonth - 1, 1);
+  const lastDay = new Date(selectedScheduleYear, selectedScheduleMonth, 0);
+  const daysInMonth = lastDay.getDate();
+  const startDayOfWeek = firstDay.getDay();
+  
+  // Create calendar grid
+  const calendar = [];
+  for (let i = 0; i < daysInMonth; i++) {
+    calendar.push({
+      day: i + 1,
+      schedules: filteredSchedules.filter(s => {
+        const scheduleDate = new Date(s.start_time);
+        return scheduleDate.getDate() === (i + 1);
+      })
+    });
+  }
+  
+  return `
+    <h2 class="text-xl font-bold text-gray-800 mb-4">
+      <i class="fas fa-calendar-alt mr-2"></i>カレンダー表示
+    </h2>
+    <div class="grid grid-cols-7 gap-2">
+      <!-- Day headers -->
+      <div class="text-center font-semibold text-sm text-red-600 p-2">日</div>
+      <div class="text-center font-semibold text-sm text-gray-700 p-2">月</div>
+      <div class="text-center font-semibold text-sm text-gray-700 p-2">火</div>
+      <div class="text-center font-semibold text-sm text-gray-700 p-2">水</div>
+      <div class="text-center font-semibold text-sm text-gray-700 p-2">木</div>
+      <div class="text-center font-semibold text-sm text-gray-700 p-2">金</div>
+      <div class="text-center font-semibold text-sm text-blue-600 p-2">土</div>
+      
+      <!-- Empty cells before first day -->
+      ${Array(startDayOfWeek).fill(0).map(() => '<div class="border border-gray-200 bg-gray-50 min-h-24"></div>').join('')}
+      
+      <!-- Calendar days -->
+      ${calendar.map(dayData => {
+        const dayOfWeek = (startDayOfWeek + dayData.day - 1) % 7;
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const bgColor = isWeekend ? 'bg-blue-50' : 'bg-white';
+        
+        return `
+          <div class="border border-gray-300 ${bgColor} min-h-24 p-2">
+            <div class="text-sm font-semibold mb-1 ${dayOfWeek === 0 ? 'text-red-600' : dayOfWeek === 6 ? 'text-blue-600' : 'text-gray-700'}">
+              ${dayData.day}
+            </div>
+            <div class="space-y-1">
+              ${dayData.schedules.map(schedule => {
+                const keyword = schedule.matched_keyword || '';
+                const time = schedule.schedule_time || '';
+                const keywordColors = {
+                  'ロープレ': 'bg-blue-200 border-blue-400',
+                  '1on1': 'bg-green-200 border-green-400',
+                  'チームMTG': 'bg-orange-200 border-orange-400',
+                  'チーム研修': 'bg-purple-200 border-purple-400'
+                };
+                const colorClass = keywordColors[keyword] || 'bg-gray-200 border-gray-400';
+                
+                return `
+                  <div class="text-xs p-1 rounded border ${colorClass} truncate" title="${schedule.title || ''}">
+                    <div class="font-semibold">${time}</div>
+                    <div>${keyword}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+/**
+ * Render attendance statistics
+ */
+function renderAttendanceStatistics() {
+  // Get filtered schedules
+  const filteredSchedules = getFilteredSchedules();
+  
+  // Count attendance by tutor and keyword
+  const attendanceMap = {};
+  
+  filteredSchedules.forEach(schedule => {
+    const keyword = schedule.matched_keyword || '不明';
+    const attendees = schedule.attendee_names || [];
+    
+    attendees.forEach(attendeeName => {
+      if (!attendanceMap[attendeeName]) {
+        attendanceMap[attendeeName] = {
+          'ロープレ': 0,
+          '1on1': 0,
+          'チームMTG': 0,
+          'チーム研修': 0,
+          total: 0
+        };
+      }
+      
+      if (attendanceMap[attendeeName][keyword] !== undefined) {
+        attendanceMap[attendeeName][keyword]++;
+      }
+      attendanceMap[attendeeName].total++;
+    });
+  });
+  
+  // Sort by total attendance (descending)
+  const sortedAttendees = Object.entries(attendanceMap).sort((a, b) => b[1].total - a[1].total);
+  
+  if (sortedAttendees.length === 0) {
+    return `
+      <tr>
+        <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+          <i class="fas fa-inbox text-4xl mb-2"></i>
+          <p>参加者データがありません</p>
+        </td>
+      </tr>
+    `;
+  }
+  
+  return sortedAttendees.map(([name, counts]) => {
+    return `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${name}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['ロープレ']}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['1on1']}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['チームMTG']}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['チーム研修']}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-blue-600">${counts.total}回</td>
+      </tr>
+    `;
+  }).join('');
+}
+
 
