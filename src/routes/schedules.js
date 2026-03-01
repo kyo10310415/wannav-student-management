@@ -60,4 +60,102 @@ app.get('/', async (c) => {
   }
 });
 
+/**
+ * Submit absence request
+ */
+app.post('/absence', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { 
+      event_id, 
+      absence_type, 
+      reason, 
+      schedule_date, 
+      schedule_time, 
+      schedule_title, 
+      matched_keyword 
+    } = body;
+    
+    // Validation
+    if (!event_id || !absence_type || !reason) {
+      return c.json({
+        success: false,
+        error: '必須項目が不足しています'
+      }, 400);
+    }
+    
+    if (!['cancel', 'reschedule'].includes(absence_type)) {
+      return c.json({
+        success: false,
+        error: '不正な種別です'
+      }, 400);
+    }
+    
+    // Get current user email from session (placeholder - implement auth later)
+    // For now, use a default email
+    const tutorEmail = 'default@example.com'; // TODO: Get from auth session
+    const tutorName = 'Unknown Tutor'; // TODO: Get from tutors table
+    
+    // Extract year and month from schedule_date
+    let year = new Date().getFullYear();
+    let month = new Date().getMonth() + 1;
+    
+    if (schedule_date) {
+      const dateParts = schedule_date.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+      if (dateParts) {
+        year = parseInt(dateParts[1]);
+        month = parseInt(dateParts[2]);
+      }
+    }
+    
+    // Insert absence request
+    const insertQuery = `
+      INSERT INTO absence_requests 
+      (event_id, tutor_email, tutor_name, absence_type, reason, year, month, 
+       schedule_date, schedule_time, schedule_title, matched_keyword)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING id
+    `;
+    
+    const result = await query(insertQuery, [
+      event_id,
+      tutorEmail,
+      tutorName,
+      absence_type,
+      reason,
+      year,
+      month,
+      schedule_date,
+      schedule_time,
+      schedule_title,
+      matched_keyword
+    ]);
+    
+    // Update tutor counters
+    const counterColumn = absence_type === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
+    const updateQuery = `
+      UPDATE tutors 
+      SET ${counterColumn} = ${counterColumn} + 1
+      WHERE email = $1
+    `;
+    await query(updateQuery, [tutorEmail]);
+    
+    return c.json({
+      success: true,
+      data: {
+        id: result.rows[0].id,
+        absence_type,
+        message: '不参加申請を受け付けました'
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error creating absence request:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

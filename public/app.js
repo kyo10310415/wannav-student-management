@@ -3814,6 +3814,7 @@ function renderSchedulesList() {
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参加者</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">アクション</th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -3836,6 +3837,9 @@ function renderSchedulesList() {
             };
             const colorClass = keywordColors[keyword] || 'bg-gray-100 text-gray-800';
             
+            // Convert schedule object to JSON string for onclick (escape quotes)
+            const scheduleJson = JSON.stringify(schedule).replace(/"/g, '&quot;');
+            
             return `
               <tr class="hover:bg-gray-50">
                 <td class="px-4 py-3 whitespace-nowrap">
@@ -3848,6 +3852,14 @@ function renderSchedulesList() {
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleDate}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleTime}</td>
                 <td class="px-4 py-3 text-sm text-gray-600">${attendeeNames}</td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <button 
+                    onclick='openAbsenceRequestModal(${scheduleJson})' 
+                    class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+                  >
+                    <i class="fas fa-calendar-times mr-1"></i>不参加申請
+                  </button>
+                </td>
               </tr>
             `;
           }).join('')}
@@ -3997,3 +4009,177 @@ function renderAttendanceStatistics() {
 }
 
 
+
+// ==================== Absence Request Modal ====================
+
+let selectedScheduleForAbsence = null;
+
+/**
+ * Open absence request modal
+ */
+function openAbsenceRequestModal(schedule) {
+  selectedScheduleForAbsence = schedule;
+  
+  const modal = document.createElement('div');
+  modal.id = 'absence-request-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-calendar-times mr-2 text-red-600"></i>不参加申請
+        </h2>
+        <button onclick="closeAbsenceRequestModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      
+      <div class="p-6">
+        <!-- Schedule info -->
+        <div class="bg-gray-50 rounded-lg p-4 mb-4">
+          <div class="text-sm text-gray-600 mb-1">スケジュール詳細</div>
+          <div class="font-semibold text-gray-900">${schedule.title || '（タイトルなし）'}</div>
+          <div class="text-sm text-gray-600 mt-2">
+            <i class="fas fa-calendar mr-1"></i>${schedule.schedule_date} ${schedule.schedule_time}
+          </div>
+          <div class="text-sm text-gray-600 mt-1">
+            <i class="fas fa-tag mr-1"></i>${schedule.matched_keyword || '-'}
+          </div>
+        </div>
+        
+        <!-- Absence type selection -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            不参加の種別<span class="text-red-500 ml-1">*</span>
+          </label>
+          <div class="space-y-2">
+            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+              <input type="radio" name="absence-type" value="cancel" class="mr-3" checked>
+              <div>
+                <div class="font-semibold text-gray-900">キャンセル</div>
+                <div class="text-xs text-gray-500">スケジュール自体をキャンセルする</div>
+              </div>
+            </label>
+            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+              <input type="radio" name="absence-type" value="reschedule" class="mr-3">
+              <div>
+                <div class="font-semibold text-gray-900">リスケ</div>
+                <div class="text-xs text-gray-500">日程を変更する</div>
+              </div>
+            </label>
+          </div>
+        </div>
+        
+        <!-- Reason input -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            理由<span class="text-red-500 ml-1">*</span>
+          </label>
+          <textarea 
+            id="absence-reason" 
+            rows="3" 
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="不参加の理由を入力してください"
+          ></textarea>
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex gap-3">
+          <button 
+            onclick="closeAbsenceRequestModal()" 
+            class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+          >
+            キャンセル
+          </button>
+          <button 
+            onclick="submitAbsenceRequest()" 
+            class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+          >
+            <i class="fas fa-paper-plane mr-2"></i>申請する
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+
+/**
+ * Close absence request modal
+ */
+function closeAbsenceRequestModal() {
+  const modal = document.getElementById('absence-request-modal');
+  if (modal) {
+    modal.remove();
+  }
+  selectedScheduleForAbsence = null;
+}
+
+/**
+ * Submit absence request
+ */
+async function submitAbsenceRequest() {
+  if (!selectedScheduleForAbsence) {
+    alert('スケジュールが選択されていません');
+    return;
+  }
+  
+  // Get selected absence type
+  const absenceTypeRadio = document.querySelector('input[name="absence-type"]:checked');
+  if (!absenceTypeRadio) {
+    alert('種別を選択してください');
+    return;
+  }
+  const absenceType = absenceTypeRadio.value;
+  
+  // Get reason
+  const reasonInput = document.getElementById('absence-reason');
+  const reason = reasonInput.value.trim();
+  if (!reason) {
+    alert('理由を入力してください');
+    return;
+  }
+  
+  try {
+    // Show loading state
+    const submitButtons = document.querySelectorAll('#absence-request-modal button');
+    const submitButton = Array.from(submitButtons).find(btn => btn.textContent.includes('申請する'));
+    if (submitButton) {
+      const originalText = submitButton.innerHTML;
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>送信中...';
+    }
+    
+    // Submit request
+    const response = await axios.post(`${API_BASE}/api/schedules/absence`, {
+      event_id: selectedScheduleForAbsence.event_id,
+      absence_type: absenceType,
+      reason: reason,
+      schedule_date: selectedScheduleForAbsence.schedule_date,
+      schedule_time: selectedScheduleForAbsence.schedule_time,
+      schedule_title: selectedScheduleForAbsence.title,
+      matched_keyword: selectedScheduleForAbsence.matched_keyword
+    });
+    
+    if (response.data.success) {
+      alert(`不参加申請が完了しました\n種別: ${absenceType === 'cancel' ? 'キャンセル' : 'リスケ'}`);
+      closeAbsenceRequestModal();
+    } else {
+      alert('申請に失敗しました: ' + (response.data.error || '不明なエラー'));
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>申請する';
+      }
+    }
+  } catch (error) {
+    console.error('Absence request error:', error);
+    alert('申請に失敗しました: ' + error.message);
+    const submitButtons = document.querySelectorAll('#absence-request-modal button');
+    const submitButton = Array.from(submitButtons).find(btn => btn.textContent.includes('送信中'));
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>申請する';
+    }
+  }
+}
