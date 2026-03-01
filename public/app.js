@@ -14,7 +14,8 @@ let reservationCountFilter = 'all'; // 'all', 'above2', 'below2'
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules'
+let schedules = []; // Tutor schedules data
 
 // Column filters and sort state for student management page
 let columnFilters = {}; // { columnName: selectedValue }
@@ -33,6 +34,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'reservations';
   } else if (hash === 'tutors') {
     currentPage = 'tutors';
+  } else if (hash === 'schedules') {
+    currentPage = 'schedules';
   }
   // Default is 'today' (already set)
   
@@ -71,6 +74,9 @@ function renderHeader() {
             </button>
             <button id="nav-helpers" onclick="changePage('helpers')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
+            </button>
+            <button id="nav-schedules" onclick="changePage('schedules')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-calendar-check mr-2"></i>Tutorスケジュール
             </button>
           </nav>
         </div>
@@ -263,6 +269,8 @@ async function renderApp() {
     await renderTodayLessonsPage();
   } else if (currentPage === 'helpers') {
     await renderHelpersPage();
+  } else if (currentPage === 'schedules') {
+    await renderSchedulesPage();
   }
 }
 
@@ -3367,3 +3375,188 @@ async function deleteHelperRequest(requestId) {
     alert('助っ人依頼の削除に失敗しました');
   }
 }
+
+// ========== Tutor Schedules Page ==========
+
+/**
+ * Render Tutor Schedules Page
+ */
+async function renderSchedulesPage() {
+  const content = document.getElementById('content');
+  
+  // Show loading
+  content.innerHTML = `
+    <div class="text-center py-12">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+      <p class="mt-4 text-gray-600">スケジュールを読み込んでいます...</p>
+    </div>
+  `;
+  
+  try {
+    // Fetch schedules from API
+    const res = await axios.get(`${API_BASE}/api/schedules`);
+    
+    if (res.data.success) {
+      schedules = res.data.data;
+      renderSchedulesContent();
+    } else {
+      content.innerHTML = `
+        <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <i class="fas fa-exclamation-circle text-red-600 text-4xl mb-4"></i>
+          <p class="text-red-800 font-semibold">スケジュールの取得に失敗しました</p>
+          <p class="text-red-600 mt-2">${res.data.error || '不明なエラー'}</p>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('スケジュール取得エラー:', error);
+    content.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <i class="fas fa-exclamation-circle text-red-600 text-4xl mb-4"></i>
+        <p class="text-red-800 font-semibold">スケジュールの取得に失敗しました</p>
+        <p class="text-red-600 mt-2">${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Render Schedules Content
+ */
+function renderSchedulesContent() {
+  const content = document.getElementById('content');
+  
+  content.innerHTML = `
+    <!-- Controls -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="flex gap-2">
+        <button onclick="renderSchedulesPage()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+          <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+      </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-chart-bar mr-2"></i>統計情報
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        ${renderScheduleStatistics()}
+      </div>
+    </div>
+
+    <!-- Schedules List -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">
+        <i class="fas fa-calendar-check mr-2"></i>スケジュール一覧
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">リーダー名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">スケジュール名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参加者</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${renderScheduleRows()}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render schedule statistics
+ */
+function renderScheduleStatistics() {
+  const total = schedules.length;
+  
+  // Count by keyword
+  const keywords = {};
+  schedules.forEach(schedule => {
+    const keyword = schedule.matched_keyword || '不明';
+    keywords[keyword] = (keywords[keyword] || 0) + 1;
+  });
+  
+  // Sort by count
+  const sortedKeywords = Object.entries(keywords).sort((a, b) => b[1] - a[1]);
+  
+  // Total stats
+  let statsHtml = `
+    <div class="bg-blue-50 p-4 rounded-lg">
+      <div class="text-sm text-gray-600 mb-1">総スケジュール数</div>
+      <div class="text-3xl font-bold text-blue-600">${total}件</div>
+    </div>
+  `;
+  
+  // Keyword stats (top 3)
+  sortedKeywords.slice(0, 3).forEach(([keyword, count], index) => {
+    const colors = [
+      { bg: 'bg-green-50', text: 'text-green-600' },
+      { bg: 'bg-orange-50', text: 'text-orange-600' },
+      { bg: 'bg-purple-50', text: 'text-purple-600' }
+    ];
+    const color = colors[index] || colors[0];
+    
+    statsHtml += `
+      <div class="${color.bg} p-4 rounded-lg">
+        <div class="text-sm text-gray-600 mb-1">${keyword}</div>
+        <div class="text-3xl font-bold ${color.text}">${count}件</div>
+      </div>
+    `;
+  });
+  
+  return statsHtml;
+}
+
+/**
+ * Render schedule rows
+ */
+function renderScheduleRows() {
+  if (schedules.length === 0) {
+    return `
+      <tr>
+        <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+          <i class="fas fa-inbox text-4xl mb-2"></i>
+          <p>スケジュールが見つかりません</p>
+        </td>
+      </tr>
+    `;
+  }
+  
+  // Sort by date (ascending)
+  const sortedSchedules = [...schedules].sort((a, b) => {
+    if (!a.start_time) return 1;
+    if (!b.start_time) return -1;
+    return new Date(a.start_time) - new Date(b.start_time);
+  });
+  
+  return sortedSchedules.map(schedule => {
+    const leaderName = schedule.leader_name || '-';
+    const title = schedule.title || '-';
+    const scheduleDate = schedule.schedule_date || '-';
+    const scheduleTime = schedule.schedule_time || '-';
+    
+    // Attendee names
+    const attendeeNames = schedule.attendee_names && schedule.attendee_names.length > 0
+      ? schedule.attendee_names.join(', ')
+      : '-';
+    
+    return `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${leaderName}</td>
+        <td class="px-4 py-3 text-sm text-gray-900">${title}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleDate}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleTime}</td>
+        <td class="px-4 py-3 text-sm text-gray-600">${attendeeNames}</td>
+      </tr>
+    `;
+  }).join('');
+}
+

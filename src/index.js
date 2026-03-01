@@ -18,6 +18,7 @@ import lessonRoutes from './routes/lessons.js';
 import reminderRoutes from './routes/reminders.js';
 import externalRoutes from './routes/external.js';
 import helperRequestRoutes from './routes/helper-requests.js';
+import scheduleRoutes from './routes/schedules.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -45,6 +46,7 @@ app.route('/api/lessons', lessonRoutes);
 app.route('/api/reminders', reminderRoutes);
 app.route('/api/external', externalRoutes);
 app.route('/api/helper-requests', helperRequestRoutes);
+app.route('/api/schedules', scheduleRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {

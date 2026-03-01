@@ -129,3 +129,77 @@ export async function getLastSyncTime(spreadsheetId) {
     return null;
   }
 }
+
+/**
+ * Fetch tutor schedules from Google Sheets (特定イベント一覧)
+ */
+export async function fetchSchedulesFromSheet() {
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID || '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo';
+  const sheetName = '特定イベント一覧';
+  
+  try {
+    const sheets = getSheets();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A2:K`, // A2からK列まで（ヘッダーをスキップ）
+    });
+
+    const rows = response.data.values || [];
+    console.log(`Fetched ${rows.length} rows from ${sheetName}`);
+
+    const schedules = rows.map(row => {
+      // E列（開始日時）をパース
+      let startDate = null;
+      let scheduleDate = null;
+      let scheduleTime = null;
+      
+      if (row[4]) {
+        try {
+          startDate = new Date(row[4]);
+          
+          // 日付部分（YYYY/MM/DD）
+          scheduleDate = startDate.toLocaleDateString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            timeZone: 'Asia/Tokyo'
+          }).replace(/\//g, '/');
+          
+          // 時間部分（HH:MM）
+          scheduleTime = startDate.toLocaleTimeString('ja-JP', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Asia/Tokyo',
+            hour12: false
+          });
+        } catch (error) {
+          console.error('Date parse error:', error);
+        }
+      }
+      
+      return {
+        event_id: row[0] || null,           // A列: イベントID
+        account: row[1] || null,            // B列: アカウント（メールアドレス）
+        matched_keyword: row[2] || null,    // C列: 一致キーワード
+        title: row[3] || null,              // D列: タイトル
+        start_time: startDate,              // E列: 開始日時（Date型）
+        schedule_date: scheduleDate,        // 日付部分（例: 2026/02/02）
+        schedule_time: scheduleTime,        // 時間部分（例: 16:00）
+        end_time: row[5] ? new Date(row[5]) : null, // F列: 終了日時
+        location: row[6] || null,           // G列: 場所
+        description: row[7] || null,        // H列: 説明
+        meet_link: row[8] || null,          // I列: Meetリンク
+        attendees: row[9] || null,          // J列: 参加者
+        fetched_at: row[10] ? new Date(row[10]) : null // K列: 取得日時
+      };
+    });
+
+    console.log(`Valid schedules: ${schedules.length}`);
+    return schedules;
+  } catch (error) {
+    console.error('Error fetching schedules from Google Sheets:', error);
+    throw error;
+  }
+}
+
