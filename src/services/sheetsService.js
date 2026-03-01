@@ -156,18 +156,18 @@ export async function fetchSchedulesFromSheet() {
       
       if (row[4]) {
         try {
-          // Google Sheetsの日時文字列（例: "2026/02/28 23:00:00"）を
+          // Google Sheetsの日時文字列（例: "2026/02/28 23:00" または "2026/02/28 23:00:00"）を
           // JSTとして解釈する
           const dateStr = row[4];
           console.log('[DEBUG] Original date string from Sheets:', dateStr);
           
           // 日時文字列を直接JSTとして解釈
-          // "YYYY/MM/DD HH:MM:SS" 形式を想定
-          const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
+          // "YYYY/MM/DD HH:MM:SS" または "YYYY/MM/DD HH:MM" 形式を想定
+          const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
           
           if (match) {
             const [_, year, month, day, hour, minute, second] = match;
-            console.log('[DEBUG] Parsed components:', { year, month, day, hour, minute, second });
+            console.log('[DEBUG] Parsed components:', { year, month, day, hour, minute, second: second || '0' });
             
             // 日付部分（YYYY/MM/DD）- JSTで表示
             scheduleDate = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
@@ -187,7 +187,7 @@ export async function fetchSchedulesFromSheet() {
               parseInt(day),
               parseInt(hour),
               parseInt(minute),
-              parseInt(second)
+              parseInt(second || '0')
             ));
             
             // JSTオフセットを引く（JSTからUTCへ変換）
@@ -196,25 +196,11 @@ export async function fetchSchedulesFromSheet() {
             console.log('[DEBUG] Stored UTC date:', startDate.toISOString());
           } else {
             console.log('[DEBUG] Date string did not match expected format, using fallback');
-            // フォールバック: 通常のDate解析
+            // フォールバック: 通常のDate解析（使われないはず）
             startDate = new Date(dateStr);
             
-            // JSTで表示するためにオフセットを適用
-            const jstDate = new Date(startDate.getTime() + 9 * 60 * 60 * 1000);
-            
-            scheduleDate = jstDate.toLocaleDateString('ja-JP', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              timeZone: 'UTC'
-            }).replace(/\//g, '/');
-            
-            scheduleTime = jstDate.toLocaleTimeString('ja-JP', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'UTC',
-              hour12: false
-            });
+            scheduleDate = dateStr.split(' ')[0];
+            scheduleTime = dateStr.split(' ')[1] || '';
             
             console.log('[DEBUG] Fallback values:', { scheduleDate, scheduleTime });
           }
