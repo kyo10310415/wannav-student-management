@@ -236,8 +236,9 @@ export async function fetchSchedulesFromSheet() {
 
 
 /**
- * Fetch individual Discord webhooks from Google Sheets
+ * Fetch individual Discord webhooks and user IDs from Google Sheets
  * @param {string} spreadsheetId - Spreadsheet ID (default: special events spreadsheet)
+ * @returns {Object} Map of email to {webhook, discordUserId}
  */
 export async function fetchIndividualWebhooks(spreadsheetId = '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo') {
   const sheetName = '個別取得シート';
@@ -247,20 +248,24 @@ export async function fetchIndividualWebhooks(spreadsheetId = '1DvjTbwz2qhqwSnNq
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: spreadsheetId,
-      range: `${sheetName}!A2:B`, // A列: メールアドレス, B列: Webhook
+      range: `${sheetName}!A2:C`, // A列: メールアドレス, B列: Webhook, C列: Discord User ID
     });
 
     const rows = response.data.values || [];
     console.log(`Fetched ${rows.length} webhook entries from ${sheetName}`);
 
-    // Create email to webhook mapping
+    // Create email to {webhook, discordUserId} mapping
     const webhookMap = {};
     rows.forEach(row => {
       const email = row[0] ? row[0].trim().toLowerCase() : null;
       const webhook = row[1] ? row[1].trim() : null;
+      const discordUserId = row[2] ? row[2].trim() : null;
       
       if (email && webhook) {
-        webhookMap[email] = webhook;
+        webhookMap[email] = {
+          webhook,
+          discordUserId
+        };
       }
     });
 

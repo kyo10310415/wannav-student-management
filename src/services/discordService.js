@@ -166,9 +166,10 @@ export { client };
 /**
  * Send absence request notification to leader's Discord webhook
  * @param {string} leaderWebhookUrl - Leader's Discord webhook URL
+ * @param {string} discordUserId - Leader's Discord user ID (optional)
  * @param {object} absenceData - Absence request data
  */
-export async function notifyAbsenceRequest(leaderWebhookUrl, absenceData) {
+export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, absenceData) {
   if (!leaderWebhookUrl) {
     console.log('No webhook URL provided, skipping absence notification');
     return { success: false, reason: 'No webhook URL' };
@@ -187,39 +188,45 @@ export async function notifyAbsenceRequest(leaderWebhookUrl, absenceData) {
       matched_keyword
     } = absenceData;
 
-    // Create Discord embed message
+    // Build mention content
+    let content = '';
+    if (discordUserId) {
+      content = `<@${discordUserId}>`; // Discord user mention
+    }
+
+    // Create Discord embed message (simplified with fewer emojis)
     const embed = {
-      title: '🚨 不参加申請通知',
+      title: '不参加申請通知',
       description: `${tutor_name} さんから不参加申請がありました`,
       color: absence_type === 'cancel' ? 0xFF0000 : 0xFFA500, // Red for cancel, Orange for reschedule
       fields: [
         {
-          name: '📅 スケジュール',
+          name: 'スケジュール',
           value: schedule_title || '（タイトルなし）',
           inline: false
         },
         {
-          name: '🗓️ 日時',
+          name: '日時',
           value: `${schedule_date} ${schedule_time}`,
           inline: true
         },
         {
-          name: '🏷️ キーワード',
+          name: 'キーワード',
           value: matched_keyword || '-',
           inline: true
         },
         {
-          name: '👤 申請者',
+          name: '申請者',
           value: tutor_name,
           inline: true
         },
         {
-          name: '📋 種別',
-          value: absence_type === 'cancel' ? '🔴 キャンセル' : '🟠 リスケ',
+          name: '種別',
+          value: absence_type === 'cancel' ? 'キャンセル' : 'リスケ',
           inline: true
         },
         {
-          name: '📝 理由',
+          name: '理由',
           value: reason || '（理由なし）',
           inline: false
         }
@@ -231,9 +238,16 @@ export async function notifyAbsenceRequest(leaderWebhookUrl, absenceData) {
     };
 
     // Send webhook
-    await axios.post(leaderWebhookUrl, {
+    const payload = {
       embeds: [embed]
-    });
+    };
+    
+    // Add content (mention) if Discord user ID is provided
+    if (content) {
+      payload.content = content;
+    }
+    
+    await axios.post(leaderWebhookUrl, payload);
 
     console.log(`Absence notification sent to leader's webhook for ${tutor_name}`);
     return { success: true };

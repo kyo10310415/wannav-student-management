@@ -142,25 +142,29 @@ app.post('/absence', async (c) => {
     // Send Discord notification to leader
     if (leader_email) {
       try {
-        // Fetch webhook URLs from Google Sheets (個別取得シート)
+        // Fetch webhook URLs and Discord user IDs from Google Sheets (個別取得シート)
         const SCHEDULES_SPREADSHEET_ID = '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo';
         const webhookMap = await fetchIndividualWebhooks(SCHEDULES_SPREADSHEET_ID);
         
-        // Find leader's webhook URL by matching email (case-insensitive)
-        const leaderWebhookUrl = webhookMap[leader_email.toLowerCase()];
+        // Find leader's webhook data by matching email (case-insensitive)
+        const leaderData = webhookMap[leader_email.toLowerCase()];
         
-        if (leaderWebhookUrl) {
-          // Send notification
-          const notificationResult = await notifyAbsenceRequest(leaderWebhookUrl, {
-            schedule_title,
-            schedule_date,
-            schedule_time,
-            matched_keyword,
-            tutor_name,
-            tutor_email,
-            absence_type,
-            reason
-          });
+        if (leaderData && leaderData.webhook) {
+          // Send notification with Discord user mention
+          const notificationResult = await notifyAbsenceRequest(
+            leaderData.webhook,
+            leaderData.discordUserId,
+            {
+              schedule_title,
+              schedule_date,
+              schedule_time,
+              matched_keyword,
+              tutor_name,
+              tutor_email,
+              absence_type,
+              reason
+            }
+          );
           
           if (notificationResult.success) {
             console.log(`[Discord] Absence notification sent to leader ${leader_email}`);
