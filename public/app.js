@@ -1420,7 +1420,38 @@ function renderTutorsPage() {
         </table>
       </div>
     </div>
+    
+    <!-- Monthly Absence Statistics -->
+    <div class="bg-white rounded-lg shadow-md p-6 mt-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-gray-800">
+          <i class="fas fa-calendar-times mr-2"></i>月別不参加統計
+        </h2>
+        <div class="flex items-center gap-3">
+          <button onclick="changeAbsenceStatsMonth(-1)" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
+            <i class="fas fa-chevron-left mr-1"></i>前月
+          </button>
+          <span class="text-lg font-semibold text-gray-800">
+            ${selectedStatsYear}年${selectedStatsMonth}月
+          </span>
+          <button onclick="changeAbsenceStatsMonth(1)" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
+            次月<i class="fas fa-chevron-right ml-1"></i>
+          </button>
+        </div>
+      </div>
+      <div id="absence-stats-container" class="overflow-x-auto">
+        <div class="text-center py-8 text-gray-500">
+          <i class="fas fa-spinner fa-spin text-4xl mb-2"></i>
+          <p>統計を読み込んでいます...</p>
+        </div>
+      </div>
+    </div>
   `;
+  
+  // Load absence stats for current month
+  fetchAbsenceStats(selectedStatsYear, selectedStatsMonth).then(() => {
+    renderAbsenceStatsSection();
+  });
 }
 
 // Render team filter options
@@ -4246,4 +4277,90 @@ function handleCurrentTutorChange(email) {
   // Re-render header to update display
   renderHeader();
   renderApp();
+}
+
+// ==================== Absence Stats Management ====================
+
+let absenceStats = null;
+let selectedStatsYear = new Date().getFullYear();
+let selectedStatsMonth = new Date().getMonth() + 1;
+
+/**
+ * Fetch absence stats for selected month
+ */
+async function fetchAbsenceStats(year, month) {
+  try {
+    const response = await axios.get(`${API_BASE}/api/schedules/absence-stats?year=${year}&month=${month}`);
+    if (response.data.success) {
+      absenceStats = response.data.data;
+      return absenceStats;
+    }
+  } catch (error) {
+    console.error('Error fetching absence stats:', error);
+  }
+  return null;
+}
+
+/**
+ * Change absence stats month
+ */
+async function changeAbsenceStatsMonth(offset) {
+  selectedStatsMonth += offset;
+  if (selectedStatsMonth > 12) {
+    selectedStatsMonth = 1;
+    selectedStatsYear++;
+  } else if (selectedStatsMonth < 1) {
+    selectedStatsMonth = 12;
+    selectedStatsYear--;
+  }
+  
+  await fetchAbsenceStats(selectedStatsYear, selectedStatsMonth);
+  renderAbsenceStatsSection();
+}
+
+/**
+ * Render absence stats section
+ */
+function renderAbsenceStatsSection() {
+  const statsContainer = document.getElementById('absence-stats-container');
+  if (!statsContainer) return;
+  
+  if (!absenceStats || !absenceStats.stats || absenceStats.stats.length === 0) {
+    statsContainer.innerHTML = `
+      <div class="text-center py-8 text-gray-500">
+        <i class="fas fa-inbox text-4xl mb-2"></i>
+        <p>${selectedStatsYear}年${selectedStatsMonth}月のデータがありません</p>
+      </div>
+    `;
+    return;
+  }
+  
+  statsContainer.innerHTML = `
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">キャンセル</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リスケ</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">合計</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        ${absenceStats.stats.map(stat => {
+          const cancelClass = stat.cancel_count >= 10 ? 'text-red-600 font-bold' : stat.cancel_count >= 5 ? 'text-orange-600 font-semibold' : 'text-gray-600';
+          const rescheduleClass = stat.reschedule_count >= 10 ? 'text-red-600 font-bold' : stat.reschedule_count >= 5 ? 'text-orange-600 font-semibold' : 'text-gray-600';
+          const totalClass = stat.total_count >= 15 ? 'text-red-600 font-bold' : stat.total_count >= 10 ? 'text-orange-600 font-semibold' : 'text-gray-600';
+          
+          return `
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${stat.tutor_name}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${cancelClass}">${stat.cancel_count}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${rescheduleClass}">${stat.reschedule_count}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${totalClass}">${stat.total_count}回</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
 }
