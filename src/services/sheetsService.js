@@ -156,23 +156,59 @@ export async function fetchSchedulesFromSheet() {
       
       if (row[4]) {
         try {
-          startDate = new Date(row[4]);
+          // Google Sheetsの日時文字列（例: "2026/02/28 23:00:00"）を
+          // JSTとして解釈する
+          const dateStr = row[4];
           
-          // 日付部分（YYYY/MM/DD）
-          scheduleDate = startDate.toLocaleDateString('ja-JP', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            timeZone: 'Asia/Tokyo'
-          }).replace(/\//g, '/');
+          // 日時文字列を直接JSTとして解釈
+          // "YYYY/MM/DD HH:MM:SS" 形式を想定
+          const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
           
-          // 時間部分（HH:MM）
-          scheduleTime = startDate.toLocaleTimeString('ja-JP', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'Asia/Tokyo',
-            hour12: false
-          });
+          if (match) {
+            const [_, year, month, day, hour, minute, second] = match;
+            
+            // JSTのタイムゾーンオフセット（UTC+9）
+            const jstOffset = 9 * 60; // 9時間を分に変換
+            
+            // UTC時間として作成してからJSTオフセットを適用
+            const utcDate = new Date(Date.UTC(
+              parseInt(year),
+              parseInt(month) - 1, // 月は0始まり
+              parseInt(day),
+              parseInt(hour),
+              parseInt(minute),
+              parseInt(second)
+            ));
+            
+            // JSTオフセットを引く（JSTからUTCへ変換）
+            startDate = new Date(utcDate.getTime() - jstOffset * 60 * 1000);
+            
+            // 日付部分（YYYY/MM/DD）- JSTで表示
+            scheduleDate = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+            
+            // 時間部分（HH:MM）- JSTで表示
+            scheduleTime = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+          } else {
+            // フォールバック: 通常のDate解析
+            startDate = new Date(dateStr);
+            
+            // JSTで表示するためにオフセットを適用
+            const jstDate = new Date(startDate.getTime() + 9 * 60 * 60 * 1000);
+            
+            scheduleDate = jstDate.toLocaleDateString('ja-JP', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              timeZone: 'UTC'
+            }).replace(/\//g, '/');
+            
+            scheduleTime = jstDate.toLocaleTimeString('ja-JP', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'UTC',
+              hour12: false
+            });
+          }
         } catch (error) {
           console.error('Date parse error:', error);
         }
@@ -183,9 +219,9 @@ export async function fetchSchedulesFromSheet() {
         account: row[1] || null,            // B列: アカウント（メールアドレス）
         matched_keyword: row[2] || null,    // C列: 一致キーワード
         title: row[3] || null,              // D列: タイトル
-        start_time: startDate,              // E列: 開始日時（Date型）
-        schedule_date: scheduleDate,        // 日付部分（例: 2026/02/02）
-        schedule_time: scheduleTime,        // 時間部分（例: 16:00）
+        start_time: startDate,              // E列: 開始日時（Date型、UTCで保存）
+        schedule_date: scheduleDate,        // 日付部分（例: 2026/02/28）- JST表示
+        schedule_time: scheduleTime,        // 時間部分（例: 23:00）- JST表示
         end_time: row[5] ? new Date(row[5]) : null, // F列: 終了日時
         location: row[6] || null,           // G列: 場所
         description: row[7] || null,        // H列: 説明
