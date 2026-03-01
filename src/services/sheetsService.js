@@ -234,3 +234,40 @@ export async function fetchSchedulesFromSheet() {
   }
 }
 
+
+/**
+ * Fetch individual Discord webhooks from Google Sheets
+ * @param {string} spreadsheetId - Spreadsheet ID (default: special events spreadsheet)
+ */
+export async function fetchIndividualWebhooks(spreadsheetId = '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo') {
+  const sheetName = '個別取得シート';
+  
+  try {
+    const sheets = getSheets();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A2:B`, // A列: メールアドレス, B列: Webhook
+    });
+
+    const rows = response.data.values || [];
+    console.log(`Fetched ${rows.length} webhook entries from ${sheetName}`);
+
+    // Create email to webhook mapping
+    const webhookMap = {};
+    rows.forEach(row => {
+      const email = row[0] ? row[0].trim().toLowerCase() : null;
+      const webhook = row[1] ? row[1].trim() : null;
+      
+      if (email && webhook) {
+        webhookMap[email] = webhook;
+      }
+    });
+
+    console.log(`Valid webhook mappings: ${Object.keys(webhookMap).length}`);
+    return webhookMap;
+  } catch (error) {
+    console.error('Error fetching individual webhooks from Google Sheets:', error);
+    throw error;
+  }
+}

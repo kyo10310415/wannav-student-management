@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { fetchSchedulesFromSheet } from '../services/sheetsService.js';
+import { fetchSchedulesFromSheet, fetchIndividualWebhooks } from '../services/sheetsService.js';
 import { query } from '../db/connection.js';
+import { notifyAbsenceRequest } from '../services/discordService.js';
 
 const app = new Hono();
 
@@ -75,7 +76,8 @@ app.post('/absence', async (c) => {
       schedule_date, 
       schedule_time, 
       schedule_title, 
-      matched_keyword 
+      matched_keyword,
+      leader_email  // リーダーのメールアドレス
     } = body;
     
     // Validation
@@ -136,6 +138,43 @@ app.post('/absence', async (c) => {
       WHERE email = $1
     `;
     await query(updateQuery, [tutor_email]);
+    
+    // Send Discord notification to leader
+    if (leader_email) {
+      try {
+        // Fetch webhook URLs from Google Sheets (個別取得シート)
+        const SCHEDULES_SPREADSHEET_ID = '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo';
+        const webhookMap = await fetchIndividualWebhooks(SCHEDULES_SPREADSHEET_ID);
+        
+        // Find leader's webhook URL by matching email (case-insensitive)
+        const leaderWebhookUrl = webhookMap[leader_email.toLowerCase()];
+        
+        if (leaderWebhookUrl) {
+          // Send notification
+          const notificationResult = await notifyAbsenceRequest(leaderWebhookUrl, {
+            schedule_title,
+            schedule_date,
+            schedule_time,
+            matched_keyword,
+            tutor_name,
+            tutor_email,
+            absence_type,
+            reason
+          });
+          
+          if (notificationResult.success) {
+            console.log(`[Discord] Absence notification sent to leader ${leader_email}`);
+          } else {
+            console.error(`[Discord] Failed to send notification to ${leader_email}:`, notificationResult.error);
+          }
+        } else {
+          console.warn(`[Discord] No webhook URL found for leader ${leader_email}`);
+        }
+      } catch (notifyError) {
+        console.error('[Discord] Error sending absence notification:', notifyError);
+        // Don't fail the whole request if notification fails
+      }
+    }
     
     return c.json({
       success: true,

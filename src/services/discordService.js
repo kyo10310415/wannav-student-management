@@ -162,3 +162,84 @@ export async function testReminder(studentId) {
 }
 
 export { client };
+
+/**
+ * Send absence request notification to leader's Discord webhook
+ * @param {string} leaderWebhookUrl - Leader's Discord webhook URL
+ * @param {object} absenceData - Absence request data
+ */
+export async function notifyAbsenceRequest(leaderWebhookUrl, absenceData) {
+  if (!leaderWebhookUrl) {
+    console.log('No webhook URL provided, skipping absence notification');
+    return { success: false, reason: 'No webhook URL' };
+  }
+
+  try {
+    const axios = (await import('axios')).default;
+    
+    const {
+      tutor_name,
+      absence_type,
+      reason,
+      schedule_title,
+      schedule_date,
+      schedule_time,
+      matched_keyword
+    } = absenceData;
+
+    // Create Discord embed message
+    const embed = {
+      title: '🚨 不参加申請通知',
+      description: `${tutor_name} さんから不参加申請がありました`,
+      color: absence_type === 'cancel' ? 0xFF0000 : 0xFFA500, // Red for cancel, Orange for reschedule
+      fields: [
+        {
+          name: '📅 スケジュール',
+          value: schedule_title || '（タイトルなし）',
+          inline: false
+        },
+        {
+          name: '🗓️ 日時',
+          value: `${schedule_date} ${schedule_time}`,
+          inline: true
+        },
+        {
+          name: '🏷️ キーワード',
+          value: matched_keyword || '-',
+          inline: true
+        },
+        {
+          name: '👤 申請者',
+          value: tutor_name,
+          inline: true
+        },
+        {
+          name: '📋 種別',
+          value: absence_type === 'cancel' ? '🔴 キャンセル' : '🟠 リスケ',
+          inline: true
+        },
+        {
+          name: '📝 理由',
+          value: reason || '（理由なし）',
+          inline: false
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'WannaV スケジュール管理システム'
+      }
+    };
+
+    // Send webhook
+    await axios.post(leaderWebhookUrl, {
+      embeds: [embed]
+    });
+
+    console.log(`Absence notification sent to leader's webhook for ${tutor_name}`);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error sending absence notification:', error.message);
+    return { success: false, error: error.message };
+  }
+}

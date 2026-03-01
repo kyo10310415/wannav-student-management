@@ -4226,7 +4226,8 @@ async function submitAbsenceRequest() {
       schedule_date: selectedScheduleForAbsence.schedule_date,
       schedule_time: selectedScheduleForAbsence.schedule_time,
       schedule_title: selectedScheduleForAbsence.title,
-      matched_keyword: selectedScheduleForAbsence.matched_keyword
+      matched_keyword: selectedScheduleForAbsence.matched_keyword,
+      leader_email: selectedScheduleForAbsence.account  // リーダーのメールアドレスを送信
     });
     
     if (response.data.success) {
