@@ -3586,18 +3586,6 @@ function renderScheduleStatistics() {
   return statsHtml;
 }
 
-    return `
-      <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${leaderName}</td>
-        <td class="px-4 py-3 text-sm text-gray-900">${title}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleDate}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleTime}</td>
-        <td class="px-4 py-3 text-sm text-gray-600">${attendeeNames}</td>
-      </tr>
-    `;
-  }).join('');
-}
-
 // ==================== Schedule Filter & Navigation Functions ====================
 
 /**
