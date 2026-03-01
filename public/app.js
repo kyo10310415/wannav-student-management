@@ -1466,7 +1466,7 @@ function renderTutorsPage() {
     </div>
     
     <!-- Monthly Absence Statistics (Leader+ only) -->
-    ${currentUser && (currentUser.role === '管理者' || currentUser.role === 'リーダー') ? `
+    ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <div class="bg-white rounded-lg shadow-md p-6 mt-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold text-gray-800">
@@ -1495,7 +1495,7 @@ function renderTutorsPage() {
   `;
   
   // Load absence stats for current month (only for leaders and admins)
-  if (currentUser && (currentUser.role === '管理者' || currentUser.role === 'リーダー')) {
+  if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader')) {
     fetchAbsenceStats(selectedStatsYear, selectedStatsMonth).then(() => {
       renderAbsenceStatsSection();
     });
@@ -4355,7 +4355,7 @@ async function fetchAbsenceStats(year, month) {
  */
 async function changeAbsenceStatsMonth(offset) {
   // Check permission
-  if (!currentUser || (currentUser.role !== '管理者' && currentUser.role !== 'リーダー')) {
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
     return;
   }
   
@@ -4380,7 +4380,7 @@ function renderAbsenceStatsSection() {
   if (!statsContainer) return;
   
   // Check permission
-  if (!currentUser || (currentUser.role !== '管理者' && currentUser.role !== 'リーダー')) {
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
     return;
   }
   
