@@ -1,6 +1,10 @@
 // API Base URL
 const API_BASE = '';
 
+// Authentication state
+let currentUser = null; // { id, email, role, tutorName, mustChangePassword }
+let sessionToken = localStorage.getItem('sessionToken') || null;
+
 // State
 let students = [];
 let tutors = [];
@@ -14,12 +18,12 @@ let reservationCountFilter = 'all'; // 'all', 'above2', 'below2'
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users'
 let schedules = []; // Tutor schedules data
 
-// Current authenticated tutor (for absence requests)
-let currentTutorEmail = localStorage.getItem('currentTutorEmail') || null;
-let currentTutorName = localStorage.getItem('currentTutorName') || null;
+// Current authenticated tutor (for absence requests) - kept for backward compatibility
+let currentTutorEmail = null;
+let currentTutorName = null;
 
 // Schedule filters
 let selectedScheduleYear = new Date().getFullYear();
@@ -37,6 +41,14 @@ let sortDirection = 'asc'; // 'asc' or 'desc'
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
+  // Verify session
+  const isAuthenticated = await verifySession();
+  
+  if (!isAuthenticated) {
+    showLoginPage();
+    return;
+  }
+  
   // Check URL hash for direct navigation
   const hash = window.location.hash.substring(1); // Remove '#'
   if (hash === 'helpers') {
@@ -49,6 +61,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'tutors';
   } else if (hash === 'schedules') {
     currentPage = 'schedules';
+  } else if (hash === 'users') {
+    currentPage = 'users';
   }
   // Default is 'today' (already set)
   
@@ -60,38 +74,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Render header
 function renderHeader() {
   const app = document.getElementById('app');
+  
+  // Build user management button (admin only)
+  const userManagementButton = currentUser && currentUser.role === 'admin' ? `
+    <button id="nav-users" onclick="changePage('users')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+      <i class="fas fa-users-cog mr-2"></i>ユーザー管理
+    </button>
+  ` : '';
+  
   app.innerHTML = `
     <div class="min-h-screen bg-gray-50">
       <!-- Header -->
       <header class="bg-blue-600 text-white shadow-lg">
         <div class="container mx-auto px-4 py-6">
-          <h1 class="text-3xl font-bold">
-            <i class="fas fa-users mr-3"></i>
-            WannaV 生徒様管理システム
-          </h1>
-          <div class="flex items-center justify-between mt-2">
-            <p class="text-blue-100">VTuber育成スクール生徒管理</p>
+          <div class="flex justify-between items-start">
+            <div>
+              <h1 class="text-3xl font-bold">
+                <i class="fas fa-users mr-3"></i>
+                WannaV 生徒様管理システム
+              </h1>
+              <p class="text-blue-100 mt-2">VTuber育成スクール生徒管理</p>
+            </div>
             
-            <!-- Current Tutor Selector -->
-            <div class="flex items-center gap-2">
-              <label class="text-blue-100 text-sm">現在のTutor:</label>
-              <select 
-                id="current-tutor-selector" 
-                onchange="handleCurrentTutorChange(this.value)"
-                class="px-3 py-1 rounded bg-white text-gray-800 text-sm focus:ring-2 focus:ring-blue-300"
-              >
-                <option value="">選択してください</option>
-                ${tutors.filter(t => t.email).map(t => `
-                  <option value="${t.email}" ${currentTutorEmail === t.email ? 'selected' : ''}>
-                    ${t.tutor_name}
-                  </option>
-                `).join('')}
-              </select>
-              ${currentTutorName ? `
-                <span class="text-blue-100 text-sm">
-                  <i class="fas fa-user-check mr-1"></i>${currentTutorName}
-                </span>
-              ` : ''}
+            <!-- User info and logout -->
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <div class="text-sm text-blue-100">ログイン中</div>
+                <div class="font-semibold">${currentUser.tutorName || currentUser.email}</div>
+                <div class="text-xs text-blue-200">${getRoleLabel(currentUser.role)}</div>
+              </div>
+              <button onclick="logout()" class="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg transition">
+                <i class="fas fa-sign-out-alt mr-2"></i>ログアウト
+              </button>
             </div>
           </div>
           
@@ -115,6 +129,7 @@ function renderHeader() {
             <button id="nav-schedules" onclick="changePage('schedules')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-calendar-check mr-2"></i>Tutorスケジュール
             </button>
+            ${userManagementButton}
           </nav>
         </div>
       </header>
@@ -129,6 +144,18 @@ function renderHeader() {
       </main>
     </div>
   `;
+}
+
+/**
+ * Get role label in Japanese
+ */
+function getRoleLabel(role) {
+  switch(role) {
+    case 'admin': return '管理者';
+    case 'leader': return 'リーダー';
+    case 'crew': return 'クルー';
+    default: return role;
+  }
 }
 
 // Load initial data
@@ -308,6 +335,8 @@ async function renderApp() {
     await renderHelpersPage();
   } else if (currentPage === 'schedules') {
     await renderSchedulesPage();
+  } else if (currentPage === 'users') {
+    await renderUsersPage();
   }
 }
 
@@ -4362,4 +4391,629 @@ function renderAbsenceStatsSection() {
       </tbody>
     </table>
   `;
+}
+
+/**
+ * ============================================
+ * Authentication Functions
+ * ============================================
+ */
+
+/**
+ * Verify session and load user data
+ */
+async function verifySession() {
+  if (!sessionToken) {
+    return false;
+  }
+  
+  try {
+    const response = await axios.get(`${API_BASE}/api/auth/verify`, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      currentUser = response.data.data.user;
+      currentTutorEmail = currentUser.email;
+      currentTutorName = currentUser.tutorName;
+      return true;
+    } else {
+      // Session invalid
+      sessionToken = null;
+      localStorage.removeItem('sessionToken');
+      return false;
+    }
+  } catch (error) {
+    console.error('Session verification failed:', error);
+    sessionToken = null;
+    localStorage.removeItem('sessionToken');
+    return false;
+  }
+}
+
+/**
+ * Show login page
+ */
+function showLoginPage() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-8">
+        <div class="text-center mb-8">
+          <h1 class="text-3xl font-bold text-gray-800 mb-2">
+            <i class="fas fa-user-lock mr-2 text-indigo-600"></i>
+            WannaV 生徒様管理システム
+          </h1>
+          <p class="text-gray-600">ログインしてください</p>
+        </div>
+        
+        <form id="login-form" class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              メールアドレス
+            </label>
+            <input 
+              type="email" 
+              id="login-email" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+              required
+              autocomplete="email"
+            />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              パスワード
+            </label>
+            <input 
+              type="password" 
+              id="login-password" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+              required
+              autocomplete="current-password"
+            />
+          </div>
+          
+          <div id="login-error" class="hidden text-red-600 text-sm"></div>
+          
+          <button 
+            type="submit" 
+            class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold"
+          >
+            <i class="fas fa-sign-in-alt mr-2"></i>
+            ログイン
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+}
+
+/**
+ * Handle login
+ */
+async function handleLogin(e) {
+  e.preventDefault();
+  
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const errorDiv = document.getElementById('login-error');
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/auth/login`, {
+      email,
+      password
+    });
+    
+    if (response.data.success) {
+      sessionToken = response.data.data.sessionToken;
+      currentUser = response.data.data.user;
+      currentTutorEmail = currentUser.email;
+      currentTutorName = currentUser.tutorName;
+      
+      localStorage.setItem('sessionToken', sessionToken);
+      
+      // Check if password change is required
+      if (currentUser.mustChangePassword) {
+        showChangePasswordPage(true); // true = first time
+      } else {
+        // Load main app
+        renderApp();
+      }
+    } else {
+      errorDiv.textContent = response.data.error || 'ログインに失敗しました';
+      errorDiv.classList.remove('hidden');
+    }
+  } catch (error) {
+    errorDiv.textContent = error.response?.data?.error || 'ログインに失敗しました';
+    errorDiv.classList.remove('hidden');
+  }
+}
+
+/**
+ * Show change password page
+ */
+function showChangePasswordPage(isFirstTime = false) {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-8">
+        <div class="text-center mb-8">
+          <h1 class="text-2xl font-bold text-gray-800 mb-2">
+            <i class="fas fa-key mr-2 text-indigo-600"></i>
+            パスワード変更${isFirstTime ? '（初回ログイン）' : ''}
+          </h1>
+          ${isFirstTime ? '<p class="text-sm text-gray-600">初回ログインのため、パスワードを変更してください</p>' : ''}
+        </div>
+        
+        <form id="change-password-form" class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              現在のパスワード
+            </label>
+            <input 
+              type="password" 
+              id="current-password" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+              required
+            />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              新しいパスワード（4文字以上）
+            </label>
+            <input 
+              type="password" 
+              id="new-password" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+              required
+              minlength="4"
+            />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              新しいパスワード（確認）
+            </label>
+            <input 
+              type="password" 
+              id="confirm-password" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+              required
+              minlength="4"
+            />
+          </div>
+          
+          <div id="change-password-error" class="hidden text-red-600 text-sm"></div>
+          
+          <button 
+            type="submit" 
+            class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold"
+          >
+            <i class="fas fa-check mr-2"></i>
+            パスワードを変更する
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById('change-password-form').addEventListener('submit', (e) => handleChangePassword(e, isFirstTime));
+}
+
+/**
+ * Handle change password
+ */
+async function handleChangePassword(e, isFirstTime) {
+  e.preventDefault();
+  
+  const currentPassword = document.getElementById('current-password').value;
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+  const errorDiv = document.getElementById('change-password-error');
+  
+  if (newPassword !== confirmPassword) {
+    errorDiv.textContent = 'パスワードが一致しません';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/auth/change-password`, {
+      currentPassword,
+      newPassword
+    }, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      alert('パスワードを変更しました');
+      currentUser.mustChangePassword = false;
+      renderApp();
+    } else {
+      errorDiv.textContent = response.data.error || 'パスワード変更に失敗しました';
+      errorDiv.classList.remove('hidden');
+    }
+  } catch (error) {
+    errorDiv.textContent = error.response?.data?.error || 'パスワード変更に失敗しました';
+    errorDiv.classList.remove('hidden');
+  }
+}
+
+/**
+ * Logout
+ */
+async function logout() {
+  if (confirm('ログアウトしますか?')) {
+    try {
+      await axios.post(`${API_BASE}/api/auth/logout`, {}, {
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+    
+    sessionToken = null;
+    currentUser = null;
+    currentTutorEmail = null;
+    currentTutorName = null;
+    localStorage.removeItem('sessionToken');
+    showLoginPage();
+  }
+}
+
+
+/**
+ * ============================================
+ * User Management Page (Admin Only)
+ * ============================================
+ */
+
+/**
+ * Render users management page
+ */
+async function renderUsersPage() {
+  const content = document.getElementById('content');
+  
+  // Check if user is admin
+  if (!currentUser || currentUser.role !== 'admin') {
+    content.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <i class="fas fa-exclamation-triangle text-red-600 text-4xl mb-4"></i>
+        <h2 class="text-xl font-bold text-red-800 mb-2">アクセス拒否</h2>
+        <p class="text-red-700">このページは管理者のみアクセスできます</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // Show loading
+  content.innerHTML = `
+    <div class="text-center py-12">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+      <p class="mt-4 text-gray-600">ユーザー一覧を読み込んでいます...</p>
+    </div>
+  `;
+  
+  try {
+    // Fetch users
+    const response = await axios.get(`${API_BASE}/api/users`, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    const users = response.data.data;
+    
+    content.innerHTML = `
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-users-cog mr-2 text-indigo-600"></i>
+            ユーザー管理
+          </h2>
+          <button onclick="showCreateUserModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+            <i class="fas fa-plus mr-2"></i>ユーザーを追加
+          </button>
+        </div>
+        
+        <!-- Users table -->
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="bg-gray-50 border-b">
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">ID</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">メールアドレス</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor名</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">権限</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">パスワード変更必須</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">最終ログイン</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${users.map(user => `
+                <tr class="border-b hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm">${user.id}</td>
+                  <td class="px-4 py-3 text-sm">${user.email}</td>
+                  <td class="px-4 py-3 text-sm">${user.tutor_name || '-'}</td>
+                  <td class="px-4 py-3">
+                    <select 
+                      class="px-2 py-1 border rounded text-sm ${getRoleBadgeClass(user.role)}"
+                      onchange="updateUserRole(${user.id}, this.value)"
+                    >
+                      <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理者</option>
+                      <option value="leader" ${user.role === 'leader' ? 'selected' : ''}>リーダー</option>
+                      <option value="crew" ${user.role === 'crew' ? 'selected' : ''}>クルー</option>
+                    </select>
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    ${user.must_change_password ? '<span class="text-orange-600">はい</span>' : '<span class="text-gray-500">いいえ</span>'}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600">
+                    ${user.last_login ? new Date(user.last_login).toLocaleString('ja-JP') : '-'}
+                  </td>
+                  <td class="px-4 py-3">
+                    <button 
+                      onclick="resetUserPassword(${user.id}, '${user.email}')"
+                      class="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 transition mr-2"
+                      title="パスワードを初期化"
+                    >
+                      <i class="fas fa-key"></i>
+                    </button>
+                    <button 
+                      onclick="deleteUser(${user.id}, '${user.email}')"
+                      class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition"
+                      title="ユーザーを削除"
+                    >
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    
+  } catch (error) {
+    console.error('Failed to load users:', error);
+    content.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <i class="fas fa-exclamation-circle text-red-600 text-4xl mb-4"></i>
+        <h2 class="text-xl font-bold text-red-800 mb-2">エラー</h2>
+        <p class="text-red-700">ユーザー一覧の読み込みに失敗しました</p>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Get role badge class
+ */
+function getRoleBadgeClass(role) {
+  switch(role) {
+    case 'admin': return 'bg-red-100 text-red-800 border-red-300';
+    case 'leader': return 'bg-blue-100 text-blue-800 border-blue-300';
+    case 'crew': return 'bg-gray-100 text-gray-800 border-gray-300';
+    default: return 'bg-gray-100 text-gray-800 border-gray-300';
+  }
+}
+
+/**
+ * Show create user modal
+ */
+function showCreateUserModal() {
+  const modal = document.createElement('div');
+  modal.id = 'create-user-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-user-plus mr-2 text-indigo-600"></i>ユーザーを追加
+        </h2>
+        <button onclick="closeCreateUserModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      
+      <form id="create-user-form" class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            メールアドレス
+          </label>
+          <input 
+            type="email" 
+            id="create-user-email" 
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+            required
+          />
+          <p class="text-xs text-gray-500 mt-1">Tutorテーブルのメールアドレスと照合されます</p>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            権限
+          </label>
+          <select 
+            id="create-user-role" 
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            required
+          >
+            <option value="crew">クルー</option>
+            <option value="leader">リーダー</option>
+            <option value="admin">管理者</option>
+          </select>
+        </div>
+        
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p class="text-sm text-blue-800">
+            <i class="fas fa-info-circle mr-2"></i>
+            初期パスワードは <strong>1111</strong> に設定されます
+          </p>
+        </div>
+        
+        <div id="create-user-error" class="hidden text-red-600 text-sm"></div>
+        
+        <div class="flex gap-2">
+          <button 
+            type="button"
+            onclick="closeCreateUserModal()"
+            class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
+          >
+            キャンセル
+          </button>
+          <button 
+            type="submit"
+            class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+          >
+            <i class="fas fa-plus mr-2"></i>追加する
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  document.getElementById('create-user-form').addEventListener('submit', handleCreateUser);
+}
+
+/**
+ * Close create user modal
+ */
+function closeCreateUserModal() {
+  const modal = document.getElementById('create-user-modal');
+  if (modal) {
+    modal.remove();
+  }
+}
+
+/**
+ * Handle create user
+ */
+async function handleCreateUser(e) {
+  e.preventDefault();
+  
+  const email = document.getElementById('create-user-email').value;
+  const role = document.getElementById('create-user-role').value;
+  const errorDiv = document.getElementById('create-user-error');
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/users`, {
+      email,
+      role
+    }, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      alert(response.data.message);
+      closeCreateUserModal();
+      await renderUsersPage();
+    } else {
+      errorDiv.textContent = response.data.error;
+      errorDiv.classList.remove('hidden');
+    }
+  } catch (error) {
+    errorDiv.textContent = error.response?.data?.error || 'ユーザー作成に失敗しました';
+    errorDiv.classList.remove('hidden');
+  }
+}
+
+/**
+ * Update user role
+ */
+async function updateUserRole(userId, newRole) {
+  if (!confirm('このユーザーの権限を変更しますか?')) {
+    await renderUsersPage(); // Reset select
+    return;
+  }
+  
+  try {
+    const response = await axios.put(`${API_BASE}/api/users/${userId}`, {
+      role: newRole
+    }, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      alert(response.data.message);
+      await renderUsersPage();
+    } else {
+      alert('エラー: ' + response.data.error);
+      await renderUsersPage();
+    }
+  } catch (error) {
+    alert('権限更新に失敗しました: ' + (error.response?.data?.error || error.message));
+    await renderUsersPage();
+  }
+}
+
+/**
+ * Reset user password
+ */
+async function resetUserPassword(userId, email) {
+  if (!confirm(`${email} のパスワードを初期値（1111）にリセットしますか？\n次回ログイン時にパスワード変更が必須となります。`)) {
+    return;
+  }
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/auth/reset-password`, {
+      userId
+    }, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      alert(response.data.message);
+      await renderUsersPage();
+    } else {
+      alert('エラー: ' + response.data.error);
+    }
+  } catch (error) {
+    alert('パスワードリセットに失敗しました: ' + (error.response?.data?.error || error.message));
+  }
+}
+
+/**
+ * Delete user
+ */
+async function deleteUser(userId, email) {
+  if (!confirm(`本当に ${email} を削除しますか？\nこの操作は取り消せません。`)) {
+    return;
+  }
+  
+  try {
+    const response = await axios.delete(`${API_BASE}/api/users/${userId}`, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      alert(response.data.message);
+      await renderUsersPage();
+    } else {
+      alert('エラー: ' + response.data.error);
+    }
+  } catch (error) {
+    alert('ユーザー削除に失敗しました: ' + (error.response?.data?.error || error.message));
+  }
 }
