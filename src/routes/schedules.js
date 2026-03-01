@@ -231,7 +231,9 @@ app.get('/absence-stats', async (c) => {
           tutor_name: row.tutor_name,
           cancel_count: 0,
           reschedule_count: 0,
-          total_count: 0
+          total_count: 0,
+          scheduled_count: 0,
+          attendance_rate: 0
         };
       }
       
@@ -244,8 +246,85 @@ app.get('/absence-stats', async (c) => {
       statsByTutor[row.tutor_email].total_count += parseInt(row.count);
     });
     
-    // Convert to array and sort by total_count (descending)
-    const stats = Object.values(statsByTutor).sort((a, b) => b.total_count - a.total_count);
+    // Fetch schedules from Google Sheets to calculate scheduled count
+    const schedules = await fetchSchedulesFromSheet();
+    
+    // Get tutors for email to tutor name mapping
+    const tutorsResult = await query('SELECT email, tutor_name FROM tutors');
+    const tutors = tutorsResult.rows;
+    const emailToTutorMap = {};
+    tutors.forEach(tutor => {
+      if (tutor.email) {
+        emailToTutorMap[tutor.email.toLowerCase()] = tutor.tutor_name;
+      }
+    });
+    
+    // Count scheduled events for each tutor in the specified month
+    const scheduledCountByTutor = {};
+    schedules.forEach(schedule => {
+      const scheduleDate = new Date(schedule.start_time);
+      const scheduleYear = scheduleDate.getFullYear();
+      const scheduleMonth = scheduleDate.getMonth() + 1;
+      
+      if (scheduleYear === parseInt(year) && scheduleMonth === parseInt(month)) {
+        // Count for leader
+        const leaderEmail = schedule.account ? schedule.account.toLowerCase() : null;
+        if (leaderEmail) {
+          scheduledCountByTutor[leaderEmail] = (scheduledCountByTutor[leaderEmail] || 0) + 1;
+        }
+        
+        // Count for attendees
+        if (schedule.attendees) {
+          const attendeeEmails = schedule.attendees.split(',').map(email => email.trim().toLowerCase());
+          attendeeEmails.forEach(email => {
+            if (email) {
+              scheduledCountByTutor[email] = (scheduledCountByTutor[email] || 0) + 1;
+            }
+          });
+        }
+      }
+    });
+    
+    // Add scheduled count and calculate attendance rate
+    Object.keys(statsByTutor).forEach(email => {
+      const scheduledCount = scheduledCountByTutor[email] || 0;
+      statsByTutor[email].scheduled_count = scheduledCount;
+      
+      // Calculate attendance rate
+      // Attendance rate = (scheduled - cancel - reschedule) / scheduled * 100
+      // If scheduled is 0, attendance rate is 100% (no schedules = perfect attendance)
+      if (scheduledCount > 0) {
+        const attendedCount = scheduledCount - statsByTutor[email].cancel_count - statsByTutor[email].reschedule_count;
+        statsByTutor[email].attendance_rate = Math.max(0, (attendedCount / scheduledCount * 100));
+      } else {
+        statsByTutor[email].attendance_rate = 100;
+      }
+    });
+    
+    // Add tutors with schedules but no absence requests
+    Object.keys(scheduledCountByTutor).forEach(email => {
+      if (!statsByTutor[email]) {
+        const tutorName = emailToTutorMap[email] || email;
+        statsByTutor[email] = {
+          tutor_email: email,
+          tutor_name: tutorName,
+          cancel_count: 0,
+          reschedule_count: 0,
+          total_count: 0,
+          scheduled_count: scheduledCountByTutor[email],
+          attendance_rate: 100
+        };
+      }
+    });
+    
+    // Convert to array and sort by attendance_rate (ascending) then total_count (descending)
+    const stats = Object.values(statsByTutor)
+      .sort((a, b) => {
+        if (a.attendance_rate !== b.attendance_rate) {
+          return a.attendance_rate - b.attendance_rate; // Lower attendance rate first
+        }
+        return b.total_count - a.total_count; // Higher absence count first
+      });
     
     return c.json({
       success: true,

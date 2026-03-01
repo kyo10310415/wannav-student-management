@@ -1465,11 +1465,12 @@ function renderTutorsPage() {
       </div>
     </div>
     
-    <!-- Monthly Absence Statistics -->
+    <!-- Monthly Absence Statistics (Leader+ only) -->
+    ${currentUser && (currentUser.role === '管理者' || currentUser.role === 'リーダー') ? `
     <div class="bg-white rounded-lg shadow-md p-6 mt-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold text-gray-800">
-          <i class="fas fa-calendar-times mr-2"></i>月別不参加統計
+          <i class="fas fa-calendar-times mr-2"></i>月別不参加集計
         </h2>
         <div class="flex items-center gap-3">
           <button onclick="changeAbsenceStatsMonth(-1)" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
@@ -1490,12 +1491,15 @@ function renderTutorsPage() {
         </div>
       </div>
     </div>
+    ` : ''}
   `;
   
-  // Load absence stats for current month
-  fetchAbsenceStats(selectedStatsYear, selectedStatsMonth).then(() => {
-    renderAbsenceStatsSection();
-  });
+  // Load absence stats for current month (only for leaders and admins)
+  if (currentUser && (currentUser.role === '管理者' || currentUser.role === 'リーダー')) {
+    fetchAbsenceStats(selectedStatsYear, selectedStatsMonth).then(() => {
+      renderAbsenceStatsSection();
+    });
+  }
 }
 
 // Render team filter options
@@ -4350,6 +4354,11 @@ async function fetchAbsenceStats(year, month) {
  * Change absence stats month
  */
 async function changeAbsenceStatsMonth(offset) {
+  // Check permission
+  if (!currentUser || (currentUser.role !== '管理者' && currentUser.role !== 'リーダー')) {
+    return;
+  }
+  
   selectedStatsMonth += offset;
   if (selectedStatsMonth > 12) {
     selectedStatsMonth = 1;
@@ -4370,6 +4379,11 @@ function renderAbsenceStatsSection() {
   const statsContainer = document.getElementById('absence-stats-container');
   if (!statsContainer) return;
   
+  // Check permission
+  if (!currentUser || (currentUser.role !== '管理者' && currentUser.role !== 'リーダー')) {
+    return;
+  }
+  
   if (!absenceStats || !absenceStats.stats || absenceStats.stats.length === 0) {
     statsContainer.innerHTML = `
       <div class="text-center py-8 text-gray-500">
@@ -4385,9 +4399,11 @@ function renderAbsenceStatsSection() {
       <thead class="bg-gray-50">
         <tr>
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">出席予定</th>
           <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">キャンセル</th>
           <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リスケ</th>
           <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">合計</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">出席率</th>
         </tr>
       </thead>
       <tbody class="bg-white divide-y divide-gray-200">
@@ -4396,12 +4412,20 @@ function renderAbsenceStatsSection() {
           const rescheduleClass = stat.reschedule_count >= 10 ? 'text-red-600 font-bold' : stat.reschedule_count >= 5 ? 'text-orange-600 font-semibold' : 'text-gray-600';
           const totalClass = stat.total_count >= 15 ? 'text-red-600 font-bold' : stat.total_count >= 10 ? 'text-orange-600 font-semibold' : 'text-gray-600';
           
+          // Attendance rate color coding
+          const attendanceRate = stat.attendance_rate || 0;
+          const attendanceRateClass = attendanceRate <= 25 ? 'text-red-600 font-bold' : 
+                                     attendanceRate <= 50 ? 'text-orange-600 font-semibold' : 
+                                     'text-green-600';
+          
           return `
             <tr class="hover:bg-gray-50">
               <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${stat.tutor_name}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm text-gray-600">${stat.scheduled_count || 0}回</td>
               <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${cancelClass}">${stat.cancel_count}回</td>
               <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${rescheduleClass}">${stat.reschedule_count}回</td>
               <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${totalClass}">${stat.total_count}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${attendanceRateClass}">${attendanceRate.toFixed(1)}%</td>
             </tr>
           `;
         }).join('')}
