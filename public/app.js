@@ -197,10 +197,16 @@ async function loadInitialData() {
     
     // Set default filter to current tutor if available
     if (currentTutorName) {
-      selectedTutor = currentTutorName;
-      selectedLeader = currentTutorName;
-      selectedAttendee = currentTutorName;
-      console.log(`Default filter set to current tutor: ${currentTutorName}`);
+      // Convert tutor_name to notion_name for filtering
+      const notionName = getTutorNotionName(currentTutorName);
+      if (notionName) {
+        selectedTutor = notionName;          // Use Notion name for student filtering
+        selectedLeader = currentTutorName;   // Use tutor_name for schedule leader filtering
+        selectedAttendee = currentTutorName; // Use tutor_name for schedule attendee filtering
+        console.log(`Default filter set - Tutor: ${currentTutorName}, Notion: ${notionName}`);
+      } else {
+        console.warn(`Could not find Notion name for tutor: ${currentTutorName}`);
+      }
     }
   } catch (error) {
     console.error('Error loading initial data:', error);
@@ -5031,4 +5037,20 @@ async function deleteUser(userId, email) {
   } catch (error) {
     alert('ユーザー削除に失敗しました: ' + (error.response?.data?.error || error.message));
   }
+}
+
+/**
+ * Get Notion name from tutor name
+ */
+function getTutorNotionName(tutorName) {
+  if (!tutorName) return null;
+  
+  // Find matching tutor by tutor_name
+  const tutor = tutors.find(t => t.tutor_name === tutorName);
+  
+  if (tutor && tutor.notion_name) {
+    return tutor.notion_name;
+  }
+  
+  return null;
 }
