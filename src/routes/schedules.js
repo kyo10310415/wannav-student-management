@@ -67,7 +67,9 @@ app.post('/absence', async (c) => {
   try {
     const body = await c.req.json();
     const { 
-      event_id, 
+      event_id,
+      tutor_email,
+      tutor_name,
       absence_type, 
       reason, 
       schedule_date, 
@@ -77,7 +79,7 @@ app.post('/absence', async (c) => {
     } = body;
     
     // Validation
-    if (!event_id || !absence_type || !reason) {
+    if (!event_id || !tutor_email || !tutor_name || !absence_type || !reason) {
       return c.json({
         success: false,
         error: '必須項目が不足しています'
@@ -90,11 +92,6 @@ app.post('/absence', async (c) => {
         error: '不正な種別です'
       }, 400);
     }
-    
-    // Get current user email from session (placeholder - implement auth later)
-    // For now, use a default email
-    const tutorEmail = 'default@example.com'; // TODO: Get from auth session
-    const tutorName = 'Unknown Tutor'; // TODO: Get from tutors table
     
     // Extract year and month from schedule_date
     let year = new Date().getFullYear();
@@ -119,8 +116,8 @@ app.post('/absence', async (c) => {
     
     const result = await query(insertQuery, [
       event_id,
-      tutorEmail,
-      tutorName,
+      tutor_email,
+      tutor_name,
       absence_type,
       reason,
       year,
@@ -135,22 +132,89 @@ app.post('/absence', async (c) => {
     const counterColumn = absence_type === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
     const updateQuery = `
       UPDATE tutors 
-      SET ${counterColumn} = ${counterColumn} + 1
+      SET ${counterColumn} = COALESCE(${counterColumn}, 0) + 1
       WHERE email = $1
     `;
-    await query(updateQuery, [tutorEmail]);
+    await query(updateQuery, [tutor_email]);
     
     return c.json({
       success: true,
       data: {
         id: result.rows[0].id,
         absence_type,
+        tutor_name,
         message: '不参加申請を受け付けました'
       }
     });
     
   } catch (error) {
     console.error('Error creating absence request:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * Get absence statistics by month
+ */
+app.get('/absence-stats', async (c) => {
+  try {
+    const year = c.req.query('year') || new Date().getFullYear();
+    const month = c.req.query('month') || new Date().getMonth() + 1;
+    
+    // Get absence requests for the specified month
+    const requestsQuery = `
+      SELECT 
+        tutor_email,
+        tutor_name,
+        absence_type,
+        COUNT(*) as count
+      FROM absence_requests
+      WHERE year = $1 AND month = $2
+      GROUP BY tutor_email, tutor_name, absence_type
+      ORDER BY tutor_name, absence_type
+    `;
+    
+    const requestsResult = await query(requestsQuery, [year, month]);
+    
+    // Organize data by tutor
+    const statsByTutor = {};
+    requestsResult.rows.forEach(row => {
+      if (!statsByTutor[row.tutor_email]) {
+        statsByTutor[row.tutor_email] = {
+          tutor_email: row.tutor_email,
+          tutor_name: row.tutor_name,
+          cancel_count: 0,
+          reschedule_count: 0,
+          total_count: 0
+        };
+      }
+      
+      if (row.absence_type === 'cancel') {
+        statsByTutor[row.tutor_email].cancel_count = parseInt(row.count);
+      } else if (row.absence_type === 'reschedule') {
+        statsByTutor[row.tutor_email].reschedule_count = parseInt(row.count);
+      }
+      
+      statsByTutor[row.tutor_email].total_count += parseInt(row.count);
+    });
+    
+    // Convert to array and sort by total_count (descending)
+    const stats = Object.values(statsByTutor).sort((a, b) => b.total_count - a.total_count);
+    
+    return c.json({
+      success: true,
+      data: {
+        year: parseInt(year),
+        month: parseInt(month),
+        stats: stats
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching absence stats:', error);
     return c.json({
       success: false,
       error: error.message

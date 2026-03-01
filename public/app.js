@@ -17,6 +17,10 @@ let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for ac
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules'
 let schedules = []; // Tutor schedules data
 
+// Current authenticated tutor (for absence requests)
+let currentTutorEmail = localStorage.getItem('currentTutorEmail') || null;
+let currentTutorName = localStorage.getItem('currentTutorName') || null;
+
 // Schedule filters
 let selectedScheduleYear = new Date().getFullYear();
 let selectedScheduleMonth = new Date().getMonth() + 1; // 1-12
@@ -65,7 +69,31 @@ function renderHeader() {
             <i class="fas fa-users mr-3"></i>
             WannaV 生徒様管理システム
           </h1>
-          <p class="text-blue-100 mt-2">VTuber育成スクール生徒管理</p>
+          <div class="flex items-center justify-between mt-2">
+            <p class="text-blue-100">VTuber育成スクール生徒管理</p>
+            
+            <!-- Current Tutor Selector -->
+            <div class="flex items-center gap-2">
+              <label class="text-blue-100 text-sm">現在のTutor:</label>
+              <select 
+                id="current-tutor-selector" 
+                onchange="handleCurrentTutorChange(this.value)"
+                class="px-3 py-1 rounded bg-white text-gray-800 text-sm focus:ring-2 focus:ring-blue-300"
+              >
+                <option value="">選択してください</option>
+                ${tutors.filter(t => t.email).map(t => `
+                  <option value="${t.email}" ${currentTutorEmail === t.email ? 'selected' : ''}>
+                    ${t.tutor_name}
+                  </option>
+                `).join('')}
+              </select>
+              ${currentTutorName ? `
+                <span class="text-blue-100 text-sm">
+                  <i class="fas fa-user-check mr-1"></i>${currentTutorName}
+                </span>
+              ` : ''}
+            </div>
+          </div>
           
           <!-- Navigation -->
           <nav class="mt-6 flex gap-2 flex-wrap">
@@ -4125,6 +4153,12 @@ async function submitAbsenceRequest() {
     return;
   }
   
+  // Check if tutor is selected
+  if (!currentTutorEmail || !currentTutorName) {
+    alert('ヘッダーから現在のTutorを選択してください');
+    return;
+  }
+  
   // Get selected absence type
   const absenceTypeRadio = document.querySelector('input[name="absence-type"]:checked');
   if (!absenceTypeRadio) {
@@ -4154,11 +4188,15 @@ async function submitAbsenceRequest() {
     // Submit request
     const response = await axios.post(`${API_BASE}/api/schedules/absence`, {
       event_id: selectedScheduleForAbsence.event_id,
+      tutor_email: currentTutorEmail,
+      tutor_name: currentTutorName,
       absence_type: absenceType,
       reason: reason,
       schedule_date: selectedScheduleForAbsence.schedule_date,
       schedule_time: selectedScheduleForAbsence.schedule_time,
       schedule_title: selectedScheduleForAbsence.title,
+      matched_keyword: selectedScheduleForAbsence.matched_keyword
+    });
       matched_keyword: selectedScheduleForAbsence.matched_keyword
     });
     
@@ -4182,4 +4220,30 @@ async function submitAbsenceRequest() {
       submitButton.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>申請する';
     }
   }
+}
+
+// ==================== Current Tutor Management ====================
+
+/**
+ * Handle current tutor change
+ */
+function handleCurrentTutorChange(email) {
+  if (!email) {
+    currentTutorEmail = null;
+    currentTutorName = null;
+    localStorage.removeItem('currentTutorEmail');
+    localStorage.removeItem('currentTutorName');
+  } else {
+    const tutor = tutors.find(t => t.email === email);
+    if (tutor) {
+      currentTutorEmail = email;
+      currentTutorName = tutor.tutor_name;
+      localStorage.setItem('currentTutorEmail', email);
+      localStorage.setItem('currentTutorName', tutor.tutor_name);
+    }
+  }
+  
+  // Re-render header to update display
+  renderHeader();
+  renderApp();
 }
