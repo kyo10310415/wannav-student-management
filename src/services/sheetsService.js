@@ -159,6 +159,7 @@ export async function fetchSchedulesFromSheet() {
           // Google Sheetsの日時文字列（例: "2026/02/28 23:00:00"）を
           // JSTとして解釈する
           const dateStr = row[4];
+          console.log('[DEBUG] Original date string from Sheets:', dateStr);
           
           // 日時文字列を直接JSTとして解釈
           // "YYYY/MM/DD HH:MM:SS" 形式を想定
@@ -166,6 +167,15 @@ export async function fetchSchedulesFromSheet() {
           
           if (match) {
             const [_, year, month, day, hour, minute, second] = match;
+            console.log('[DEBUG] Parsed components:', { year, month, day, hour, minute, second });
+            
+            // 日付部分（YYYY/MM/DD）- JSTで表示
+            scheduleDate = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+            
+            // 時間部分（HH:MM）- JSTで表示
+            scheduleTime = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+            
+            console.log('[DEBUG] Display values (JST):', { scheduleDate, scheduleTime });
             
             // JSTのタイムゾーンオフセット（UTC+9）
             const jstOffset = 9 * 60; // 9時間を分に変換
@@ -183,12 +193,9 @@ export async function fetchSchedulesFromSheet() {
             // JSTオフセットを引く（JSTからUTCへ変換）
             startDate = new Date(utcDate.getTime() - jstOffset * 60 * 1000);
             
-            // 日付部分（YYYY/MM/DD）- JSTで表示
-            scheduleDate = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
-            
-            // 時間部分（HH:MM）- JSTで表示
-            scheduleTime = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+            console.log('[DEBUG] Stored UTC date:', startDate.toISOString());
           } else {
+            console.log('[DEBUG] Date string did not match expected format, using fallback');
             // フォールバック: 通常のDate解析
             startDate = new Date(dateStr);
             
@@ -208,6 +215,8 @@ export async function fetchSchedulesFromSheet() {
               timeZone: 'UTC',
               hour12: false
             });
+            
+            console.log('[DEBUG] Fallback values:', { scheduleDate, scheduleTime });
           }
         } catch (error) {
           console.error('Date parse error:', error);
