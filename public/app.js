@@ -23,6 +23,7 @@ let selectedScheduleMonth = new Date().getMonth() + 1; // 1-12
 let selectedKeyword = 'all'; // all, ロープレ, 1on1, チームMTG, チーム研修
 let selectedDateRange = 'all'; // all, this_week, next_week, this_month, next_month
 let selectedLeader = 'all'; // all or tutor_name
+let selectedAttendee = 'all'; // all or tutor_name
 let scheduleViewMode = 'list'; // list or calendar
 
 // Column filters and sort state for student management page
@@ -3452,7 +3453,7 @@ function renderSchedulesContent() {
         </div>
         
         <!-- Second row: Filters -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
           <!-- Keyword filter -->
           <select id="keyword-filter" onchange="handleKeywordFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="all">すべてのキーワード</option>
@@ -3474,6 +3475,11 @@ function renderSchedulesContent() {
           <!-- Leader filter -->
           <select id="leader-filter" onchange="handleLeaderFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             ${renderLeaderFilterOptions()}
+          </select>
+          
+          <!-- Attendee filter -->
+          <select id="attendee-filter" onchange="handleAttendeeFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            ${renderAttendeeFilterOptions()}
           </select>
           
           <!-- View mode toggle -->
@@ -3628,6 +3634,14 @@ function handleLeaderFilterChange(value) {
 }
 
 /**
+ * Handle attendee filter change
+ */
+function handleAttendeeFilterChange(value) {
+  selectedAttendee = value;
+  renderSchedulesContent();
+}
+
+/**
  * Toggle schedule view mode
  */
 function toggleScheduleViewMode(mode) {
@@ -3642,6 +3656,7 @@ function clearScheduleFilters() {
   selectedKeyword = 'all';
   selectedDateRange = 'all';
   selectedLeader = 'all';
+  selectedAttendee = 'all';
   renderSchedulesContent();
 }
 
@@ -3656,6 +3671,30 @@ function renderLeaderFilterOptions() {
   let html = '<option value="all">すべてのリーダー</option>';
   leaders.forEach(leader => {
     html += `<option value="${leader}">${leader}</option>`;
+  });
+  
+  return html;
+}
+
+/**
+ * Render attendee filter options
+ */
+function renderAttendeeFilterOptions() {
+  // Get unique attendees from all schedules
+  const attendeesSet = new Set();
+  schedules.forEach(schedule => {
+    if (schedule.attendee_names && Array.isArray(schedule.attendee_names)) {
+      schedule.attendee_names.forEach(name => {
+        if (name) attendeesSet.add(name);
+      });
+    }
+  });
+  
+  const attendees = [...attendeesSet].sort();
+  
+  let html = '<option value="all">すべての参加者</option>';
+  attendees.forEach(attendee => {
+    html += `<option value="${attendee}">${attendee}</option>`;
   });
   
   return html;
@@ -3722,6 +3761,14 @@ function getFilteredSchedules() {
     // Leader filter
     if (selectedLeader !== 'all' && schedule.leader_name !== selectedLeader) {
       return false;
+    }
+    
+    // Attendee filter
+    if (selectedAttendee !== 'all') {
+      const attendees = schedule.attendee_names || [];
+      if (!attendees.includes(selectedAttendee)) {
+        return false;
+      }
     }
     
     return true;
