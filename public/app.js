@@ -194,6 +194,14 @@ async function loadInitialData() {
     // Load lesson stats and dates for current month
     await loadLessonStats();
     await loadLessonDates();
+    
+    // Set default filter to current tutor if available
+    if (currentTutorName) {
+      selectedTutor = currentTutorName;
+      selectedLeader = currentTutorName;
+      selectedAttendee = currentTutorName;
+      console.log(`Default filter set to current tutor: ${currentTutorName}`);
+    }
   } catch (error) {
     console.error('Error loading initial data:', error);
     alert('データの読み込みに失敗しました: ' + error.message);
@@ -383,8 +391,8 @@ function renderReservationsPage() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter-reservations" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
-            <option value="all">すべてのTutor</option>
+          <select id="tutor-filter-reservations" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="all" ${selectedTutor === 'all' ? 'selected' : ''}>すべてのTutor</option>
             ${getTutorOptions()}
           </select>
         </div>
@@ -518,7 +526,8 @@ function getTutorOptions() {
   return uniqueNotionNames
     .map(notionName => {
       const displayName = getTutorDisplayName(notionName);
-      return `<option value="${notionName}">${displayName}</option>`;
+      const isSelected = notionName === selectedTutor ? 'selected' : '';
+      return `<option value="${notionName}" ${isSelected}>${displayName}</option>`;
     })
     .sort((a, b) => {
       // Sort by display name
@@ -1020,8 +1029,8 @@ function renderStudentsPage() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter-students" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
-            <option value="all">すべてのTutor</option>
+          <select id="tutor-filter-students" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="all" ${selectedTutor === 'all' ? 'selected' : ''}>すべてのTutor</option>
             ${getTutorOptions()}
           </select>
         </div>
@@ -2231,8 +2240,8 @@ async function renderTodayLessonsPage() {
             <i class="fas fa-filter mr-2"></i>
             担当Tutor絞り込み
           </label>
-          <select id="tutor-filter-today" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" value="${selectedTutor}">
-            <option value="all">すべてのTutor</option>
+          <select id="tutor-filter-today" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="all" ${selectedTutor === 'all' ? 'selected' : ''}>すべてのTutor</option>
             ${getTutorOptions()}
           </select>
         </div>
@@ -3756,9 +3765,10 @@ function renderLeaderFilterOptions() {
   const leaders = [...new Set(schedules.map(s => s.leader_name).filter(Boolean))];
   leaders.sort();
   
-  let html = '<option value="all">すべてのリーダー</option>';
+  let html = `<option value="all" ${selectedLeader === 'all' ? 'selected' : ''}>すべてのリーダー</option>`;
   leaders.forEach(leader => {
-    html += `<option value="${leader}">${leader}</option>`;
+    const isSelected = leader === selectedLeader ? 'selected' : '';
+    html += `<option value="${leader}" ${isSelected}>${leader}</option>`;
   });
   
   return html;
@@ -3780,9 +3790,10 @@ function renderAttendeeFilterOptions() {
   
   const attendees = [...attendeesSet].sort();
   
-  let html = '<option value="all">すべての参加者</option>';
+  let html = `<option value="all" ${selectedAttendee === 'all' ? 'selected' : ''}>すべての参加者</option>`;
   attendees.forEach(attendee => {
-    html += `<option value="${attendee}">${attendee}</option>`;
+    const isSelected = attendee === selectedAttendee ? 'selected' : '';
+    html += `<option value="${attendee}" ${isSelected}>${attendee}</option>`;
   });
   
   return html;
