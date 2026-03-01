@@ -4228,8 +4228,6 @@ async function submitAbsenceRequest() {
       schedule_title: selectedScheduleForAbsence.title,
       matched_keyword: selectedScheduleForAbsence.matched_keyword
     });
-      matched_keyword: selectedScheduleForAbsence.matched_keyword
-    });
     
     if (response.data.success) {
       alert(`不参加申請が完了しました\n種別: ${absenceType === 'cancel' ? 'キャンセル' : 'リスケ'}`);
