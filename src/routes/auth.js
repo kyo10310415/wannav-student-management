@@ -53,11 +53,11 @@ app.post('/login', async (c) => {
     
     // Get tutor name from tutors table
     const tutorResult = await query(
-      'SELECT name FROM tutors WHERE LOWER(email) = $1',
+      'SELECT tutor_name FROM tutors WHERE LOWER(email) = $1',
       [email.toLowerCase()]
     );
     
-    const tutorName = tutorResult.rows.length > 0 ? tutorResult.rows[0].name : null;
+    const tutorName = tutorResult.rows.length > 0 ? tutorResult.rows[0].tutor_name : null;
     
     // Create session
     const sessionToken = generateSessionToken();
@@ -150,11 +150,11 @@ app.get('/verify', async (c) => {
     
     // Get tutor name
     const tutorResult = await query(
-      'SELECT name FROM tutors WHERE LOWER(email) = $1',
+      'SELECT tutor_name FROM tutors WHERE LOWER(email) = $1',
       [session.email.toLowerCase()]
     );
     
-    const tutorName = tutorResult.rows.length > 0 ? tutorResult.rows[0].name : null;
+    const tutorName = tutorResult.rows.length > 0 ? tutorResult.rows[0].tutor_name : null;
     
     return c.json({
       success: true,

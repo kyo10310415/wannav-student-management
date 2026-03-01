@@ -52,7 +52,7 @@ app.get('/', requireAdmin, async (c) => {
         u.must_change_password, 
         u.created_at, 
         u.last_login,
-        t.name as tutor_name
+        t.tutor_name as tutor_name
       FROM users u
       LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
       ORDER BY u.created_at DESC
