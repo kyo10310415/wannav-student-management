@@ -28,7 +28,7 @@ let currentTutorName = null;
 // Schedule filters
 let selectedScheduleYear = new Date().getFullYear();
 let selectedScheduleMonth = new Date().getMonth() + 1; // 1-12
-let selectedKeyword = 'all'; // all, ロープレ, 1on1, チームMTG, チーム研修
+let selectedKeyword = 'all'; // all, ロープレ, 1on1, チームMTG, チーム研修, 全Tutor MTG
 let selectedDateRange = 'all'; // all, this_week, next_week, this_month, next_month
 let selectedLeader = 'all'; // all or tutor_name
 let selectedAttendee = 'all'; // all or tutor_name
@@ -3602,6 +3602,7 @@ function renderSchedulesContent() {
             <option value="1on1">1on1</option>
             <option value="チームMTG">チームMTG</option>
             <option value="チーム研修">チーム研修</option>
+            <option value="全Tutor MTG">全Tutor MTG</option>
           </select>
           
           <!-- Date range filter -->
@@ -3675,6 +3676,7 @@ function renderSchedulesContent() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">1on1</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チームMTG</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チーム研修</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">全Tutor MTG</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合計</th>
             </tr>
           </thead>
@@ -4016,7 +4018,8 @@ function renderSchedulesList() {
               'ロープレ': 'bg-blue-100 text-blue-800',
               '1on1': 'bg-green-100 text-green-800',
               'チームMTG': 'bg-orange-100 text-orange-800',
-              'チーム研修': 'bg-purple-100 text-purple-800'
+              'チーム研修': 'bg-purple-100 text-purple-800',
+              '全Tutor MTG': 'bg-pink-100 text-pink-800'
             };
             const colorClass = keywordColors[keyword] || 'bg-gray-100 text-gray-800';
             
@@ -4113,7 +4116,8 @@ function renderSchedulesCalendar() {
                   'ロープレ': 'bg-blue-200 border-blue-400',
                   '1on1': 'bg-green-200 border-green-400',
                   'チームMTG': 'bg-orange-200 border-orange-400',
-                  'チーム研修': 'bg-purple-200 border-purple-400'
+                  'チーム研修': 'bg-purple-200 border-purple-400',
+                  '全Tutor MTG': 'bg-pink-200 border-pink-400'
                 };
                 const colorClass = keywordColors[keyword] || 'bg-gray-200 border-gray-400';
                 
@@ -4153,6 +4157,7 @@ function renderAttendanceStatistics() {
           '1on1': 0,
           'チームMTG': 0,
           'チーム研修': 0,
+          '全Tutor MTG': 0,
           total: 0
         };
       }
@@ -4186,6 +4191,7 @@ function renderAttendanceStatistics() {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['1on1']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['チームMTG']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['チーム研修']}回</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['全Tutor MTG']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-blue-600">${counts.total}回</td>
       </tr>
     `;
