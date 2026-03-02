@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { sendDailyReminders, testReminder } from '../services/reminderService.js';
+import { sendTestWebhook } from '../services/discordService.js';
 
 const app = new Hono();
 
@@ -52,6 +53,44 @@ app.post('/test', async (c) => {
     });
   } catch (error) {
     console.error('Error sending test reminder:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/reminders/test-webhook
+ * Test webhook notification
+ * Body: { webhookUrl: "...", discordUserId: "...", message: "..." }
+ */
+app.post('/test-webhook', async (c) => {
+  try {
+    const { webhookUrl, discordUserId, message } = await c.req.json();
+    
+    if (!webhookUrl) {
+      return c.json({
+        success: false,
+        error: 'webhookUrl is required'
+      }, 400);
+    }
+    
+    const result = await sendTestWebhook(webhookUrl, discordUserId, message);
+    
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: 'Test webhook sent successfully'
+      });
+    } else {
+      return c.json({
+        success: false,
+        error: result.error || result.reason
+      }, 500);
+    }
+  } catch (error) {
+    console.error('Error sending test webhook:', error);
     return c.json({
       success: false,
       error: error.message

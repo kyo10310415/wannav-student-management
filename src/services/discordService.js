@@ -360,3 +360,69 @@ export async function notifyAbsenceApproval(tutorWebhookUrl, discordUserId, appr
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Send test webhook notification to Discord
+ * @param {string} webhookUrl - Discord webhook URL
+ * @param {string} discordUserId - Discord user ID for mention (optional)
+ * @param {string} message - Test message (optional)
+ * @returns {Promise<Object>} Result object
+ */
+export async function sendTestWebhook(webhookUrl, discordUserId = null, message = null) {
+  if (!webhookUrl) {
+    console.log('No webhook URL provided');
+    return { success: false, reason: 'No webhook URL' };
+  }
+
+  try {
+    const axios = (await import('axios')).default;
+    
+    // Build mention content
+    let content = '';
+    if (discordUserId) {
+      content = `<@${discordUserId}>`;
+    }
+
+    // Create test embed message
+    const embed = {
+      title: '🧪 テスト通知',
+      description: message || 'これはテスト送信です。システムが正常に動作しています。',
+      color: 0x00FF00, // Green
+      fields: [
+        {
+          name: 'テストタイプ',
+          value: 'Webhook通知テスト',
+          inline: true
+        },
+        {
+          name: '送信時刻',
+          value: new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
+          inline: true
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'WannaV スケジュール管理システム - テストモード'
+      }
+    };
+
+    // Send webhook
+    const payload = {
+      embeds: [embed]
+    };
+    
+    // Add content (mention) if Discord user ID is provided
+    if (content) {
+      payload.content = content;
+    }
+    
+    await axios.post(webhookUrl, payload);
+
+    console.log(`Test webhook sent successfully to ${webhookUrl.substring(0, 50)}...`);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error sending test webhook:', error.message);
+    return { success: false, error: error.message };
+  }
+}
