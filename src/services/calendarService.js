@@ -357,6 +357,13 @@ export async function fetchLessonsForTomorrow() {
     const totalEvents = uniqueEvents.size;
     console.log(`[Calendar] Total unique events found: ${totalEvents}`);
     
+    // Debug: Log raw event structure
+    if (totalEvents > 0) {
+      const firstEvent = Array.from(uniqueEvents.values())[0];
+      console.log(`[Calendar] Raw event object keys:`, Object.keys(firstEvent));
+      console.log(`[Calendar] Raw event sample:`, JSON.stringify(firstEvent, null, 2).substring(0, 500));
+    }
+    
     const allLessons = Array.from(uniqueEvents.values()).map(event => {
       const studentId = extractStudentId(event.description || '');
       
