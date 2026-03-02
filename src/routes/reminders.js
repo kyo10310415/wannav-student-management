@@ -177,4 +177,57 @@ app.get('/test-student-info/:studentId', async (c) => {
   }
 });
 
+/**
+ * GET /api/reminders/test-lesson-data
+ * Test fetching tomorrow's lesson data from Google Calendar
+ * Returns: Array of lesson objects with all fields
+ */
+app.get('/test-lesson-data', async (c) => {
+  try {
+    const { fetchLessonsForTomorrow } = await import('../services/calendarService.js');
+    
+    console.log('\n[Test] Fetching tomorrow\'s lessons from Google Calendar...');
+    
+    const lessons = await fetchLessonsForTomorrow();
+    
+    console.log(`[Test] Found ${lessons.length} lessons for tomorrow`);
+    
+    if (lessons.length > 0) {
+      console.log('[Test] Sample lesson data:');
+      lessons.slice(0, 3).forEach((lesson, index) => {
+        console.log(`\n[Test] Lesson ${index + 1}:`);
+        console.log(`[Test]   Student ID: ${lesson.student_id || '(not found)'}`);
+        console.log(`[Test]   Tutor: ${lesson.tutor_name || '(not found)'}`);
+        console.log(`[Test]   Date: ${lesson.lesson_date}`);
+        console.log(`[Test]   Meet Link: ${lesson.meet_link || '(not found)'}`);
+      });
+    }
+    
+    return c.json({
+      success: true,
+      data: {
+        totalLessons: lessons.length,
+        lessons: lessons.map(lesson => ({
+          student_id: lesson.student_id,
+          tutor_name: lesson.tutor_name,
+          lesson_date: lesson.lesson_date,
+          lesson_date_parsed: lesson.lesson_date ? new Date(lesson.lesson_date).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : null,
+          meet_link: lesson.meet_link,
+          title: lesson.title,
+          has_student_id: !!lesson.student_id,
+          has_tutor_name: !!lesson.tutor_name,
+          has_meet_link: !!lesson.meet_link
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('[Test] Error fetching lesson data:', error);
+    return c.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    }, 500);
+  }
+});
+
 export default app;
