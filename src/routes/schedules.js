@@ -344,4 +344,62 @@ app.get('/absence-stats', async (c) => {
   }
 });
 
+/**
+ * Get absence requests for current month
+ * Returns all absence requests to show who has submitted absence for each event
+ */
+app.get('/absence-requests', async (c) => {
+  try {
+    const year = c.req.query('year') || new Date().getFullYear();
+    const month = c.req.query('month') || new Date().getMonth() + 1;
+    
+    // Get all absence requests for the specified month
+    const requestsQuery = `
+      SELECT 
+        event_id,
+        tutor_email,
+        tutor_name,
+        absence_type,
+        reason,
+        created_at
+      FROM absence_requests
+      WHERE year = $1 AND month = $2
+      ORDER BY created_at DESC
+    `;
+    
+    const requestsResult = await query(requestsQuery, [year, month]);
+    
+    // Group by event_id
+    const requestsByEvent = {};
+    requestsResult.rows.forEach(row => {
+      if (!requestsByEvent[row.event_id]) {
+        requestsByEvent[row.event_id] = [];
+      }
+      requestsByEvent[row.event_id].push({
+        tutor_email: row.tutor_email,
+        tutor_name: row.tutor_name,
+        absence_type: row.absence_type,
+        reason: row.reason,
+        created_at: row.created_at
+      });
+    });
+    
+    return c.json({
+      success: true,
+      data: {
+        year: parseInt(year),
+        month: parseInt(month),
+        requests: requestsByEvent
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching absence requests:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

@@ -3514,6 +3514,27 @@ async function renderSchedulesPage() {
     
     if (res.data.success) {
       schedules = res.data.data;
+      
+      // Fetch absence requests for current month
+      try {
+        const absenceRes = await axios.get(`${API_BASE}/api/schedules/absence-requests?year=${selectedScheduleYear}&month=${selectedScheduleMonth}`);
+        if (absenceRes.data.success) {
+          const absenceRequests = absenceRes.data.data.requests;
+          
+          // Add absence information to schedules
+          schedules = schedules.map(schedule => {
+            const eventAbsences = absenceRequests[schedule.event_id] || [];
+            return {
+              ...schedule,
+              absence_requests: eventAbsences
+            };
+          });
+        }
+      } catch (absenceError) {
+        console.error('Error fetching absence requests:', absenceError);
+        // Continue without absence data
+      }
+      
       renderSchedulesContent();
     } else {
       content.innerHTML = `
@@ -3704,7 +3725,7 @@ function renderScheduleStatistics() {
 /**
  * Change schedule month
  */
-function changeScheduleMonth(offset) {
+async function changeScheduleMonth(offset) {
   selectedScheduleMonth += offset;
   if (selectedScheduleMonth > 12) {
     selectedScheduleMonth = 1;
@@ -3713,7 +3734,9 @@ function changeScheduleMonth(offset) {
     selectedScheduleMonth = 12;
     selectedScheduleYear--;
   }
-  renderSchedulesContent();
+  
+  // Reload schedules with new absence data for the selected month
+  await renderSchedulesPage();
 }
 
 /**
@@ -3923,6 +3946,7 @@ function renderSchedulesList() {
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">参加者</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">不参加申請済み</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">アクション</th>
           </tr>
         </thead>
@@ -3936,6 +3960,16 @@ function renderSchedulesList() {
             const attendeeNames = schedule.attendee_names && schedule.attendee_names.length > 0
               ? schedule.attendee_names.join(', ')
               : '-';
+            
+            // Get absence requests for this schedule
+            const absenceRequests = schedule.absence_requests || [];
+            const absenceNames = absenceRequests.length > 0
+              ? absenceRequests.map(req => {
+                  const typeLabel = req.absence_type === 'cancel' ? 'キャンセル' : 'リスケ';
+                  const typeColor = req.absence_type === 'cancel' ? 'text-red-600' : 'text-orange-600';
+                  return `<span class="${typeColor} font-semibold">${req.tutor_name} (${typeLabel})</span>`;
+                }).join(', ')
+              : '<span class="text-gray-400">-</span>';
             
             // Keyword badge colors
             const keywordColors = {
@@ -3961,6 +3995,7 @@ function renderSchedulesList() {
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleDate}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleTime}</td>
                 <td class="px-4 py-3 text-sm text-gray-600">${attendeeNames}</td>
+                <td class="px-4 py-3 text-sm">${absenceNames}</td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <button 
                     onclick='openAbsenceRequestModal(${scheduleJson})' 
@@ -4288,6 +4323,11 @@ async function submitAbsenceRequest() {
         alert(`不参加申請が完了しました\n種別: キャンセル`);
       }
       closeAbsenceRequestModal();
+      
+      // Reload schedules to show updated absence information
+      if (currentPage === 'schedules') {
+        await renderSchedulesPage();
+      }
     } else {
       alert('申請に失敗しました: ' + (response.data.error || '不明なエラー'));
       if (submitButton) {
