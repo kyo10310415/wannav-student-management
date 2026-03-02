@@ -61,6 +61,120 @@ app.post('/test', async (c) => {
 });
 
 /**
+ * POST /api/reminders/test-notification
+ * Test reminder notification with actual lesson data
+ * Body: { webhookUrl: "...", discordUserId: "..." }
+ */
+app.post('/test-notification', async (c) => {
+  try {
+    const { webhookUrl, discordUserId } = await c.req.json();
+    
+    if (!webhookUrl) {
+      return c.json({
+        success: false,
+        error: 'webhookUrl is required'
+      }, 400);
+    }
+    
+    console.log('[Test Notification] Fetching tomorrow\'s lessons...');
+    
+    // Get tomorrow's lessons
+    const { fetchLessonsForTomorrow } = await import('../services/sheetsService.js');
+    const lessons = await fetchLessonsForTomorrow();
+    
+    if (lessons.length === 0) {
+      return c.json({
+        success: false,
+        error: 'No lessons found for tomorrow'
+      }, 404);
+    }
+    
+    // Pick first lesson
+    const lesson = lessons[0];
+    console.log('[Test Notification] Using lesson:', {
+      student_id: lesson.student_id,
+      tutor_name: lesson.tutor_name,
+      lesson_date: lesson.lesson_date
+    });
+    
+    // Format lesson date
+    const lessonDate = new Date(lesson.lesson_date);
+    const dateStr = lessonDate.toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long',
+      timeZone: 'Asia/Tokyo'
+    });
+    const timeStr = lessonDate.toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Tokyo'
+    });
+    
+    // Build reminder message
+    let content = '';
+    if (discordUserId) {
+      content = `<@${discordUserId}>`;
+    }
+    
+    // Create embed
+    const embed = {
+      title: '📅 レッスンリマインド（テスト）',
+      description: '明日のレッスンのお知らせです！',
+      color: 0x5865F2, // Discord blue
+      fields: [
+        {
+          name: '日時',
+          value: `${dateStr} ${timeStr}`,
+          inline: false
+        },
+        {
+          name: '講師',
+          value: lesson.tutor_name || '未設定',
+          inline: true
+        },
+        {
+          name: '生徒ID',
+          value: lesson.student_id,
+          inline: true
+        }
+      ],
+      footer: {
+        text: 'WannaV レッスンリマインドシステム（テスト送信）'
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    // Send webhook
+    const axios = (await import('axios')).default;
+    await axios.post(webhookUrl, {
+      content: content,
+      embeds: [embed]
+    });
+    
+    console.log('[Test Notification] ✅ Test notification sent successfully');
+    
+    return c.json({
+      success: true,
+      message: 'Test notification sent successfully',
+      lesson: {
+        student_id: lesson.student_id,
+        tutor_name: lesson.tutor_name,
+        lesson_date: lessonDate.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
+        title: lesson.title
+      }
+    });
+  } catch (error) {
+    console.error('[Test Notification] Error:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * POST /api/reminders/test-webhook
  * Test webhook notification
  * Body: { webhookUrl: "...", discordUserId: "...", message: "..." }
