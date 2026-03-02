@@ -63,18 +63,19 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
     const lessons = rows.map(row => {
       let lessonDate = null;
       if (row[4]) {
-        // Parse date as JST (Japan Standard Time, UTC+9)
-        // Input format: "2026/02/26 19:00:00"
+        // Parse date as JST (Japan Standard Time)
+        // Input format: "2026/03/04 10:00:00"
         const dateStr = row[4];
         const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
         if (match) {
           const [, year, month, day, hour, minute, second] = match;
-          // Create date in JST by subtracting 9 hours to get UTC
+          // Create date in JST (treat as JST, no timezone conversion)
+          // Store as UTC but represents JST time
           lessonDate = new Date(Date.UTC(
             parseInt(year),
             parseInt(month) - 1, // Month is 0-indexed
             parseInt(day),
-            parseInt(hour) - 9, // Convert JST to UTC
+            parseInt(hour),      // Keep JST hours as-is
             parseInt(minute),
             parseInt(second)
           ));
@@ -158,23 +159,46 @@ export async function fetchLessonsForTomorrow() {
     // Fetch all lessons from sheet
     const allLessons = await fetchLessonsFromSheet(spreadsheetId, sheetName);
     
-    // Filter lessons for tomorrow
-    const tomorrowLessons = allLessons.filter(lesson => {
-      if (!lesson.lesson_date) return false;
-      
-      const lessonDate = new Date(lesson.lesson_date);
-      return lessonDate >= tomorrow && lessonDate < dayAfterTomorrow;
+    // Get tutor information from database
+    const { query } = await import('../db/connection.js');
+    const studentsResult = await query('SELECT student_id, tutor_name FROM students WHERE tutor_name IS NOT NULL');
+    const studentTutorMap = new Map();
+    studentsResult.rows.forEach(row => {
+      studentTutorMap.set(row.student_id, row.tutor_name);
     });
     
+    console.log(`[Sheets] Loaded ${studentTutorMap.size} student-tutor mappings from database`);
+    
+    // Filter lessons for tomorrow and only include "レッスン" schedules
+    const tomorrowLessons = allLessons
+      .filter(lesson => {
+        if (!lesson.lesson_date) return false;
+        
+        const lessonDate = new Date(lesson.lesson_date);
+        return lessonDate >= tomorrow && lessonDate < dayAfterTomorrow;
+      })
+      .filter(lesson => {
+        // Only include schedules with "レッスン" in title
+        return lesson.title && lesson.title.includes('レッスン');
+      })
+      .map(lesson => {
+        // Replace tutor_name with actual homeroom tutor from database
+        const actualTutor = studentTutorMap.get(lesson.student_id);
+        return {
+          ...lesson,
+          tutor_name: actualTutor || lesson.tutor_name
+        };
+      });
+    
     console.log(`[Sheets] Total lessons in sheet: ${allLessons.length}`);
-    console.log(`[Sheets] Lessons for tomorrow: ${tomorrowLessons.length}`);
+    console.log(`[Sheets] Lessons for tomorrow (with "レッスン" filter): ${tomorrowLessons.length}`);
     
     if (tomorrowLessons.length > 0) {
       console.log(`[Sheets] Sample lessons:`);
       tomorrowLessons.slice(0, 3).forEach((lesson, i) => {
         console.log(`[Sheets]   Lesson ${i + 1}:`);
         console.log(`[Sheets]     Student: ${lesson.student_id}`);
-        console.log(`[Sheets]     Tutor: ${lesson.tutor_name}`);
+        console.log(`[Sheets]     Tutor (from DB): ${lesson.tutor_name}`);
         console.log(`[Sheets]     Date: ${lesson.lesson_date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
         console.log(`[Sheets]     Title: ${lesson.title}`);
       });
