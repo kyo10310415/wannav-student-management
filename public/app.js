@@ -333,8 +333,16 @@ async function loadTodayLessonDates() {
 
 // Render main app
 async function renderApp() {
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('content').classList.remove('hidden');
+  // Check if elements exist
+  const loadingElement = document.getElementById('loading');
+  const contentElement = document.getElementById('content');
+  
+  if (loadingElement) {
+    loadingElement.classList.add('hidden');
+  }
+  if (contentElement) {
+    contentElement.classList.remove('hidden');
+  }
   
   // Render based on current page
   if (currentPage === 'reservations') {
@@ -4663,7 +4671,9 @@ async function handleLogin(e) {
         showChangePasswordPage(true); // true = first time
       } else {
         // Load main app
-        renderApp();
+        renderHeader();
+        await loadInitialData();
+        await renderApp();
       }
     } else {
       errorDiv.textContent = response.data.error || 'ログインに失敗しました';
