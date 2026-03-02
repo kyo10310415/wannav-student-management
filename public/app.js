@@ -359,6 +359,10 @@ async function renderApp() {
     await renderSchedulesPage();
   } else if (currentPage === 'users') {
     await renderUsersPage();
+  } else {
+    // Default to today's lessons
+    currentPage = 'today';
+    await renderTodayLessonsPage();
   }
 }
 
