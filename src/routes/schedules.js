@@ -661,13 +661,20 @@ app.post('/absence/:requestId/approve', async (c) => {
       const { fetchTutorWebhooks } = await import('../services/sheetsService.js');
       const { notifyAbsenceApproval } = await import('../services/discordService.js');
       
+      console.log(`[Discord] Attempting to send approval notification to tutor: ${request.tutor_name}`);
+      
       // Fetch tutor webhooks from WTCチャットURL sheet
       const tutorWebhookMap = await fetchTutorWebhooks();
+      console.log(`[Discord] Available tutor names in webhook map:`, Object.keys(tutorWebhookMap));
+      console.log(`[Discord] Looking for tutor name: "${request.tutor_name}"`);
       
       // Find tutor's webhook data by matching name
       const tutorData = tutorWebhookMap[request.tutor_name];
       
       if (tutorData && tutorData.webhook) {
+        console.log(`[Discord] Found webhook for ${request.tutor_name}, webhook URL: ${tutorData.webhook.substring(0, 50)}...`);
+        console.log(`[Discord] Discord User ID: ${tutorData.discordUserId || 'Not set'}`);
+        
         const approvalNotificationResult = await notifyAbsenceApproval(
           tutorData.webhook,
           tutorData.discordUserId,
@@ -683,12 +690,13 @@ app.post('/absence/:requestId/approve', async (c) => {
         );
         
         if (approvalNotificationResult.success) {
-          console.log(`[Discord] Approval notification sent to tutor ${request.tutor_name}`);
+          console.log(`[Discord] ✅ Approval notification sent successfully to tutor ${request.tutor_name}`);
         } else {
-          console.error(`[Discord] Failed to send approval notification to ${request.tutor_name}:`, approvalNotificationResult.error);
+          console.error(`[Discord] ❌ Failed to send approval notification to ${request.tutor_name}:`, approvalNotificationResult.error);
         }
       } else {
-        console.warn(`[Discord] No webhook URL found for tutor ${request.tutor_name}`);
+        console.warn(`[Discord] ⚠️ No webhook URL found for tutor "${request.tutor_name}"`);
+        console.warn(`[Discord] Available tutors:`, Object.keys(tutorWebhookMap).join(', '));
       }
     } catch (notifyError) {
       console.error('[Discord] Error sending approval notification:', notifyError);
