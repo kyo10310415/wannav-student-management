@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { fetchSchedulesFromSheet, fetchIndividualWebhooks } from '../services/sheetsService.js';
+import { fetchSchedulesFromSheet, fetchIndividualWebhooks, fetchTutorWebhooks } from '../services/sheetsService.js';
 import { query } from '../db/connection.js';
-import { notifyAbsenceRequest } from '../services/discordService.js';
+import { notifyAbsenceRequest, notifyAbsenceApproval } from '../services/discordService.js';
 
 const app = new Hono();
 
@@ -120,12 +120,12 @@ app.post('/absence', async (c) => {
     let absenceRequestId;
     
     if (existingRequest.rows.length > 0) {
-      // Update existing request instead of creating a new one
+      // Update existing request instead of creating a new one (reset to pending status)
       const updateQuery = `
         UPDATE absence_requests
         SET absence_type = $1, reason = $2, year = $3, month = $4,
             schedule_date = $5, schedule_time = $6, schedule_title = $7,
-            matched_keyword = $8, created_at = NOW()
+            matched_keyword = $8, created_at = NOW(), status = 'pending'
         WHERE id = $9
         RETURNING id
       `;
@@ -161,12 +161,12 @@ app.post('/absence', async (c) => {
         );
       }
     } else {
-      // Insert new absence request
+      // Insert new absence request with pending status
       const insertQuery = `
         INSERT INTO absence_requests 
         (event_id, tutor_email, tutor_name, absence_type, reason, year, month, 
-         schedule_date, schedule_time, schedule_title, matched_keyword)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         schedule_date, schedule_time, schedule_title, matched_keyword, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')
         RETURNING id
       `;
       
@@ -205,7 +205,11 @@ app.post('/absence', async (c) => {
         const leaderData = webhookMap[leader_email.toLowerCase()];
         
         if (leaderData && leaderData.webhook) {
-          // Send notification with Discord user mention
+          // Get base URL for schedule link
+          const baseUrl = process.env.APP_URL || 'https://wannav-student-management.onrender.com';
+          const scheduleUrl = `${baseUrl}/?page=schedules`;
+          
+          // Send notification with Discord user mention and schedule link
           const notificationResult = await notifyAbsenceRequest(
             leaderData.webhook,
             leaderData.discordUserId,
@@ -218,7 +222,8 @@ app.post('/absence', async (c) => {
               tutor_email,
               absence_type,
               reason
-            }
+            },
+            scheduleUrl
           );
           
           if (notificationResult.success) {
@@ -471,7 +476,7 @@ app.get('/absence-requests', async (c) => {
     const year = c.req.query('year') || new Date().getFullYear();
     const month = c.req.query('month') || new Date().getMonth() + 1;
     
-    // Get all absence requests for the specified month
+    // Get all APPROVED absence requests for the specified month
     const requestsQuery = `
       SELECT 
         event_id,
@@ -481,7 +486,7 @@ app.get('/absence-requests', async (c) => {
         reason,
         created_at
       FROM absence_requests
-      WHERE year = $1 AND month = $2
+      WHERE year = $1 AND month = $2 AND status = 'approved'
       ORDER BY created_at DESC
     `;
     
@@ -523,6 +528,180 @@ app.get('/absence-requests', async (c) => {
     
   } catch (error) {
     console.error('Error fetching absence requests:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * Get pending absence requests (for approval tab)
+ */
+app.get('/absence-requests/pending', async (c) => {
+  try {
+    const year = c.req.query('year') || new Date().getFullYear();
+    const month = c.req.query('month') || new Date().getMonth() + 1;
+    
+    // Get all PENDING absence requests for the specified month
+    const requestsQuery = `
+      SELECT 
+        id,
+        event_id,
+        tutor_email,
+        tutor_name,
+        absence_type,
+        reason,
+        schedule_title,
+        schedule_date,
+        schedule_time,
+        matched_keyword,
+        created_at
+      FROM absence_requests
+      WHERE year = $1 AND month = $2 AND status = 'pending'
+      ORDER BY created_at DESC
+    `;
+    
+    const requestsResult = await query(requestsQuery, [year, month]);
+    
+    // Group by event_id
+    const requestsByEvent = {};
+    requestsResult.rows.forEach(row => {
+      if (!requestsByEvent[row.event_id]) {
+        requestsByEvent[row.event_id] = {
+          event_id: row.event_id,
+          schedule_title: row.schedule_title,
+          schedule_date: row.schedule_date,
+          schedule_time: row.schedule_time,
+          matched_keyword: row.matched_keyword,
+          requests: []
+        };
+      }
+      
+      requestsByEvent[row.event_id].requests.push({
+        id: row.id,
+        tutor_email: row.tutor_email,
+        tutor_name: row.tutor_name,
+        absence_type: row.absence_type,
+        reason: row.reason,
+        created_at: row.created_at
+      });
+    });
+    
+    return c.json({
+      success: true,
+      data: {
+        year: parseInt(year),
+        month: parseInt(month),
+        pendingRequests: Object.values(requestsByEvent)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching pending absence requests:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * Approve an absence request
+ */
+app.post('/absence/:requestId/approve', async (c) => {
+  try {
+    const requestId = c.req.param('requestId');
+    const body = await c.req.json();
+    const { leader_email, leader_name } = body;
+    
+    // Validation
+    if (!leader_email || !leader_name) {
+      return c.json({
+        success: false,
+        error: 'リーダー情報が不足しています'
+      }, 400);
+    }
+    
+    // Get request details before updating
+    const getRequestQuery = `
+      SELECT * FROM absence_requests WHERE id = $1
+    `;
+    const requestResult = await query(getRequestQuery, [requestId]);
+    
+    if (requestResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: '申請が見つかりません'
+      }, 404);
+    }
+    
+    const request = requestResult.rows[0];
+    
+    // Check if already approved
+    if (request.status === 'approved') {
+      return c.json({
+        success: false,
+        error: 'すでに受理されています'
+      }, 400);
+    }
+    
+    // Update status to approved
+    const updateQuery = `
+      UPDATE absence_requests
+      SET status = 'approved', leader_email = $1, approved_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `;
+    
+    await query(updateQuery, [leader_email, requestId]);
+    
+    // Send approval notification to tutor
+    try {
+      const { fetchTutorWebhooks } = await import('../services/sheetsService.js');
+      const { notifyAbsenceApproval } = await import('../services/discordService.js');
+      
+      // Fetch tutor webhooks from WTCチャットURL sheet
+      const tutorWebhookMap = await fetchTutorWebhooks();
+      
+      // Find tutor's webhook data by matching name
+      const tutorData = tutorWebhookMap[request.tutor_name];
+      
+      if (tutorData && tutorData.webhook) {
+        const approvalNotificationResult = await notifyAbsenceApproval(
+          tutorData.webhook,
+          tutorData.discordUserId,
+          {
+            tutor_name: request.tutor_name,
+            absence_type: request.absence_type,
+            schedule_title: request.schedule_title,
+            schedule_date: request.schedule_date,
+            schedule_time: request.schedule_time,
+            matched_keyword: request.matched_keyword,
+            leader_name
+          }
+        );
+        
+        if (approvalNotificationResult.success) {
+          console.log(`[Discord] Approval notification sent to tutor ${request.tutor_name}`);
+        } else {
+          console.error(`[Discord] Failed to send approval notification to ${request.tutor_name}:`, approvalNotificationResult.error);
+        }
+      } else {
+        console.warn(`[Discord] No webhook URL found for tutor ${request.tutor_name}`);
+      }
+    } catch (notifyError) {
+      console.error('[Discord] Error sending approval notification:', notifyError);
+      // Don't fail the whole request if notification fails
+    }
+    
+    return c.json({
+      success: true,
+      message: '申請を受理しました'
+    });
+    
+  } catch (error) {
+    console.error('Error approving absence request:', error);
     return c.json({
       success: false,
       error: error.message

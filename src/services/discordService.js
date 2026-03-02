@@ -169,7 +169,7 @@ export { client };
  * @param {string} discordUserId - Leader's Discord user ID (optional)
  * @param {object} absenceData - Absence request data
  */
-export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, absenceData) {
+export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, absenceData, scheduleUrl = null) {
   if (!leaderWebhookUrl) {
     console.log('No webhook URL provided, skipping absence notification');
     return { success: false, reason: 'No webhook URL' };
@@ -194,43 +194,55 @@ export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, abse
       content = `<@${discordUserId}>`; // Discord user mention
     }
 
+    // Prepare fields
+    const fields = [
+      {
+        name: 'スケジュール',
+        value: schedule_title || '（タイトルなし）',
+        inline: false
+      },
+      {
+        name: '日時',
+        value: `${schedule_date} ${schedule_time}`,
+        inline: true
+      },
+      {
+        name: 'キーワード',
+        value: matched_keyword || '-',
+        inline: true
+      },
+      {
+        name: '申請者',
+        value: tutor_name,
+        inline: true
+      },
+      {
+        name: '種別',
+        value: absence_type === 'cancel' ? 'キャンセル' : 'リスケ',
+        inline: true
+      },
+      {
+        name: '理由',
+        value: reason || '（理由なし）',
+        inline: false
+      }
+    ];
+
+    // Add schedule URL if provided
+    if (scheduleUrl) {
+      fields.push({
+        name: 'Tutorスケジュール',
+        value: `[申請を確認する](${scheduleUrl})`,
+        inline: false
+      });
+    }
+
     // Create Discord embed message (simplified with fewer emojis)
     const embed = {
       title: '不参加申請通知',
       description: `${tutor_name} さんから不参加申請がありました`,
       color: absence_type === 'cancel' ? 0xFF0000 : 0xFFA500, // Red for cancel, Orange for reschedule
-      fields: [
-        {
-          name: 'スケジュール',
-          value: schedule_title || '（タイトルなし）',
-          inline: false
-        },
-        {
-          name: '日時',
-          value: `${schedule_date} ${schedule_time}`,
-          inline: true
-        },
-        {
-          name: 'キーワード',
-          value: matched_keyword || '-',
-          inline: true
-        },
-        {
-          name: '申請者',
-          value: tutor_name,
-          inline: true
-        },
-        {
-          name: '種別',
-          value: absence_type === 'cancel' ? 'キャンセル' : 'リスケ',
-          inline: true
-        },
-        {
-          name: '理由',
-          value: reason || '（理由なし）',
-          inline: false
-        }
-      ],
+      fields,
       timestamp: new Date().toISOString(),
       footer: {
         text: 'WannaV スケジュール管理システム'
@@ -254,6 +266,97 @@ export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, abse
     
   } catch (error) {
     console.error('Error sending absence notification:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send approval notification to tutor via Discord webhook
+ * @param {string} tutorWebhookUrl - Tutor's Discord webhook URL
+ * @param {string} discordUserId - Tutor's Discord user ID (for mention)
+ * @param {Object} approvalData - Approval data
+ * @returns {Promise<Object>} Result object
+ */
+export async function notifyAbsenceApproval(tutorWebhookUrl, discordUserId, approvalData) {
+  if (!tutorWebhookUrl) {
+    console.log('No webhook URL provided, skipping approval notification');
+    return { success: false, reason: 'No webhook URL' };
+  }
+
+  try {
+    const axios = (await import('axios')).default;
+    
+    const {
+      tutor_name,
+      absence_type,
+      schedule_title,
+      schedule_date,
+      schedule_time,
+      matched_keyword,
+      leader_name
+    } = approvalData;
+
+    // Build mention content
+    let content = '';
+    if (discordUserId) {
+      content = `<@${discordUserId}>`; // Discord user mention
+    }
+
+    // Create Discord embed message
+    const embed = {
+      title: '✅ 不参加申請が受理されました',
+      description: `${tutor_name} さんの不参加申請が受理されました`,
+      color: 0x00FF00, // Green for approval
+      fields: [
+        {
+          name: 'スケジュール',
+          value: schedule_title || '（タイトルなし）',
+          inline: false
+        },
+        {
+          name: '日時',
+          value: `${schedule_date} ${schedule_time}`,
+          inline: true
+        },
+        {
+          name: 'キーワード',
+          value: matched_keyword || '-',
+          inline: true
+        },
+        {
+          name: '種別',
+          value: absence_type === 'cancel' ? 'キャンセル' : 'リスケ',
+          inline: true
+        },
+        {
+          name: '受理者',
+          value: leader_name || 'リーダー',
+          inline: true
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'WannaV スケジュール管理システム'
+      }
+    };
+
+    // Send webhook
+    const payload = {
+      embeds: [embed]
+    };
+    
+    // Add content (mention) if Discord user ID is provided
+    if (content) {
+      payload.content = content;
+    }
+    
+    await axios.post(tutorWebhookUrl, payload);
+
+    console.log(`Approval notification sent to tutor's webhook for ${tutor_name}`);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error sending approval notification:', error.message);
     return { success: false, error: error.message };
   }
 }

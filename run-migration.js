@@ -1,39 +1,31 @@
-import { readFileSync, readdirSync } from 'fs';
-import { query } from './src/db/connection.js';
-import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import pg from 'pg';
+const { Pool } = pg;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
 
 async function runMigration() {
+  const client = await pool.connect();
+  
   try {
-    const migrationFile = process.argv[2];
+    const sql = readFileSync(join(__dirname, 'migrations/20260302_add_absence_approval.sql'), 'utf8');
     
-    if (migrationFile) {
-      // Run specific migration file
-      console.log(`Running migration: ${migrationFile}...`);
-      const sql = readFileSync(migrationFile, 'utf-8');
-      await query(sql);
-      console.log('✅ Migration completed successfully');
-    } else {
-      // Run all migrations in order
-      console.log('Running all migrations...');
-      const migrationsDir = './migrations';
-      const files = readdirSync(migrationsDir)
-        .filter(f => f.endsWith('.sql'))
-        .sort(); // Sort alphabetically to run in order
-      
-      for (const file of files) {
-        console.log(`\n📄 Running: ${file}`);
-        const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
-        await query(sql);
-        console.log(`✅ ${file} completed`);
-      }
-      
-      console.log('\n✅ All migrations completed successfully');
-    }
-    
-    process.exit(0);
+    console.log('Running migration: 20260302_add_absence_approval.sql');
+    await client.query(sql);
+    console.log('Migration completed successfully!');
   } catch (error) {
-    console.error('❌ Migration failed:', error.message);
-    process.exit(1);
+    console.error('Migration failed:', error);
+    throw error;
+  } finally {
+    client.release();
+    await pool.end();
   }
 }
 

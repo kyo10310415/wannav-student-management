@@ -277,3 +277,45 @@ export async function fetchIndividualWebhooks(spreadsheetId = '1DvjTbwz2qhqwSnNq
     throw error;
   }
 }
+
+/**
+ * Fetch Tutor webhooks from WTCチャットURL sheet
+ * @param {string} spreadsheetId - Spreadsheet ID (default: WTCチャットURL sheet)
+ * @returns {Object} Tutor name to {webhook, discordUserId} mapping
+ */
+export async function fetchTutorWebhooks(spreadsheetId = '13rHnYHavM6Mm7JRC3n88X2pTCoAlCZOXMkapDq7uwNs') {
+  const sheetName = 'WTCチャットURL';
+  
+  try {
+    const sheets = getSheets();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A2:L`, // A列: Tutor名, E列: チャットWebhook, L列: ユーザーID
+    });
+
+    const rows = response.data.values || [];
+    console.log(`Fetched ${rows.length} tutor webhook entries from ${sheetName}`);
+
+    // Create tutor name to {webhook, discordUserId} mapping
+    const webhookMap = {};
+    rows.forEach(row => {
+      const tutorName = row[0] ? row[0].trim() : null; // A列
+      const webhook = row[4] ? row[4].trim() : null;    // E列
+      const discordUserId = row[11] ? row[11].trim() : null; // L列
+      
+      if (tutorName && webhook) {
+        webhookMap[tutorName] = {
+          webhook,
+          discordUserId
+        };
+      }
+    });
+
+    console.log(`Valid tutor webhook mappings: ${Object.keys(webhookMap).length}`);
+    return webhookMap;
+  } catch (error) {
+    console.error('Error fetching tutor webhooks from Google Sheets:', error);
+    throw error;
+  }
+}

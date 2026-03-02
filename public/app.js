@@ -20,6 +20,7 @@ let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', '
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users'
 let schedules = []; // Tutor schedules data
+let pendingRequests = []; // Pending absence requests
 
 // Current authenticated tutor (for absence requests) - kept for backward compatibility
 let currentTutorEmail = null;
@@ -33,6 +34,7 @@ let selectedDateRange = 'all'; // all, this_week, next_week, this_month, next_mo
 let selectedLeader = 'all'; // all or tutor_name
 let selectedAttendee = 'all'; // all or tutor_name
 let scheduleViewMode = 'list'; // list or calendar
+let scheduleTab = 'confirmed'; // confirmed (受理済み) or pending (申請中)
 
 // Column filters and sort state for student management page
 let columnFilters = {}; // { columnName: selectedValue }
@@ -3593,8 +3595,26 @@ function renderSchedulesContent() {
           </button>
         </div>
         
-        <!-- Second row: Filters -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <!-- Tabs: 受理済み / 申請中 (only for leader+ roles) -->
+        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+          <div class="flex gap-2 border-b border-gray-200">
+            <button 
+              onclick="handleScheduleTabChange('confirmed')" 
+              class="px-6 py-3 font-semibold transition ${scheduleTab === 'confirmed' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}">
+              受理済み
+            </button>
+            <button 
+              onclick="handleScheduleTabChange('pending')" 
+              class="px-6 py-3 font-semibold transition ${scheduleTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}">
+              申請中
+            </button>
+          </div>
+        ` : ''}
+        
+        <!-- Second row: Filters (hide for pending tab) -->
+        ${scheduleTab === 'confirmed' ? `
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">`
+: '<!-- Filters hidden for pending tab --><div style="display:none;">'}
           <!-- Keyword filter -->
           <select id="keyword-filter" onchange="handleKeywordFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="all">すべてのキーワード</option>
@@ -3635,7 +3655,8 @@ function renderSchedulesContent() {
           </div>
         </div>
         
-        <!-- Third row: Actions -->
+        <!-- Third row: Actions (hide for pending tab) -->
+        ${scheduleTab === 'confirmed' ? `
         <div class="flex gap-2">
           <button onclick="renderSchedulesPage()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
             <i class="fas fa-sync-alt mr-2"></i>データ更新
@@ -3644,9 +3665,11 @@ function renderSchedulesContent() {
             <i class="fas fa-times mr-2"></i>フィルタークリア
           </button>
         </div>
+        ` : ''}
       </div>
     </div>
 
+    ${scheduleTab === 'confirmed' ? `
     <!-- Statistics -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
@@ -3661,7 +3684,14 @@ function renderSchedulesContent() {
     <div class="bg-white rounded-lg shadow-md p-6">
       ${scheduleViewMode === 'list' ? renderSchedulesList() : renderSchedulesCalendar()}
     </div>
+    ` : `
+    <!-- Pending Absence Requests -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      ${renderPendingRequests()}
+    </div>
+    `}
     
+    ${scheduleTab === 'confirmed' ? `
     <!-- Attendance Statistics -->
     <div class="bg-white rounded-lg shadow-md p-6 mt-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
@@ -3686,6 +3716,7 @@ function renderSchedulesContent() {
         </table>
       </div>
     </div>
+    ` : ''}
   `;
 }
 
@@ -3750,8 +3781,13 @@ async function changeScheduleMonth(offset) {
     selectedScheduleYear--;
   }
   
-  // Reload schedules with new absence data for the selected month
-  await renderSchedulesPage();
+  // Reload data based on current tab
+  if (scheduleTab === 'pending') {
+    await handleScheduleTabChange('pending');
+  } else {
+    // Reload schedules with new absence data for the selected month
+    await renderSchedulesPage();
+  }
 }
 
 /**
@@ -3759,6 +3795,37 @@ async function changeScheduleMonth(offset) {
  */
 function handleKeywordFilterChange(value) {
   selectedKeyword = value;
+  renderSchedulesContent();
+}
+
+/**
+ * Handle schedule tab change
+ */
+async function handleScheduleTabChange(tab) {
+  scheduleTab = tab;
+  
+  // Show loading
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="text-center py-12">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+      <p class="mt-4 text-gray-600">読み込み中...</p>
+    </div>
+  `;
+  
+  if (tab === 'pending') {
+    // Fetch pending requests
+    try {
+      const res = await axios.get(`${API_BASE}/api/schedules/absence-requests/pending?year=${selectedScheduleYear}&month=${selectedScheduleMonth}`);
+      if (res.data.success) {
+        pendingRequests = res.data.data.pendingRequests;
+      }
+    } catch (error) {
+      console.error('Error fetching pending requests:', error);
+      pendingRequests = [];
+    }
+  }
+  
   renderSchedulesContent();
 }
 
@@ -4198,6 +4265,80 @@ function renderAttendanceStatistics() {
   }).join('');
 }
 
+/**
+ * Render pending absence requests
+ */
+function renderPendingRequests() {
+  if (!pendingRequests || pendingRequests.length === 0) {
+    return `
+      <div class="text-center py-12">
+        <i class="fas fa-inbox text-gray-400 text-5xl mb-4"></i>
+        <p class="text-gray-600 text-lg">申請中の不参加申請はありません</p>
+      </div>
+    `;
+  }
+  
+  return `
+    <h2 class="text-xl font-bold text-gray-800 mb-4">
+      <i class="fas fa-clock mr-2"></i>申請中の不参加申請 (${pendingRequests.length}件)
+    </h2>
+    <div class="space-y-4">
+      ${pendingRequests.map(event => {
+        const keywordColors = {
+          'ロープレ': 'bg-blue-100 text-blue-800',
+          '1on1': 'bg-green-100 text-green-800',
+          'チームMTG': 'bg-orange-100 text-orange-800',
+          'チーム研修': 'bg-purple-100 text-purple-800',
+          '全Tutor MTG': 'bg-pink-100 text-pink-800'
+        };
+        const colorClass = keywordColors[event.matched_keyword] || 'bg-gray-100 text-gray-800';
+        
+        return `
+          <div class="border border-gray-200 rounded-lg p-4">
+            <div class="flex items-start justify-between mb-3">
+              <div>
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="px-3 py-1 rounded-full text-sm font-semibold ${colorClass}">
+                    ${event.matched_keyword || '-'}
+                  </span>
+                  <h3 class="text-lg font-semibold text-gray-900">${event.schedule_title || '（タイトルなし）'}</h3>
+                </div>
+                <p class="text-gray-600">
+                  <i class="fas fa-calendar mr-2"></i>${event.schedule_date} ${event.schedule_time}
+                </p>
+              </div>
+            </div>
+            
+            <div class="space-y-2">
+              ${event.requests.map(req => `
+                <div class="bg-gray-50 rounded-lg p-3 flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="font-semibold text-gray-900">${req.tutor_name}</span>
+                      <span class="px-2 py-1 rounded text-xs font-semibold ${req.absence_type === 'cancel' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}">
+                        ${req.absence_type === 'cancel' ? 'キャンセル' : 'リスケ'}
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-1">理由: ${req.reason || '（理由なし）'}</p>
+                    <p class="text-xs text-gray-500">申請日時: ${new Date(req.created_at).toLocaleString('ja-JP')}</p>
+                  </div>
+                  ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+                    <button 
+                      onclick="approveAbsenceRequest(${req.id}, '${req.tutor_name}')" 
+                      class="ml-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold">
+                      <i class="fas fa-check mr-1"></i>受理
+                    </button>
+                  ` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
 
 
 // ==================== Absence Request Modal ====================
@@ -4417,6 +4558,34 @@ async function cancelAbsenceRequest(eventId, tutorEmail) {
   } catch (error) {
     console.error('Cancel absence request error:', error);
     alert('取り下げに失敗しました: ' + error.message);
+  }
+}
+
+/**
+ * Approve absence request
+ */
+async function approveAbsenceRequest(requestId, tutorName) {
+  if (!confirm(`${tutorName} さんの不参加申請を受理しますか？`)) {
+    return;
+  }
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/schedules/absence/${requestId}/approve`, {
+      leader_email: currentUser.email,
+      leader_name: currentUser.name || currentUser.email
+    });
+    
+    if (response.data.success) {
+      alert('不参加申請を受理しました');
+      
+      // Reload pending requests
+      await handleScheduleTabChange('pending');
+    } else {
+      alert('受理に失敗しました: ' + (response.data.error || '不明なエラー'));
+    }
+  } catch (error) {
+    console.error('Approve absence request error:', error);
+    alert('受理に失敗しました: ' + error.message);
   }
 }
 
