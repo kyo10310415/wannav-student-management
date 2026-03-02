@@ -81,19 +81,22 @@ async function getCalendarIds() {
   // Check for multiple calendar IDs in environment first
   if (process.env.GOOGLE_CALENDAR_IDS) {
     const ids = process.env.GOOGLE_CALENDAR_IDS.split(',').map(id => id.trim());
-    console.log(`Using calendar IDs from environment: ${ids.join(', ')}`);
+    console.log(`[Calendar] Using calendar IDs from GOOGLE_CALENDAR_IDS: ${ids.length} calendar(s)`);
+    console.log(`[Calendar] IDs: ${ids.join(', ')}`);
     return ids;
   }
   
   // Fallback to single calendar ID
   if (process.env.GOOGLE_CALENDAR_ID) {
-    console.log(`Using single calendar ID from environment: ${process.env.GOOGLE_CALENDAR_ID}`);
+    console.log(`[Calendar] Using single calendar ID from GOOGLE_CALENDAR_ID: ${process.env.GOOGLE_CALENDAR_ID}`);
     return [process.env.GOOGLE_CALENDAR_ID];
   }
   
   // Use tutor emails from database as calendar IDs
-  console.log('No calendar IDs in environment, fetching from tutor emails...');
-  return await getCalendarIdsFromTutors();
+  console.log('[Calendar] No calendar IDs in environment, fetching from tutor emails...');
+  const ids = await getCalendarIdsFromTutors();
+  console.log(`[Calendar] Fetched ${ids.length} tutor email(s) as calendar IDs`);
+  return ids;
 }
 
 /**
@@ -290,19 +293,29 @@ export async function fetchLessonsForTomorrow() {
     const calendar = getCalendar();
     const calendarIds = await getCalendarIds();
 
-    const tomorrow = new Date();
+    // Use JST timezone for "tomorrow"
+    const now = new Date();
+    const jstOffset = 9 * 60 * 60 * 1000; // JST is UTC+9
+    const jstNow = new Date(now.getTime() + jstOffset);
+    
+    const tomorrow = new Date(jstNow);
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
 
     const dayAfter = new Date(tomorrow);
     dayAfter.setDate(dayAfter.getDate() + 1);
 
-    console.log(`Fetching tomorrow's lessons from ${calendarIds.length} calendar(s)`);
+    console.log(`[Calendar] Current time (JST): ${jstNow.toISOString()}`);
+    console.log(`[Calendar] Tomorrow (JST): ${tomorrow.toISOString()}`);
+    console.log(`[Calendar] Day after (JST): ${dayAfter.toISOString()}`);
+    console.log(`[Calendar] Fetching tomorrow's lessons from ${calendarIds.length} calendar(s)`);
+    console.log(`[Calendar] Calendar IDs:`, calendarIds);
 
     // Fetch events from all calendars in parallel
     const allEventsArrays = await Promise.all(
-      calendarIds.map(async (calendarId) => {
+      calendarIds.map(async (calendarId, index) => {
         try {
+          console.log(`[Calendar] Fetching from calendar ${index + 1}/${calendarIds.length}: ${calendarId.substring(0, 20)}...`);
           const response = await calendar.events.list({
             calendarId: calendarId,
             timeMin: tomorrow.toISOString(),
@@ -310,9 +323,11 @@ export async function fetchLessonsForTomorrow() {
             singleEvents: true,
             orderBy: 'startTime',
           });
-          return response.data.items || [];
+          const events = response.data.items || [];
+          console.log(`[Calendar] Found ${events.length} events in calendar ${index + 1}`);
+          return events;
         } catch (error) {
-          console.error(`Error fetching events from calendar ${calendarId}:`, error.message);
+          console.error(`[Calendar] ❌ Error fetching events from calendar ${calendarId}:`, error.message);
           return []; // Return empty array if calendar fails
         }
       })
@@ -342,7 +357,14 @@ export async function fetchLessonsForTomorrow() {
       };
     }).filter(lesson => lesson.student_id);
 
-    console.log(`Found ${lessons.length} lessons for tomorrow`);
+    console.log(`[Calendar] ✅ Found ${lessons.length} lessons for tomorrow (with student ID)`);
+    if (lessons.length > 0) {
+      console.log(`[Calendar] Sample lessons:`, lessons.slice(0, 2).map(l => ({
+        student_id: l.student_id,
+        tutor: l.tutor_name,
+        date: l.lesson_date
+      })));
+    }
     return lessons;
   } catch (error) {
     console.error('Error fetching tomorrow\'s lessons:', error);
