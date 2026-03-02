@@ -112,6 +112,14 @@ export async function sendReminder(studentId, lessonInfo) {
       return;
     }
 
+    // Get student name from database
+    const { query } = await import('../db/connection.js');
+    const studentResult = await query(
+      'SELECT name FROM students WHERE student_id = $1',
+      [studentId]
+    );
+    const studentName = studentResult.rows.length > 0 ? studentResult.rows[0].name : studentId;
+
     // Format lesson date
     const lessonDate = new Date(lessonInfo.lesson_date);
     const dateStr = lessonDate.toLocaleDateString('ja-JP', {
@@ -132,19 +140,21 @@ export async function sendReminder(studentId, lessonInfo) {
       message += `<@${studentInfo.discordId}>\n\n`;
     }
     
-    message += `📅 **レッスンリマインド**\n\n`;
-    message += `明日のレッスンのお知らせです！\n\n`;
+    message += `${studentName}様\n\n`;
+    message += `明日はレッスンの予定になっております！\n`;
+    message += `忘れずにご参加ください！\n`;
+    message += `もしご都合が悪い場合は、必ず担任の先生にご連絡ください！\n\n`;
     message += `**日時**: ${dateStr} ${timeStr}\n`;
     
     if (lessonInfo.tutor_name) {
-      message += `**講師**: ${lessonInfo.tutor_name}\n`;
+      message += `**担任講師**: ${lessonInfo.tutor_name}\n`;
     }
     
     message += `\nよろしくお願いいたします！`;
 
     // Send message
     await channel.send(message);
-    console.log(`Reminder sent to student ${studentId} in channel ${channelId}`);
+    console.log(`Reminder sent to student ${studentId} (${studentName}) in channel ${channelId}`);
     
     return true;
   } catch (error) {

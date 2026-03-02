@@ -91,8 +91,18 @@ app.post('/test-notification', async (c) => {
     
     // Pick first lesson
     const lesson = lessons[0];
+    
+    // Get student name from database
+    const { query } = await import('../db/connection.js');
+    const studentResult = await query(
+      'SELECT name FROM students WHERE student_id = $1',
+      [lesson.student_id]
+    );
+    const studentName = studentResult.rows.length > 0 ? studentResult.rows[0].name : lesson.student_id;
+    
     console.log('[Test Notification] Using lesson:', {
       student_id: lesson.student_id,
+      student_name: studentName,
       tutor_name: lesson.tutor_name,
       lesson_date: lesson.lesson_date
     });
@@ -115,13 +125,16 @@ app.post('/test-notification', async (c) => {
     // Build reminder message
     let content = '';
     if (discordUserId) {
-      content = `<@${discordUserId}>`;
+      content = `<@${discordUserId}>\n\n`;
     }
+    content += `${studentName}様\n\n`;
+    content += `明日はレッスンの予定になっております！\n`;
+    content += `忘れずにご参加ください！\n`;
+    content += `もしご都合が悪い場合は、必ず担任の先生にご連絡ください！`;
     
     // Create embed
     const embed = {
-      title: '📅 レッスンリマインド（テスト）',
-      description: '明日のレッスンのお知らせです！',
+      title: '📅 レッスンリマインド',
       color: 0x5865F2, // Discord blue
       fields: [
         {
@@ -130,18 +143,13 @@ app.post('/test-notification', async (c) => {
           inline: false
         },
         {
-          name: '講師',
+          name: '担任講師',
           value: lesson.tutor_name || '未設定',
-          inline: true
-        },
-        {
-          name: '生徒ID',
-          value: lesson.student_id,
-          inline: true
+          inline: false
         }
       ],
       footer: {
-        text: 'WannaV レッスンリマインドシステム（テスト送信）'
+        text: 'よろしくお願いいたします！'
       },
       timestamp: new Date().toISOString()
     };
@@ -160,6 +168,7 @@ app.post('/test-notification', async (c) => {
       message: 'Test notification sent successfully',
       lesson: {
         student_id: lesson.student_id,
+        student_name: studentName,
         tutor_name: lesson.tutor_name,
         lesson_date: lessonDate.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
         title: lesson.title

@@ -64,21 +64,21 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
       let lessonDate = null;
       if (row[4]) {
         // Parse date as JST (Japan Standard Time)
-        // Input format: "2026/03/04 10:00:00"
+        // Input format: "2026/03/04 10:00:00" or "2026/3/4 10:00:00"
         const dateStr = row[4];
         const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
         if (match) {
           const [, year, month, day, hour, minute, second] = match;
-          // Create date in JST (treat as JST, no timezone conversion)
-          // Store as UTC but represents JST time
-          lessonDate = new Date(Date.UTC(
+          // Create date using local timezone constructor (treats as JST in JST environment)
+          // This preserves the time as-is without timezone conversion
+          lessonDate = new Date(
             parseInt(year),
             parseInt(month) - 1, // Month is 0-indexed
             parseInt(day),
-            parseInt(hour),      // Keep JST hours as-is
+            parseInt(hour),
             parseInt(minute),
             parseInt(second)
-          ));
+          );
         } else {
           // Fallback to original behavior if format doesn't match
           lessonDate = new Date(dateStr);
