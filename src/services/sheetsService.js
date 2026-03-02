@@ -161,10 +161,10 @@ export async function fetchLessonsForTomorrow() {
     
     // Get tutor information from database
     const { query } = await import('../db/connection.js');
-    const studentsResult = await query('SELECT student_id, tutor_name FROM students WHERE tutor_name IS NOT NULL');
+    const studentsResult = await query('SELECT student_id, homeroom_tutor FROM students WHERE homeroom_tutor IS NOT NULL');
     const studentTutorMap = new Map();
     studentsResult.rows.forEach(row => {
-      studentTutorMap.set(row.student_id, row.tutor_name);
+      studentTutorMap.set(row.student_id, row.homeroom_tutor);
     });
     
     console.log(`[Sheets] Loaded ${studentTutorMap.size} student-tutor mappings from database`);
