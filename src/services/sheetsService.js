@@ -61,36 +61,13 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
 
     // Convert rows to lesson objects
     const lessons = rows.map(row => {
-      let lessonDate = null;
-      if (row[4]) {
-        // Parse date as JST (Japan Standard Time)
-        // Input format: "2026/03/04 10:00:00" or "2026/3/4 10:00:00"
-        const dateStr = row[4];
-        const match = dateStr.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
-        if (match) {
-          const [, year, month, day, hour, minute, second] = match;
-          // Create date using local timezone constructor (treats as JST in JST environment)
-          // This preserves the time as-is without timezone conversion
-          lessonDate = new Date(
-            parseInt(year),
-            parseInt(month) - 1, // Month is 0-indexed
-            parseInt(day),
-            parseInt(hour),
-            parseInt(minute),
-            parseInt(second)
-          );
-        } else {
-          // Fallback to original behavior if format doesn't match
-          lessonDate = new Date(dateStr);
-        }
-      }
-      
       return {
         calendar_event_id: row[0] || null,
         student_id: row[1] || null,
         tutor_name: row[2] || null,
         tutor_email: row[3] || null,
-        lesson_date: lessonDate,
+        lesson_date: row[4] || null,  // Keep as string from spreadsheet (e.g., "2026/03/04 10:00:00")
+        lesson_date_raw: row[4] || null,  // Store raw string for display
         title: row[5] || null,
         description: row[6] || null,
         meet_link: row[7] || null,
@@ -147,12 +124,11 @@ export async function fetchLessonsForTomorrow() {
     
     const tomorrow = new Date(jstNow);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
     
-    const dayAfterTomorrow = new Date(tomorrow);
-    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+    // Format as YYYY/M/D for comparison (match spreadsheet format)
+    const tomorrowStr = `${tomorrow.getFullYear()}/${tomorrow.getMonth() + 1}/${tomorrow.getDate()}`;
     
-    console.log(`[Sheets] Fetching lessons for tomorrow: ${tomorrow.toISOString().split('T')[0]}`);
+    console.log(`[Sheets] Fetching lessons for tomorrow: ${tomorrowStr}`);
     console.log(`[Sheets] Spreadsheet ID: ${spreadsheetId}`);
     console.log(`[Sheets] Sheet name: ${sheetName}`);
     
@@ -174,8 +150,13 @@ export async function fetchLessonsForTomorrow() {
       .filter(lesson => {
         if (!lesson.lesson_date) return false;
         
-        const lessonDate = new Date(lesson.lesson_date);
-        return lessonDate >= tomorrow && lessonDate < dayAfterTomorrow;
+        // Compare date string (lesson_date format: "2026/3/4 10:00:00")
+        // Extract date part and compare with tomorrow
+        const dateMatch = lesson.lesson_date.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+        if (!dateMatch) return false;
+        
+        const lessonDateStr = `${dateMatch[1]}/${parseInt(dateMatch[2])}/${parseInt(dateMatch[3])}`;
+        return lessonDateStr === tomorrowStr;
       })
       .filter(lesson => {
         // Only include schedules with "レッスン" in title
@@ -199,7 +180,7 @@ export async function fetchLessonsForTomorrow() {
         console.log(`[Sheets]   Lesson ${i + 1}:`);
         console.log(`[Sheets]     Student: ${lesson.student_id}`);
         console.log(`[Sheets]     Tutor (from DB): ${lesson.tutor_name}`);
-        console.log(`[Sheets]     Date: ${lesson.lesson_date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
+        console.log(`[Sheets]     Date (raw): ${lesson.lesson_date}`);
         console.log(`[Sheets]     Title: ${lesson.title}`);
       });
     }

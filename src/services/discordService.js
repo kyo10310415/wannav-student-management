@@ -120,18 +120,8 @@ export async function sendReminder(studentId, lessonInfo) {
     );
     const studentName = studentResult.rows.length > 0 ? studentResult.rows[0].name : studentId;
 
-    // Format lesson date
-    const lessonDate = new Date(lessonInfo.lesson_date);
-    const dateStr = lessonDate.toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long'
-    });
-    const timeStr = lessonDate.toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    // Use raw date string from spreadsheet (e.g., "2026/03/04 10:00:00")
+    const dateTimeStr = lessonInfo.lesson_date || '日時未設定';
 
     // Build reminder message
     let message = '';
@@ -144,7 +134,7 @@ export async function sendReminder(studentId, lessonInfo) {
     message += `明日はレッスンの予定になっております！\n`;
     message += `忘れずにご参加ください！\n`;
     message += `もしご都合が悪い場合は、必ず担任の先生にご連絡ください！\n\n`;
-    message += `**日時**: ${dateStr} ${timeStr}\n`;
+    message += `**日時**: ${dateTimeStr}\n`;
     
     if (lessonInfo.tutor_name) {
       message += `**担任講師**: ${lessonInfo.tutor_name}\n`;

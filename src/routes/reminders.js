@@ -107,20 +107,8 @@ app.post('/test-notification', async (c) => {
       lesson_date: lesson.lesson_date
     });
     
-    // Format lesson date
-    const lessonDate = new Date(lesson.lesson_date);
-    const dateStr = lessonDate.toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long',
-      timeZone: 'Asia/Tokyo'
-    });
-    const timeStr = lessonDate.toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Tokyo'
-    });
+    // Use raw date string from spreadsheet (e.g., "2026/03/04 10:00:00")
+    const dateTimeStr = lesson.lesson_date || '日時未設定';
     
     // Build reminder message
     let content = '';
@@ -139,7 +127,7 @@ app.post('/test-notification', async (c) => {
       fields: [
         {
           name: '日時',
-          value: `${dateStr} ${timeStr}`,
+          value: dateTimeStr,
           inline: false
         },
         {
@@ -170,7 +158,7 @@ app.post('/test-notification', async (c) => {
         student_id: lesson.student_id,
         student_name: studentName,
         tutor_name: lesson.tutor_name,
-        lesson_date: lessonDate.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
+        lesson_date: lesson.lesson_date,
         title: lesson.title
       }
     });
