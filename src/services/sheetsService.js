@@ -5,7 +5,7 @@ let sheets;
 /**
  * Initialize Google Sheets API
  */
-function getSheets() {
+export function getSheets() {
   if (!sheets) {
     let credentials;
     

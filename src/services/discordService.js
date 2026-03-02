@@ -22,19 +22,61 @@ client.login(process.env.DISCORD_BOT_TOKEN).catch(err => {
  * This is a placeholder - you'll need to implement actual Google Sheets API
  */
 async function getStudentDiscordInfo(studentId) {
-  // TODO: Implement Google Sheets API integration
-  // For now, return mock data structure
-  // URL: https://docs.google.com/spreadsheets/d/1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM/edit
-  // Sheet: ❶RAW_生徒様情報
-  // B列: 学籍番号
-  // M列: チャットURL
-  // G列: Discord ID
-  
-  return {
-    studentId: studentId,
-    chatUrl: null,  // Extract from column M
-    discordId: null // Extract from column G
-  };
+  try {
+    // Import sheets service
+    const { getSheets } = await import('./sheetsService.js');
+    const sheets = getSheets();
+    
+    const spreadsheetId = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM';
+    const sheetName = '❶RAW_生徒様情報';
+    
+    // Fetch data from Google Sheets (B, G, M columns)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!B2:M`, // B列（学籍番号）からM列（チャットURL）まで
+    });
+
+    const rows = response.data.values || [];
+    console.log(`Fetched ${rows.length} student records from Google Sheets`);
+
+    // Find student by ID (B列 = index 0)
+    const studentRow = rows.find(row => row[0] === studentId);
+    
+    if (!studentRow) {
+      console.warn(`Student ${studentId} not found in Google Sheets`);
+      return {
+        studentId: studentId,
+        chatUrl: null,
+        discordId: null
+      };
+    }
+
+    // Extract data
+    // B列 = index 0 (学籍番号)
+    // G列 = index 5 (Discord ID)
+    // M列 = index 11 (チャットURL)
+    const discordId = studentRow[5] ? studentRow[5].trim() : null;
+    const chatUrl = studentRow[11] ? studentRow[11].trim() : null;
+
+    console.log(`Student ${studentId} found:`, {
+      discordId: discordId ? 'Set' : 'Not set',
+      chatUrl: chatUrl ? 'Set' : 'Not set'
+    });
+
+    return {
+      studentId: studentId,
+      chatUrl: chatUrl,
+      discordId: discordId
+    };
+  } catch (error) {
+    console.error(`Error fetching student Discord info for ${studentId}:`, error);
+    // Return empty data on error
+    return {
+      studentId: studentId,
+      chatUrl: null,
+      discordId: null
+    };
+  }
 }
 
 /**
