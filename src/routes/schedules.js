@@ -668,8 +668,22 @@ app.post('/absence/:requestId/approve', async (c) => {
       console.log(`[Discord] Available tutor names in webhook map:`, Object.keys(tutorWebhookMap));
       console.log(`[Discord] Looking for tutor name: "${request.tutor_name}"`);
       
-      // Find tutor's webhook data by matching name
-      const tutorData = tutorWebhookMap[request.tutor_name];
+      // Find tutor's webhook data by matching name (exact match first)
+      let tutorData = tutorWebhookMap[request.tutor_name];
+      
+      // If exact match not found, try partial match (fallback)
+      if (!tutorData) {
+        const tutorNameLower = request.tutor_name.toLowerCase().replace(/\s/g, '');
+        const matchedKey = Object.keys(tutorWebhookMap).find(key => {
+          const keyLower = key.toLowerCase().replace(/\s/g, '');
+          return keyLower.includes(tutorNameLower) || tutorNameLower.includes(keyLower);
+        });
+        
+        if (matchedKey) {
+          tutorData = tutorWebhookMap[matchedKey];
+          console.log(`[Discord] Found partial match: "${request.tutor_name}" → "${matchedKey}"`);
+        }
+      }
       
       if (tutorData && tutorData.webhook) {
         console.log(`[Discord] Found webhook for ${request.tutor_name}, webhook URL: ${tutorData.webhook.substring(0, 50)}...`);
