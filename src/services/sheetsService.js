@@ -211,6 +211,7 @@ export async function fetchSchedulesFromSheet() {
       
       return {
         event_id: row[0] || null,           // A列: イベントID
+        unique_event_key: `${row[0] || 'unknown'}_${scheduleDate}_${scheduleTime}`.replace(/[\/:\s]/g, '-'), // ユニークキー（event_id + 日付 + 時間）
         account: row[1] || null,            // B列: アカウント（メールアドレス）
         matched_keyword: row[2] || null,    // C列: 一致キーワード
         title: row[3] || null,              // D列: タイトル

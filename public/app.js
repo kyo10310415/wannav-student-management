@@ -3523,7 +3523,8 @@ async function renderSchedulesPage() {
           
           // Add absence information to schedules
           schedules = schedules.map(schedule => {
-            const eventAbsences = absenceRequests[schedule.event_id] || [];
+            const uniqueKey = schedule.unique_event_key || schedule.event_id;
+            const eventAbsences = absenceRequests[uniqueKey] || [];
             return {
               ...schedule,
               absence_requests: eventAbsences
@@ -3987,8 +3988,9 @@ function renderSchedulesList() {
                   
                   // Add cancel button if this is current user's request
                   const isOwnRequest = currentTutorEmail && req.tutor_email === currentTutorEmail;
+                  const uniqueKey = schedule.unique_event_key || schedule.event_id;
                   const cancelButton = isOwnRequest 
-                    ? `<button onclick="cancelAbsenceRequest('${schedule.event_id}', '${req.tutor_email}')" class="ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded" title="取り下げる">
+                    ? `<button onclick="cancelAbsenceRequest('${uniqueKey}', '${req.tutor_email}')" class="ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded" title="取り下げる">
                          <i class="fas fa-times"></i>
                        </button>`
                     : '';
@@ -4329,7 +4331,7 @@ async function submitAbsenceRequest() {
     
     // Submit request
     const response = await axios.post(`${API_BASE}/api/schedules/absence`, {
-      event_id: selectedScheduleForAbsence.event_id,
+      event_id: selectedScheduleForAbsence.unique_event_key || selectedScheduleForAbsence.event_id, // Use unique key if available
       tutor_email: currentTutorEmail,
       tutor_name: currentTutorName,
       absence_type: absenceType,
