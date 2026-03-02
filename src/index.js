@@ -74,13 +74,13 @@ app.get('/', (c) => {
   `);
 });
 
-// Schedule daily reminders (runs at 10:00 AM JST every day)
-// JST = UTC+9, so 10:00 JST = 01:00 UTC
+// Schedule daily reminders (runs at 17:00 JST every day)
+// JST = UTC+9, so 17:00 JST = 08:00 UTC
 // Can be disabled by setting DISCORD_REMINDERS_ENABLED=false
 if (process.env.DISCORD_REMINDERS_ENABLED !== 'false') {
-  console.log('Discord automatic reminders: ENABLED');
-  cron.schedule('0 1 * * *', async () => {
-    console.log('Running daily reminder task...');
+  console.log('Discord automatic reminders: ENABLED (17:00 JST daily)');
+  cron.schedule('0 8 * * *', async () => {
+    console.log('Running daily reminder task at 17:00 JST...');
     try {
       await sendDailyReminders();
       console.log('Daily reminders sent successfully');
