@@ -221,17 +221,27 @@ export async function fetchLessonsForMonth(year, month) {
  * Based on the image, student ID appears in the description field
  */
 function extractStudentId(description) {
+  if (!description) return null;
+  
   // Look for pattern like "学籍番号" or "OLTS240488-AR" format
   const patterns = [
     /学籍番号[：:\s]*([A-Z0-9-]+)/i,
     /OLTS\d{6}-[A-Z]{2}/i,
     /予約者[：:\s]*.*\n.*\n.*学籍番号[：:\s]*([A-Z0-9-]+)/i,
+    // Additional flexible patterns
+    /\bOLTS[A-Z0-9-]+\b/i,  // Any OLTS pattern
+    /学生ID[：:\s]*([A-Z0-9-]+)/i,
+    /生徒ID[：:\s]*([A-Z0-9-]+)/i,
+    /ID[：:\s]*OLTS[A-Z0-9-]+/i,
   ];
 
   for (const pattern of patterns) {
     const match = description.match(pattern);
     if (match) {
-      return match[1] || match[0];
+      // Return the captured group if exists, otherwise the full match
+      const extracted = match[1] || match[0];
+      // Clean up any whitespace
+      return extracted.trim();
     }
   }
 
@@ -343,7 +353,11 @@ export async function fetchLessonsForTomorrow() {
       }
     });
 
-    const lessons = Array.from(uniqueEvents.values()).map(event => {
+    // Log total events before filtering
+    const totalEvents = uniqueEvents.size;
+    console.log(`[Calendar] Total unique events found: ${totalEvents}`);
+    
+    const allLessons = Array.from(uniqueEvents.values()).map(event => {
       const studentId = extractStudentId(event.description || '');
       
       return {
@@ -355,7 +369,23 @@ export async function fetchLessonsForTomorrow() {
         description: event.description,
         meet_link: event.hangoutLink || extractMeetLink(event.description || '')
       };
-    }).filter(lesson => lesson.student_id);
+    });
+    
+    // Log sample events BEFORE filtering
+    if (allLessons.length > 0) {
+      console.log(`[Calendar] Sample events (before student ID filter):`);
+      allLessons.slice(0, 3).forEach((lesson, i) => {
+        console.log(`[Calendar]   Event ${i + 1}:`);
+        console.log(`[Calendar]     Title: ${lesson.title}`);
+        console.log(`[Calendar]     Description (first 200 chars): ${(lesson.description || '(empty)').substring(0, 200)}`);
+        console.log(`[Calendar]     Extracted Student ID: ${lesson.student_id || '(NOT FOUND)'}`);
+        console.log(`[Calendar]     Extracted Tutor: ${lesson.tutor_name || '(NOT FOUND)'}`);
+        console.log(`[Calendar]     Meet Link: ${lesson.meet_link || '(NOT FOUND)'}`);
+      });
+    }
+    
+    // Filter by student ID
+    const lessons = allLessons.filter(lesson => lesson.student_id);
 
     console.log(`[Calendar] ✅ Found ${lessons.length} lessons for tomorrow (with student ID)`);
     if (lessons.length > 0) {
