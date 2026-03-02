@@ -972,7 +972,7 @@ APP_URL=https://wannav-student-management.onrender.com
 
 ### 📅 Tutorスケジュールページ
 
-**目的**: Google Sheets「特定イベント一覧」から、ロープレ・1on1・チームMTG・チーム研修などの特定イベントを自動取得して表示します。
+**目的**: Google Sheets「特定イベント一覧」から、ロープレ・1on1・チームMTG・チーム研修・**全Tutor MTG**などの特定イベントを自動取得して表示します。
 
 #### 📊 主な機能
 
@@ -983,7 +983,7 @@ APP_URL=https://wannav-student-management.onrender.com
 
 **2. 多様なフィルター機能**
 - **キーワードフィルター**: 
-  - すべてのキーワード / ロープレ / 1on1 / チームMTG / チーム研修
+  - すべてのキーワード / ロープレ / 1on1 / チームMTG / チーム研修 / **全Tutor MTG**
   - 特定の種類のイベントだけを表示できる
   
 - **日付範囲フィルター**:
@@ -1023,6 +1023,7 @@ APP_URL=https://wannav-student-management.onrender.com
 - **1on1**: 緑色（`bg-green-100 text-green-800`）
 - **チームMTG**: オレンジ色（`bg-orange-100 text-orange-800`）
 - **チーム研修**: 紫色（`bg-purple-100 text-purple-800`）
+- **全Tutor MTG**: ピンク色（`bg-pink-100 text-pink-800`）
 
 #### 📋 データソース
 
