@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-import { fetchLessonsForTomorrow } from './calendarService.js';
+import { fetchLessonsForTomorrow } from './sheetsService.js';
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -138,10 +138,6 @@ export async function sendReminder(studentId, lessonInfo) {
     
     if (lessonInfo.tutor_name) {
       message += `**講師**: ${lessonInfo.tutor_name}\n`;
-    }
-    
-    if (lessonInfo.meet_link) {
-      message += `**Google Meet**: ${lessonInfo.meet_link}\n`;
     }
     
     message += `\nよろしくお願いいたします！`;

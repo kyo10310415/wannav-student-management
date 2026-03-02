@@ -131,6 +131,63 @@ export async function getLastSyncTime(spreadsheetId) {
 }
 
 /**
+ * Fetch lessons for tomorrow from Google Sheets
+ * Used for daily reminder notifications
+ */
+export async function fetchLessonsForTomorrow() {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID || '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo';
+    const sheetName = 'レッスン予約データ';
+    
+    // Calculate tomorrow's date in JST
+    const now = new Date();
+    const jstOffset = 9 * 60 * 60 * 1000; // JST is UTC+9
+    const jstNow = new Date(now.getTime() + jstOffset);
+    
+    const tomorrow = new Date(jstNow);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    
+    const dayAfterTomorrow = new Date(tomorrow);
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+    
+    console.log(`[Sheets] Fetching lessons for tomorrow: ${tomorrow.toISOString().split('T')[0]}`);
+    console.log(`[Sheets] Spreadsheet ID: ${spreadsheetId}`);
+    console.log(`[Sheets] Sheet name: ${sheetName}`);
+    
+    // Fetch all lessons from sheet
+    const allLessons = await fetchLessonsFromSheet(spreadsheetId, sheetName);
+    
+    // Filter lessons for tomorrow
+    const tomorrowLessons = allLessons.filter(lesson => {
+      if (!lesson.lesson_date) return false;
+      
+      const lessonDate = new Date(lesson.lesson_date);
+      return lessonDate >= tomorrow && lessonDate < dayAfterTomorrow;
+    });
+    
+    console.log(`[Sheets] Total lessons in sheet: ${allLessons.length}`);
+    console.log(`[Sheets] Lessons for tomorrow: ${tomorrowLessons.length}`);
+    
+    if (tomorrowLessons.length > 0) {
+      console.log(`[Sheets] Sample lessons:`);
+      tomorrowLessons.slice(0, 3).forEach((lesson, i) => {
+        console.log(`[Sheets]   Lesson ${i + 1}:`);
+        console.log(`[Sheets]     Student: ${lesson.student_id}`);
+        console.log(`[Sheets]     Tutor: ${lesson.tutor_name}`);
+        console.log(`[Sheets]     Date: ${lesson.lesson_date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
+        console.log(`[Sheets]     Title: ${lesson.title}`);
+      });
+    }
+    
+    return tomorrowLessons;
+  } catch (error) {
+    console.error('[Sheets] Error fetching tomorrow\'s lessons:', error);
+    throw error;
+  }
+}
+
+/**
  * Fetch tutor schedules from Google Sheets (特定イベント一覧)
  */
 export async function fetchSchedulesFromSheet() {

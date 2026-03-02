@@ -179,14 +179,14 @@ app.get('/test-student-info/:studentId', async (c) => {
 
 /**
  * GET /api/reminders/test-lesson-data
- * Test fetching tomorrow's lesson data from Google Calendar
+ * Test fetching tomorrow's lesson data from Google Sheets
  * Returns: Array of lesson objects with all fields
  */
 app.get('/test-lesson-data', async (c) => {
   try {
-    const { fetchLessonsForTomorrow } = await import('../services/calendarService.js');
+    const { fetchLessonsForTomorrow } = await import('../services/sheetsService.js');
     
-    console.log('\n[Test] Fetching tomorrow\'s lessons from Google Calendar...');
+    console.log('\n[Test] Fetching tomorrow\'s lessons from Google Sheets...');
     
     const lessons = await fetchLessonsForTomorrow();
     
@@ -199,7 +199,7 @@ app.get('/test-lesson-data', async (c) => {
         console.log(`[Test]   Student ID: ${lesson.student_id || '(not found)'}`);
         console.log(`[Test]   Tutor: ${lesson.tutor_name || '(not found)'}`);
         console.log(`[Test]   Date: ${lesson.lesson_date}`);
-        console.log(`[Test]   Meet Link: ${lesson.meet_link || '(not found)'}`);
+        console.log(`[Test]   Title: ${lesson.title || '(not found)'}`);
       });
     }
     
@@ -210,13 +210,13 @@ app.get('/test-lesson-data', async (c) => {
         lessons: lessons.map(lesson => ({
           student_id: lesson.student_id,
           tutor_name: lesson.tutor_name,
+          tutor_email: lesson.tutor_email,
           lesson_date: lesson.lesson_date,
           lesson_date_parsed: lesson.lesson_date ? new Date(lesson.lesson_date).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : null,
-          meet_link: lesson.meet_link,
           title: lesson.title,
+          description: lesson.description,
           has_student_id: !!lesson.student_id,
-          has_tutor_name: !!lesson.tutor_name,
-          has_meet_link: !!lesson.meet_link
+          has_tutor_name: !!lesson.tutor_name
         }))
       }
     });
