@@ -4281,7 +4281,12 @@ async function submitAbsenceRequest() {
     });
     
     if (response.data.success) {
-      alert(`不参加申請が完了しました\n種別: ${absenceType === 'cancel' ? 'キャンセル' : 'リスケ'}`);
+      // Show different message based on absence type
+      if (absenceType === 'reschedule') {
+        alert(`不参加申請が完了しました\n種別: リスケ\n\n⚠️ 忘れずに再予約してください！`);
+      } else {
+        alert(`不参加申請が完了しました\n種別: キャンセル`);
+      }
       closeAbsenceRequestModal();
     } else {
       alert('申請に失敗しました: ' + (response.data.error || '不明なエラー'));
