@@ -255,6 +255,69 @@ app.post('/absence', async (c) => {
 });
 
 /**
+ * Delete/cancel absence request
+ */
+app.delete('/absence/:eventId/:tutorEmail', async (c) => {
+  try {
+    const eventId = c.req.param('eventId');
+    const tutorEmail = c.req.param('tutorEmail');
+    
+    if (!eventId || !tutorEmail) {
+      return c.json({
+        success: false,
+        error: 'イベントIDとメールアドレスが必要です'
+      }, 400);
+    }
+    
+    // Get the absence request details before deleting
+    const getQuery = `
+      SELECT absence_type FROM absence_requests
+      WHERE event_id = $1 AND tutor_email = $2
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    
+    const existingRequest = await query(getQuery, [eventId, tutorEmail]);
+    
+    if (existingRequest.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: '不参加申請が見つかりません'
+      }, 404);
+    }
+    
+    const absenceType = existingRequest.rows[0].absence_type;
+    
+    // Delete the absence request
+    const deleteQuery = `
+      DELETE FROM absence_requests
+      WHERE event_id = $1 AND tutor_email = $2
+    `;
+    
+    await query(deleteQuery, [eventId, tutorEmail]);
+    
+    // Update tutor counter (decrement)
+    const counterColumn = absenceType === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
+    await query(
+      `UPDATE tutors SET ${counterColumn} = GREATEST(0, ${counterColumn} - 1) WHERE email = $1`,
+      [tutorEmail]
+    );
+    
+    return c.json({
+      success: true,
+      message: '不参加申請を取り下げました'
+    });
+    
+  } catch (error) {
+    console.error('Error deleting absence request:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * Get absence statistics by month
  */
 app.get('/absence-stats', async (c) => {

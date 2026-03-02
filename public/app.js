@@ -3984,7 +3984,16 @@ function renderSchedulesList() {
               ? uniqueAbsenceRequests.map(req => {
                   const typeLabel = req.absence_type === 'cancel' ? 'キャンセル' : 'リスケ';
                   const typeColor = req.absence_type === 'cancel' ? 'text-red-600' : 'text-orange-600';
-                  return `<span class="${typeColor} font-semibold">${req.tutor_name} (${typeLabel})</span>`;
+                  
+                  // Add cancel button if this is current user's request
+                  const isOwnRequest = currentTutorEmail && req.tutor_email === currentTutorEmail;
+                  const cancelButton = isOwnRequest 
+                    ? `<button onclick="cancelAbsenceRequest('${schedule.event_id}', '${req.tutor_email}')" class="ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded" title="取り下げる">
+                         <i class="fas fa-times"></i>
+                       </button>`
+                    : '';
+                  
+                  return `<span class="${typeColor} font-semibold">${req.tutor_name} (${typeLabel})${cancelButton}</span>`;
                 }).join(', ')
               : '<span class="text-gray-400">-</span>';
             
@@ -4361,6 +4370,33 @@ async function submitAbsenceRequest() {
       submitButton.disabled = false;
       submitButton.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>申請する';
     }
+  }
+}
+
+/**
+ * Cancel/withdraw absence request
+ */
+async function cancelAbsenceRequest(eventId, tutorEmail) {
+  if (!confirm('不参加申請を取り下げますか？')) {
+    return;
+  }
+  
+  try {
+    const response = await axios.delete(`${API_BASE}/api/schedules/absence/${encodeURIComponent(eventId)}/${encodeURIComponent(tutorEmail)}`);
+    
+    if (response.data.success) {
+      alert('不参加申請を取り下げました');
+      
+      // Reload schedules to show updated information
+      if (currentPage === 'schedules') {
+        await renderSchedulesPage();
+      }
+    } else {
+      alert('取り下げに失敗しました: ' + (response.data.error || '不明なエラー'));
+    }
+  } catch (error) {
+    console.error('Cancel absence request error:', error);
+    alert('取り下げに失敗しました: ' + error.message);
   }
 }
 
