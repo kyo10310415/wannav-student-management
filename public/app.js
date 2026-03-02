@@ -3963,8 +3963,25 @@ function renderSchedulesList() {
             
             // Get absence requests for this schedule
             const absenceRequests = schedule.absence_requests || [];
-            const absenceNames = absenceRequests.length > 0
-              ? absenceRequests.map(req => {
+            
+            // Remove duplicates: keep only the latest request per tutor
+            const uniqueAbsenceRequests = [];
+            const seenTutors = new Set();
+            
+            // Sort by created_at descending (latest first)
+            const sortedAbsences = [...absenceRequests].sort((a, b) => 
+              new Date(b.created_at) - new Date(a.created_at)
+            );
+            
+            sortedAbsences.forEach(req => {
+              if (!seenTutors.has(req.tutor_email)) {
+                uniqueAbsenceRequests.push(req);
+                seenTutors.add(req.tutor_email);
+              }
+            });
+            
+            const absenceNames = uniqueAbsenceRequests.length > 0
+              ? uniqueAbsenceRequests.map(req => {
                   const typeLabel = req.absence_type === 'cancel' ? 'キャンセル' : 'リスケ';
                   const typeColor = req.absence_type === 'cancel' ? 'text-red-600' : 'text-orange-600';
                   return `<span class="${typeColor} font-semibold">${req.tutor_name} (${typeLabel})</span>`;

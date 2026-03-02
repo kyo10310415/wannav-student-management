@@ -107,37 +107,92 @@ app.post('/absence', async (c) => {
       }
     }
     
-    // Insert absence request
-    const insertQuery = `
-      INSERT INTO absence_requests 
-      (event_id, tutor_email, tutor_name, absence_type, reason, year, month, 
-       schedule_date, schedule_time, schedule_title, matched_keyword)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id
+    // Check if there's already an absence request for this event and tutor
+    const checkQuery = `
+      SELECT id, absence_type FROM absence_requests
+      WHERE event_id = $1 AND tutor_email = $2
+      ORDER BY created_at DESC
+      LIMIT 1
     `;
     
-    const result = await query(insertQuery, [
-      event_id,
-      tutor_email,
-      tutor_name,
-      absence_type,
-      reason,
-      year,
-      month,
-      schedule_date,
-      schedule_time,
-      schedule_title,
-      matched_keyword
-    ]);
+    const existingRequest = await query(checkQuery, [event_id, tutor_email]);
     
-    // Update tutor counters
-    const counterColumn = absence_type === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
-    const updateQuery = `
-      UPDATE tutors 
-      SET ${counterColumn} = COALESCE(${counterColumn}, 0) + 1
-      WHERE email = $1
-    `;
-    await query(updateQuery, [tutor_email]);
+    let absenceRequestId;
+    
+    if (existingRequest.rows.length > 0) {
+      // Update existing request instead of creating a new one
+      const updateQuery = `
+        UPDATE absence_requests
+        SET absence_type = $1, reason = $2, year = $3, month = $4,
+            schedule_date = $5, schedule_time = $6, schedule_title = $7,
+            matched_keyword = $8, created_at = NOW()
+        WHERE id = $9
+        RETURNING id
+      `;
+      
+      const updateResult = await query(updateQuery, [
+        absence_type,
+        reason,
+        year,
+        month,
+        schedule_date,
+        schedule_time,
+        schedule_title,
+        matched_keyword,
+        existingRequest.rows[0].id
+      ]);
+      
+      absenceRequestId = updateResult.rows[0].id;
+      
+      // Update tutor counters (decrement old type, increment new type if different)
+      const oldType = existingRequest.rows[0].absence_type;
+      if (oldType !== absence_type) {
+        const oldCounter = oldType === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
+        const newCounter = absence_type === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
+        
+        await query(
+          `UPDATE tutors SET ${oldCounter} = GREATEST(0, ${oldCounter} - 1) WHERE email = $1`,
+          [tutor_email]
+        );
+        
+        await query(
+          `UPDATE tutors SET ${newCounter} = ${newCounter} + 1 WHERE email = $1`,
+          [tutor_email]
+        );
+      }
+    } else {
+      // Insert new absence request
+      const insertQuery = `
+        INSERT INTO absence_requests 
+        (event_id, tutor_email, tutor_name, absence_type, reason, year, month, 
+         schedule_date, schedule_time, schedule_title, matched_keyword)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id
+      `;
+      
+      const result = await query(insertQuery, [
+        event_id,
+        tutor_email,
+        tutor_name,
+        absence_type,
+        reason,
+        year,
+        month,
+        schedule_date,
+        schedule_time,
+        schedule_title,
+        matched_keyword
+      ]);
+      
+      absenceRequestId = result.rows[0].id;
+      
+      // Update tutor counter
+      const counterColumn = absence_type === 'cancel' ? 'cancel_count' : 'schedule_reschedule_count';
+      await query(
+        `UPDATE tutors SET ${counterColumn} = ${counterColumn} + 1 WHERE email = $1`,
+        [tutor_email]
+      );
+    }
     
     // Send Discord notification to leader
     if (leader_email) {
@@ -183,7 +238,7 @@ app.post('/absence', async (c) => {
     return c.json({
       success: true,
       data: {
-        id: result.rows[0].id,
+        id: absenceRequestId,
         absence_type,
         tutor_name,
         message: '不参加申請を受け付けました'
@@ -369,19 +424,29 @@ app.get('/absence-requests', async (c) => {
     
     const requestsResult = await query(requestsQuery, [year, month]);
     
-    // Group by event_id
+    // Group by event_id and remove duplicates (keep only latest per tutor per event)
     const requestsByEvent = {};
     requestsResult.rows.forEach(row => {
       if (!requestsByEvent[row.event_id]) {
-        requestsByEvent[row.event_id] = [];
+        requestsByEvent[row.event_id] = {};
       }
-      requestsByEvent[row.event_id].push({
-        tutor_email: row.tutor_email,
-        tutor_name: row.tutor_name,
-        absence_type: row.absence_type,
-        reason: row.reason,
-        created_at: row.created_at
-      });
+      
+      // Keep only the latest request per tutor (rows are already sorted by created_at DESC)
+      if (!requestsByEvent[row.event_id][row.tutor_email]) {
+        requestsByEvent[row.event_id][row.tutor_email] = {
+          tutor_email: row.tutor_email,
+          tutor_name: row.tutor_name,
+          absence_type: row.absence_type,
+          reason: row.reason,
+          created_at: row.created_at
+        };
+      }
+    });
+    
+    // Convert to array format
+    const requestsByEventArray = {};
+    Object.keys(requestsByEvent).forEach(eventId => {
+      requestsByEventArray[eventId] = Object.values(requestsByEvent[eventId]);
     });
     
     return c.json({
@@ -389,7 +454,7 @@ app.get('/absence-requests', async (c) => {
       data: {
         year: parseInt(year),
         month: parseInt(month),
-        requests: requestsByEvent
+        requests: requestsByEventArray
       }
     });
     
