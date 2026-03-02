@@ -1109,6 +1109,7 @@ APP_URL=https://wannav-student-management.onrender.com
 5. 理由を入力（必須）
 6. 「申請する」ボタンをクリック
 7. → データベースに保存され、リーダーにDiscord通知が送信される
+8. **NEW**: リスケの場合、確定後に「忘れずに再予約してください！」のリマインダーポップアップが表示される
 
 **Discord通知の内容:**
 - リーダーへのメンション（Discord User IDが設定されている場合）
