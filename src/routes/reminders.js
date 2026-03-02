@@ -98,4 +98,83 @@ app.post('/test-webhook', async (c) => {
   }
 });
 
+/**
+ * GET /api/reminders/test-student-info/:studentId
+ * Test fetching student Discord info from Google Sheets
+ * Returns: { studentId, chatUrl, discordId }
+ */
+app.get('/test-student-info/:studentId', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    
+    if (!studentId) {
+      return c.json({
+        success: false,
+        error: 'studentId is required'
+      }, 400);
+    }
+    
+    // Import getStudentDiscordInfo (internal function)
+    const { getSheets } = await import('../services/sheetsService.js');
+    
+    const sheets = getSheets();
+    const spreadsheetId = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM';
+    const sheetName = '❶RAW_生徒様情報';
+    
+    console.log(`\n[Test] Fetching student info for: ${studentId}`);
+    console.log(`[Test] Spreadsheet: ${spreadsheetId}`);
+    console.log(`[Test] Sheet: ${sheetName}`);
+    
+    // Fetch data from Google Sheets (B, G, M columns)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!B2:M`,
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[Test] Fetched ${rows.length} student records`);
+
+    // Find student by ID (B列 = index 0)
+    const studentRow = rows.find(row => row[0] === studentId);
+    
+    if (!studentRow) {
+      console.warn(`[Test] Student ${studentId} not found`);
+      return c.json({
+        success: false,
+        error: `Student ${studentId} not found in Google Sheets`,
+        totalRecords: rows.length
+      }, 404);
+    }
+
+    // Extract data
+    // B列 = index 0 (学籍番号)
+    // G列 = index 5 (Discord ID)
+    // M列 = index 11 (チャットURL)
+    const discordId = studentRow[5] ? studentRow[5].trim() : null;
+    const chatUrl = studentRow[11] ? studentRow[11].trim() : null;
+
+    console.log(`[Test] ✅ Student ${studentId} found:`);
+    console.log(`[Test]   Discord ID: ${discordId || '(not set)'}`);
+    console.log(`[Test]   Chat URL: ${chatUrl || '(not set)'}`);
+
+    return c.json({
+      success: true,
+      data: {
+        studentId: studentId,
+        chatUrl: chatUrl,
+        discordId: discordId,
+        hasDiscordId: !!discordId,
+        hasChatUrl: !!chatUrl
+      }
+    });
+  } catch (error) {
+    console.error('[Test] Error fetching student info:', error);
+    return c.json({
+      success: false,
+      error: error.message,
+      details: error.response?.data?.error || null
+    }, 500);
+  }
+});
+
 export default app;
