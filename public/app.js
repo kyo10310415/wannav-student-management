@@ -5733,12 +5733,29 @@ async function renderExtensionsPage() {
 
   } catch (error) {
     console.error('Error loading extensions page:', error);
+    
+    // Determine error message based on error response
+    let errorTitle = 'エラーが発生しました';
+    let errorMessage = error.message || '不明なエラー';
+    let errorDetail = '';
+    
+    if (error.response) {
+      if (error.response.status === 503) {
+        errorTitle = '延長審査DBが設定されていません';
+        errorMessage = error.response.data?.error || 'データベースが設定されていません';
+        errorDetail = 'Render.comの環境変数でEXTENSION_DATABASE_URLを設定してください';
+      } else {
+        errorMessage = error.response.data?.error || `サーバーエラー (${error.response.status})`;
+        errorDetail = '延長審査DBの接続を確認してください';
+      }
+    }
+    
     content.innerHTML = `
       <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
         <i class="fas fa-exclamation-triangle text-4xl text-red-600 mb-4"></i>
-        <h3 class="text-xl font-bold text-red-800 mb-2">エラーが発生しました</h3>
-        <p class="text-red-600">${error.message}</p>
-        <p class="text-sm text-red-500 mt-2">延長審査DBの接続を確認してください</p>
+        <h3 class="text-xl font-bold text-red-800 mb-2">${errorTitle}</h3>
+        <p class="text-red-600 mb-2">${errorMessage}</p>
+        ${errorDetail ? `<p class="text-sm text-red-500 mt-2">${errorDetail}</p>` : ''}
       </div>
     `;
   }
