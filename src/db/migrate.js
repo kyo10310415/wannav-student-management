@@ -103,6 +103,48 @@ const migrations = [
       ALTER TABLE tutors DROP COLUMN IF EXISTS helper_accepted_count;
       ALTER TABLE tutors DROP COLUMN IF EXISTS reschedule_count;
     `
+  },
+  {
+    version: 7,
+    name: 'add_extended_student_columns',
+    up: `
+      -- Add all missing columns to students table
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS lesson_progress INTEGER;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS notion_url TEXT;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS discord_url TEXT;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_status_prev_month VARCHAR(100);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_status_curr_month VARCHAR(100);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_year_month_prev VARCHAR(20);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_year_month_curr VARCHAR(20);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS result_score_prev_month VARCHAR(10);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS absence_count INTEGER DEFAULT 0;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS lesson_start_date DATE;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS continued_months INTEGER DEFAULT 0;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS suspension_months INTEGER DEFAULT 0;
+      
+      -- Create indexes for commonly queried columns
+      CREATE INDEX IF NOT EXISTS idx_students_status ON students(status);
+      CREATE INDEX IF NOT EXISTS idx_students_contract_plan ON students(contract_plan);
+      CREATE INDEX IF NOT EXISTS idx_students_continued_months ON students(continued_months);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_students_continued_months;
+      DROP INDEX IF EXISTS idx_students_contract_plan;
+      DROP INDEX IF EXISTS idx_students_status;
+      
+      ALTER TABLE students DROP COLUMN IF EXISTS suspension_months;
+      ALTER TABLE students DROP COLUMN IF EXISTS continued_months;
+      ALTER TABLE students DROP COLUMN IF EXISTS lesson_start_date;
+      ALTER TABLE students DROP COLUMN IF EXISTS absence_count;
+      ALTER TABLE students DROP COLUMN IF EXISTS result_score_prev_month;
+      ALTER TABLE students DROP COLUMN IF EXISTS payment_year_month_curr;
+      ALTER TABLE students DROP COLUMN IF EXISTS payment_year_month_prev;
+      ALTER TABLE students DROP COLUMN IF EXISTS payment_status_curr_month;
+      ALTER TABLE students DROP COLUMN IF EXISTS payment_status_prev_month;
+      ALTER TABLE students DROP COLUMN IF EXISTS discord_url;
+      ALTER TABLE students DROP COLUMN IF EXISTS notion_url;
+      ALTER TABLE students DROP COLUMN IF EXISTS lesson_progress;
+    `
   }
 ];
 
