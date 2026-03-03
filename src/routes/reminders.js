@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { sendDailyReminders, testReminder } from '../services/reminderService.js';
 import { sendTestWebhook } from '../services/discordService.js';
+import { sendDailyStatsReport } from '../services/statsReportService.js';
 
 const app = new Hono();
 
@@ -337,6 +338,27 @@ app.get('/test-lesson-data', async (c) => {
       success: false,
       error: error.message,
       stack: error.stack
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/reminders/send-stats-report
+ * Manually trigger daily statistics report
+ */
+app.post('/send-stats-report', async (c) => {
+  try {
+    await sendDailyStatsReport();
+    
+    return c.json({
+      success: true,
+      message: 'Statistics report sent successfully'
+    });
+  } catch (error) {
+    console.error('Error sending statistics report:', error);
+    return c.json({
+      success: false,
+      error: error.message
     }, 500);
   }
 });

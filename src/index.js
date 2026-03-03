@@ -24,6 +24,7 @@ import userRoutes from './routes/users.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
+import { sendDailyStatsReport } from './services/statsReportService.js';
 
 const app = new Hono();
 
@@ -110,6 +111,25 @@ cron.schedule('0 * * * *', async () => {
 }, {
   timezone: 'Asia/Tokyo'
 });
+
+// Schedule daily statistics report (runs at 13:00 JST every day)
+// JST = UTC+9, so 13:00 JST = 04:00 UTC
+if (process.env.DISCORD_STATS_REPORT_ENABLED !== 'false') {
+  console.log('Discord daily statistics report: ENABLED (13:00 JST daily)');
+  cron.schedule('0 4 * * *', async () => {
+    console.log('Running daily statistics report at 13:00 JST...');
+    try {
+      await sendDailyStatsReport();
+      console.log('Daily statistics report sent successfully');
+    } catch (error) {
+      console.error('Error sending daily statistics report:', error);
+    }
+  }, {
+    timezone: 'Asia/Tokyo'
+  });
+} else {
+  console.log('Discord daily statistics report: DISABLED (DISCORD_STATS_REPORT_ENABLED=false)');
+}
 
 const port = process.env.PORT || 3000;
 
