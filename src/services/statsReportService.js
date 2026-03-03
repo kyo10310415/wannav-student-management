@@ -35,12 +35,12 @@ export async function sendDailyStatsReport() {
     const students = studentsResult.rows;
     console.log(`[Stats Report] Found ${students.length} active students`);
     
-    // 3. Fetch satisfaction data from external endpoint
+    // 3. Fetch satisfaction data from internal API endpoint
     let satisfactionData = {};
     try {
-      console.log('[Stats Report] Fetching satisfaction data from external API...');
-      const satisfactionResponse = await axios.get('https://script.google.com/macros/s/AKfycbxhQ8FckXGS6jCN1oK3lSaLf7Y51z8JfqzYl1ub0jvP2sMTKXDgxK2gENMYNPQKexNN/exec');
-      if (satisfactionResponse.data && satisfactionResponse.data.data) {
+      console.log('[Stats Report] Fetching satisfaction data from internal API...');
+      const satisfactionResponse = await axios.get('http://localhost:3000/api/tutors/satisfaction/all');
+      if (satisfactionResponse.data && satisfactionResponse.data.success && satisfactionResponse.data.data) {
         satisfactionData = satisfactionResponse.data.data;
         console.log(`[Stats Report] Satisfaction data loaded for ${Object.keys(satisfactionData).length} tutors`);
       } else {
