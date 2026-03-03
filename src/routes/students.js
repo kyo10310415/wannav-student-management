@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
 import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
-import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts } from '../services/sheetsService.js';
+import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts, fetchSuspensionMonthsMap } from '../services/sheetsService.js';
 import { fetchLessonStartDates, calculateContinuedMonths } from '../services/externalDbService.js';
 
 const app = new Hono();
@@ -61,6 +61,10 @@ app.get('/sync', async (c) => {
     const lessonStartDates = await fetchLessonStartDates();
     console.log(`Loaded ${Object.keys(lessonStartDates).length} lesson start dates`);
     
+    // Fetch suspension months map
+    const suspensionMonthsMap = await fetchSuspensionMonthsMap();
+    console.log(`Loaded suspension data for ${Object.keys(suspensionMonthsMap).length} students`);
+    
     // Filter out students without student_id
     const skippedStudents = [];
     const validStudents = students.filter(student => {
@@ -87,7 +91,13 @@ app.get('/sync', async (c) => {
         
         // Calculate continued_months from lesson_start_date
         const lessonStartDate = student.lesson_start_date || lessonStartDates[student.student_id];
-        const continuedMonths = lessonStartDate ? calculateContinuedMonths(lessonStartDate) : 0;
+        let continuedMonths = lessonStartDate ? calculateContinuedMonths(lessonStartDate) : 0;
+        
+        // Subtract suspension months if exists
+        const suspensionMonths = suspensionMonthsMap[student.student_id] || 0;
+        if (suspensionMonths > 0) {
+          continuedMonths = Math.max(0, continuedMonths - suspensionMonths);
+        }
         
         await query(
           `INSERT INTO students 

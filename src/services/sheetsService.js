@@ -648,3 +648,29 @@ export async function fetchSuspensionData() {
     throw error;
   }
 }
+
+/**
+ * Fetch suspension months map by student ID
+ * @returns {Object} - Map of student_id to suspension_months
+ */
+export async function fetchSuspensionMonthsMap() {
+  try {
+    const suspensions = await fetchSuspensionData();
+    
+    // Create map: student_id -> total suspension months
+    const suspensionMap = {};
+    
+    suspensions.forEach(s => {
+      if (s.studentId && s.suspensionMonths > 0) {
+        // If multiple suspension records exist, sum them up
+        suspensionMap[s.studentId] = (suspensionMap[s.studentId] || 0) + s.suspensionMonths;
+      }
+    });
+    
+    console.log(`[Suspension Map] Created map for ${Object.keys(suspensionMap).length} students with suspension history`);
+    return suspensionMap;
+  } catch (error) {
+    console.error('Error creating suspension months map:', error);
+    return {};
+  }
+}
