@@ -22,6 +22,7 @@ import scheduleRoutes from './routes/schedules.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import extensionRoutes from './routes/extensions.js';
+import suspensionRoutes from './routes/suspensions.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -54,6 +55,7 @@ app.route('/api/schedules', scheduleRoutes);
 app.route('/api/auth', authRoutes);
 app.route('/api/users', userRoutes);
 app.route('/api/extensions', extensionRoutes);
+app.route('/api/suspensions', suspensionRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {

@@ -585,3 +585,66 @@ export async function fetchTutorWebhooks(spreadsheetId = '13rHnYHavM6Mm7JRC3n88X
     throw error;
   }
 }
+
+/**
+ * Fetch suspension data from Google Sheets
+ * @returns {Array} - Array of suspension records
+ */
+export async function fetchSuspensionData() {
+  try {
+    const spreadsheetId = '17ys2PZpDpffG3j4EQrXiLlwGbFxiNosBqMivL2quVEA';
+    const sheetName = 'フォームの回答 1';
+    
+    const sheets = getSheets();
+    
+    // Fetch G, H, K, L columns (生徒名, 学籍番号, 休会期間, 休会開始日)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!G2:L`, // Skip header row
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[Suspension] Fetched ${rows.length} records from Google Sheets`);
+
+    const suspensions = [];
+    
+    rows.forEach((row, index) => {
+      const studentName = row[0] ? row[0].trim() : null;      // G列 (index 0)
+      const studentId = row[1] ? row[1].trim() : null;        // H列 (index 1)
+      const suspensionMonths = row[4] ? parseInt(row[4]) : 0; // K列 (index 4)
+      const suspensionStartDate = row[5] ? row[5].trim() : null; // L列 (index 5)
+      
+      if (!studentName || !studentId || !suspensionStartDate) {
+        return; // Skip invalid rows
+      }
+      
+      // Calculate suspension end date
+      let suspensionEndDate = null;
+      if (suspensionStartDate && suspensionMonths > 0) {
+        try {
+          const startDate = new Date(suspensionStartDate);
+          const endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + suspensionMonths);
+          endDate.setDate(endDate.getDate() - 1); // -1日
+          suspensionEndDate = endDate.toISOString().split('T')[0];
+        } catch (error) {
+          console.error(`Error calculating end date for row ${index + 2}:`, error);
+        }
+      }
+      
+      suspensions.push({
+        studentName,
+        studentId,
+        suspensionMonths,
+        suspensionStartDate,
+        suspensionEndDate
+      });
+    });
+
+    console.log(`[Suspension] Processed ${suspensions.length} valid suspension records`);
+    return suspensions;
+  } catch (error) {
+    console.error('Error fetching suspension data from Google Sheets:', error);
+    throw error;
+  }
+}

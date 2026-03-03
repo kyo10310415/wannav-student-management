@@ -129,6 +129,9 @@ function renderHeader() {
             <button id="nav-extensions" onclick="changePage('extensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-sync-alt mr-2"></i>延長管理
             </button>
+            <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-pause-circle mr-2"></i>休会管理
+            </button>
             <button id="nav-helpers" onclick="changePage('helpers')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
             </button>
@@ -367,6 +370,8 @@ async function renderApp() {
     await renderUsersPage();
   } else if (currentPage === 'extensions') {
     await renderExtensionsPage();
+  } else if (currentPage === 'suspensions') {
+    await renderSuspensionsPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -5756,6 +5761,101 @@ async function renderExtensionsPage() {
         <h3 class="text-xl font-bold text-red-800 mb-2">${errorTitle}</h3>
         <p class="text-red-600 mb-2">${errorMessage}</p>
         ${errorDetail ? `<p class="text-sm text-red-500 mt-2">${errorDetail}</p>` : ''}
+      </div>
+    `;
+  }
+}
+
+/**
+ * Render Suspensions Page
+ */
+async function renderSuspensionsPage() {
+  const content = document.getElementById('content');
+  
+  // Show loading spinner
+  content.innerHTML = `
+    <div class="flex justify-center items-center min-h-screen">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+  `;
+  
+  try {
+    // Fetch suspension data
+    const response = await axios.get('/api/suspensions');
+    const suspensions = response.data.data || [];
+    
+    // Render page
+    content.innerHTML = `
+      <div class="max-w-7xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold text-gray-800">
+              <i class="fas fa-pause-circle mr-2 text-blue-600"></i>休会管理
+            </h2>
+            <div class="text-sm text-gray-600">
+              <i class="fas fa-users mr-2"></i>休会中: <span class="font-bold text-lg">${suspensions.length}</span>名
+            </div>
+          </div>
+          
+          <!-- Suspensions Table -->
+          <div class="overflow-x-auto">
+            <table class="min-w-full bg-white border border-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">生徒名</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">学籍番号</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b">休会期間</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b">休会開始日</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b">休会終了予定</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                ${suspensions.length === 0 ? `
+                  <tr>
+                    <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                      <i class="fas fa-info-circle mr-2"></i>休会中の生徒はいません
+                    </td>
+                  </tr>
+                ` : suspensions.map(s => `
+                  <tr class="hover:bg-gray-50 transition">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="font-medium text-gray-900">${s.studentName}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="text-sm text-gray-600">${s.studentId}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-orange-100 text-orange-800">
+                        <i class="fas fa-calendar mr-1"></i>${s.suspensionMonths}ヶ月
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
+                      ${s.suspensionStartDate || '-'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
+                      <span class="text-sm font-medium text-blue-600">
+                        ${s.suspensionEndDate || '-'}
+                      </span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error loading suspensions page:', error);
+    content.innerHTML = `
+      <div class="max-w-4xl mx-auto">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-red-800 mb-2">
+            <i class="fas fa-exclamation-triangle mr-2"></i>エラーが発生しました
+          </h3>
+          <p class="text-red-600">休会データの読み込みに失敗しました。</p>
+          <p class="text-sm text-red-500 mt-2">Google Sheetsの接続を確認してください。</p>
+        </div>
       </div>
     `;
   }
