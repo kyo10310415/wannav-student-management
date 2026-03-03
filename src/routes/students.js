@@ -168,41 +168,9 @@ app.get('/sync', async (c) => {
 });
 
 /**
- * GET /api/students/:id
- * Get student by student_id
- */
-app.get('/:id', async (c) => {
-  try {
-    const studentId = c.req.param('id');
-    
-    const result = await query(
-      'SELECT * FROM students WHERE student_id = $1',
-      [studentId]
-    );
-    
-    if (result.rows.length === 0) {
-      return c.json({
-        success: false,
-        error: 'Student not found'
-      }, 404);
-    }
-    
-    return c.json({
-      success: true,
-      data: result.rows[0]
-    });
-  } catch (error) {
-    console.error('Error fetching student:', error);
-    return c.json({
-      success: false,
-      error: error.message
-    }, 500);
-  }
-});
-
-/**
  * GET /api/students/tutor/:tutorName
  * Get students by homeroom tutor
+ * IMPORTANT: Specific routes with path prefixes come before dynamic /:id routes
  */
 app.get('/tutor/:tutorName', async (c) => {
   try {
@@ -231,7 +199,7 @@ app.get('/tutor/:tutorName', async (c) => {
  * GET /api/students/wanami-usage-all
  * Get Wanami-san usage counts for all students (cached for 24 hours)
  * Query params: ?year=2025&month=11 (optional, defaults to current month)
- * IMPORTANT: This must be defined BEFORE /:studentId routes to avoid being caught by :studentId pattern
+ * IMPORTANT: This must be defined BEFORE /:id and /:studentId routes
  */
 app.get('/wanami-usage-all', async (c) => {
   try {
@@ -253,6 +221,40 @@ app.get('/wanami-usage-all', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching all Wanami usage counts:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/students/:id
+ * Get student by student_id
+ * IMPORTANT: This dynamic route must come AFTER all specific routes
+ */
+app.get('/:id', async (c) => {
+  try {
+    const studentId = c.req.param('id');
+    
+    const result = await query(
+      'SELECT * FROM students WHERE student_id = $1',
+      [studentId]
+    );
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Student not found'
+      }, 404);
+    }
+    
+    return c.json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error fetching student:', error);
     return c.json({
       success: false,
       error: error.message
