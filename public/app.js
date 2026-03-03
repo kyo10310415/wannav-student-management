@@ -93,9 +93,8 @@ function renderHeader() {
             <div>
               <h1 class="text-3xl font-bold">
                 <i class="fas fa-users mr-3"></i>
-                WannaV 生徒様管理システム
+                WannaV 中央管理システム
               </h1>
-              <p class="text-blue-100 mt-2">VTuber育成スクール生徒管理</p>
             </div>
             
             <!-- User info and logout -->
@@ -4772,7 +4771,7 @@ function showLoginPage() {
         <div class="text-center mb-8">
           <h1 class="text-3xl font-bold text-gray-800 mb-2">
             <i class="fas fa-user-lock mr-2 text-indigo-600"></i>
-            WannaV 生徒様管理システム
+            WannaV 中央管理システム
           </h1>
           <p class="text-gray-600">ログインしてください</p>
         </div>

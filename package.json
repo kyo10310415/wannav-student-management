@@ -1,7 +1,7 @@
 {
   "name": "wannav-student-management",
   "version": "1.0.0",
-  "description": "WannaV VTuber School Student Management System",
+  "description": "WannaV Central Management System",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
