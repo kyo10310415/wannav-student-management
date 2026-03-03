@@ -1651,12 +1651,19 @@ async function loadWanamiUsageDataForTutors() {
     
     const usageCounts = response.data.data.usage_counts;
     
-    // Update all loading elements
+    // Calculate team totals
+    const teamTotals = {};
+    
+    // Update all loading elements for individual tutors
     const loadingElements = document.querySelectorAll('.wanami-usage-tutor');
     
     loadingElements.forEach(element => {
       const tutorNotionName = element.getAttribute('data-tutor-notion-name');
       if (!tutorNotionName) return;
+      
+      // Find the tutor to get their team
+      const tutor = tutors.find(t => t.notion_name === tutorNotionName);
+      const teamName = tutor ? (tutor.team || '未所属') : '未所属';
       
       // Find all students of this tutor
       const tutorStudents = students.filter(s => 
@@ -1672,17 +1679,35 @@ async function loadWanamiUsageDataForTutors() {
         totalCount += (usageCounts[student.student_id] || 0);
       });
       
+      // Update team total
+      if (!teamTotals[teamName]) {
+        teamTotals[teamName] = 0;
+      }
+      teamTotals[teamName] += totalCount;
+      
       element.textContent = `${totalCount}回`;
       element.classList.remove('text-gray-400');
       element.classList.add('text-blue-600', 'font-semibold');
     });
     
-    console.log(`[Wanami Tutors] Loaded usage counts for tutors`);
+    // Update team statistics
+    const teamElements = document.querySelectorAll('.wanami-usage-team');
+    teamElements.forEach(element => {
+      const teamName = element.getAttribute('data-team-name');
+      if (!teamName) return;
+      
+      const teamTotal = teamTotals[teamName] || 0;
+      element.textContent = `${teamTotal}回`;
+      element.classList.remove('text-gray-400');
+      element.classList.add('text-blue-600', 'font-semibold');
+    });
+    
+    console.log(`[Wanami Tutors] Loaded usage counts for tutors and teams`);
   } catch (error) {
     console.error('Error loading Wanami usage data for tutors:', error);
     
     // Fallback: show '-' for all elements
-    const loadingElements = document.querySelectorAll('.wanami-usage-tutor');
+    const loadingElements = document.querySelectorAll('.wanami-usage-tutor, .wanami-usage-team');
     loadingElements.forEach(element => {
       element.textContent = '-';
       element.classList.remove('text-gray-400');
@@ -1805,7 +1830,8 @@ function renderTutorStatistics() {
       tutorCount: teamTutors.length,
       satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
       collectionRate: teamValidCount > 0 ? (teamCollectionRate / teamValidCount).toFixed(1) : '-',
-      satisfactionScore: teamValidCount > 0 ? (teamSatisfactionScore / teamValidCount).toFixed(2) : '-'
+      satisfactionScore: teamValidCount > 0 ? (teamSatisfactionScore / teamValidCount).toFixed(2) : '-',
+      wanamiUsage: 0  // Will be populated later from API
     };
   });
   
@@ -1853,6 +1879,7 @@ function renderTutorStatistics() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度平均</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率平均</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア平均</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">わなみさん合計</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -1869,6 +1896,9 @@ function renderTutorStatistics() {
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionColor}">${stats.satisfaction}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${collectionRateColor}">${stats.collectionRate}${stats.collectionRate !== '-' ? '%' : ''}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${stats.satisfactionScore}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">
+                    <span class="wanami-usage-team text-gray-400" data-team-name="${team}">...</span>
+                  </td>
                 </tr>
               `;
             }).join('')}
