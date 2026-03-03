@@ -18,7 +18,7 @@ let reservationCountFilter = 'all'; // 'all', 'above2', 'below2'
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions'
 let schedules = []; // Tutor schedules data
 let pendingRequests = []; // Pending absence requests
 
@@ -65,6 +65,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'schedules';
   } else if (hash === 'users') {
     currentPage = 'users';
+  } else if (hash === 'extensions') {
+    currentPage = 'extensions';
   }
   // Default is 'today' (already set)
   
@@ -123,6 +125,9 @@ function renderHeader() {
             </button>
             <button id="nav-tutors" onclick="changePage('tutors')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
+            </button>
+            <button id="nav-extensions" onclick="changePage('extensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+              <i class="fas fa-sync-alt mr-2"></i>延長管理
             </button>
             <button id="nav-helpers" onclick="changePage('helpers')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
@@ -360,6 +365,8 @@ async function renderApp() {
     await renderSchedulesPage();
   } else if (currentPage === 'users') {
     await renderUsersPage();
+  } else if (currentPage === 'extensions') {
+    await renderExtensionsPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -5573,4 +5580,178 @@ function getTutorNotionName(tutorName) {
   }
   
   return null;
+}
+utorName) {
+  if (!tutorName) return null;
+  
+  // Find matching tutor by tutor_name
+  const tutor = tutors.find(t => t.tutor_name === tutorName);
+  
+  if (tutor && tutor.notion_name) {
+    return tutor.notion_name;
+  }
+  
+  return null;
+}
+
+// Render Extensions Management Page
+async function renderExtensionsPage() {
+  const content = document.getElementById('content');
+  
+  // Show loading
+  content.innerHTML = `
+    <div class="text-center py-12">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+      <p class="mt-4 text-gray-600">延長管理データを読み込んでいます...</p>
+    </div>
+  `;
+
+  try {
+    // Fetch statistics
+    const statsRes = await axios.get('/api/extensions/stats');
+    const tutorRes = await axios.get('/api/extensions/by-tutor');
+    
+    if (!statsRes.data.success || !tutorRes.data.success) {
+      throw new Error('データの取得に失敗しました');
+    }
+
+    const stats = statsRes.data.data;
+    const tutorList = tutorRes.data.data;
+
+    content.innerHTML = `
+      <div class="space-y-6">
+        <!-- Page Title -->
+        <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg p-6">
+          <h2 class="text-3xl font-bold">
+            <i class="fas fa-sync-alt mr-3"></i>延長管理
+          </h2>
+          <p class="mt-2 text-purple-100">生徒の延長審査状況とTutor別ヒアリング対象を管理します</p>
+        </div>
+
+        <!-- Overall Statistics -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-chart-bar mr-2 text-purple-600"></i>全体統計
+          </h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-blue-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">延長対象数</div>
+              <div class="text-2xl font-bold text-blue-600">${stats.targetCount}人</div>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">延長確度記入済み</div>
+              <div class="text-2xl font-bold text-green-600">${stats.certaintyFilledCount}人</div>
+            </div>
+            <div class="bg-purple-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">延長数</div>
+              <div class="text-2xl font-bold text-purple-600">${stats.extensionCount}人</div>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">退会数</div>
+              <div class="text-2xl font-bold text-red-600">${stats.withdrawalCount}人</div>
+            </div>
+            <div class="bg-indigo-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">延長率</div>
+              <div class="text-2xl font-bold text-indigo-600">${stats.extensionRate}%</div>
+            </div>
+            <div class="bg-pink-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">延長率（対 結果お伝え）</div>
+              <div class="text-2xl font-bold text-pink-600">${stats.extensionRateVsResult}%</div>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-4">
+              <div class="text-sm text-gray-600 mb-1">残弾数</div>
+              <div class="text-2xl font-bold text-yellow-600">${stats.remainingCount}人</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Extension Review Statistics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- 1st Review (5 months) -->
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">
+              <i class="fas fa-1 mr-2 text-blue-600"></i>1回目延長審査（5ヶ月目）
+            </h3>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">対象数</span>
+                <span class="text-xl font-bold text-gray-800">${stats.exam1st.targetCount}人</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">延長数</span>
+                <span class="text-xl font-bold text-green-600">${stats.exam1st.extensionCount}人</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">延長率</span>
+                <span class="text-xl font-bold text-blue-600">${stats.exam1st.extensionRate}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2nd Review (11 months) -->
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">
+              <i class="fas fa-2 mr-2 text-purple-600"></i>2回目延長審査（11ヶ月目）
+            </h3>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">対象数</span>
+                <span class="text-xl font-bold text-gray-800">${stats.exam2nd.targetCount}人</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">延長数</span>
+                <span class="text-xl font-bold text-green-600">${stats.exam2nd.extensionCount}人</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">延長率</span>
+                <span class="text-xl font-bold text-purple-600">${stats.exam2nd.extensionRate}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tutor List -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-users mr-2 text-indigo-600"></i>Tutor別ヒアリング・審査対象
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor名</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">ヒアリング対象数</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">ヒアリング未完了</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長審査対象数</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">審査未完了</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                ${tutorList.map(tutor => `
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm font-medium text-gray-800">${tutor.tutorName}</td>
+                    <td class="px-4 py-3 text-center text-sm text-gray-600">${tutor.hearingTargetCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm ${tutor.hearingIncompleteCount > 0 ? 'text-red-600 font-semibold' : 'text-gray-600'}">${tutor.hearingIncompleteCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm text-gray-600">${tutor.examTargetCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm ${tutor.examIncompleteCount > 0 ? 'text-red-600 font-semibold' : 'text-gray-600'}">${tutor.examIncompleteCount}人</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+  } catch (error) {
+    console.error('Error loading extensions page:', error);
+    content.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <i class="fas fa-exclamation-triangle text-4xl text-red-600 mb-4"></i>
+        <h3 class="text-xl font-bold text-red-800 mb-2">エラーが発生しました</h3>
+        <p class="text-red-600">${error.message}</p>
+        <p class="text-sm text-red-500 mt-2">延長審査DBの接続を確認してください</p>
+      </div>
+    `;
+  }
 }
