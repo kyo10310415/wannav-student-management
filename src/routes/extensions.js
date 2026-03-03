@@ -80,8 +80,8 @@ app.get('/stats', async (c) => {
     });
 
     // 各生徒のサイクル判定と統計計算
-    let targetCount = 0; // 延長対象数（4,5,10,11ヶ月目）
-    let certaintyFilledCount = 0; // 延長確度記入済み
+    let targetCount = 0; // 延長対象数（5ヶ月目と11ヶ月目のみ）
+    let certaintyFilledCount = 0; // 延長確度記入済み（4ヶ月目と10ヶ月目のみ）
     let extensionCount = 0; // 延長数
     let withdrawalCount = 0; // 退会数
     let resultToldCount = 0; // 結果お伝え済み数（審査結果が入力されている）
@@ -97,19 +97,14 @@ app.get('/stats', async (c) => {
       const months = student.continued_months;
       const ext = extensionMap[student.student_id];
 
-      // 対象判定：4,5,10,11ヶ月目
-      if ([4, 5, 10, 11].includes(months)) {
+      // サイクル判定
+      const cycle = (months === 4 || months === 5) ? 1 : 2;
+      const certainty = cycle === 1 ? ext?.extension_certainty_1 : ext?.extension_certainty_2;
+      const examResult = cycle === 1 ? ext?.examination_result_1 : ext?.examination_result_2;
+
+      // 延長対象数：5ヶ月目と11ヶ月目のみカウント
+      if (months === 5 || months === 11) {
         targetCount++;
-
-        // サイクル判定
-        const cycle = (months === 4 || months === 5) ? 1 : 2;
-        const certainty = cycle === 1 ? ext?.extension_certainty_1 : ext?.extension_certainty_2;
-        const examResult = cycle === 1 ? ext?.examination_result_1 : ext?.examination_result_2;
-
-        // 延長確度記入済み
-        if (certainty) {
-          certaintyFilledCount++;
-        }
 
         // 審査結果がある場合
         if (examResult) {
@@ -139,6 +134,11 @@ app.get('/stats', async (c) => {
             exam2ndExtensionCount++;
           }
         }
+      }
+
+      // 延長確度記入済み：4ヶ月目と10ヶ月目のみカウント
+      if ((months === 4 || months === 10) && certainty) {
+        certaintyFilledCount++;
       }
     });
 
