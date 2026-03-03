@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
 import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
+import { fetchWanamiUsageCount, fetchWanamiUsageHistory } from '../services/sheetsService.js';
 
 const app = new Hono();
 
@@ -219,6 +220,63 @@ app.get('/tutor/:tutorName', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching students by tutor:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/students/:studentId/wanami-usage
+ * Get Wanami-san usage count for a specific student
+ * Query params: ?year=2025&month=11 (optional, defaults to current month)
+ */
+app.get('/:studentId/wanami-usage', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    const year = c.req.query('year') ? parseInt(c.req.query('year')) : null;
+    const month = c.req.query('month') ? parseInt(c.req.query('month')) : null;
+    
+    const count = await fetchWanamiUsageCount(studentId, year, month);
+    
+    return c.json({
+      success: true,
+      data: {
+        student_id: studentId,
+        year: year || new Date().getFullYear(),
+        month: month || (new Date().getMonth() + 1),
+        count: count
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching Wanami usage count:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/students/:studentId/wanami-history
+ * Get Wanami-san usage history (all months) for a specific student
+ */
+app.get('/:studentId/wanami-history', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    
+    const history = await fetchWanamiUsageHistory(studentId);
+    
+    return c.json({
+      success: true,
+      data: {
+        student_id: studentId,
+        history: history
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching Wanami usage history:', error);
     return c.json({
       success: false,
       error: error.message

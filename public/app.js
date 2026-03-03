@@ -1253,6 +1253,14 @@ function renderStudentsPage() {
                   </button>
                 </div>
               </th>
+              <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <span>わなみさん</span>
+                  <button onclick="toggleSort('wanami_usage')" class="hover:text-blue-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'wanami_usage' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>欠席回数</span>
@@ -1300,6 +1308,105 @@ function renderStudentsPage() {
     selectElement.addEventListener('change', async (e) => {
       await filterByTutor(e.target.value);
     });
+  }
+  
+  // Load Wanami usage data asynchronously
+  loadWanamiUsageData();
+}
+
+// Load Wanami usage data for all visible students
+async function loadWanamiUsageData() {
+  const loadingElements = document.querySelectorAll('.wanami-usage-loading');
+  
+  for (const element of loadingElements) {
+    const studentId = element.getAttribute('data-student-id');
+    if (!studentId) continue;
+    
+    try {
+      const response = await axios.get(`/api/students/${studentId}/wanami-usage`);
+      
+      if (response.data.success) {
+        const count = response.data.data.count;
+        element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" onclick="showWanamiHistory('${studentId}')">${count}回</span>`;
+        element.classList.remove('text-gray-400');
+        element.classList.remove('wanami-usage-loading');
+      } else {
+        element.textContent = '-';
+        element.classList.remove('text-gray-400');
+        element.classList.remove('wanami-usage-loading');
+      }
+    } catch (error) {
+      console.error(`Error loading Wanami usage for ${studentId}:`, error);
+      element.textContent = '-';
+      element.classList.remove('text-gray-400');
+      element.classList.remove('wanami-usage-loading');
+    }
+  }
+}
+
+// Show Wanami usage history modal
+async function showWanamiHistory(studentId) {
+  try {
+    const response = await axios.get(`/api/students/${studentId}/wanami-history`);
+    
+    if (!response.data.success || response.data.data.history.length === 0) {
+      showAlert('この生徒の使用履歴がありません', 'info');
+      return;
+    }
+    
+    const history = response.data.data.history;
+    const student = students.find(s => s.student_id === studentId);
+    const studentName = student ? student.name : studentId;
+    
+    const historyRows = history.map(h => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-center text-sm text-gray-900">${h.year}年${h.month}月</td>
+        <td class="px-4 py-3 text-center text-sm font-semibold text-blue-600">${h.count}回</td>
+      </tr>
+    `).join('');
+    
+    const modalHtml = `
+      <div id="wanami-history-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div class="mt-3">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">
+              <i class="fas fa-history mr-2"></i>${studentName}様 - わなみさん使用履歴
+            </h3>
+            <div class="mt-2 max-h-96 overflow-y-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">月</th>
+                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">使用回数</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  ${historyRows}
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-4 flex justify-end">
+              <button onclick="closeWanamiHistoryModal()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                <i class="fas fa-times mr-2"></i>閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+  } catch (error) {
+    console.error('Error showing Wanami history:', error);
+    showAlert('使用履歴の取得に失敗しました', 'error');
+  }
+}
+
+// Close Wanami history modal
+function closeWanamiHistoryModal() {
+  const modal = document.getElementById('wanami-history-modal');
+  if (modal) {
+    modal.remove();
   }
 }
 
@@ -1396,6 +1503,9 @@ function renderStudentRowsSimple() {
         <td class="px-3 py-3 whitespace-nowrap text-xs text-center text-gray-700">${lessonStartDate}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center">
+          <span class="wanami-usage-loading text-gray-400" data-student-id="${student.student_id}">...</span>
+        </td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">

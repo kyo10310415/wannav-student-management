@@ -193,6 +193,128 @@ export async function fetchLessonsForTomorrow() {
 }
 
 /**
+ * Fetch Wanami-san usage count from Q&A records sheet
+ * @param {string} studentId - Student ID to search
+ * @param {number} year - Year to filter (optional, defaults to current year)
+ * @param {number} month - Month to filter (optional, defaults to current month)
+ * @returns {number} - Count of records for the student in the specified month
+ */
+export async function fetchWanamiUsageCount(studentId, year = null, month = null) {
+  try {
+    const spreadsheetId = '1vKrYCzaw-miJOY52oskNoMfn-uEHIolBMhC7uMxxN_M';
+    const sheetName = 'Q&A記録';
+    
+    const sheets = getSheets();
+    
+    // Fetch all records (A and O columns)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A2:O`, // Skip header row
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[Wanami] Fetched ${rows.length} Q&A records`);
+
+    // Default to current year/month if not specified
+    if (!year || !month) {
+      const now = new Date();
+      year = year || now.getFullYear();
+      month = month || now.getMonth() + 1; // getMonth() is 0-indexed
+    }
+
+    // Filter records by student ID and month
+    const matchingRecords = rows.filter(row => {
+      const timestamp = row[0]; // A列 (index 0)
+      const studentIdInRow = row[14]; // O列 (index 14)
+      
+      if (!timestamp || !studentIdInRow) return false;
+      if (studentIdInRow !== studentId) return false;
+      
+      // Parse timestamp (format: "2025-11-28T10:44:45.838Z")
+      try {
+        const date = new Date(timestamp);
+        const recordYear = date.getFullYear();
+        const recordMonth = date.getMonth() + 1;
+        
+        return recordYear === year && recordMonth === month;
+      } catch (error) {
+        return false;
+      }
+    });
+
+    const count = matchingRecords.length;
+    console.log(`[Wanami] Student ${studentId}: ${count} records in ${year}/${month}`);
+    
+    return count;
+  } catch (error) {
+    console.error('[Wanami] Error fetching usage count:', error);
+    return 0; // Return 0 on error instead of throwing
+  }
+}
+
+/**
+ * Fetch Wanami-san usage history (all months)
+ * @param {string} studentId - Student ID to search
+ * @returns {Array} - Array of {year, month, count} objects
+ */
+export async function fetchWanamiUsageHistory(studentId) {
+  try {
+    const spreadsheetId = '1vKrYCzaw-miJOY52oskNoMfn-uEHIolBMhC7uMxxN_M';
+    const sheetName = 'Q&A記録';
+    
+    const sheets = getSheets();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A2:O`,
+    });
+
+    const rows = response.data.values || [];
+    
+    // Group by year/month
+    const monthlyCount = {};
+    
+    rows.forEach(row => {
+      const timestamp = row[0];
+      const studentIdInRow = row[14];
+      
+      if (!timestamp || !studentIdInRow || studentIdInRow !== studentId) return;
+      
+      try {
+        const date = new Date(timestamp);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const key = `${year}-${month}`;
+        
+        monthlyCount[key] = (monthlyCount[key] || 0) + 1;
+      } catch (error) {
+        // Skip invalid timestamps
+      }
+    });
+    
+    // Convert to array and sort by year/month descending
+    const history = Object.keys(monthlyCount).map(key => {
+      const [year, month] = key.split('-').map(Number);
+      return {
+        year,
+        month,
+        count: monthlyCount[key]
+      };
+    }).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+    
+    console.log(`[Wanami] Student ${studentId} history:`, history);
+    
+    return history;
+  } catch (error) {
+    console.error('[Wanami] Error fetching usage history:', error);
+    return [];
+  }
+}
+
+/**
  * Fetch tutor schedules from Google Sheets (特定イベント一覧)
  */
 export async function fetchSchedulesFromSheet() {
