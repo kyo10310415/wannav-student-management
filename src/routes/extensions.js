@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { queryExtension } from '../db/extensionConnection.js';
+import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
 import { getPool } from '../db/connection.js';
 
 const app = new Hono();
@@ -11,6 +11,16 @@ const app = new Hono();
 app.get('/stats', async (c) => {
   try {
     console.log('📊 Fetching extension stats...');
+
+    // Check if extension DB is configured
+    const pool = getExtensionPool();
+    if (!pool) {
+      console.warn('⚠️ Extension database not configured (EXTENSION_DATABASE_URL missing)');
+      return c.json({
+        success: false,
+        error: 'Extension database not configured. Please set EXTENSION_DATABASE_URL environment variable.'
+      }, 503);
+    }
 
     // 延長審査DBから全データ取得
     const extensionResult = await queryExtension(`
@@ -177,6 +187,16 @@ app.get('/stats', async (c) => {
 app.get('/by-tutor', async (c) => {
   try {
     console.log('👥 Fetching extension data by tutor...');
+
+    // Check if extension DB is configured
+    const pool = getExtensionPool();
+    if (!pool) {
+      console.warn('⚠️ Extension database not configured (EXTENSION_DATABASE_URL missing)');
+      return c.json({
+        success: false,
+        error: 'Extension database not configured. Please set EXTENSION_DATABASE_URL environment variable.'
+      }, 503);
+    }
 
     // 延長審査DBから全データ取得
     const extensionResult = await queryExtension(`
