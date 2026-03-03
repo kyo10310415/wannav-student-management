@@ -1588,7 +1588,7 @@ function renderTutorsPage() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">わなみさん</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -1631,6 +1631,61 @@ function renderTutorsPage() {
   if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader')) {
     fetchAbsenceStats(selectedStatsYear, selectedStatsMonth).then(() => {
       renderAbsenceStatsSection();
+    });
+  }
+  
+  // Load Wanami usage data for all tutors
+  loadWanamiUsageDataForTutors();
+}
+
+// Load Wanami usage data for all tutors (sum of their students' usage)
+async function loadWanamiUsageDataForTutors() {
+  try {
+    // Fetch all usage counts in one API call (cached for 24 hours)
+    const response = await axios.get('/api/students/wanami-usage-all');
+    
+    if (!response.data.success) {
+      console.error('Failed to load Wanami usage data for tutors');
+      return;
+    }
+    
+    const usageCounts = response.data.data.usage_counts;
+    
+    // Update all loading elements
+    const loadingElements = document.querySelectorAll('.wanami-usage-tutor');
+    
+    loadingElements.forEach(element => {
+      const tutorNotionName = element.getAttribute('data-tutor-notion-name');
+      if (!tutorNotionName) return;
+      
+      // Find all students of this tutor
+      const tutorStudents = students.filter(s => 
+        s.homeroom_tutor === tutorNotionName &&
+        s.status === 'アクティブ' &&
+        s.contract_plan !== '永久会員' &&
+        s.contract_plan !== '在籍プラン'
+      );
+      
+      // Calculate total usage count for this tutor's students
+      let totalCount = 0;
+      tutorStudents.forEach(student => {
+        totalCount += (usageCounts[student.student_id] || 0);
+      });
+      
+      element.textContent = `${totalCount}回`;
+      element.classList.remove('text-gray-400');
+      element.classList.add('text-blue-600', 'font-semibold');
+    });
+    
+    console.log(`[Wanami Tutors] Loaded usage counts for tutors`);
+  } catch (error) {
+    console.error('Error loading Wanami usage data for tutors:', error);
+    
+    // Fallback: show '-' for all elements
+    const loadingElements = document.querySelectorAll('.wanami-usage-tutor');
+    loadingElements.forEach(element => {
+      element.textContent = '-';
+      element.classList.remove('text-gray-400');
     });
   }
 }
@@ -1966,6 +2021,9 @@ function renderTutorRows() {
     const requestColor = getCounterColor(helperRequestCount);
     const rescheduleColor = getCounterColor(rescheduleCount);
     
+    // わなみさん使用回数（担当生徒の合計）
+    const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${tutor.notion_name}">...</span>`;
+    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
@@ -1993,7 +2051,7 @@ function renderTutorRows() {
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold ${collectionRateColor}">${collectionRate}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${satisfactionScore}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm ${statusClass}">${tutor.status || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${wanamiUsage}</td>
       </tr>
     `;
   }).join('');
