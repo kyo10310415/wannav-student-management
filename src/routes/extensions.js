@@ -54,6 +54,24 @@ app.get('/stats', async (c) => {
 
     const students = studentsResult.rows;
     console.log('  アクティブ生徒数:', students.length);
+    
+    // Debug: Show sample student data
+    if (students.length > 0) {
+      console.log('  サンプル生徒データ:', {
+        student_id: students[0].student_id,
+        continued_months: students[0].continued_months,
+        status: students[0].status,
+        contract_plan: students[0].contract_plan
+      });
+    }
+    
+    // Debug: Count students by continued_months
+    const monthsDistribution = {};
+    students.forEach(s => {
+      const months = s.continued_months || 0;
+      monthsDistribution[months] = (monthsDistribution[months] || 0) + 1;
+    });
+    console.log('  継続月数分布:', monthsDistribution);
 
     // 延長審査データマップ作成
     const extensionMap = {};
