@@ -5581,18 +5581,6 @@ function getTutorNotionName(tutorName) {
   
   return null;
 }
-utorName) {
-  if (!tutorName) return null;
-  
-  // Find matching tutor by tutor_name
-  const tutor = tutors.find(t => t.tutor_name === tutorName);
-  
-  if (tutor && tutor.notion_name) {
-    return tutor.notion_name;
-  }
-  
-  return null;
-}
 
 // Render Extensions Management Page
 async function renderExtensionsPage() {
