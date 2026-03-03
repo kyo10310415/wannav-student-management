@@ -38,9 +38,13 @@ export async function sendDailyStatsReport() {
     // 3. Fetch satisfaction data from external endpoint
     let satisfactionData = {};
     try {
+      console.log('[Stats Report] Fetching satisfaction data from external API...');
       const satisfactionResponse = await axios.get('https://script.google.com/macros/s/AKfycbxhQ8FckXGS6jCN1oK3lSaLf7Y51z8JfqzYl1ub0jvP2sMTKXDgxK2gENMYNPQKexNN/exec');
       if (satisfactionResponse.data && satisfactionResponse.data.data) {
         satisfactionData = satisfactionResponse.data.data;
+        console.log(`[Stats Report] Satisfaction data loaded for ${Object.keys(satisfactionData).length} tutors`);
+      } else {
+        console.warn('[Stats Report] Satisfaction data structure unexpected:', satisfactionResponse.data);
       }
     } catch (error) {
       console.error('[Stats Report] Error fetching satisfaction data:', error.message);
@@ -96,6 +100,10 @@ export async function sendDailyStatsReport() {
       };
     });
     
+    console.log(`[Stats Report] Calculated stats for ${tutorStats.length} tutors`);
+    const tutorsWithSatisfaction = tutorStats.filter(t => t.satisfactionScoreValue > 0).length;
+    console.log(`[Stats Report] ${tutorsWithSatisfaction} tutors have satisfaction scores`);
+    
     // 7. Calculate team statistics
     const teams = [...new Set(tutors.map(t => t.team || '未所属'))].sort();
     const teamStats = teams.map(team => {
@@ -114,6 +122,8 @@ export async function sendDailyStatsReport() {
       });
       
       const avgSatisfactionScore = validCount > 0 ? (teamSatisfactionScore / validCount).toFixed(2) : '-';
+      
+      console.log(`[Stats Report] Team ${team}: ${validCount}/${teamTutors.length} tutors with scores, avg=${avgSatisfactionScore}`);
       
       return {
         team,
