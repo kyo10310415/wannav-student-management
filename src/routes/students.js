@@ -3,6 +3,7 @@ import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
 import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
 import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts } from '../services/sheetsService.js';
+import { fetchLessonStartDates, calculateContinuedMonths } from '../services/externalDbService.js';
 
 const app = new Hono();
 
@@ -56,6 +57,10 @@ app.get('/sync', async (c) => {
     const progressMap = await fetchProgressFromCache(cacheSpreadsheetId);
     console.log(`Loaded ${Object.keys(progressMap).length} progress records`);
     
+    // Fetch lesson start dates from external DB
+    const lessonStartDates = await fetchLessonStartDates();
+    console.log(`Loaded ${Object.keys(lessonStartDates).length} lesson start dates`);
+    
     // Filter out students without student_id
     const skippedStudents = [];
     const validStudents = students.filter(student => {
@@ -80,6 +85,10 @@ app.get('/sync', async (c) => {
       try {
         const lessonProgress = progressMap[student.student_id] || null;
         
+        // Calculate continued_months from lesson_start_date
+        const lessonStartDate = student.lesson_start_date || lessonStartDates[student.student_id];
+        const continuedMonths = lessonStartDate ? calculateContinuedMonths(lessonStartDate) : 0;
+        
         await query(
           `INSERT INTO students 
             (student_id, name, status, contract_plan, character_name, homeroom_tutor, lesson_progress, 
@@ -88,8 +97,8 @@ app.get('/sync', async (c) => {
              payment_year_month_last, payment_year_month_current,
              result_absence, result_late, result_mission, result_payment,
              result_active_listening, result_understanding, result_overall,
-             absence_count, lesson_start_date, suspension_months, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, CURRENT_TIMESTAMP)
+             absence_count, lesson_start_date, continued_months, suspension_months, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -114,6 +123,7 @@ app.get('/sync', async (c) => {
             result_overall = EXCLUDED.result_overall,
             absence_count = EXCLUDED.absence_count,
             lesson_start_date = EXCLUDED.lesson_start_date,
+            continued_months = EXCLUDED.continued_months,
             suspension_months = EXCLUDED.suspension_months,
             updated_at = CURRENT_TIMESTAMP`,
           [
@@ -139,7 +149,8 @@ app.get('/sync', async (c) => {
             student.result_understanding,
             student.result_overall,
             student.absence_count,
-            student.lesson_start_date,
+            lessonStartDate,
+            continuedMonths,
             student.suspension_months
           ]
         );
