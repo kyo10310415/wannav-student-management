@@ -173,9 +173,11 @@ app.get('/stats', async (c) => {
 
   } catch (error) {
     console.error('❌ Error fetching extension stats:', error);
+    console.error('Error stack:', error.stack);
     return c.json({
       success: false,
-      error: error.message
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     }, 500);
   }
 });
@@ -297,9 +299,11 @@ app.get('/by-tutor', async (c) => {
 
   } catch (error) {
     console.error('❌ Error fetching extension data by tutor:', error);
+    console.error('Error stack:', error.stack);
     return c.json({
       success: false,
-      error: error.message
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     }, 500);
   }
 });
