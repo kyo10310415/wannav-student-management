@@ -148,14 +148,12 @@ export async function sendDailyStatsReport() {
     // Overall statistics
     message += `**【全体統計】**\n`;
     message += `📈 満足度スコア平均: **${overallAvgSatisfactionScore}**\n`;
-    message += `💬 わなみさん使用回数合計: **${overallWanamiTotal}回**\n`;
-    message += `👥 アクティブTutor数: **${tutors.length}名**\n`;
-    message += `🎓 アクティブ生徒数: **${students.length}名**\n\n`;
+    message += `💬 わなみさん使用回数合計: **${overallWanamiTotal}回**\n\n`;
     
     // Team statistics
     message += `**【チーム別統計】**\n`;
     teamStats.forEach(team => {
-      message += `\n**${team.team}** (Tutor: ${team.tutorCount}名)\n`;
+      message += `\n**${team.team}**\n`;
       message += `├ 満足度スコア平均: ${team.avgSatisfactionScore}\n`;
       message += `└ わなみさん使用回数: ${team.wanamiTotal}回\n`;
     });
