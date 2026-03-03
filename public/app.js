@@ -1310,37 +1310,47 @@ function renderStudentsPage() {
     });
   }
   
-  // Load Wanami usage data asynchronously
-  loadWanamiUsageData();
+  // Load Wanami usage data asynchronously (batch load for all students)
+  loadWanamiUsageDataBatch();
 }
 
-// Load Wanami usage data for all visible students
-async function loadWanamiUsageData() {
-  const loadingElements = document.querySelectorAll('.wanami-usage-loading');
-  
-  for (const element of loadingElements) {
-    const studentId = element.getAttribute('data-student-id');
-    if (!studentId) continue;
+// Load Wanami usage data for all visible students (batch mode with cache)
+async function loadWanamiUsageDataBatch() {
+  try {
+    // Fetch all usage counts in one API call (cached for 24 hours)
+    const response = await axios.get('/api/students/wanami-usage-all');
     
-    try {
-      const response = await axios.get(`/api/students/${studentId}/wanami-usage`);
+    if (!response.data.success) {
+      console.error('Failed to load Wanami usage data');
+      return;
+    }
+    
+    const usageCounts = response.data.data.usage_counts;
+    
+    // Update all loading elements
+    const loadingElements = document.querySelectorAll('.wanami-usage-loading');
+    
+    loadingElements.forEach(element => {
+      const studentId = element.getAttribute('data-student-id');
+      if (!studentId) return;
       
-      if (response.data.success) {
-        const count = response.data.data.count;
-        element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" onclick="showWanamiHistory('${studentId}')">${count}回</span>`;
-        element.classList.remove('text-gray-400');
-        element.classList.remove('wanami-usage-loading');
-      } else {
-        element.textContent = '-';
-        element.classList.remove('text-gray-400');
-        element.classList.remove('wanami-usage-loading');
-      }
-    } catch (error) {
-      console.error(`Error loading Wanami usage for ${studentId}:`, error);
+      const count = usageCounts[studentId] || 0;
+      element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" onclick="showWanamiHistory('${studentId}')">${count}回</span>`;
+      element.classList.remove('text-gray-400');
+      element.classList.remove('wanami-usage-loading');
+    });
+    
+    console.log(`[Wanami] Loaded usage counts for ${Object.keys(usageCounts).length} students`);
+  } catch (error) {
+    console.error('Error loading Wanami usage data:', error);
+    
+    // Fallback: show '-' for all elements
+    const loadingElements = document.querySelectorAll('.wanami-usage-loading');
+    loadingElements.forEach(element => {
       element.textContent = '-';
       element.classList.remove('text-gray-400');
       element.classList.remove('wanami-usage-loading');
-    }
+    });
   }
 }
 

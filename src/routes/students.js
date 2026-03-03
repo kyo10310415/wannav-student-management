@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
 import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
-import { fetchWanamiUsageCount, fetchWanamiUsageHistory } from '../services/sheetsService.js';
+import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts } from '../services/sheetsService.js';
 
 const app = new Hono();
 
@@ -220,6 +220,35 @@ app.get('/tutor/:tutorName', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching students by tutor:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/students/wanami-usage-all
+ * Get Wanami-san usage counts for all students (cached for 24 hours)
+ * Query params: ?year=2025&month=11 (optional, defaults to current month)
+ */
+app.get('/wanami-usage-all', async (c) => {
+  try {
+    const year = c.req.query('year') ? parseInt(c.req.query('year')) : null;
+    const month = c.req.query('month') ? parseInt(c.req.query('month')) : null;
+    
+    const usageCounts = await fetchAllWanamiUsageCounts(year, month);
+    
+    return c.json({
+      success: true,
+      data: {
+        year: year || new Date().getFullYear(),
+        month: month || (new Date().getMonth() + 1),
+        usage_counts: usageCounts
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching all Wanami usage counts:', error);
     return c.json({
       success: false,
       error: error.message

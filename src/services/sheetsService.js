@@ -192,6 +192,88 @@ export async function fetchLessonsForTomorrow() {
   }
 }
 
+// Cache for Wanami usage data
+let wanamiCache = null;
+let wanamiCacheTimestamp = null;
+const WANAMI_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+/**
+ * Fetch all Wanami-san usage counts for all students (with 24-hour cache)
+ * @param {number} year - Year to filter (optional, defaults to current year)
+ * @param {number} month - Month to filter (optional, defaults to current month)
+ * @returns {Object} - Map of student_id to count
+ */
+export async function fetchAllWanamiUsageCounts(year = null, month = null) {
+  try {
+    const now = new Date();
+    
+    // Default to current year/month if not specified
+    year = year || now.getFullYear();
+    month = month || now.getMonth() + 1;
+    
+    // Check cache validity (24 hours)
+    if (wanamiCache && wanamiCacheTimestamp) {
+      const cacheAge = now.getTime() - wanamiCacheTimestamp;
+      if (cacheAge < WANAMI_CACHE_DURATION) {
+        console.log(`[Wanami Cache] Using cached data (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
+        return wanamiCache[`${year}-${month}`] || {};
+      }
+    }
+    
+    console.log('[Wanami Cache] Cache expired or not found, fetching from Google Sheets...');
+    
+    const spreadsheetId = '1vKrYCzaw-miJOY52oskNoMfn-uEHIolBMhC7uMxxN_M';
+    const sheetName = 'Q&A記録';
+    
+    const sheets = getSheets();
+    
+    // Fetch all records (A and O columns)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!A2:O`, // Skip header row
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[Wanami] Fetched ${rows.length} Q&A records for caching`);
+
+    // Group by year-month and student ID
+    const monthlyData = {};
+    
+    rows.forEach(row => {
+      const timestamp = row[0]; // A列 (index 0)
+      const studentIdInRow = row[14]; // O列 (index 14)
+      
+      if (!timestamp || !studentIdInRow) return;
+      
+      try {
+        const date = new Date(timestamp);
+        const recordYear = date.getFullYear();
+        const recordMonth = date.getMonth() + 1;
+        const key = `${recordYear}-${recordMonth}`;
+        
+        if (!monthlyData[key]) {
+          monthlyData[key] = {};
+        }
+        
+        monthlyData[key][studentIdInRow] = (monthlyData[key][studentIdInRow] || 0) + 1;
+      } catch (error) {
+        // Skip invalid timestamps
+      }
+    });
+    
+    // Update cache
+    wanamiCache = monthlyData;
+    wanamiCacheTimestamp = now.getTime();
+    
+    console.log(`[Wanami Cache] Cache updated. Found data for ${Object.keys(monthlyData).length} months`);
+    
+    return monthlyData[`${year}-${month}`] || {};
+  } catch (error) {
+    console.error('[Wanami] Error fetching all usage counts:', error);
+    return {};
+  }
+}
+
 /**
  * Fetch Wanami-san usage count from Q&A records sheet
  * @param {string} studentId - Student ID to search
