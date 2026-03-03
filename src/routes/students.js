@@ -231,13 +231,17 @@ app.get('/tutor/:tutorName', async (c) => {
  * GET /api/students/wanami-usage-all
  * Get Wanami-san usage counts for all students (cached for 24 hours)
  * Query params: ?year=2025&month=11 (optional, defaults to current month)
+ * IMPORTANT: This must be defined BEFORE /:studentId routes to avoid being caught by :studentId pattern
  */
 app.get('/wanami-usage-all', async (c) => {
   try {
+    console.log('[Wanami API] Fetching all usage counts...');
     const year = c.req.query('year') ? parseInt(c.req.query('year')) : null;
     const month = c.req.query('month') ? parseInt(c.req.query('month')) : null;
     
     const usageCounts = await fetchAllWanamiUsageCounts(year, month);
+    
+    console.log(`[Wanami API] Found ${Object.keys(usageCounts).length} students with usage data`);
     
     return c.json({
       success: true,
