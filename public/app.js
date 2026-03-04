@@ -171,7 +171,20 @@ function getRoleLabel(role) {
 async function loadInitialData() {
   try {
     // Sync data from Notion
-    await axios.get(`${API_BASE}/api/students/sync`);
+    try {
+      await axios.get(`${API_BASE}/api/students/sync`);
+    } catch (syncError) {
+      console.error('Error syncing students:', syncError);
+      if (syncError.response && syncError.response.data) {
+        const errorData = syncError.response.data;
+        if (errorData.error && errorData.error.includes('Cache spreadsheet is empty')) {
+          alert('⚠️ キャッシュシートが空です\n\nNotionからのデータ同期が必要です。\nキャッシュ更新スクリプトを実行してください。');
+          throw syncError;
+        }
+      }
+      throw syncError;
+    }
+    
     await axios.get(`${API_BASE}/api/tutors/sync`);
     
     // Sync lessons from Google Sheets (populated by GAS)

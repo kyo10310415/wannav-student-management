@@ -29,6 +29,12 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     });
 
     const rows = response.data.values || [];
+    
+    if (rows.length === 0) {
+      console.warn('⚠️ Cache spreadsheet is empty. Please run the cache update script.');
+      return [];
+    }
+    
     console.log(`Fetched ${rows.length} students from cache spreadsheet`);
 
     return rows.map(row => {

@@ -53,6 +53,15 @@ app.get('/sync', async (c) => {
     // Fetch students from cache
     const students = await fetchStudentsFromCache(cacheSpreadsheetId);
     
+    // Check if cache is empty
+    if (students.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Cache spreadsheet is empty. Please run the cache update script first.',
+        hint: 'The cache spreadsheet may need to be populated with data from Notion.'
+      }, 400);
+    }
+    
     // Fetch progress data
     const progressMap = await fetchProgressFromCache(cacheSpreadsheetId);
     console.log(`Loaded ${Object.keys(progressMap).length} progress records`);
