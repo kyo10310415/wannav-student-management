@@ -1057,6 +1057,28 @@ async function sendReminders() {
   }
 }
 
+// Send daily statistics report
+async function sendStatsReport() {
+  if (!confirm('日次統計レポートをDiscordに送信しますか？')) {
+    return;
+  }
+  
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>送信中...';
+  
+  try {
+    const res = await axios.post(`${API_BASE}/api/stats/send`);
+    alert(res.data.message || '日次統計レポートを送信しました');
+  } catch (error) {
+    console.error('Error sending stats report:', error);
+    alert('統計レポートの送信に失敗しました: ' + (error.response?.data?.error || error.message));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>日次統計レポート送信';
+  }
+}
+
 // ========== Students Page ==========
 
 // Render Students Page (without payment status, reservations, and lesson dates)
@@ -1562,9 +1584,13 @@ function renderTutorsPage() {
   content.innerHTML = `
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div class="flex gap-2 items-center">
+      <div class="flex gap-2 items-center flex-wrap">
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+        
+        <button onclick="sendStatsReport()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
+          <i class="fas fa-paper-plane mr-2"></i>日次統計レポート送信
         </button>
         
         <!-- Team Filter -->

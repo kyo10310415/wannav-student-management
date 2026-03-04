@@ -23,6 +23,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import extensionRoutes from './routes/extensions.js';
 import suspensionRoutes from './routes/suspensions.js';
+import statsRoutes from './routes/stats.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -56,6 +57,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/users', userRoutes);
 app.route('/api/extensions', extensionRoutes);
 app.route('/api/suspensions', suspensionRoutes);
+app.route('/api/stats', statsRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
