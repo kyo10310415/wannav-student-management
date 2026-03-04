@@ -1,4 +1,5 @@
 import { queryExternal } from '../db/externalConnection.js';
+import { differenceInMonths, parseISO } from 'date-fns';
 
 /**
  * 外部DBからレッスン開始日を取得
@@ -34,7 +35,7 @@ export async function fetchLessonStartDates() {
 
 /**
  * レッスン開始日から継続月数を計算
- * 開始月を1ヶ月目としてカウント
+ * 開始月を1ヶ月目としてカウント（既存システムと同じロジック）
  * @param {string} startDate - レッスン開始日 (YYYY-MM-DD形式)
  * @returns {number} 継続月数
  */
@@ -42,23 +43,16 @@ export function calculateContinuedMonths(startDate) {
   if (!startDate) return 0;
   
   try {
-    const start = new Date(startDate);
+    // "YYYY-MM-DD" または "YYYY/MM/DD" 形式を統一
+    const formattedDate = startDate.replace(/\//g, '-');
+    const start = parseISO(formattedDate);
     const now = new Date();
     
-    const yearsDiff = now.getFullYear() - start.getFullYear();
-    const monthsDiff = now.getMonth() - start.getMonth();
+    // differenceInMonths は完全に経過した月数を返すため、+1 する
+    // （開始月を1ヶ月目としてカウント）
+    const months = differenceInMonths(now, start) + 1;
     
-    let totalMonths = yearsDiff * 12 + monthsDiff;
-    
-    // 開始日が今月の日付より後の場合は1ヶ月引く
-    if (now.getDate() < start.getDate()) {
-      totalMonths = totalMonths - 1;
-    }
-    
-    // 開始月を1ヶ月目としてカウント（+1）
-    totalMonths = totalMonths + 1;
-    
-    return Math.max(0, totalMonths);
+    return Math.max(0, months);
   } catch (error) {
     console.error('Error calculating continued months:', error);
     return 0;

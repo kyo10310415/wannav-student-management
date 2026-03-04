@@ -24,6 +24,7 @@
     "@notionhq/client": "^2.2.15",
     "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",
+    "date-fns": "^4.1.0",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
