@@ -85,6 +85,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 function renderHeader() {
   const app = document.getElementById('app');
   
+  // Debug: Log current user info
+  console.log('renderHeader - currentUser:', currentUser);
+  console.log('renderHeader - currentUser.role:', currentUser?.role);
+  
   // Build user management button (admin only)
   const userManagementButton = currentUser && currentUser.role === 'admin' ? `
     <button id="nav-users" onclick="changePage('users')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
@@ -98,6 +102,9 @@ function renderHeader() {
       <i class="fas fa-database mr-2"></i>DB管理
     </button>
   ` : '';
+  
+  console.log('renderHeader - userManagementButton:', userManagementButton ? 'yes' : 'no');
+  console.log('renderHeader - databaseManagementButton:', databaseManagementButton ? 'yes' : 'no');
   
   app.innerHTML = `
     <div class="min-h-screen bg-gray-50">
