@@ -12,6 +12,30 @@ export async function sendDailyStatsReport() {
     
     console.log('[Stats Report] Generating daily statistics report...');
     
+    // 1. Fetch extension statistics
+    let extensionStats = null;
+    let extensionTeamStats = [];
+    try {
+      console.log('[Stats Report] Fetching extension statistics from internal API...');
+      const [extensionResponse, extensionTeamResponse] = await Promise.all([
+        axios.get('http://localhost:3000/api/extensions/stats'),
+        axios.get('http://localhost:3000/api/extensions/by-team')
+      ]);
+      
+      if (extensionResponse.data && extensionResponse.data.success) {
+        extensionStats = extensionResponse.data.data;
+        console.log('[Stats Report] Extension stats loaded successfully');
+      }
+      
+      if (extensionTeamResponse.data && extensionTeamResponse.data.success) {
+        // Filter teams with 2+ students
+        extensionTeamStats = extensionTeamResponse.data.data.filter(team => team.targetCount >= 2);
+        console.log(`[Stats Report] Extension team stats loaded: ${extensionTeamStats.length} teams (filtered for 2+ students)`);
+      }
+    } catch (error) {
+      console.error('[Stats Report] Error fetching extension data:', error.message);
+    }
+    
     // 1. Fetch all active tutors
     const tutorsResult = await query(`
       SELECT employee_id, tutor_name, notion_name, team, status, job_type
@@ -158,14 +182,34 @@ export async function sendDailyStatsReport() {
     // Overall statistics
     message += `**【全体統計】**\n`;
     message += `📈 満足度スコア平均: **${overallAvgSatisfactionScore}**\n`;
-    message += `💬 わなみさん使用回数合計: **${overallWanamiTotal}回**\n\n`;
+    message += `💬 わなみさん使用回数合計: **${overallWanamiTotal}回**\n`;
+    
+    // Add extension statistics if available
+    if (extensionStats) {
+      message += `\n**【延長率統計】**\n`;
+      message += `🎯 全体延長率: **${extensionStats.extensionRate}%** (${extensionStats.extensionCount}/${extensionStats.targetCount}人)\n`;
+      message += `├ 1回目（5ヶ月目）: **${extensionStats.exam1st.extensionRate}%** (${extensionStats.exam1st.extensionCount}/${extensionStats.exam1st.targetCount}人)\n`;
+      message += `└ 2回目（11ヶ月目）: **${extensionStats.exam2nd.extensionRate}%** (${extensionStats.exam2nd.extensionCount}/${extensionStats.exam2nd.targetCount}人)\n`;
+    }
+    
+    message += `\n`;
     
     // Team statistics
     message += `**【チーム別統計】**\n`;
     teamStats.forEach(team => {
       message += `\n**${team.team}**\n`;
       message += `├ 満足度スコア平均: ${team.avgSatisfactionScore}\n`;
-      message += `└ わなみさん使用回数: ${team.wanamiTotal}回\n`;
+      message += `├ わなみさん使用回数: ${team.wanamiTotal}回\n`;
+      
+      // Add extension rate for this team if available
+      const teamExtension = extensionTeamStats.find(t => t.teamName === team.team);
+      if (teamExtension && teamExtension.targetCount >= 2) {
+        message += `└ 延長率: **${teamExtension.extensionRate}%** (${teamExtension.extensionCount}/${teamExtension.targetCount}人)\n`;
+        message += `  ├ 1回目: ${teamExtension.exam1stExtensionRate}% (${teamExtension.exam1stExtensionCount}/${teamExtension.exam1stTargetCount}人)\n`;
+        message += `  └ 2回目: ${teamExtension.exam2ndExtensionRate}% (${teamExtension.exam2ndExtensionCount}/${teamExtension.exam2ndTargetCount}人)\n`;
+      } else {
+        message += `└ 延長率: データなし\n`;
+      }
     });
     
     message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
