@@ -117,11 +117,6 @@ app.get('/stats', async (c) => {
           }
         }
 
-        // 残弾数：延長確度が「高」「中」で審査結果が未入力
-        if ((certainty === '高' || certainty === '中') && !examResult) {
-          remainingCount++;
-        }
-
         // 1回目・2回目の統計（審査月：5ヶ月目、11ヶ月目）
         if (months === 5) {
           exam1stTargetCount++;
@@ -136,11 +131,14 @@ app.get('/stats', async (c) => {
         }
       }
 
-      // 延長確度記入済み：4ヶ月目と10ヶ月目のみカウント
-      if ((months === 4 || months === 10) && certainty) {
+      // 延長確度記入済み：4ヶ月目と10ヶ月目のみカウント（「対象外」を除く）
+      if ((months === 4 || months === 10) && certainty && certainty !== '対象外') {
         certaintyFilledCount++;
       }
     });
+
+    // 残弾数 = 延長審査対象 - 延長数 - 退会数
+    remainingCount = targetCount - extensionCount - withdrawalCount;
 
     // 延長率計算
     const extensionRate = targetCount > 0 
