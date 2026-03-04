@@ -39,26 +39,19 @@ app.get('/stats', async (c) => {
       `);
       stats.mainDatabase.tables = tableSizeResult.rows;
 
-      // Get row counts
+      // Get row counts - dynamically query only existing tables
       const rowCountResult = await pool.query(`
         SELECT 
-          'students' as table_name,
-          COUNT(*) as row_count
-        FROM students
-        UNION ALL
-        SELECT 'tutors', COUNT(*) FROM tutors
-        UNION ALL
-        SELECT 'lessons', COUNT(*) FROM lessons
-        UNION ALL
-        SELECT 'schedules', COUNT(*) FROM schedules
-        UNION ALL
-        SELECT 'absence_requests', COUNT(*) FROM absence_requests
-        UNION ALL
-        SELECT 'helper_requests', COUNT(*) FROM helper_requests
-        UNION ALL
-        SELECT 'users', COUNT(*) FROM users;
+          schemaname || '.' || tablename as table_name,
+          n_live_tup as row_count
+        FROM pg_stat_user_tables
+        WHERE schemaname = 'public'
+        ORDER BY n_live_tup DESC;
       `);
-      stats.mainDatabase.rowCounts = rowCountResult.rows;
+      stats.mainDatabase.rowCounts = rowCountResult.rows.map(row => ({
+        table_name: row.table_name.split('.')[1], // Remove schema prefix
+        row_count: row.row_count.toString()
+      }));
 
       // Calculate total rows
       stats.mainDatabase.totalRows = rowCountResult.rows.reduce(
