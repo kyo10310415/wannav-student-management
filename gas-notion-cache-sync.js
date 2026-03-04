@@ -166,8 +166,8 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
   
-  // ヘッダー行を設定（23列に拡張）
-  sheet.getRange(1, 1, 1, 23).setValues([[
+  // ヘッダー行を設定（25列に拡張 - YouTubeとXのID追加）
+  sheet.getRange(1, 1, 1, 25).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -190,11 +190,13 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     '欠席回数',
     'レッスン開始日',
     '休会期間（月）',
+    'YouTubeチャンネルID',
+    'X ID',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 23).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 25).setFontWeight('bold');
   
-  // データを書き込み
+  // データを書き込み（25列に拡張）
   if (students.length > 0) {
     const rows = students.map(s => [
       s.notion_page_id || '',
@@ -219,10 +221,12 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
       s.absence_count || 0,
       s.lesson_start_date || '',
       s.suspension_months || 0,
+      s.youtube_channel_id || '',  // YouTube ID追加
+      s.x_account_id || '',         // X ID追加
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 23).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 25).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -294,7 +298,9 @@ function fetchStudentsFromNotion() {
       character_name: getPropertyValue(props['キャラクター名']),
       homeroom_tutor: getPropertyValue(props['担任Tutor']),
       notion_url: getPropertyValue(props['Notion URL']) || getPropertyValue(props['NotionURL']) || '',
-      discord_url: '' // Will be filled from Discord destination spreadsheet
+      discord_url: '', // Will be filled from Discord destination spreadsheet
+      youtube_channel_id: getPropertyValue(props['YTチャンネルID']) || '', // YouTube ID追加
+      x_account_id: getPropertyValue(props['X ID（@は無し）']) || ''    // X ID追加
     };
   });
 }

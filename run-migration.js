@@ -15,9 +15,9 @@ async function runMigration() {
   const client = await pool.connect();
   
   try {
-    const sql = readFileSync(join(__dirname, 'migrations/20260302_add_absence_approval.sql'), 'utf8');
+    const sql = readFileSync(join(__dirname, 'migrations/20260304_add_social_media_ids.sql'), 'utf8');
     
-    console.log('Running migration: 20260302_add_absence_approval.sql');
+    console.log('Running migration: 20260304_add_social_media_ids.sql');
     await client.query(sql);
     console.log('Migration completed successfully!');
   } catch (error) {
