@@ -324,4 +324,151 @@ app.get('/by-tutor', async (c) => {
   }
 });
 
+/**
+ * GET /api/extensions/by-team
+ * チーム別の延長管理統計を取得
+ */
+app.get('/by-team', async (c) => {
+  try {
+    console.log('👥 Fetching extension data by team...');
+
+    // Check if extension DB is configured
+    const pool = getExtensionPool();
+    if (!pool) {
+      console.warn('⚠️ Extension database not configured (EXTENSION_DATABASE_URL missing)');
+      return c.json({
+        success: false,
+        error: 'Extension database not configured. Please set EXTENSION_DATABASE_URL environment variable.'
+      }, 503);
+    }
+
+    // 延長審査DBから全データ取得
+    const extensionResult = await queryExtension(`
+      SELECT 
+        student_id,
+        extension_certainty_1,
+        examination_result_1,
+        extension_certainty_2,
+        examination_result_2
+      FROM student_extensions
+    `);
+
+    const extensionData = extensionResult.rows;
+
+    // メインDBからアクティブ生徒データとTutor情報を取得
+    const mainPool = getPool();
+    const studentsResult = await mainPool.query(`
+      SELECT 
+        s.student_id,
+        s.continued_months,
+        s.homeroom_tutor,
+        s.status,
+        s.contract_plan,
+        t.team
+      FROM students s
+      LEFT JOIN tutors t ON s.homeroom_tutor = t.notion_name
+      WHERE s.status = 'アクティブ'
+        AND s.contract_plan NOT IN ('永久会員', '在籍プラン')
+    `);
+
+    const students = studentsResult.rows;
+    console.log('  アクティブ生徒数:', students.length);
+
+    // 延長審査データマップ作成
+    const extensionMap = {};
+    extensionData.forEach(ext => {
+      extensionMap[ext.student_id] = ext;
+    });
+
+    // チーム別集計
+    const teamStats = {};
+
+    students.forEach(student => {
+      const team = student.team || '未所属';
+      const months = student.continued_months;
+      const ext = extensionMap[student.student_id];
+
+      if (!teamStats[team]) {
+        teamStats[team] = {
+          teamName: team,
+          targetCount: 0,          // 延長対象数（5,11ヶ月目）
+          extensionCount: 0,       // 延長数
+          withdrawalCount: 0,      // 退会数
+          extensionRate: 0,        // 延長率
+          exam1stTargetCount: 0,   // 1回目対象数
+          exam1stExtensionCount: 0,// 1回目延長数
+          exam1stExtensionRate: 0, // 1回目延長率
+          exam2ndTargetCount: 0,   // 2回目対象数
+          exam2ndExtensionCount: 0,// 2回目延長数
+          exam2ndExtensionRate: 0  // 2回目延長率
+        };
+      }
+
+      // サイクル判定
+      const cycle = (months === 4 || months === 5) ? 1 : 2;
+      const examResult = cycle === 1 ? ext?.examination_result_1 : ext?.examination_result_2;
+
+      // 延長対象数：5ヶ月目と11ヶ月目のみカウント
+      if (months === 5 || months === 11) {
+        teamStats[team].targetCount++;
+
+        if (examResult === '延長') {
+          teamStats[team].extensionCount++;
+        } else if (examResult === '退会') {
+          teamStats[team].withdrawalCount++;
+        }
+
+        // 1回目・2回目の統計
+        if (months === 5) {
+          teamStats[team].exam1stTargetCount++;
+          if (examResult === '延長') {
+            teamStats[team].exam1stExtensionCount++;
+          }
+        } else if (months === 11) {
+          teamStats[team].exam2ndTargetCount++;
+          if (examResult === '延長') {
+            teamStats[team].exam2ndExtensionCount++;
+          }
+        }
+      }
+    });
+
+    // 延長率を計算
+    Object.values(teamStats).forEach(team => {
+      team.extensionRate = team.targetCount > 0 
+        ? Math.round((team.extensionCount / team.targetCount) * 100 * 10) / 10 
+        : 0;
+      
+      team.exam1stExtensionRate = team.exam1stTargetCount > 0
+        ? Math.round((team.exam1stExtensionCount / team.exam1stTargetCount) * 100 * 10) / 10
+        : 0;
+      
+      team.exam2ndExtensionRate = team.exam2ndTargetCount > 0
+        ? Math.round((team.exam2ndExtensionCount / team.exam2ndTargetCount) * 100 * 10) / 10
+        : 0;
+    });
+
+    // 配列に変換してソート（延長対象数の降順）
+    const teamList = Object.values(teamStats).sort((a, b) => 
+      b.targetCount - a.targetCount
+    );
+
+    console.log('  ✅ Team stats calculated:', teamList.length, 'teams');
+
+    return c.json({
+      success: true,
+      data: teamList
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching extension data by team:', error);
+    console.error('Error stack:', error.stack);
+    return c.json({
+      success: false,
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, 500);
+  }
+});
+
 export default app;

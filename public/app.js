@@ -5616,13 +5616,15 @@ async function renderExtensionsPage() {
     // Fetch statistics
     const statsRes = await axios.get('/api/extensions/stats');
     const tutorRes = await axios.get('/api/extensions/by-tutor');
+    const teamRes = await axios.get('/api/extensions/by-team');
     
-    if (!statsRes.data.success || !tutorRes.data.success) {
+    if (!statsRes.data.success || !tutorRes.data.success || !teamRes.data.success) {
       throw new Error('データの取得に失敗しました');
     }
 
     const stats = statsRes.data.data;
     const tutorList = tutorRes.data.data;
+    const teamList = teamRes.data.data;
 
     content.innerHTML = `
       <div class="space-y-6">
@@ -5713,6 +5715,53 @@ async function renderExtensionsPage() {
                 <span class="text-xl font-bold text-purple-600">${stats.exam2nd.extensionRate}%</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Team Statistics -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-users-cog mr-2 text-purple-600"></i>チーム別延長率
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">チーム名</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長対象数</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長数</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">退会数</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長率</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">1回目延長率</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">2回目延長率</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                ${teamList.map(team => `
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm font-medium text-gray-800">${team.teamName}</td>
+                    <td class="px-4 py-3 text-center text-sm text-gray-600">${team.targetCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm text-green-600 font-semibold">${team.extensionCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm text-red-600">${team.withdrawalCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm">
+                      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                        team.extensionRate >= 80 ? 'bg-green-100 text-green-800' :
+                        team.extensionRate >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }">
+                        ${team.extensionRate}%
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 text-center text-sm text-gray-600">
+                      ${team.exam1stExtensionRate}% <span class="text-xs text-gray-400">(${team.exam1stExtensionCount}/${team.exam1stTargetCount})</span>
+                    </td>
+                    <td class="px-4 py-3 text-center text-sm text-gray-600">
+                      ${team.exam2ndExtensionRate}% <span class="text-xs text-gray-400">(${team.exam2ndExtensionCount}/${team.exam2ndTargetCount})</span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
           </div>
         </div>
 
