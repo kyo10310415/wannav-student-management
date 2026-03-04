@@ -1005,11 +1005,13 @@ function getLessonCountBadgeColor(count) {
   return 'bg-gray-200 text-gray-800';
 }
 
-// Get previous month in YYYY/M format for result system
+// Get previous month in YYYY-MM format for result system
 function getPreviousMonth() {
   const now = new Date();
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  return `${prevMonth.getFullYear()}/${prevMonth.getMonth() + 1}`;
+  const year = prevMonth.getFullYear();
+  const month = String(prevMonth.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
 }
 
 // Calculate continued months from lesson start date (minus suspension months)
