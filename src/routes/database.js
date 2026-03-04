@@ -42,7 +42,7 @@ app.get('/stats', async (c) => {
       // Get row counts - dynamically query only existing tables
       const rowCountResult = await pool.query(`
         SELECT 
-          schemaname || '.' || tablename as table_name,
+          schemaname || '.' || relname as table_name,
           n_live_tup as row_count
         FROM pg_stat_user_tables
         WHERE schemaname = 'public'
