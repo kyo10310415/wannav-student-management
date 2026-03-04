@@ -28,9 +28,9 @@ export async function sendDailyStatsReport() {
       }
       
       if (extensionTeamResponse.data && extensionTeamResponse.data.success) {
-        // Filter teams with 2+ students
-        extensionTeamStats = extensionTeamResponse.data.data.filter(team => team.targetCount >= 2);
-        console.log(`[Stats Report] Extension team stats loaded: ${extensionTeamStats.length} teams (filtered for 2+ students)`);
+        // No filtering here - we'll filter by tutor count later
+        extensionTeamStats = extensionTeamResponse.data.data;
+        console.log(`[Stats Report] Extension team stats loaded: ${extensionTeamStats.length} teams`);
       }
     } catch (error) {
       console.error('[Stats Report] Error fetching extension data:', error.message);
@@ -128,7 +128,7 @@ export async function sendDailyStatsReport() {
     const tutorsWithSatisfaction = tutorStats.filter(t => t.satisfactionScoreValue > 0).length;
     console.log(`[Stats Report] ${tutorsWithSatisfaction} tutors have satisfaction scores`);
     
-    // 7. Calculate team statistics
+    // 7. Calculate team statistics (filter teams with 2+ tutors)
     const teams = [...new Set(tutors.map(t => t.team || '未所属'))].sort();
     const teamStats = teams.map(team => {
       const teamTutors = tutorStats.filter(t => t.team === team);
@@ -147,7 +147,7 @@ export async function sendDailyStatsReport() {
       
       const avgSatisfactionScore = validCount > 0 ? (teamSatisfactionScore / validCount).toFixed(2) : '-';
       
-      console.log(`[Stats Report] Team ${team}: ${validCount}/${teamTutors.length} tutors with scores, avg=${avgSatisfactionScore}`);
+      console.log(`[Stats Report] Team ${team}: ${teamTutors.length} tutors, ${validCount}/${teamTutors.length} with scores, avg=${avgSatisfactionScore}`);
       
       return {
         team,
@@ -155,7 +155,9 @@ export async function sendDailyStatsReport() {
         avgSatisfactionScore,
         wanamiTotal: teamWanamiTotal
       };
-    });
+    }).filter(team => team.tutorCount >= 2); // Filter teams with 2+ tutors
+    
+    console.log(`[Stats Report] ${teamStats.length} teams with 2+ tutors (filtered from ${teams.length} total teams)`);
     
     // 8. Calculate overall statistics
     let overallSatisfactionScore = 0;
@@ -194,21 +196,21 @@ export async function sendDailyStatsReport() {
     
     message += `\n`;
     
-    // Team statistics
+    // Team statistics (only teams with 2+ tutors)
     message += `**【チーム別統計】**\n`;
     teamStats.forEach(team => {
-      message += `\n**${team.team}**\n`;
+      message += `\n**${team.team}** (Tutor: ${team.tutorCount}名)\n`;
       message += `├ 満足度スコア平均: ${team.avgSatisfactionScore}\n`;
       message += `├ わなみさん使用回数: ${team.wanamiTotal}回\n`;
       
       // Add extension rate for this team if available
       const teamExtension = extensionTeamStats.find(t => t.teamName === team.team);
-      if (teamExtension && teamExtension.targetCount >= 2) {
+      if (teamExtension && teamExtension.targetCount > 0) {
         message += `└ 延長率: **${teamExtension.extensionRate}%** (${teamExtension.extensionCount}/${teamExtension.targetCount}人)\n`;
         message += `  ├ 1回目: ${teamExtension.exam1stExtensionRate}% (${teamExtension.exam1stExtensionCount}/${teamExtension.exam1stTargetCount}人)\n`;
         message += `  └ 2回目: ${teamExtension.exam2ndExtensionRate}% (${teamExtension.exam2ndExtensionCount}/${teamExtension.exam2ndTargetCount}人)\n`;
       } else {
-        message += `└ 延長率: データなし\n`;
+        message += `└ 延長率: 延長対象なし\n`;
       }
     });
     
