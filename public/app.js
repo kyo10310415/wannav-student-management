@@ -91,14 +91,14 @@ function renderHeader() {
   
   // Build user management button (admin only)
   const userManagementButton = currentUser && currentUser.role === 'admin' ? `
-    <button id="nav-users" onclick="changePage('users')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+    <button id="nav-users" onclick="changePage('users')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-users-cog mr-2"></i>ユーザー管理
     </button>
   ` : '';
   
   // Build database management button (admin only)
   const databaseManagementButton = currentUser && currentUser.role === 'admin' ? `
-    <button id="nav-database" onclick="changePage('database')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'database' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+    <button id="nav-database" onclick="changePage('database')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'database' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-database mr-2"></i>DB管理
     </button>
   ` : '';
@@ -109,7 +109,7 @@ function renderHeader() {
   app.innerHTML = `
     <div class="min-h-screen bg-gray-50">
       <!-- Header -->
-      <header class="bg-blue-600 text-white shadow-lg">
+      <header class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg">
         <div class="container mx-auto px-4 py-6">
           <div class="flex justify-between items-start">
             <div>
@@ -132,37 +132,63 @@ function renderHeader() {
             </div>
           </div>
           
-          <!-- Navigation -->
-          <nav class="mt-6 flex gap-2 flex-wrap">
-            <button id="nav-today" onclick="changePage('today')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-calendar-day mr-2"></i>今日のレッスン
-            </button>
-            <button id="nav-reservations" onclick="changePage('reservations')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'reservations' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-calendar-check mr-2"></i>予約管理
-            </button>
-            <button id="nav-students" onclick="changePage('students')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'students' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-user-graduate mr-2"></i>生徒管理
-            </button>
-            <button id="nav-tutors" onclick="changePage('tutors')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
-            </button>
-            <button id="nav-extensions" onclick="changePage('extensions')" class="relative px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-sync-alt mr-2"></i>延長管理
-              <span id="extension-hearing-badge" class="hidden absolute -top-1 -left-1 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
-              <span id="extension-exam-badge" class="hidden absolute -top-1 left-8 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
-            </button>
-            <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-pause-circle mr-2"></i>休会管理
-            </button>
-            <button id="nav-helpers" onclick="changePage('helpers')" class="relative px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
-              <span id="helper-badge" class="hidden absolute -top-1 -left-1 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
-            </button>
-            <button id="nav-schedules" onclick="changePage('schedules')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
-              <i class="fas fa-calendar-check mr-2"></i>Tutorスケジュール
-            </button>
-            ${userManagementButton}
-            ${databaseManagementButton}
+          <!-- Navigation - Organized by sections -->
+          <nav class="mt-6 flex gap-4 flex-wrap">
+            <!-- Lesson Section (Green) -->
+            <div class="flex gap-2">
+              <button id="nav-today" onclick="changePage('today')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
+                <i class="fas fa-calendar-day mr-2"></i>今日のレッスン
+              </button>
+              <button id="nav-reservations" onclick="changePage('reservations')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'reservations' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
+                <i class="fas fa-calendar-check mr-2"></i>予約管理
+              </button>
+              <button id="nav-helpers" onclick="changePage('helpers')" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
+                <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
+                <span id="helper-badge" class="hidden absolute -top-1 -left-1 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
+              </button>
+            </div>
+            
+            <!-- Divider -->
+            <div class="w-px bg-white/30"></div>
+            
+            <!-- Student Section (Blue) -->
+            <div class="flex gap-2">
+              <button id="nav-students" onclick="changePage('students')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'students' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+                <i class="fas fa-user-graduate mr-2"></i>生徒管理
+              </button>
+              <button id="nav-extensions" onclick="changePage('extensions')" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+                <i class="fas fa-sync-alt mr-2"></i>延長管理
+                <span id="extension-hearing-badge" class="hidden absolute -top-1 -left-1 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
+                <span id="extension-exam-badge" class="hidden absolute -top-1 left-8 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
+              </button>
+              <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+                <i class="fas fa-pause-circle mr-2"></i>休会管理
+              </button>
+            </div>
+            
+            <!-- Divider -->
+            <div class="w-px bg-white/30"></div>
+            
+            <!-- Tutor Section (Purple) -->
+            <div class="flex gap-2">
+              <button id="nav-tutors" onclick="changePage('tutors')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+                <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
+              </button>
+              <button id="nav-schedules" onclick="changePage('schedules')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+                <i class="fas fa-calendar-alt mr-2"></i>スケジュール
+              </button>
+            </div>
+            
+            ${userManagementButton || databaseManagementButton ? `
+              <!-- Divider -->
+              <div class="w-px bg-white/30"></div>
+              
+              <!-- Admin Section (Orange) -->
+              <div class="flex gap-2">
+                ${userManagementButton}
+                ${databaseManagementButton}
+              </div>
+            ` : ''}
           </nav>
         </div>
       </header>
