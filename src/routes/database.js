@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import pool from '../db.js';
+import pool from '../db/connection.js';
 import { extensionDbPool } from '../services/externalDbService.js';
 
 const app = new Hono();
