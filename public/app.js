@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'users';
   } else if (hash === 'extensions') {
     currentPage = 'extensions';
+  } else if (hash === 'database') {
+    currentPage = 'database';
   }
   // Default is 'today' (already set)
   
@@ -87,6 +89,13 @@ function renderHeader() {
   const userManagementButton = currentUser && currentUser.role === 'admin' ? `
     <button id="nav-users" onclick="changePage('users')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
       <i class="fas fa-users-cog mr-2"></i>ユーザー管理
+    </button>
+  ` : '';
+  
+  // Build database management button (admin only)
+  const databaseManagementButton = currentUser && currentUser.role === 'admin' ? `
+    <button id="nav-database" onclick="changePage('database')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'database' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+      <i class="fas fa-database mr-2"></i>DB管理
     </button>
   ` : '';
   
@@ -146,6 +155,7 @@ function renderHeader() {
               <i class="fas fa-calendar-check mr-2"></i>Tutorスケジュール
             </button>
             ${userManagementButton}
+            ${databaseManagementButton}
           </nav>
         </div>
       </header>
@@ -398,6 +408,8 @@ async function renderApp() {
     await renderExtensionsPage();
   } else if (currentPage === 'suspensions') {
     await renderSuspensionsPage();
+  } else if (currentPage === 'database') {
+    await renderDatabasePage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -6127,3 +6139,236 @@ async function renderSuspensionsPage() {
     `;
   }
 }
+
+/**
+ * Render Database Management Page
+ */
+async function renderDatabasePage() {
+  const content = document.getElementById('content');
+  
+  // Show loading
+  content.innerHTML = `
+    <div class="text-center py-12">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+      <p class="mt-4 text-gray-600">データベース情報を読み込んでいます...</p>
+    </div>
+  `;
+
+  try {
+    // Fetch database stats
+    const statsRes = await axios.get(`${API_BASE}/api/database/stats`);
+    const connectionRes = await axios.get(`${API_BASE}/api/database/connection-info`);
+    
+    if (!statsRes.data.success || !connectionRes.data.success) {
+      throw new Error('データの取得に失敗しました');
+    }
+
+    const stats = statsRes.data.data;
+    const connections = connectionRes.data.data;
+
+    content.innerHTML = `
+      <div class="space-y-6">
+        <!-- Page Title -->
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg shadow-lg p-6">
+          <h2 class="text-3xl font-bold">
+            <i class="fas fa-database mr-3"></i>データベース管理
+          </h2>
+          <p class="mt-2 text-indigo-100">データベースの使用状況とパフォーマンスを確認します</p>
+        </div>
+
+        <!-- Main Database Stats -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-server mr-2 text-indigo-600"></i>メインデータベース
+          </h3>
+          
+          ${stats.mainDatabase.error ? `
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+              <i class="fas fa-exclamation-triangle mr-2"></i>${stats.mainDatabase.error}
+            </div>
+          ` : `
+            <!-- Overview Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm text-gray-600 mb-1">データベース容量</div>
+                    <div class="text-2xl font-bold text-blue-600">${stats.mainDatabase.totalSize}</div>
+                  </div>
+                  <i class="fas fa-hdd text-4xl text-blue-400"></i>
+                </div>
+              </div>
+              
+              <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm text-gray-600 mb-1">総レコード数</div>
+                    <div class="text-2xl font-bold text-green-600">${stats.mainDatabase.totalRows?.toLocaleString() || 0}</div>
+                  </div>
+                  <i class="fas fa-list text-4xl text-green-400"></i>
+                </div>
+              </div>
+              
+              <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm text-gray-600 mb-1">接続数</div>
+                    <div class="text-2xl font-bold text-purple-600">${connections.mainDatabase.totalConnections}</div>
+                    <div class="text-xs text-gray-500 mt-1">アイドル: ${connections.mainDatabase.idleConnections}</div>
+                  </div>
+                  <i class="fas fa-plug text-4xl text-purple-400"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Table Sizes -->
+            <div class="mb-6">
+              <h4 class="text-lg font-semibold text-gray-700 mb-3">
+                <i class="fas fa-table mr-2"></i>テーブル別容量
+              </h4>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-100">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">テーブル名</th>
+                      <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">容量</th>
+                      <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">割合</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200">
+                    ${stats.mainDatabase.tables.map(table => {
+                      const percentage = ((table.size_bytes / stats.mainDatabase.totalSizeBytes) * 100).toFixed(1);
+                      return `
+                        <tr class="hover:bg-gray-50">
+                          <td class="px-4 py-3 text-sm font-medium text-gray-800">${table.tablename}</td>
+                          <td class="px-4 py-3 text-sm text-right text-gray-600">${table.size}</td>
+                          <td class="px-4 py-3 text-sm text-right">
+                            <div class="flex items-center justify-end">
+                              <div class="w-24 h-2 bg-gray-200 rounded-full mr-2">
+                                <div class="h-2 bg-blue-500 rounded-full" style="width: ${percentage}%"></div>
+                              </div>
+                              <span class="text-gray-600">${percentage}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Row Counts -->
+            <div>
+              <h4 class="text-lg font-semibold text-gray-700 mb-3">
+                <i class="fas fa-list-ol mr-2"></i>テーブル別レコード数
+              </h4>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                ${stats.mainDatabase.rowCounts.map(row => `
+                  <div class="bg-gray-50 rounded-lg p-3">
+                    <div class="text-xs text-gray-600 mb-1">${row.table_name}</div>
+                    <div class="text-xl font-bold text-gray-800">${parseInt(row.row_count).toLocaleString()}</div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `}
+        </div>
+
+        <!-- Extension Database Stats -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-server mr-2 text-purple-600"></i>延長管理データベース
+          </h3>
+          
+          ${stats.extensionDatabase.error ? `
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
+              <i class="fas fa-info-circle mr-2"></i>${stats.extensionDatabase.error}
+            </div>
+          ` : `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm text-gray-600 mb-1">データベース容量</div>
+                    <div class="text-2xl font-bold text-purple-600">${stats.extensionDatabase.totalSize}</div>
+                  </div>
+                  <i class="fas fa-hdd text-4xl text-purple-400"></i>
+                </div>
+              </div>
+              
+              <div class="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-sm text-gray-600 mb-1">総レコード数</div>
+                    <div class="text-2xl font-bold text-pink-600">${stats.extensionDatabase.totalRows?.toLocaleString() || 0}</div>
+                  </div>
+                  <i class="fas fa-list text-4xl text-pink-400"></i>
+                </div>
+              </div>
+            </div>
+
+            ${stats.extensionDatabase.tables && stats.extensionDatabase.tables.length > 0 ? `
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-100">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">テーブル名</th>
+                      <th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">容量</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200">
+                    ${stats.extensionDatabase.tables.map(table => `
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm font-medium text-gray-800">${table.tablename}</td>
+                        <td class="px-4 py-3 text-sm text-right text-gray-600">${table.size}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : ''}
+          `}
+        </div>
+
+        <!-- Performance Tips -->
+        <div class="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-6">
+          <h3 class="text-lg font-bold text-gray-800 mb-3">
+            <i class="fas fa-lightbulb mr-2 text-yellow-600"></i>パフォーマンス改善のヒント
+          </h3>
+          <ul class="space-y-2 text-sm text-gray-700">
+            <li class="flex items-start">
+              <i class="fas fa-check-circle text-green-600 mr-2 mt-1"></i>
+              <span>定期的に不要なデータを削除して容量を削減しましょう</span>
+            </li>
+            <li class="flex items-start">
+              <i class="fas fa-check-circle text-green-600 mr-2 mt-1"></i>
+              <span>インデックスが適切に設定されているか確認しましょう</span>
+            </li>
+            <li class="flex items-start">
+              <i class="fas fa-check-circle text-green-600 mr-2 mt-1"></i>
+              <span>接続プールの設定を最適化しましょう（現在: ${connections.mainDatabase.totalConnections}接続）</span>
+            </li>
+            <li class="flex items-start">
+              <i class="fas fa-check-circle text-green-600 mr-2 mt-1"></i>
+              <span>大量データ取得時はページネーションを活用しましょう</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    `;
+
+  } catch (error) {
+    console.error('Error loading database page:', error);
+    
+    content.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <i class="fas fa-exclamation-triangle text-4xl text-red-600 mb-4"></i>
+        <h3 class="text-xl font-bold text-red-800 mb-2">エラーが発生しました</h3>
+        <p class="text-red-600 mb-2">${error.message}</p>
+        <p class="text-sm text-red-500 mt-2">データベース情報の取得に失敗しました。</p>
+      </div>
+    `;
+  }
+}
+
