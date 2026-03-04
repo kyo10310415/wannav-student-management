@@ -26,6 +26,10 @@ let pendingRequests = []; // Pending absence requests
 let currentTutorEmail = null;
 let currentTutorName = null;
 
+// Extension management data
+let extensionTutorStats = [];
+let selectedExtensionTutor = null; // For badge display
+
 // Schedule filters
 let selectedScheduleYear = new Date().getFullYear();
 let selectedScheduleMonth = new Date().getMonth() + 1; // 1-12
@@ -126,8 +130,10 @@ function renderHeader() {
             <button id="nav-tutors" onclick="changePage('tutors')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
             </button>
-            <button id="nav-extensions" onclick="changePage('extensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+            <button id="nav-extensions" onclick="changePage('extensions')" class="relative px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-sync-alt mr-2"></i>延長管理
+              <span id="extension-hearing-badge" class="hidden absolute -top-1 -left-1 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
+              <span id="extension-exam-badge" class="hidden absolute -top-1 left-8 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
             </button>
             <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-pause-circle mr-2"></i>休会管理
@@ -220,6 +226,9 @@ async function loadInitialData() {
     
     // Load helper requests for badge count
     await loadHelperRequests();
+    
+    // Load extension tutor stats for badge count
+    await loadExtensionTutorStats();
     
     // Set default filter to current tutor if available
     if (currentTutorName) {
@@ -3495,6 +3504,61 @@ function updateHelperBadge() {
   }
 }
 
+// Load extension tutor stats from API
+async function loadExtensionTutorStats() {
+  try {
+    const res = await axios.get(`${API_BASE}/api/extensions/by-tutor`);
+    extensionTutorStats = res.data.data || [];
+    console.log(`Loaded ${extensionTutorStats.length} extension tutor stats`);
+    
+    // Set selected tutor to current user's tutor name
+    if (currentTutorName) {
+      selectedExtensionTutor = currentTutorName;
+    }
+    
+    // Update extension badges
+    updateExtensionBadges();
+  } catch (error) {
+    console.error('Error loading extension tutor stats:', error);
+    extensionTutorStats = [];
+    updateExtensionBadges();
+  }
+}
+
+// Update extension badges count
+function updateExtensionBadges() {
+  const hearingBadge = document.getElementById('extension-hearing-badge');
+  const examBadge = document.getElementById('extension-exam-badge');
+  
+  if (!hearingBadge || !examBadge) return;
+  
+  // Find stats for selected tutor (or current tutor)
+  const tutorName = selectedExtensionTutor || currentTutorName;
+  const tutorStats = extensionTutorStats.find(t => t.tutorName === tutorName);
+  
+  if (tutorStats) {
+    // Update hearing badge (orange)
+    if (tutorStats.hearingIncompleteCount > 0) {
+      hearingBadge.textContent = tutorStats.hearingIncompleteCount > 9 ? '9+' : tutorStats.hearingIncompleteCount;
+      hearingBadge.classList.remove('hidden');
+    } else {
+      hearingBadge.classList.add('hidden');
+    }
+    
+    // Update exam badge (red)
+    if (tutorStats.examIncompleteCount > 0) {
+      examBadge.textContent = tutorStats.examIncompleteCount > 9 ? '9+' : tutorStats.examIncompleteCount;
+      examBadge.classList.remove('hidden');
+    } else {
+      examBadge.classList.add('hidden');
+    }
+  } else {
+    // No stats found, hide badges
+    hearingBadge.classList.add('hidden');
+    examBadge.classList.add('hidden');
+  }
+}
+
 // Render helper statistics
 function renderHelperStatistics() {
   const pending = helperRequests.filter(r => r.status === 'pending').length;
@@ -5649,6 +5713,14 @@ function getTutorNotionName(tutorName) {
   return null;
 }
 
+// Change extension tutor for badge display
+function changeExtensionTutor(tutorName) {
+  selectedExtensionTutor = tutorName;
+  updateExtensionBadges();
+  // Reload page to show updated stats
+  renderExtensionsPage();
+}
+
 // Render Extensions Management Page
 async function renderExtensionsPage() {
   const content = document.getElementById('content');
@@ -5674,16 +5746,86 @@ async function renderExtensionsPage() {
     const stats = statsRes.data.data;
     const tutorList = tutorRes.data.data;
     const teamList = teamRes.data.data;
+    
+    // Store tutor stats globally
+    extensionTutorStats = tutorList;
+    
+    // Check if user is leader or admin
+    const canSelectTutor = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader');
+    
+    // Set default selected tutor to current user's tutor
+    if (!selectedExtensionTutor && currentTutorName) {
+      selectedExtensionTutor = currentTutorName;
+    }
+    
+    // Find current tutor's stats
+    const currentTutorStats = tutorList.find(t => t.tutorName === selectedExtensionTutor);
 
     content.innerHTML = `
       <div class="space-y-6">
         <!-- Page Title -->
         <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg p-6">
-          <h2 class="text-3xl font-bold">
-            <i class="fas fa-sync-alt mr-3"></i>延長管理
-          </h2>
-          <p class="mt-2 text-purple-100">生徒の延長審査状況とTutor別ヒアリング対象を管理します</p>
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-3xl font-bold">
+                <i class="fas fa-sync-alt mr-3"></i>延長管理
+              </h2>
+              <p class="mt-2 text-purple-100">生徒の延長審査状況とTutor別ヒアリング対象を管理します</p>
+            </div>
+            ${canSelectTutor ? `
+              <div class="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                <label class="text-sm text-purple-100 block mb-1">Tutor選択</label>
+                <select id="extension-tutor-select" class="px-3 py-2 rounded bg-white text-gray-800 font-semibold min-w-[150px]" onchange="changeExtensionTutor(this.value)">
+                  ${tutorList.map(t => `
+                    <option value="${t.tutorName}" ${t.tutorName === selectedExtensionTutor ? 'selected' : ''}>
+                      ${t.tutorName}
+                    </option>
+                  `).join('')}
+                </select>
+                <p class="text-xs text-purple-100 mt-1">※バッジ表示用</p>
+              </div>
+            ` : ''}
+          </div>
         </div>
+        
+        ${currentTutorStats ? `
+        <!-- Current Tutor Badge Stats -->
+        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg shadow-lg p-6">
+          <h3 class="text-xl font-bold mb-4">
+            <i class="fas fa-user-check mr-2"></i>${selectedExtensionTutor} の未完了タスク
+          </h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-white/20 backdrop-blur-sm rounded-lg p-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm text-orange-100 mb-1">ヒアリング未完了</div>
+                  <div class="text-3xl font-bold">${currentTutorStats.hearingIncompleteCount}人</div>
+                </div>
+                <div class="bg-orange-500 text-white rounded-full h-12 w-12 flex items-center justify-center text-xl font-bold">
+                  ${currentTutorStats.hearingIncompleteCount}
+                </div>
+              </div>
+              <div class="text-xs text-orange-100 mt-2">
+                対象: ${currentTutorStats.hearingTargetCount}人 / 4ヶ月目・10ヶ月目
+              </div>
+            </div>
+            <div class="bg-white/20 backdrop-blur-sm rounded-lg p-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm text-red-100 mb-1">審査未完了</div>
+                  <div class="text-3xl font-bold">${currentTutorStats.examIncompleteCount}人</div>
+                </div>
+                <div class="bg-red-600 text-white rounded-full h-12 w-12 flex items-center justify-center text-xl font-bold">
+                  ${currentTutorStats.examIncompleteCount}
+                </div>
+              </div>
+              <div class="text-xs text-red-100 mt-2">
+                対象: ${currentTutorStats.examTargetCount}人 / 5ヶ月目・11ヶ月目
+              </div>
+            </div>
+          </div>
+        </div>
+        ` : ''}
 
         <!-- Overall Statistics -->
         <div class="bg-white rounded-lg shadow-md p-6">
@@ -5875,6 +6017,9 @@ async function renderExtensionsPage() {
       </div>
     `;
   }
+  
+  // Update badges after rendering
+  updateExtensionBadges();
 }
 
 /**
