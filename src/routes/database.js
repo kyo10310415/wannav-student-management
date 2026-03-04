@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import pool from '../db/connection.js';
-import { extensionDbPool } from '../services/externalDbService.js';
+import { getExtensionPool } from '../db/extensionConnection.js';
 
 const app = new Hono();
 
@@ -71,6 +71,7 @@ app.get('/stats', async (c) => {
     }
 
     // Extension Database Statistics (if available)
+    const extensionDbPool = getExtensionPool();
     if (extensionDbPool) {
       try {
         const extDbSizeResult = await extensionDbPool.query(`
@@ -137,6 +138,7 @@ app.get('/connection-info', async (c) => {
       }
     };
 
+    const extensionDbPool = getExtensionPool();
     if (extensionDbPool) {
       info.extensionDatabase = {
         totalConnections: extensionDbPool.totalCount,
