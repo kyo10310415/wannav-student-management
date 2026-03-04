@@ -409,6 +409,11 @@ async function renderApp() {
 async function changePage(page) {
   currentPage = page;
   renderHeader();
+  
+  // Update all badges after header render
+  updateHelperBadge();
+  updateExtensionBadges();
+  
   await renderApp();
 }
 
@@ -3530,13 +3535,18 @@ function updateExtensionBadges() {
   const hearingBadge = document.getElementById('extension-hearing-badge');
   const examBadge = document.getElementById('extension-exam-badge');
   
-  if (!hearingBadge || !examBadge) return;
+  if (!hearingBadge || !examBadge) {
+    console.warn('Extension badges not found in DOM');
+    return;
+  }
   
   // Find stats for selected tutor (or current tutor)
   const tutorName = selectedExtensionTutor || currentTutorName;
+  console.log(`Updating extension badges for tutor: ${tutorName}`);
   const tutorStats = extensionTutorStats.find(t => t.tutorName === tutorName);
   
   if (tutorStats) {
+    console.log(`Found stats for ${tutorName}:`, tutorStats);
     // Update hearing badge (orange)
     if (tutorStats.hearingIncompleteCount > 0) {
       hearingBadge.textContent = tutorStats.hearingIncompleteCount > 9 ? '9+' : tutorStats.hearingIncompleteCount;
@@ -3554,6 +3564,7 @@ function updateExtensionBadges() {
     }
   } else {
     // No stats found, hide badges
+    console.log(`No stats found for tutor: ${tutorName}`);
     hearingBadge.classList.add('hidden');
     examBadge.classList.add('hidden');
   }
