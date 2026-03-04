@@ -25,7 +25,7 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: '生徒データ!A2:W', // 23 columns (A-W)
+      range: '生徒データ!A2:Y', // 25 columns (A-Y) - added YouTube ID and X ID
     });
 
     const rows = response.data.values || [];
@@ -69,6 +69,8 @@ export async function fetchStudentsFromCache(spreadsheetId) {
         absence_count: row[19] || 0,
         lesson_start_date: row[20] || '',
         suspension_months: row[21] || 0,
+        youtube_channel_id: row[22] || '',
+        x_account_id: row[23] || '',
       };
     });
   } catch (error) {

@@ -116,8 +116,9 @@ app.get('/sync', async (c) => {
              payment_year_month_last, payment_year_month_current,
              result_absence, result_late, result_mission, result_payment,
              result_active_listening, result_understanding, result_overall,
-             absence_count, lesson_start_date, continued_months, suspension_months, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP)
+             absence_count, lesson_start_date, continued_months, suspension_months, 
+             youtube_channel_id, x_account_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -144,6 +145,8 @@ app.get('/sync', async (c) => {
             lesson_start_date = EXCLUDED.lesson_start_date,
             continued_months = EXCLUDED.continued_months,
             suspension_months = EXCLUDED.suspension_months,
+            youtube_channel_id = EXCLUDED.youtube_channel_id,
+            x_account_id = EXCLUDED.x_account_id,
             updated_at = CURRENT_TIMESTAMP`,
           [
             student.student_id,
@@ -170,7 +173,9 @@ app.get('/sync', async (c) => {
             student.absence_count,
             lessonStartDate,
             continuedMonths,
-            student.suspension_months
+            student.suspension_months,
+            student.youtube_channel_id || null,
+            student.x_account_id || null
           ]
         );
         successCount++;

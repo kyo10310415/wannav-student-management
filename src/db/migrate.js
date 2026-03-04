@@ -145,6 +145,26 @@ const migrations = [
       ALTER TABLE students DROP COLUMN IF EXISTS notion_url;
       ALTER TABLE students DROP COLUMN IF EXISTS lesson_progress;
     `
+  },
+  {
+    version: 8,
+    name: 'add_social_media_columns',
+    up: `
+      -- Add YouTube channel ID and X (Twitter) account ID columns
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS youtube_channel_id VARCHAR(255);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS x_account_id VARCHAR(255);
+      
+      -- Create indexes for social media columns
+      CREATE INDEX IF NOT EXISTS idx_students_youtube_channel_id ON students(youtube_channel_id);
+      CREATE INDEX IF NOT EXISTS idx_students_x_account_id ON students(x_account_id);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_students_x_account_id;
+      DROP INDEX IF EXISTS idx_students_youtube_channel_id;
+      
+      ALTER TABLE students DROP COLUMN IF EXISTS x_account_id;
+      ALTER TABLE students DROP COLUMN IF EXISTS youtube_channel_id;
+    `
   }
 ];
 
