@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import pool from '../db/connection.js';
+import { getPool } from '../db/connection.js';
 import { getExtensionPool } from '../db/extensionConnection.js';
 
 const app = new Hono();
@@ -16,6 +16,7 @@ app.get('/stats', async (c) => {
     };
 
     // Main Database Statistics
+    const pool = getPool();
     try {
       // Get database size
       const dbSizeResult = await pool.query(`
@@ -130,6 +131,7 @@ app.get('/stats', async (c) => {
  */
 app.get('/connection-info', async (c) => {
   try {
+    const pool = getPool();
     const info = {
       mainDatabase: {
         totalConnections: pool.totalCount,
