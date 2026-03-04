@@ -132,8 +132,9 @@ function renderHeader() {
             <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-pause-circle mr-2"></i>休会管理
             </button>
-            <button id="nav-helpers" onclick="changePage('helpers')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
+            <button id="nav-helpers" onclick="changePage('helpers')" class="relative px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
+              <span id="helper-badge" class="hidden absolute -top-1 -left-1 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
             </button>
             <button id="nav-schedules" onclick="changePage('schedules')" class="px-6 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-blue-600' : 'bg-blue-700 text-white hover:bg-blue-800'}">
               <i class="fas fa-calendar-check mr-2"></i>Tutorスケジュール
@@ -216,6 +217,9 @@ async function loadInitialData() {
     // Load lesson stats and dates for current month
     await loadLessonStats();
     await loadLessonDates();
+    
+    // Load helper requests for badge count
+    await loadHelperRequests();
     
     // Set default filter to current tutor if available
     if (currentTutorName) {
@@ -3466,9 +3470,28 @@ async function loadHelperRequests() {
     const res = await axios.get(`${API_BASE}/api/helper-requests`);
     helperRequests = res.data.data || [];
     console.log(`Loaded ${helperRequests.length} helper requests`);
+    
+    // Update helper badge
+    updateHelperBadge();
   } catch (error) {
     console.error('Error loading helper requests:', error);
     helperRequests = [];
+    updateHelperBadge();
+  }
+}
+
+// Update helper requests badge count
+function updateHelperBadge() {
+  const badge = document.getElementById('helper-badge');
+  if (!badge) return;
+  
+  const pendingCount = helperRequests.filter(r => r.status === 'pending').length;
+  
+  if (pendingCount > 0) {
+    badge.textContent = pendingCount > 9 ? '9+' : pendingCount;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
   }
 }
 
