@@ -135,15 +135,25 @@ export async function fetchLessonsForTomorrow() {
     // Fetch all lessons from sheet
     const allLessons = await fetchLessonsFromSheet(spreadsheetId, sheetName);
     
-    // Get tutor information from database
+    // Get tutor information from database (get both homeroom_tutor and actual tutor_name)
     const { query } = await import('../db/connection.js');
+    
+    // Get student homeroom tutor (Notion name)
     const studentsResult = await query('SELECT student_id, homeroom_tutor FROM students WHERE homeroom_tutor IS NOT NULL');
-    const studentTutorMap = new Map();
+    const studentNotionTutorMap = new Map();
     studentsResult.rows.forEach(row => {
-      studentTutorMap.set(row.student_id, row.homeroom_tutor);
+      studentNotionTutorMap.set(row.student_id, row.homeroom_tutor);
     });
     
-    console.log(`[Sheets] Loaded ${studentTutorMap.size} student-tutor mappings from database`);
+    // Get Notion name to Tutor name mapping
+    const tutorsResult = await query('SELECT notion_name, tutor_name FROM tutors WHERE notion_name IS NOT NULL AND tutor_name IS NOT NULL');
+    const notionToTutorNameMap = new Map();
+    tutorsResult.rows.forEach(row => {
+      notionToTutorNameMap.set(row.notion_name, row.tutor_name);
+    });
+    
+    console.log(`[Sheets] Loaded ${studentNotionTutorMap.size} student-tutor mappings from database`);
+    console.log(`[Sheets] Loaded ${notionToTutorNameMap.size} Notion-to-Tutor name mappings`);
     
     // Filter lessons for tomorrow and only include "レッスン" schedules
     const tomorrowLessons = allLessons
@@ -163,11 +173,15 @@ export async function fetchLessonsForTomorrow() {
         return lesson.title && lesson.title.includes('レッスン');
       })
       .map(lesson => {
-        // Replace tutor_name with actual homeroom tutor from database
-        const actualTutor = studentTutorMap.get(lesson.student_id);
+        // Get homeroom tutor (Notion name) from database
+        const notionName = studentNotionTutorMap.get(lesson.student_id);
+        
+        // Convert Notion name to Tutor name
+        const tutorName = notionName ? notionToTutorNameMap.get(notionName) : null;
+        
         return {
           ...lesson,
-          tutor_name: actualTutor || lesson.tutor_name
+          tutor_name: tutorName || lesson.tutor_name || notionName || '担任未設定'
         };
       });
     
