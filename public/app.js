@@ -2012,7 +2012,13 @@ function renderTutorStatistics() {
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            ${uniqueTeams.map(team => {
+            ${uniqueTeams
+              .filter(team => {
+                const stats = teamStats[team];
+                // TUTOR数が2名以下のチームは非表示
+                return stats.tutorCount > 2;
+              })
+              .map(team => {
               const stats = teamStats[team];
               const satisfactionColor = stats.satisfaction !== '-' && parseFloat(stats.satisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
               const collectionRateColor = stats.collectionRate !== '-' && parseFloat(stats.collectionRate) < 50 ? 'text-red-600' : 'text-green-600';

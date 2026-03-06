@@ -275,16 +275,17 @@ function syncLessonsIncremental() {
     }
   });
   
-  // 削除されたイベントを検出（改善版）
-  // 更新対象期間内のイベントで、カレンダーから取得できなかったものを削除
+  // 削除されたイベントを検出（改善版 - 未来のイベントのみ対象）
+  // 過去のイベントは完了した可能性があるため削除検知しない
+  const now = new Date();
   const rowsToDelete = [];
   const deletedEventsData = []; // 削除されたイベントのデータを保存
   
   existingData.forEach((value, eventId) => {
     const eventDate = new Date(value.data[4]); // レッスン日時
     
-    // 更新対象期間内のイベントのみチェック
-    if (eventDate >= startDate && eventDate <= endDate) {
+    // 未来のイベントのみ削除検知（今日以降）
+    if (eventDate >= today && eventDate <= endDate) {
       // カレンダーから取得できなかった = 削除された
       if (!fetchedEventIds.has(eventId)) {
         rowsToDelete.push(value.rowNumber);
@@ -297,9 +298,13 @@ function syncLessonsIncremental() {
         
         // 削除ログ（最初の10件のみ）
         if (deletedEvents <= 10) {
-          Logger.log(`削除検知: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
+          Logger.log(`削除検知（未来）: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
         }
       }
+    }
+    // 過去のイベントは削除検知しない（完了したイベントのため保持）
+    else if (eventDate < today) {
+      // 何もしない（過去のイベントは保持）
     }
   });
   
@@ -518,16 +523,23 @@ function updateMetaSheet(ss, totalEvents, validEvents, successCalendars, failedC
 function extractStudentId(description) {
   if (!description) return null;
   
-  // パターン1: 学籍番号：OLTS240488-AR
-  let match = description.match(/学籍番号[：:\s]*([A-Z0-9-]+)/i);
+  // HTMLタグを削除してから抽出（<b>, </b>, <br>など）
+  const cleanDescription = description.replace(/<[^>]*>/g, '');
+  
+  // パターン1: 学籍番号：OLTS240488-AR または 学籍番号: OLTS240488-AR
+  let match = cleanDescription.match(/学籍番号[：:\s]*([A-Z0-9-]+)/i);
   if (match) return match[1];
   
-  // パターン2: OLTS形式の直接マッチ
-  match = description.match(/OLTS\d{6}-[A-Z]{2}/i);
+  // パターン2: 改行を挟むパターン（学籍番号\nOLTS240488-AR）
+  match = cleanDescription.match(/学籍番号[：:\s]*[\r\n]+\s*([A-Z0-9-]+)/i);
+  if (match) return match[1];
+  
+  // パターン3: OLTS形式の直接マッチ
+  match = cleanDescription.match(/OL[A-Z]{2}\d{6}-[A-Z]{2}/i);
   if (match) return match[0];
   
-  // パターン3: 複数行パターン
-  match = description.match(/予約者[：:\s]*.*\n.*\n.*学籍番号[：:\s]*([A-Z0-9-]+)/i);
+  // パターン4: 複数行パターン
+  match = cleanDescription.match(/予約者[：:\s]*.*\n.*\n.*学籍番号[：:\s]*([A-Z0-9-]+)/i);
   if (match) return match[1];
   
   return null;
@@ -657,4 +669,290 @@ function testDeletionDetection() {
   
   Logger.log(`期間内イベント: ${inRangeCount}件`);
   Logger.log(`期間外イベント: ${outOfRangeCount}件（削除検知対象外）`);
+}
+
+/**
+ * イベント取得デバッグ（学籍番号抽出の検証）
+ */
+function debugEventExtraction() {
+  Logger.log('========== イベント取得デバッグ ==========');
+  
+  // NotionからTutorメールアドレスを取得
+  const notionEmails = getTutorEmailsFromNotion();
+  
+  if (notionEmails.length === 0) {
+    Logger.log('エラー: Tutorメールアドレスが取得できませんでした');
+    return;
+  }
+  
+  // アクセス可能なカレンダーのリストを取得
+  const accessibleCalendars = CalendarApp.getAllCalendars();
+  const accessibleEmailsSet = new Set(
+    accessibleCalendars.map(cal => cal.getId().toLowerCase())
+  );
+  
+  const TUTOR_EMAILS = notionEmails.filter(email => accessibleEmailsSet.has(email));
+  
+  if (TUTOR_EMAILS.length === 0) {
+    Logger.log('⚠️ 警告: アクセス可能なTutorカレンダーがありません');
+    return;
+  }
+  
+  // 最初のTutorカレンダーから直近のイベントを5件取得してテスト
+  const testEmail = TUTOR_EMAILS[0];
+  Logger.log(`テスト対象カレンダー: ${testEmail}`);
+  
+  const calendar = CalendarApp.getCalendarById(testEmail);
+  const today = new Date();
+  const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  
+  const events = calendar.getEvents(today, nextWeek);
+  Logger.log(`取得イベント数: ${events.length}件`);
+  
+  // 最初の5件を詳細表示
+  events.slice(0, 5).forEach((event, index) => {
+    const title = event.getTitle();
+    const description = event.getDescription();
+    const startTime = event.getStartTime();
+    const eventId = event.getId();
+    
+    Logger.log(`\n--- イベント ${index + 1} ---`);
+    Logger.log(`イベントID: ${eventId}`);
+    Logger.log(`タイトル: ${title}`);
+    Logger.log(`日時: ${formatDate(startTime)}`);
+    Logger.log(`説明（最初の200文字）: ${description ? description.substring(0, 200) : '(なし)'}`);
+    
+    // 学籍番号抽出テスト
+    const studentId = extractStudentId(description);
+    Logger.log(`抽出された学籍番号: ${studentId || '❌ 抽出失敗'}`);
+    
+    // Tutor名抽出テスト
+    const tutorName = extractTutorName(title);
+    Logger.log(`抽出されたTutor名: ${tutorName || '❌ 抽出失敗'}`);
+    
+    // Meetリンク抽出テスト
+    const meetLink = extractMeetLink(description);
+    Logger.log(`抽出されたMeetリンク: ${meetLink || '(なし)'}`);
+  });
+  
+  // 学籍番号抽出の統計
+  let successCount = 0;
+  let failCount = 0;
+  
+  events.forEach(event => {
+    const description = event.getDescription();
+    const studentId = extractStudentId(description);
+    
+    if (studentId) {
+      successCount++;
+    } else {
+      failCount++;
+    }
+  });
+  
+  Logger.log(`\n========== 学籍番号抽出統計 ==========`);
+  Logger.log(`成功: ${successCount}件`);
+  Logger.log(`失敗: ${failCount}件`);
+  Logger.log(`成功率: ${Math.round((successCount / events.length) * 100)}%`);
+}
+
+/**
+ * 特定のスケジュールをデバッグ（学籍番号またはTutor名で検索）
+ * @param {string} searchKeyword - 学籍番号またはTutor名（部分一致）
+ */
+function debugSpecificSchedule(searchKeyword) {
+  Logger.log(`========== 特定スケジュールデバッグ: "${searchKeyword}" ==========`);
+  
+  if (!searchKeyword) {
+    Logger.log('エラー: 検索キーワードを指定してください');
+    Logger.log('使用例: debugSpecificSchedule("OLTS240488-AR")');
+    Logger.log('使用例: debugSpecificSchedule("山田")');
+    return;
+  }
+  
+  // NotionからTutorメールアドレスを取得
+  const notionEmails = getTutorEmailsFromNotion();
+  const accessibleCalendars = CalendarApp.getAllCalendars();
+  const accessibleEmailsSet = new Set(
+    accessibleCalendars.map(cal => cal.getId().toLowerCase())
+  );
+  const TUTOR_EMAILS = notionEmails.filter(email => accessibleEmailsSet.has(email));
+  
+  Logger.log(`検索対象カレンダー: ${TUTOR_EMAILS.length}件`);
+  
+  // 検索期間（過去30日～未来30日）
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDate = new Date(today.getTime() - INCREMENTAL_DAYS_BACK * 24 * 60 * 60 * 1000);
+  const endDate = new Date(today.getTime() + (INCREMENTAL_DAYS_FORWARD + 1) * 24 * 60 * 60 * 1000);
+  
+  Logger.log(`検索期間: ${formatDate(startDate)} ～ ${formatDate(endDate)}`);
+  
+  let foundEvents = [];
+  
+  // 全Tutorカレンダーを検索
+  TUTOR_EMAILS.forEach((email, index) => {
+    try {
+      const calendar = CalendarApp.getCalendarById(email);
+      if (!calendar) return;
+      
+      const events = calendar.getEvents(startDate, endDate);
+      
+      events.forEach(event => {
+        const title = event.getTitle();
+        const description = event.getDescription() || '';
+        const eventId = event.getId();
+        
+        // キーワードにマッチするか確認（タイトルまたは説明に含まれる）
+        if (title.includes(searchKeyword) || description.includes(searchKeyword)) {
+          foundEvents.push({
+            calendar: email,
+            event: event,
+            eventId: eventId,
+            title: title,
+            description: description,
+            startTime: event.getStartTime()
+          });
+        }
+      });
+      
+    } catch (error) {
+      Logger.log(`エラー [${email}]: ${error.message}`);
+    }
+  });
+  
+  Logger.log(`\n検索結果: ${foundEvents.length}件見つかりました`);
+  
+  if (foundEvents.length === 0) {
+    Logger.log('❌ 該当するスケジュールが見つかりませんでした');
+    Logger.log('確認事項:');
+    Logger.log('1. カレンダーに実際にイベントが存在するか');
+    Logger.log('2. 検索期間内のイベントか（過去30日～未来30日）');
+    Logger.log('3. 検索キーワードが正確か');
+    return;
+  }
+  
+  // 見つかったイベントの詳細を表示
+  foundEvents.forEach((item, index) => {
+    Logger.log(`\n========== 該当イベント ${index + 1} ==========`);
+    Logger.log(`カレンダー: ${item.calendar}`);
+    Logger.log(`イベントID: ${item.eventId}`);
+    Logger.log(`タイトル: ${item.title}`);
+    Logger.log(`日時: ${formatDate(item.startTime)}`);
+    Logger.log(`\n説明文（全文）:\n${item.description}`);
+    Logger.log(`\n--- 抽出テスト ---`);
+    
+    // 学籍番号抽出
+    const studentId = extractStudentId(item.description);
+    if (studentId) {
+      Logger.log(`✅ 学籍番号抽出成功: ${studentId}`);
+    } else {
+      Logger.log(`❌ 学籍番号抽出失敗`);
+      Logger.log(`説明文から学籍番号を手動で確認してください`);
+    }
+    
+    // Tutor名抽出
+    const tutorName = extractTutorName(item.title);
+    if (tutorName) {
+      Logger.log(`✅ Tutor名抽出成功: ${tutorName}`);
+    } else {
+      Logger.log(`❌ Tutor名抽出失敗`);
+    }
+    
+    // Meetリンク抽出
+    const meetLink = extractMeetLink(item.description);
+    Logger.log(`Meetリンク: ${meetLink || '(なし)'}`);
+    
+    // スプレッドシートに存在するか確認
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const existingData = loadExistingData(sheet);
+    
+    if (existingData.has(item.eventId)) {
+      Logger.log(`\n📋 スプレッドシートの状態: ✅ 既に存在`);
+      const existing = existingData.get(item.eventId);
+      Logger.log(`行番号: ${existing.rowNumber}`);
+      Logger.log(`保存されている学籍番号: ${existing.data[1]}`);
+    } else {
+      Logger.log(`\n📋 スプレッドシートの状態: ❌ 存在しない（次回同期で追加される）`);
+      
+      if (!studentId) {
+        Logger.log(`\n⚠️ 問題: 学籍番号が抽出できないため、同期されません`);
+        Logger.log(`解決策: 説明文に以下のいずれかの形式で学籍番号を記載してください`);
+        Logger.log(`  - 学籍番号：OLTS240488-AR`);
+        Logger.log(`  - 学籍番号: OLTS240488-AR`);
+        Logger.log(`  - OLTS240488-AR（単独で記載）`);
+      }
+    }
+  });
+}
+
+/**
+ * イベントIDの比較デバッグ
+ */
+function debugEventIdComparison() {
+  Logger.log('========== イベントID比較デバッグ ==========');
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    Logger.log('エラー: シートが見つかりません');
+    return;
+  }
+  
+  // 既存データのイベントIDを取得（最初の10件）
+  const existingData = loadExistingData(sheet);
+  const existingIds = Array.from(existingData.keys()).slice(0, 10);
+  
+  Logger.log(`既存イベントID（最初の10件）:`);
+  existingIds.forEach((id, index) => {
+    Logger.log(`[${index + 1}] ${id}`);
+  });
+  
+  // NotionからTutorメールアドレスを取得
+  const notionEmails = getTutorEmailsFromNotion();
+  const accessibleCalendars = CalendarApp.getAllCalendars();
+  const accessibleEmailsSet = new Set(
+    accessibleCalendars.map(cal => cal.getId().toLowerCase())
+  );
+  const TUTOR_EMAILS = notionEmails.filter(email => accessibleEmailsSet.has(email));
+  
+  // 最初のTutorカレンダーからイベントを取得
+  const testEmail = TUTOR_EMAILS[0];
+  const calendar = CalendarApp.getCalendarById(testEmail);
+  const today = new Date();
+  const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const events = calendar.getEvents(today, nextWeek);
+  
+  Logger.log(`\nカレンダーのイベントID（最初の10件）:`);
+  events.slice(0, 10).forEach((event, index) => {
+    const eventId = event.getId();
+    const exists = existingData.has(eventId);
+    Logger.log(`[${index + 1}] ${eventId} ${exists ? '✅ 既存' : '❌ 新規'}`);
+  });
+}
+
+/**
+ * 特定学籍番号のデバッグテスト（実行しやすいように）
+ * 学籍番号を変更してから実行してください
+ */
+function testSpecificStudent() {
+  // ここに調査したい学籍番号を入力
+  const studentId = "OLTS251075-TY";
+  
+  Logger.log(`検索対象: ${studentId}`);
+  debugSpecificSchedule(studentId);
+}
+
+/**
+ * 特定Tutor名のデバッグテスト
+ * Tutor名を変更してから実行してください
+ */
+function testSpecificTutor() {
+  // ここに調査したいTutor名を入力（部分一致）
+  const tutorName = "山田";
+  
+  Logger.log(`検索対象: ${tutorName}`);
+  debugSpecificSchedule(tutorName);
 }

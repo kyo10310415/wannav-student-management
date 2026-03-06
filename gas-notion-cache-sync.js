@@ -9,7 +9,7 @@ const PROGRESS_SPREADSHEET_ID = '1dwqi8NvrbDDkrwIryYJrOJ2AAg4oBu6v0-CEdR2HrzE'; 
 const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM'; // Discord送信先スプレッドシートのID
 const RESULT_SCORE_SPREADSHEET_ID = '1t571fqZJtUjNL7_gH6G2dSNBCmS98LTnDrWEtt7J92k'; // リザルトスコアスプレッドシートのID
 const SUSPENSION_SPREADSHEET_ID = '17ys2PZpDpffG3j4EQrXiLlwGbFxiNosBqMivL2quVEA'; // 休会情報スプレッドシートのID
-const SATISFACTION_SPREADSHEET_ID = '1qJAZWsuhA68IEDaw0NBciapZhWsmhmXKIDi7979-S7A'; // レッスン満足度スプレッドシートのID
+const SATISFACTION_SPREADSHEET_ID = '1UqJPI8LlzWRXXbgCA65RUrtA3GEEKIyK9gtuwkGpMps'; // レッスン満足度スプレッドシートのID
 
 // バックエンドAPI設定（外部DB用）
 const BACKEND_API_URL = 'https://wannav-student-management.onrender.com/api/external/lesson-start-dates'; // バックエンドAPIのURL
@@ -1116,12 +1116,12 @@ function syncSatisfactionData() {
       return;
     }
     
-    // A列: タイムスタンプ, C列: 名前（本名）, D列: 担任の先生の名前, L列: 担任の先生の対応, M列: 理由
+    // A列: タイムスタンプ, C列: 名前（本名）, E列: 担任の先生の名前, M列: 担任の先生の対応, N列: 理由
     const timestamps = sourceSheet.getRange(2, 1, lastRow - 1, 1).getValues(); // A列
     const studentNames = sourceSheet.getRange(2, 3, lastRow - 1, 1).getValues(); // C列
-    const tutorNames = sourceSheet.getRange(2, 4, lastRow - 1, 1).getValues(); // D列
-    const satisfactionScores = sourceSheet.getRange(2, 12, lastRow - 1, 1).getValues(); // L列
-    const reasons = sourceSheet.getRange(2, 13, lastRow - 1, 1).getValues(); // M列
+    const tutorNames = sourceSheet.getRange(2, 5, lastRow - 1, 1).getValues(); // E列
+    const satisfactionScores = sourceSheet.getRange(2, 13, lastRow - 1, 1).getValues(); // M列
+    const reasons = sourceSheet.getRange(2, 14, lastRow - 1, 1).getValues(); // N列
     
     // データを保存するスプレッドシート
     const destSs = SpreadsheetApp.openById(SPREADSHEET_ID);
