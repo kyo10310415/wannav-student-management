@@ -135,6 +135,11 @@ app.post('/test-notification', async (c) => {
           name: '担任講師',
           value: lesson.tutor_name || '未設定',
           inline: false
+        },
+        {
+          name: 'Google Meetリンク',
+          value: lesson.meet_link || '（リンクなし）',
+          inline: false
         }
       ],
       footer: {
@@ -160,7 +165,8 @@ app.post('/test-notification', async (c) => {
         student_name: studentName,
         tutor_name: lesson.tutor_name,
         lesson_date: lesson.lesson_date,
-        title: lesson.title
+        title: lesson.title,
+        meet_link: lesson.meet_link
       }
     });
   } catch (error) {
@@ -327,8 +333,10 @@ app.get('/test-lesson-data', async (c) => {
           lesson_date_parsed: lesson.lesson_date ? new Date(lesson.lesson_date).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : null,
           title: lesson.title,
           description: lesson.description,
+          meet_link: lesson.meet_link,
           has_student_id: !!lesson.student_id,
-          has_tutor_name: !!lesson.tutor_name
+          has_tutor_name: !!lesson.tutor_name,
+          has_meet_link: !!lesson.meet_link
         }))
       }
     });

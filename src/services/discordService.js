@@ -140,6 +140,10 @@ export async function sendReminder(studentId, lessonInfo) {
       message += `**担任講師**: ${lessonInfo.tutor_name}\n`;
     }
     
+    if (lessonInfo.meet_link) {
+      message += `**Google Meetリンク**: ${lessonInfo.meet_link}\n`;
+    }
+    
     message += `\nよろしくお願いいたします！`;
 
     // Send message
