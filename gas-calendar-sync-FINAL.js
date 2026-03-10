@@ -346,18 +346,12 @@ function syncLessonsIncrementalFixed() {
   
   existingData.forEach((value, eventId) => {
     const eventDate = new Date(value.data[4]); // レッスン日時
+    let deleteReason = null;
     
     // ケース1: 取得範囲外のイベント（古すぎる過去 or 遠すぎる未来）
     if (eventDate < startDate || eventDate > endDate) {
-      rowsToDelete.push(value.rowNumber);
-      deletedEvents++;
+      deleteReason = '取得範囲外';
       outOfRangeCount++;
-      
-      // 削除されたイベントのデータを保存（削除日時と削除理由を追加）
-      const deletedData = [...value.data]; // 既存データをコピー
-      deletedData.push(new Date()); // 削除検知日時を追加
-      deletedData.push('取得範囲外'); // 削除理由を追加
-      deletedEventsData.push(deletedData);
       
       // 削除ログ（最初の5件のみ）
       if (outOfRangeCount <= 5) {
@@ -365,22 +359,25 @@ function syncLessonsIncrementalFixed() {
       }
     }
     // ケース2: 取得範囲内だがカレンダーから取得できなかった（削除/キャンセル）
-    else if (eventDate >= startDate && eventDate <= endDate) {
-      if (!fetchedEventIds.has(eventId)) {
-        rowsToDelete.push(value.rowNumber);
-        deletedEvents++;
-        
-        // 削除されたイベントのデータを保存（削除日時と削除理由を追加）
-        const deletedData = [...value.data]; // 既存データをコピー
-        deletedData.push(new Date()); // 削除検知日時を追加
-        deletedData.push('カレンダーから削除'); // 削除理由を追加
-        deletedEventsData.push(deletedData);
-        
-        // 削除ログ（最初の10件のみ）
-        if (deletedEvents - outOfRangeCount <= 10) {
-          Logger.log(`削除検知（キャンセル）: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
-        }
+    else if (eventDate >= startDate && eventDate <= endDate && !fetchedEventIds.has(eventId)) {
+      deleteReason = 'カレンダーから削除';
+      
+      // 削除ログ（最初の10件のみ）
+      if (deletedEvents - outOfRangeCount < 10) {
+        Logger.log(`削除検知（キャンセル）: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
       }
+    }
+    
+    // 削除対象の場合のみデータを保存
+    if (deleteReason) {
+      rowsToDelete.push(value.rowNumber);
+      deletedEvents++;
+      
+      // 削除されたイベントのデータを保存（削除日時と削除理由を追加）
+      const deletedData = [...value.data]; // 既存データをコピー
+      deletedData.push(new Date()); // 削除検知日時を追加
+      deletedData.push(deleteReason); // 削除理由を追加
+      deletedEventsData.push(deletedData);
     }
   });
   
@@ -510,23 +507,57 @@ function applyBatchUpdates(sheet, rowsToUpdate, rowsToAdd, rowsToDelete) {
   if (rowsToDelete.length > 0) {
     Logger.log(`削除処理: ${rowsToDelete.length}件の削除を実行中...`);
     
-    // 降順ソート（後ろから削除しないと行番号がズレる）
-    rowsToDelete.sort((a, b) => b - a);
+    // 重複削除と範囲チェック
+    const maxRow = sheet.getLastRow();
+    const uniqueRows = [...new Set(rowsToDelete)].filter(row => row > 1 && row <= maxRow);
     
-    // バッチ削除（100件ずつ処理）
-    const batchSize = 100;
-    for (let i = 0; i < rowsToDelete.length; i += batchSize) {
-      const batch = rowsToDelete.slice(i, i + batchSize);
-      batch.forEach(rowNumber => {
-        sheet.deleteRow(rowNumber);
-      });
-      
-      if (i + batchSize < rowsToDelete.length) {
-        Logger.log(`削除進捗: ${i + batch.length}/${rowsToDelete.length}件完了`);
+    if (uniqueRows.length !== rowsToDelete.length) {
+      Logger.log(`⚠️ 警告: 重複または範囲外の行番号を除外しました（${rowsToDelete.length}件 → ${uniqueRows.length}件）`);
+    }
+    
+    // 降順ソート（後ろから削除しないと行番号がズレる）
+    uniqueRows.sort((a, b) => b - a);
+    
+    // バッチ削除（連続する行をまとめて削除）
+    let deletedCount = 0;
+    let i = 0;
+    
+    while (i < uniqueRows.length) {
+      try {
+        const startRow = uniqueRows[i];
+        let numRows = 1;
+        
+        // 連続する行をカウント（降順なので-1ずつ減る）
+        while (i + numRows < uniqueRows.length && 
+               uniqueRows[i + numRows] === startRow - numRows) {
+          numRows++;
+        }
+        
+        // 連続する行をまとめて削除（最大100行ずつ）
+        const batchSize = Math.min(numRows, 100);
+        const deleteStartRow = startRow - batchSize + 1;
+        
+        sheet.deleteRows(deleteStartRow, batchSize);
+        deletedCount += batchSize;
+        i += batchSize;
+        
+        // 進捗表示（100件ごと）
+        if (deletedCount % 100 === 0) {
+          Logger.log(`削除進捗: ${deletedCount}/${uniqueRows.length}件完了`);
+        }
+        
+        // API制限対策（100行削除ごとに0.5秒待機）
+        if (deletedCount % 100 === 0) {
+          Utilities.sleep(500);
+        }
+        
+      } catch (error) {
+        Logger.log(`⚠️ 削除エラー（行${uniqueRows[i]}付近）: ${error.message}`);
+        i++; // エラーが出たら1行スキップして続行
       }
     }
     
-    Logger.log(`✅ 削除完了: ${rowsToDelete.length}件`);
+    Logger.log(`✅ 削除完了: ${deletedCount}/${uniqueRows.length}件`);
   }
   
   // 2. 更新（既存行を上書き）
@@ -535,7 +566,11 @@ function applyBatchUpdates(sheet, rowsToUpdate, rowsToAdd, rowsToDelete) {
     
     // バッチ処理で一度に更新
     rowsToUpdate.forEach(item => {
-      sheet.getRange(item.rowNumber, 1, 1, 9).setValues([item.data]);
+      try {
+        sheet.getRange(item.rowNumber, 1, 1, 9).setValues([item.data]);
+      } catch (error) {
+        Logger.log(`⚠️ 更新エラー（行${item.rowNumber}）: ${error.message}`);
+      }
     });
     
     Logger.log(`✅ 更新完了: ${rowsToUpdate.length}件`);
