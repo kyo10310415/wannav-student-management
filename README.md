@@ -214,6 +214,9 @@ node create-admin.js admin@example.com 1111
    - アプリ起動時に最初に表示されるページ
    - 本日レッスンがある生徒様の一覧表示
    - レッスン報告フォーム（Googleフォーム）へのリンクボタン
+   - **NEW**: 各生徒のGoogle Meetリンクをボタン表示
+     - 青色の「Meet」ボタンをクリックで直接Google Meetに参加可能
+     - リンクが無い場合は「-」と表示
    - **NEW**: Discord自動リマインド通知にGoogle Meetリンク（H列）を追加表示
    - 担当Tutor絞り込み機能
    - レッスン進捗、継続月数、リザルト総合、欠席回数を表示
@@ -515,14 +518,18 @@ npm run dev
 
 ## 📝 最新の更新履歴
 
-### 2026-03-10: Discord自動リマインド通知にGoogle Meetリンク（H列）を追加
-- **要望**: 今日のレッスンとDiscordへのリマインド通知にMeetリンク（H列）を追加したい
+### 2026-03-10: Discord自動リマインド通知と今日のレッスンページにGoogle Meetリンクを追加
+- **要望**: 今日のレッスンページとDiscordへのリマインド通知にMeetリンク（H列）を追加したい
 - **実装内容**: 
   - Google Apps Script (GAS) でカレンダーイベントからMeetリンクを取得
     - Calendar API の `hangoutLink` プロパティを優先取得
     - `conferenceData.entryPoints` から video 形式のエントリーポイントを取得
     - 正規表現による description からの抽出をフォールバックとして実装
   - スプレッドシート「レッスン予約データ」のH列に保存
+  - **今日のレッスンページにMeetリンク列を追加**
+    - 各生徒の行に青色の「Meet」ボタンを表示
+    - クリックで直接Google Meetに参加可能
+    - リンクが無い場合は「-」と表示
   - Discordリマインド通知にMeetリンクを表示
     - `/api/reminders/send` (自動実行: 毎日17:00 JST)
     - `/api/reminders/test-notification` (手動テスト)
@@ -538,6 +545,7 @@ npm run dev
   - イベントID形式の正規化処理（`@google.com`除去、`_`区切り対応）
   - Calendar API 呼び出しのキャッシュ化で実行時間短縮（14,000イベントで約8分 → 2-3分）
   - `needsUpdate()` 関数でMeetリンク列（H列）の変更検出に対応
+  - フロントエンド: `loadTodayLessonDates()` でMeetリンクを取得し、各生徒行に表示
 - **GASスクリプト**: `/home/user/webapp/gas-calendar-sync-FINAL.js` (1,542行)
 - **結果**: 約97%のレッスンイベントでMeetリンクを自動取得・通知可能に
 
