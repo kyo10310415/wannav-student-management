@@ -1,0 +1,192 @@
+# Google Apps Script - レッスンデータ同期スクリプト（本番版）
+
+## 📋 概要
+
+このスクリプトは、GoogleカレンダーからレッスンデータをGoogle Spreadsheetsに同期し、PostgreSQLデータベースへの連携を可能にします。
+
+## ✅ 実装機能
+
+### 主要機能
+1. **NotionからTutorメールアドレス自動取得**
+   - ページネーション対応で全Tutorを取得
+   - メールアドレスを小文字に統一してカレンダー照合精度を向上
+
+2. **差分更新（incremental sync）**
+   - 過去30日〜未来30日の範囲を効率的に更新
+   - 新規イベント追加、既存イベント更新、削除イベント検知
+
+3. **削除検知（有効化済み）**
+   - **ケース1**: 取得範囲外のイベント（古すぎる過去 or 遠すぎる未来）
+   - **ケース2**: カレンダーから削除/キャンセルされたイベント
+   - 削除されたデータは別シート「削除されたレッスンデータ」に保存
+
+4. **Google Meetリンク取得**
+   - Calendar APIの`hangoutLink`から優先取得
+   - `conferenceData.entryPoints`から取得（フォールバック1）
+   - 正規表現で説明文から抽出（フォールバック2）
+   - キャッシュ機能で API 呼び出し回数を削減
+
+5. **学籍番号・Tutor名の自動抽出**
+   - 複数の正規表現パターンで柔軟に抽出
+   - イベントタイトルと説明文から自動解析
+
+## 📁 ファイル情報
+
+- **ファイル名**: `gas-calendar-sync-FINAL.js`
+- **行数**: 787行（デバッグコード削除後）
+- **削減率**: 51%（1,542行 → 787行）
+
+## 🚀 デプロイ手順
+
+### 1. Google Apps Script エディタでプロジェクトを開く
+
+### 2. Calendar API を有効化（必須）
+1. GAS エディタで「サービス」（左側メニュー）をクリック
+2. 「Google Calendar API」を検索
+3. 「追加」ボタンをクリック
+4. 識別子を「Calendar」のまま保存
+
+### 3. スクリプトをコピー＆ペースト
+- `/home/user/webapp/gas-calendar-sync-FINAL.js` の全内容をコピー
+- GAS エディタに貼り付け
+
+### 4. 設定を編集（17-28行目）
+```javascript
+const SPREADSHEET_ID = '1DvjTbwz2qhqwSnNqROTDAvd1hl-Lz9o05LE6rzEQEGo'; // スプレッドシートID
+const SHEET_NAME = 'レッスン予約データ';
+const DELETED_SHEET_NAME = '削除されたレッスンデータ';
+
+const NOTION_TUTOR_API_TOKEN = 'YOUR_TOKEN_HERE'; // Notion API トークン
+const NOTION_TUTOR_DB_ID = '2f6c668b8d194ae3ba75f6acb5bb7ce2'; // TutorデータベースID
+
+const INCREMENTAL_DAYS_BACK = 30;    // 過去30日
+const INCREMENTAL_DAYS_FORWARD = 30; // 未来30日
+```
+
+### 5. 実行関数を選択
+- `syncLessonsIncrementalFixed()` - メイン同期関数（推奨）
+
+### 6. 初回実行して権限を承認
+
+### 7. トリガーを設定（自動実行）
+```javascript
+// 30分ごとに自動実行
+setupIncrementalTrigger();
+```
+
+## 📊 スプレッドシート構造
+
+### メインシート「レッスン予約データ」
+| 列 | 項目 | 説明 |
+|----|------|------|
+| A | イベントID | Googleカレンダーのイベント識別子 |
+| B | 学籍番号 | 自動抽出された学籍番号 |
+| C | Tutor名 | 自動抽出されたTutor名 |
+| D | Tutorメールアドレス | カレンダーID（メールアドレス） |
+| E | レッスン日時 | イベント開始日時 |
+| F | タイトル | イベントタイトル |
+| G | 説明 | イベント説明文 |
+| H | **Meetリンク** | Google Meet URL（新規追加） |
+| I | 最終更新日時 | データ更新タイムスタンプ |
+
+### 削除シート「削除されたレッスンデータ」
+| 列 | 項目 | 説明 |
+|----|------|------|
+| A-I | （同上） | メインシートと同じ |
+| J | 削除検知日時 | 削除が検知された日時 |
+| K | 削除理由 | 「取得範囲外」または「カレンダーから削除」 |
+
+## 🔧 主要関数
+
+| 関数名 | 説明 | 実行頻度 |
+|--------|------|---------|
+| `syncLessonsIncrementalFixed()` | メイン同期処理（削除検知あり） | 30分ごと（推奨） |
+| `setupIncrementalTrigger()` | 30分ごとのトリガーを設定 | 1回のみ |
+| `deleteAllTriggers()` | 全トリガーを削除 | 必要時 |
+| `listTriggers()` | トリガー一覧を表示 | デバッグ時 |
+
+## 📈 実行統計（例）
+
+```
+========== レッスン差分同期開始 ==========
+Notion Tutor総数: 145件
+アクセス可能カレンダー: 31件
+更新対象期間: 2026/02/08 ～ 2026/04/10
+更新対象イベント: 13,939件
+差分検出: 新規3件、更新0件、削除0件
+Meetリンク取得: あり13,500件、なし400件（割合: 97%）
+========== 差分同期完了 ==========
+実行時間: 180秒
+```
+
+## ⚠️ 重要な変更点
+
+### ✅ 有効化された機能
+- **削除検知機能**: 347行目から有効化（コメントアウト解除）
+- 範囲外イベントの自動削除
+- キャンセルイベントの自動削除
+- 削除データの別シート保存
+
+### ❌ 削除されたコード
+- デバッグログカウンター（205行目）
+- 最初の5件のデバッグログ（293-297行目）
+- テスト関数群（789行目以降、約755行削除）
+  - `testIncrementalSync()`
+  - `testDeletionDetection()`
+  - `debugEventExtraction()`
+  - `debugSpecificSchedule()`
+  - `debugEventIdComparison()`
+  - `debugMeetLinkExtraction()`
+  - その他すべてのデバッグ関数
+
+## 🎯 推奨設定
+
+### トリガー設定
+```javascript
+// 実行方法
+setupIncrementalTrigger();
+
+// 結果
+// ✅ 30分ごとに自動実行
+// ✅ タイムアウト: 6分（360秒）
+// ✅ 実行時間: 通常2-3分、初回約8分
+```
+
+### 実行タイミング
+- **推奨**: 30分ごと（差分更新で高速）
+- **代替**: 1時間ごと（負荷低減）
+- **避ける**: 10分ごと（API制限リスク）
+
+## 📝 トラブルシューティング
+
+### エラー: "Calendar is not defined"
+**原因**: Calendar API が有効化されていない  
+**解決策**: デプロイ手順2を実行
+
+### エラー: "description.match is not a function"
+**原因**: description が null または undefined  
+**解決策**: 既に修正済み（`description || ''` で対応）
+
+### Meetリンク取得率が低い
+**原因**: イベント作成時に Meet が設定されていない  
+**解決策**: Googleカレンダー予約ページで「Google Meet のビデオ会議を追加」を有効化
+
+### 削除が多すぎる
+**原因**: 範囲設定が狭すぎる  
+**解決策**: `INCREMENTAL_DAYS_BACK/FORWARD` を増やす（例: 60日）
+
+## 🔗 関連ファイル
+
+- **Backend**: `/home/user/webapp/src/services/sheetsService.js`
+- **Frontend**: `/home/user/webapp/public/app.js`
+- **README**: `/home/user/webapp/README.md`
+
+## 📅 更新履歴
+
+- **2026-03-10**: デバッグコード削除、削除機能有効化（787行に最適化）
+- **2026-03-10**: Meetリンク取得機能追加（H列）
+- **2026-02-26**: 差分更新機能実装
+
+---
+
+**メンテナンス担当**: このドキュメントは本番環境用です。新機能追加時は必ず更新してください。
