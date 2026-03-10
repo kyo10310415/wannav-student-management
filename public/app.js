@@ -619,14 +619,11 @@ function renderReservationsPage() {
 
 // Get tutor options for filter (only cached tutors)
 function getTutorOptions() {
-  // Get unique notion_names that exist in tutors array (cached tutors only)
-  const cachedTutorNotionNames = new Set(tutors.map(t => t.notion_name).filter(Boolean));
-  
-  // Get unique notion_names from students that are also in cached tutors
+  // Get unique notion_names from students (all tutors, regardless of cache)
   const uniqueNotionNames = [...new Set(
     students
       .map(s => s.homeroom_tutor)
-      .filter(notionName => notionName && cachedTutorNotionNames.has(notionName))
+      .filter(notionName => notionName) // 空でないもののみ
   )];
   
   // Map notion_name to tutor_name for display
