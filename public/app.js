@@ -394,7 +394,8 @@ async function loadTodayLessonDates() {
       
       lessonDates[lesson.student_id].push({
         date: utcDate,
-        formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`
+        formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`,
+        meet_link: lesson.meet_link || null
       });
     });
     
@@ -2636,6 +2637,7 @@ async function renderTodayLessonsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Meet</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
@@ -2666,7 +2668,7 @@ function renderTodayStudentRows(todayStudents) {
   if (todayStudents.length === 0) {
     return `
       <tr>
-        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="10" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-calendar-times text-4xl mb-2"></i>
           <p>今日レッスンの生徒様はいません</p>
         </td>
@@ -2694,6 +2696,13 @@ function renderTodayStudentRows(todayStudents) {
     const suspensionMonths = student.suspension_months || 0;
     const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
     
+    // Get Meet link for today's lesson
+    const studentLessonDates = lessonDates[student.student_id] || [];
+    const today = new Date();
+    const todayFormatted = `${today.getMonth() + 1}/${today.getDate()}`;
+    const todayLesson = studentLessonDates.find(d => d.formatted === todayFormatted);
+    const meetLink = todayLesson?.meet_link || null;
+    
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
@@ -2704,6 +2713,9 @@ function renderTodayStudentRows(todayStudents) {
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          ${meetLink ? `<a href="${meetLink}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition" title="Google Meetを開く"><i class="fas fa-video mr-1"></i>Meet</a>` : '<span class="text-gray-400 text-xs">-</span>'}
+        </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
