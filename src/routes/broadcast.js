@@ -89,7 +89,7 @@ app.post('/preview', async (c) => {
 /**
  * POST /api/broadcast/send
  * Send broadcast message
- * Body: { content, imageUrl, channelType, targetStatus, targetTutor, name, saveAsTemplate }
+ * Body: { content, imageUrl, channelType, targetStatus, targetTutor, name, saveAsTemplate, isTest }
  */
 app.post('/send', async (c) => {
   try {
@@ -111,7 +111,22 @@ app.post('/send', async (c) => {
       }, 400);
     }
     
-    // Get target students
+    // Handle test mode - skip student lookup
+    if (messageData.isTest) {
+      console.log('[Broadcast] Test mode: Skipping student lookup');
+      
+      // Send broadcast in test mode (empty student array)
+      const result = await sendBroadcast(messageData, [], user.email);
+      
+      return c.json({
+        success: true,
+        message: 'Test broadcast sent',
+        broadcastId: result.broadcastId,
+        results: result.results
+      });
+    }
+    
+    // Get target students for normal mode
     const targetStudents = await getTargetStudents(
       messageData.targetStatus || 'active',
       messageData.targetTutor,
