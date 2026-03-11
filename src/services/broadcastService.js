@@ -54,6 +54,11 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
  */
 async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
   try {
+    console.log('[Broadcast] Sending via webhook:', {
+      hasImage: !!imageUrl,
+      imageUrl: imageUrl ? imageUrl.substring(0, 50) + '...' : 'none'
+    });
+    
     const embed = {
       description: content,
       color: 0x5865F2, // Discord blue
@@ -62,6 +67,9 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
     
     if (imageUrl) {
       embed.image = { url: imageUrl };
+      console.log('[Broadcast] Image added to embed');
+    } else {
+      console.log('[Broadcast] No image URL provided');
     }
     
     const payload = {
@@ -72,6 +80,8 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
     if (discordId) {
       payload.content = `<@${discordId}>`;
     }
+    
+    console.log('[Broadcast] Sending payload:', JSON.stringify(payload, null, 2));
     
     await axios.post(webhookUrl, payload);
     

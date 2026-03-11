@@ -7254,9 +7254,13 @@ async function handleImageUpload(event) {
     }
   } catch (error) {
     console.error('Error uploading image:', error);
+    console.error('Error details:', error.response?.data);
+    
+    const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+    
     statusElement.className = 'mt-2 text-red-600';
-    statusElement.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>アップロード失敗';
-    showNotification('画像のアップロードに失敗しました', 'error');
+    statusElement.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i>アップロード失敗: ${errorMessage}`;
+    showNotification(`画像のアップロードに失敗しました: ${errorMessage}`, 'error');
   }
 }
 
