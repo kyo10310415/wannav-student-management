@@ -689,3 +689,99 @@ export async function fetchSuspensionMonthsMap() {
     return {};
   }
 }
+
+/**
+ * Fetch student broadcast info from Google Sheets
+ * @returns {Array} - Array of student broadcast info
+ */
+export async function fetchStudentBroadcastInfo() {
+  try {
+    const spreadsheetId = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM';
+    const sheetName = '❶RAW_生徒様情報';
+    
+    const sheets = getSheets();
+    
+    // Fetch B (学籍番号), G (Discord ID), H (お知らせWH), I (お役立ちWH), M (チャットURL)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!B2:M`, // Skip header row
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[Broadcast Info] Fetched ${rows.length} student records`);
+
+    const studentInfo = [];
+    
+    rows.forEach((row, index) => {
+      const studentId = row[0] ? row[0].trim() : null;          // B列 (index 0)
+      const discordId = row[5] ? row[5].trim() : null;          // G列 (index 5)
+      const noticeWebhook = row[6] ? row[6].trim() : null;      // H列 (index 6)
+      const tipsWebhook = row[7] ? row[7].trim() : null;        // I列 (index 7)
+      const chatUrl = row[11] ? row[11].trim() : null;          // M列 (index 11)
+      
+      if (studentId) {
+        studentInfo.push({
+          studentId,
+          discordId,
+          noticeWebhook,
+          tipsWebhook,
+          chatUrl
+        });
+      }
+    });
+
+    console.log(`[Broadcast Info] Processed ${studentInfo.length} valid student records`);
+    return studentInfo;
+  } catch (error) {
+    console.error('[Broadcast Info] Error fetching student broadcast info:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch student broadcast info from Google Sheets
+ * @returns {Array} - Array of student broadcast info
+ */
+export async function fetchStudentBroadcastInfo() {
+  try {
+    const spreadsheetId = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM';
+    const sheetName = '❶RAW_生徒様情報';
+    
+    const sheets = getSheets();
+    
+    // Fetch B (学籍番号), G (Discord ID), H (お知らせWH), I (お役立ちWH), M (チャットURL)
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: spreadsheetId,
+      range: `${sheetName}!B2:M`, // Skip header row
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[Broadcast Info] Fetched ${rows.length} student records`);
+
+    const studentInfo = [];
+    
+    rows.forEach((row, index) => {
+      const studentId = row[0] ? row[0].trim() : null;          // B列 (index 0)
+      const discordId = row[5] ? row[5].trim() : null;          // G列 (index 5)
+      const noticeWebhook = row[6] ? row[6].trim() : null;      // H列 (index 6)
+      const tipsWebhook = row[7] ? row[7].trim() : null;        // I列 (index 7)
+      const chatUrl = row[11] ? row[11].trim() : null;          // M列 (index 11)
+      
+      if (studentId) {
+        studentInfo.push({
+          studentId,
+          discordId,
+          noticeWebhook,
+          tipsWebhook,
+          chatUrl
+        });
+      }
+    });
+
+    console.log(`[Broadcast Info] Processed ${studentInfo.length} valid student records`);
+    return studentInfo;
+  } catch (error) {
+    console.error('[Broadcast Info] Error fetching student broadcast info:', error);
+    throw error;
+  }
+}
