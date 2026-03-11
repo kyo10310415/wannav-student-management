@@ -372,8 +372,8 @@ app.post('/upload-image', async (c) => {
       contentType: file.type
     });
     
-    // Send to Discord webhook
-    const response = await axios.post(testWebhookUrl, formData, {
+    // Send to Discord webhook with wait=true to get message data
+    const response = await axios.post(testWebhookUrl + '?wait=true', formData, {
       headers: {
         ...formData.getHeaders()
       }
@@ -381,9 +381,28 @@ app.post('/upload-image', async (c) => {
     
     // Extract image URL from Discord response
     const imageUrl = response.data.attachments?.[0]?.url;
+    const messageId = response.data.id;
     
     if (!imageUrl) {
       throw new Error('Failed to get image URL from Discord');
+    }
+    
+    // Delete the upload message immediately to avoid duplicate images
+    // Extract webhook ID and token from URL
+    const webhookMatch = testWebhookUrl.match(/webhooks\/(\d+)\/([^\/]+)/);
+    if (webhookMatch && messageId) {
+      const webhookId = webhookMatch[1];
+      const webhookToken = webhookMatch[2];
+      
+      try {
+        await axios.delete(
+          `https://discord.com/api/webhooks/${webhookId}/${webhookToken}/messages/${messageId}`
+        );
+        console.log('[Broadcast] Deleted upload preview message');
+      } catch (deleteError) {
+        console.warn('[Broadcast] Failed to delete upload message:', deleteError.message);
+        // Don't fail the upload if deletion fails
+      }
     }
     
     return c.json({
