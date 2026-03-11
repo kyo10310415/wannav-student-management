@@ -380,8 +380,14 @@ function syncLessonsIncrementalFixed() {
       
       // 削除されたイベントのデータを保存（削除日時と削除理由を追加）
       const deletedData = [...value.data]; // 既存データをコピー
-      deletedData.push(new Date()); // 削除検知日時を追加
-      deletedData.push(deleteReason); // 削除理由を追加
+      
+      // 既存データにJ列（時間）がない場合は空文字列を追加
+      if (deletedData.length < 10) {
+        deletedData.push(''); // J列: 時間（空）
+      }
+      
+      deletedData.push(new Date()); // K列: 削除検知日時を追加
+      deletedData.push(deleteReason); // L列: 削除理由を追加
       deletedEventsData.push(deletedData);
     }
   });
@@ -491,14 +497,18 @@ function loadExistingData(sheet) {
  * 更新が必要かチェック
  */
 function needsUpdate(existing, newData) {
-  // 日時、タイトル、説明、Meetリンクを比較
+  // 既存データにJ列（時間）がない場合は更新が必要
+  if (existing.data.length < 10) return true;
+  
+  // 日時、タイトル、説明、Meetリンク、時間を比較
   const existingDate = new Date(existing.data[4]).getTime();
   const newDate = new Date(newData[4]).getTime();
   
   if (existingDate !== newDate) return true;
   if (existing.data[5] !== newData[5]) return true; // タイトル
   if (existing.data[6] !== newData[6]) return true; // 説明
-  if (existing.data[7] !== newData[7]) return true; // Meetリンク（追加）
+  if (existing.data[7] !== newData[7]) return true; // Meetリンク
+  if (existing.data[9] !== newData[9]) return true; // 時間
   
   return false;
 }
