@@ -2676,7 +2676,7 @@ function renderTodayStudentRows(todayStudents) {
   if (todayStudents.length === 0) {
     return `
       <tr>
-        <td colspan="10" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="11" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-calendar-times text-4xl mb-2"></i>
           <p>今日レッスンの生徒様はいません</p>
         </td>
