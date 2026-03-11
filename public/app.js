@@ -164,6 +164,9 @@ function renderHeader() {
               <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-pause-circle mr-2"></i>休会管理
               </button>
+              <button id="nav-broadcast" onclick="changePage('broadcast')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'broadcast' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+                <i class="fas fa-bullhorn mr-2"></i>一斉送信
+              </button>
             </div>
             
             <!-- Divider -->
@@ -457,6 +460,8 @@ async function renderApp() {
     await renderExtensionsPage();
   } else if (currentPage === 'suspensions') {
     await renderSuspensionsPage();
+  } else if (currentPage === 'broadcast') {
+    await renderBroadcastPage();
   } else if (currentPage === 'database') {
     await renderDatabasePage();
   } else {
@@ -6456,3 +6461,553 @@ async function renderDatabasePage() {
   }
 }
 
+
+// ===========================================
+// Broadcast Functions
+// ===========================================
+
+// Broadcast state
+let broadcastTutors = [];
+let broadcastTemplates = [];
+let broadcastLogs = [];
+
+/**
+ * Render Broadcast Page
+ */
+async function renderBroadcastPage() {
+  document.getElementById('content').innerHTML = `
+    <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-8">
+          <div>
+            <h1 class="text-4xl font-bold text-blue-900 mb-2">
+              <i class="fas fa-bullhorn mr-3 text-blue-600"></i>一斉送信
+            </h1>
+            <p class="text-gray-600">Discord一斉送信メッセージ管理</p>
+          </div>
+          <button onclick="showTemplatesModal()" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition">
+            <i class="fas fa-folder-open mr-2"></i>テンプレート管理
+          </button>
+        </div>
+        
+        <!-- Broadcast Form -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+          <h2 class="text-xl font-bold text-gray-800 mb-4">
+            <i class="fas fa-paper-plane mr-2 text-blue-600"></i>メッセージ送信
+          </h2>
+          
+          <!-- Target Settings -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">
+                <i class="fas fa-users mr-1"></i>送信対象
+              </label>
+              <select id="broadcast-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="active">アクティブ生徒のみ</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">
+                <i class="fas fa-chalkboard-teacher mr-1"></i>担当Tutor
+              </label>
+              <select id="broadcast-target-tutor" onchange="updatePreviewCount()" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="all">全てのTutor</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-hashtag mr-1"></i>送信先チャンネル
+            </label>
+            <select id="broadcast-channel-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              <option value="notice">お知らせ</option>
+              <option value="tips">お役立ち情報</option>
+              <option value="chat">チャット</option>
+            </select>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-comment-alt mr-1"></i>メッセージ内容
+            </label>
+            <textarea id="broadcast-content" rows="6" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="送信するメッセージを入力してください..."></textarea>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              <i class="fas fa-image mr-1"></i>添付画像URL（任意）
+            </label>
+            <input type="text" id="broadcast-image-url" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="https://example.com/image.png">
+            <p class="text-xs text-gray-500 mt-1">※画像URLを入力してください。空欄の場合は画像なしで送信されます。</p>
+          </div>
+          
+          <!-- Preview Section -->
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <h3 class="text-sm font-bold text-blue-900 mb-2">
+              <i class="fas fa-eye mr-2"></i>送信先プレビュー
+            </h3>
+            <p id="preview-count" class="text-gray-700">
+              <i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...
+            </p>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div class="flex gap-3">
+            <button onclick="previewBroadcast()" class="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-semibold">
+              <i class="fas fa-eye mr-2"></i>送信先を確認
+            </button>
+            <button onclick="sendBroadcast()" class="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-semibold">
+              <i class="fas fa-paper-plane mr-2"></i>送信
+            </button>
+            <button onclick="saveTemplate()" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
+              <i class="fas fa-save mr-2"></i>テンプレート保存
+            </button>
+          </div>
+        </div>
+        
+        <!-- Logs Section -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-800">
+              <i class="fas fa-history mr-2 text-blue-600"></i>送信履歴
+            </h2>
+            <button onclick="loadBroadcastLogs()" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition">
+              <i class="fas fa-sync-alt mr-2"></i>更新
+            </button>
+          </div>
+          <div id="broadcast-logs-container">
+            <p class="text-gray-500 text-center py-8">
+              <i class="fas fa-inbox mr-2"></i>送信履歴を読み込み中...
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Load tutors and initial preview
+  await loadBroadcastTutors();
+  await updatePreviewCount();
+  await loadBroadcastLogs();
+}
+
+/**
+ * Load tutors for filtering
+ */
+async function loadBroadcastTutors() {
+  try {
+    const response = await axios.get(`${API_BASE}/api/broadcast/tutors`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      broadcastTutors = response.data.tutors;
+      
+      const selectElement = document.getElementById('broadcast-target-tutor');
+      if (selectElement) {
+        // Add tutor options
+        broadcastTutors.forEach(tutor => {
+          const option = document.createElement('option');
+          option.value = tutor.notion_name;
+          option.textContent = tutor.notion_name;
+          selectElement.appendChild(option);
+        });
+        
+        // If crew role, disable "all" option
+        if (currentUser.role === 'crew') {
+          selectElement.querySelector('option[value="all"]').disabled = true;
+          selectElement.selectedIndex = 1; // Select first tutor
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error loading tutors:', error);
+    showNotification('Tutor一覧の取得に失敗しました', 'error');
+  }
+}
+
+/**
+ * Update preview count
+ */
+async function updatePreviewCount() {
+  const targetStatus = document.getElementById('broadcast-target-status')?.value || 'active';
+  const targetTutor = document.getElementById('broadcast-target-tutor')?.value || 'all';
+  const previewElement = document.getElementById('preview-count');
+  
+  if (!previewElement) return;
+  
+  previewElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...';
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/broadcast/preview`, {
+      targetStatus,
+      targetTutor: targetTutor === 'all' ? null : targetTutor
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      const count = response.data.count;
+      previewElement.innerHTML = `
+        <i class="fas fa-check-circle mr-2 text-green-600"></i>
+        <span class="font-bold text-2xl text-blue-900">${count}</span>名の生徒に送信されます
+      `;
+    }
+  } catch (error) {
+    console.error('Error getting preview:', error);
+    previewElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-2 text-red-600"></i>プレビューの取得に失敗しました';
+  }
+}
+
+/**
+ * Preview broadcast targets
+ */
+async function previewBroadcast() {
+  const targetStatus = document.getElementById('broadcast-target-status').value;
+  const targetTutor = document.getElementById('broadcast-target-tutor').value;
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/broadcast/preview`, {
+      targetStatus,
+      targetTutor: targetTutor === 'all' ? null : targetTutor
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      const students = response.data.students;
+      
+      // Show modal with student list
+      const studentListHtml = students.map(s => `
+        <div class="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded">
+          <div>
+            <span class="font-semibold">${s.name}</span>
+            <span class="text-gray-500 text-sm ml-2">(${s.student_id})</span>
+          </div>
+          <div class="text-sm text-gray-600">
+            <i class="fas fa-chalkboard-teacher mr-1"></i>${s.homeroom_tutor}
+          </div>
+        </div>
+      `).join('');
+      
+      showModal(`
+        <h2 class="text-2xl font-bold mb-4">
+          <i class="fas fa-users mr-2 text-blue-600"></i>送信先プレビュー
+        </h2>
+        <p class="text-gray-700 mb-4">
+          以下の<span class="font-bold text-blue-900 text-xl">${students.length}名</span>の生徒に送信されます：
+        </p>
+        <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-2">
+          ${studentListHtml}
+        </div>
+        <div class="mt-4 flex gap-3">
+          <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">
+            閉じる
+          </button>
+          <button onclick="closeModal(); sendBroadcast();" class="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition">
+            <i class="fas fa-paper-plane mr-2"></i>この内容で送信
+          </button>
+        </div>
+      `);
+    }
+  } catch (error) {
+    console.error('Error previewing broadcast:', error);
+    showNotification('プレビューの取得に失敗しました', 'error');
+  }
+}
+
+/**
+ * Send broadcast message
+ */
+async function sendBroadcast() {
+  const content = document.getElementById('broadcast-content').value.trim();
+  const imageUrl = document.getElementById('broadcast-image-url').value.trim();
+  const channelType = document.getElementById('broadcast-channel-type').value;
+  const targetStatus = document.getElementById('broadcast-target-status').value;
+  const targetTutor = document.getElementById('broadcast-target-tutor').value;
+  
+  if (!content) {
+    showNotification('メッセージ内容を入力してください', 'error');
+    return;
+  }
+  
+  // Confirm
+  if (!confirm('メッセージを送信しますか？\nこの操作は取り消せません。')) {
+    return;
+  }
+  
+  try {
+    showNotification('送信中...', 'info');
+    
+    const response = await axios.post(`${API_BASE}/api/broadcast/send`, {
+      content,
+      imageUrl: imageUrl || null,
+      channelType,
+      targetStatus,
+      targetTutor: targetTutor === 'all' ? null : targetTutor,
+      name: `Broadcast ${new Date().toLocaleString('ja-JP')}`,
+      saveAsTemplate: false
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      showNotification(`✅ ${response.data.results.sent}/${response.data.results.total}件 送信完了`, 'success');
+      
+      // Reload logs
+      await loadBroadcastLogs();
+      
+      // Show detailed results
+      if (response.data.results.failed > 0) {
+        showModal(`
+          <h2 class="text-2xl font-bold mb-4">
+            <i class="fas fa-info-circle mr-2 text-yellow-600"></i>送信結果
+          </h2>
+          <div class="space-y-3">
+            <p class="text-lg">
+              <span class="text-green-600 font-bold">${response.data.results.sent}件</span> 送信成功
+            </p>
+            <p class="text-lg">
+              <span class="text-red-600 font-bold">${response.data.results.failed}件</span> 送信失敗
+            </p>
+            <p class="text-sm text-gray-600 mt-4">
+              詳細は送信履歴をご確認ください。
+            </p>
+          </div>
+          <button onclick="closeModal()" class="mt-4 w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition">
+            閉じる
+          </button>
+        `);
+      }
+    }
+  } catch (error) {
+    console.error('Error sending broadcast:', error);
+    showNotification('送信に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
+  }
+}
+
+/**
+ * Save as template
+ */
+async function saveTemplate() {
+  const content = document.getElementById('broadcast-content').value.trim();
+  const imageUrl = document.getElementById('broadcast-image-url').value.trim();
+  const channelType = document.getElementById('broadcast-channel-type').value;
+  const targetTutor = document.getElementById('broadcast-target-tutor').value;
+  
+  if (!content) {
+    showNotification('メッセージ内容を入力してください', 'error');
+    return;
+  }
+  
+  const name = prompt('テンプレート名を入力してください:');
+  if (!name) return;
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/broadcast/templates`, {
+      name,
+      content,
+      imageUrl: imageUrl || null,
+      channelType,
+      targetTutor: targetTutor === 'all' ? null : targetTutor
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      showNotification('✅ テンプレートを保存しました', 'success');
+    }
+  } catch (error) {
+    console.error('Error saving template:', error);
+    showNotification('テンプレートの保存に失敗しました', 'error');
+  }
+}
+
+/**
+ * Show templates modal
+ */
+async function showTemplatesModal() {
+  try {
+    const response = await axios.get(`${API_BASE}/api/broadcast/templates`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      broadcastTemplates = response.data.templates;
+      
+      const templatesHtml = broadcastTemplates.length === 0 ? `
+        <p class="text-gray-500 text-center py-8">
+          <i class="fas fa-inbox mr-2"></i>テンプレートがありません
+        </p>
+      ` : broadcastTemplates.map(t => `
+        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+          <div class="flex justify-between items-start mb-2">
+            <h3 class="font-bold text-lg text-gray-800">${t.name}</h3>
+            <div class="flex gap-2">
+              <button onclick="loadTemplate(${t.id})" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition text-sm">
+                <i class="fas fa-download mr-1"></i>読込
+              </button>
+              <button onclick="deleteTemplate(${t.id})" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition text-sm">
+                <i class="fas fa-trash mr-1"></i>削除
+              </button>
+            </div>
+          </div>
+          <p class="text-gray-700 text-sm mb-2 whitespace-pre-wrap">${t.content}</p>
+          <div class="flex gap-4 text-xs text-gray-500">
+            <span><i class="fas fa-hashtag mr-1"></i>${t.channel_type}</span>
+            ${t.target_tutor ? `<span><i class="fas fa-chalkboard-teacher mr-1"></i>${t.target_tutor}</span>` : ''}
+            ${t.image_url ? '<span><i class="fas fa-image mr-1"></i>画像あり</span>' : ''}
+          </div>
+        </div>
+      `).join('');
+      
+      showModal(`
+        <h2 class="text-2xl font-bold mb-4">
+          <i class="fas fa-folder-open mr-2 text-indigo-600"></i>テンプレート管理
+        </h2>
+        <div class="max-h-96 overflow-y-auto space-y-3">
+          ${templatesHtml}
+        </div>
+        <button onclick="closeModal()" class="mt-4 w-full bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition">
+          閉じる
+        </button>
+      `);
+    }
+  } catch (error) {
+    console.error('Error loading templates:', error);
+    showNotification('テンプレートの取得に失敗しました', 'error');
+  }
+}
+
+/**
+ * Load template into form
+ */
+function loadTemplate(templateId) {
+  const template = broadcastTemplates.find(t => t.id === templateId);
+  if (!template) return;
+  
+  document.getElementById('broadcast-content').value = template.content;
+  document.getElementById('broadcast-image-url').value = template.image_url || '';
+  document.getElementById('broadcast-channel-type').value = template.channel_type;
+  
+  if (template.target_tutor) {
+    document.getElementById('broadcast-target-tutor').value = template.target_tutor;
+  }
+  
+  closeModal();
+  updatePreviewCount();
+  showNotification('✅ テンプレートを読み込みました', 'success');
+}
+
+/**
+ * Delete template
+ */
+async function deleteTemplate(templateId) {
+  if (!confirm('このテンプレートを削除しますか？')) {
+    return;
+  }
+  
+  try {
+    const response = await axios.delete(`${API_BASE}/api/broadcast/templates/${templateId}`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      showNotification('✅ テンプレートを削除しました', 'success');
+      showTemplatesModal(); // Reload modal
+    }
+  } catch (error) {
+    console.error('Error deleting template:', error);
+    showNotification('テンプレートの削除に失敗しました', 'error');
+  }
+}
+
+/**
+ * Load broadcast logs
+ */
+async function loadBroadcastLogs() {
+  try {
+    const response = await axios.get(`${API_BASE}/api/broadcast/logs?limit=50`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      broadcastLogs = response.data.logs;
+      renderBroadcastLogs();
+    }
+  } catch (error) {
+    console.error('Error loading logs:', error);
+    const container = document.getElementById('broadcast-logs-container');
+    if (container) {
+      container.innerHTML = `
+        <p class="text-red-600 text-center py-8">
+          <i class="fas fa-exclamation-triangle mr-2"></i>送信履歴の取得に失敗しました
+        </p>
+      `;
+    }
+  }
+}
+
+/**
+ * Render broadcast logs
+ */
+function renderBroadcastLogs() {
+  const container = document.getElementById('broadcast-logs-container');
+  if (!container) return;
+  
+  if (broadcastLogs.length === 0) {
+    container.innerHTML = `
+      <p class="text-gray-500 text-center py-8">
+        <i class="fas fa-inbox mr-2"></i>送信履歴がありません
+      </p>
+    `;
+    return;
+  }
+  
+  // Group logs by broadcast_message_id
+  const groupedLogs = {};
+  broadcastLogs.forEach(log => {
+    if (!groupedLogs[log.broadcast_message_id]) {
+      groupedLogs[log.broadcast_message_id] = [];
+    }
+    groupedLogs[log.broadcast_message_id].push(log);
+  });
+  
+  const logsHtml = Object.entries(groupedLogs).map(([broadcastId, logs]) => {
+    const firstLog = logs[0];
+    const successCount = logs.filter(l => l.status === 'sent').length;
+    const failCount = logs.filter(l => l.status === 'failed').length;
+    const totalCount = logs.length;
+    
+    return `
+      <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+        <div class="flex justify-between items-start mb-2">
+          <div>
+            <h3 class="font-bold text-gray-800">${firstLog.message_name || 'Broadcast ' + broadcastId}</h3>
+            <p class="text-sm text-gray-600">
+              <i class="fas fa-clock mr-1"></i>${new Date(firstLog.sent_at).toLocaleString('ja-JP')}
+            </p>
+          </div>
+          <div class="flex gap-2 items-center">
+            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+              <i class="fas fa-check mr-1"></i>${successCount}
+            </span>
+            ${failCount > 0 ? `
+              <span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
+                <i class="fas fa-times mr-1"></i>${failCount}
+              </span>
+            ` : ''}
+          </div>
+        </div>
+        <div class="flex gap-2 text-xs text-gray-500">
+          <span><i class="fas fa-hashtag mr-1"></i>${firstLog.channel_type}</span>
+          <span><i class="fas fa-users mr-1"></i>${totalCount}名</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = logsHtml;
+}

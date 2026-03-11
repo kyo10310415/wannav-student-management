@@ -25,6 +25,7 @@ import extensionRoutes from './routes/extensions.js';
 import suspensionRoutes from './routes/suspensions.js';
 import statsRoutes from './routes/stats.js';
 import databaseRoutes from './routes/database.js';
+import broadcastRoutes from './routes/broadcast.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -60,6 +61,7 @@ app.route('/api/extensions', extensionRoutes);
 app.route('/api/suspensions', suspensionRoutes);
 app.route('/api/stats', statsRoutes);
 app.route('/api/database', databaseRoutes);
+app.route('/api/broadcast', broadcastRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
