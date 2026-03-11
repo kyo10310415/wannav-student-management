@@ -259,7 +259,7 @@ app.get('/logs', async (c) => {
 
 /**
  * GET /api/broadcast/tutors
- * Get list of tutors for filtering
+ * Get list of tutors for filtering (only users registered in users table)
  */
 app.get('/tutors', async (c) => {
   try {
@@ -268,12 +268,24 @@ app.get('/tutors', async (c) => {
     // Import query function
     const { query } = await import('../db/connection.js');
     
-    let sqlQuery = 'SELECT DISTINCT notion_name, email FROM tutors WHERE notion_name IS NOT NULL ORDER BY notion_name';
+    // Get tutors that are registered as users (have email in users table)
+    let sqlQuery = `
+      SELECT DISTINCT t.notion_name, t.email 
+      FROM tutors t
+      INNER JOIN users u ON LOWER(t.email) = LOWER(u.email)
+      WHERE t.notion_name IS NOT NULL 
+      ORDER BY t.notion_name
+    `;
     const params = [];
     
     // If crew, only return their own info
     if (user.role === 'crew') {
-      sqlQuery = 'SELECT notion_name, email FROM tutors WHERE email = $1';
+      sqlQuery = `
+        SELECT t.notion_name, t.email 
+        FROM tutors t
+        INNER JOIN users u ON LOWER(t.email) = LOWER(u.email)
+        WHERE LOWER(t.email) = LOWER($1)
+      `;
       params.push(user.email);
     }
     

@@ -139,7 +139,7 @@ async function sendViaBot(chatUrl, discordId, content, imageUrl) {
  * @returns {Object} - Send results
  */
 export async function sendBroadcast(messageData, targetStudents, userEmail) {
-  const { content, imageUrl, channelType, name, saveAsTemplate } = messageData;
+  const { content, imageUrl, channelType, name, saveAsTemplate, isTest } = messageData;
   
   let broadcastId = null;
   
@@ -163,6 +163,61 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
     );
     
     broadcastId = insertResult.rows[0].id;
+    
+    // Handle test mode
+    if (isTest) {
+      console.log('[Broadcast] Test mode: Sending to test webhook');
+      
+      const testWebhookUrl = 'https://discord.com/api/webhooks/1282616705817903146/M4KSUtmoHYSDqySMBgtgjU0wZywkUkVtfh3KOOA-BNzgXMnwVnEphKwuleMXhFn60MYd';
+      const testDiscordId = '766666980086120470';
+      
+      try {
+        await sendViaWebhook(testWebhookUrl, testDiscordId, content, imageUrl);
+        
+        // Log test send
+        await logBroadcastSend(
+          broadcastId, 
+          { student_id: 'TEST', name: 'Test User' }, 
+          channelType, 
+          testWebhookUrl, 
+          'sent', 
+          null
+        );
+        
+        return {
+          success: true,
+          broadcastId,
+          results: {
+            total: 1,
+            sent: 1,
+            failed: 0,
+            errors: []
+          }
+        };
+      } catch (error) {
+        console.error('[Broadcast] Test send error:', error);
+        
+        await logBroadcastSend(
+          broadcastId, 
+          { student_id: 'TEST', name: 'Test User' }, 
+          channelType, 
+          testWebhookUrl, 
+          'failed', 
+          error.message
+        );
+        
+        return {
+          success: false,
+          broadcastId,
+          results: {
+            total: 1,
+            sent: 0,
+            failed: 1,
+            errors: [{ studentId: 'TEST', error: error.message }]
+          }
+        };
+      }
+    }
     
     // Fetch student broadcast info from Google Sheets
     const studentBroadcastInfo = await fetchStudentBroadcastInfo();

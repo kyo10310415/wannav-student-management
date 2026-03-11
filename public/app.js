@@ -6607,6 +6607,20 @@ async function loadBroadcastTutors() {
       
       const selectElement = document.getElementById('broadcast-target-tutor');
       if (selectElement) {
+        // Add test option first
+        const testOption = document.createElement('option');
+        testOption.value = 'test';
+        testOption.textContent = '🧪 テスト送信';
+        testOption.style.backgroundColor = '#FEF3C7';
+        testOption.style.fontWeight = 'bold';
+        selectElement.appendChild(testOption);
+        
+        // Add separator
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '──────────────';
+        selectElement.appendChild(separator);
+        
         // Add tutor options
         broadcastTutors.forEach(tutor => {
           const option = document.createElement('option');
@@ -6618,7 +6632,7 @@ async function loadBroadcastTutors() {
         // If crew role, disable "all" option
         if (currentUser.role === 'crew') {
           selectElement.querySelector('option[value="all"]').disabled = true;
-          selectElement.selectedIndex = 1; // Select first tutor
+          selectElement.selectedIndex = 3; // Select first tutor (after test and separator)
         }
       }
     }
@@ -6637,6 +6651,16 @@ async function updatePreviewCount() {
   const previewElement = document.getElementById('preview-count');
   
   if (!previewElement) return;
+  
+  // Handle test mode
+  if (targetTutor === 'test') {
+    previewElement.innerHTML = `
+      <i class="fas fa-flask mr-2 text-yellow-600"></i>
+      <span class="font-bold text-xl text-yellow-900">テスト送信モード</span>
+      <span class="text-sm text-gray-600 ml-2">（テスト用Webhookに送信されます）</span>
+    `;
+    return;
+  }
   
   previewElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...';
   
@@ -6667,6 +6691,38 @@ async function updatePreviewCount() {
 async function previewBroadcast() {
   const targetStatus = document.getElementById('broadcast-target-status').value;
   const targetTutor = document.getElementById('broadcast-target-tutor').value;
+  
+  // Handle test mode
+  if (targetTutor === 'test') {
+    showModal(`
+      <h2 class="text-2xl font-bold mb-4">
+        <i class="fas fa-flask mr-2 text-yellow-600"></i>テスト送信プレビュー
+      </h2>
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+        <p class="text-yellow-800 font-semibold mb-2">
+          <i class="fas fa-info-circle mr-2"></i>テストモード
+        </p>
+        <p class="text-sm text-gray-700 mb-2">
+          以下のテスト用Webhookに送信されます：
+        </p>
+        <div class="bg-white rounded p-3 text-xs font-mono break-all text-gray-600">
+          https://discord.com/api/webhooks/1282616705817903146/M4KSU...
+        </div>
+        <p class="text-sm text-gray-700 mt-2">
+          <i class="fas fa-user mr-1"></i>メンション: <code class="bg-white px-2 py-1 rounded">@766666980086120470</code>
+        </p>
+      </div>
+      <div class="mt-4 flex gap-3">
+        <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">
+          閉じる
+        </button>
+        <button onclick="closeModal(); sendBroadcast();" class="flex-1 bg-yellow-600 text-white px-6 py-3 rounded-lg hover:bg-yellow-700 transition">
+          <i class="fas fa-flask mr-2"></i>テスト送信
+        </button>
+      </div>
+    `);
+    return;
+  }
   
   try {
     const response = await axios.post(`${API_BASE}/api/broadcast/preview`, {
@@ -6741,20 +6797,26 @@ async function sendBroadcast() {
   try {
     showNotification('送信中...', 'info');
     
+    const isTest = targetTutor === 'test';
+    
     const response = await axios.post(`${API_BASE}/api/broadcast/send`, {
       content,
       imageUrl: imageUrl || null,
       channelType,
       targetStatus,
-      targetTutor: targetTutor === 'all' ? null : targetTutor,
-      name: `Broadcast ${new Date().toLocaleString('ja-JP')}`,
-      saveAsTemplate: false
+      targetTutor: (targetTutor === 'all' || targetTutor === 'test') ? null : targetTutor,
+      name: isTest ? `Test Broadcast ${new Date().toLocaleString('ja-JP')}` : `Broadcast ${new Date().toLocaleString('ja-JP')}`,
+      saveAsTemplate: false,
+      isTest: isTest
     }, {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
     
     if (response.data.success) {
-      showNotification(`✅ ${response.data.results.sent}/${response.data.results.total}件 送信完了`, 'success');
+      const message = isTest 
+        ? '✅ テスト送信が完了しました' 
+        : `✅ ${response.data.results.sent}/${response.data.results.total}件 送信完了`;
+      showNotification(message, 'success');
       
       // Reload logs
       await loadBroadcastLogs();
