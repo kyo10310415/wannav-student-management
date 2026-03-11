@@ -6463,6 +6463,85 @@ async function renderDatabasePage() {
 
 
 // ===========================================
+// Broadcast Helper Functions
+// ===========================================
+
+/**
+ * Show modal dialog
+ */
+function showModal(content) {
+  const modalHtml = `
+    <div id="broadcast-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center" onclick="if(event.target.id === 'broadcast-modal') closeModal()">
+      <div class="relative bg-white rounded-lg shadow-xl max-w-2xl w-full m-4 p-6" onclick="event.stopPropagation()">
+        ${content}
+      </div>
+    </div>
+  `;
+  
+  // Remove existing modal if any
+  const existingModal = document.getElementById('broadcast-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+/**
+ * Close modal dialog
+ */
+function closeModal() {
+  const modal = document.getElementById('broadcast-modal');
+  if (modal) {
+    modal.remove();
+  }
+}
+
+/**
+ * Show notification toast
+ */
+function showNotification(message, type = 'info') {
+  const colors = {
+    success: 'bg-green-600',
+    error: 'bg-red-600',
+    warning: 'bg-yellow-600',
+    info: 'bg-blue-600'
+  };
+  
+  const icons = {
+    success: 'fa-check-circle',
+    error: 'fa-exclamation-circle',
+    warning: 'fa-exclamation-triangle',
+    info: 'fa-info-circle'
+  };
+  
+  const notificationHtml = `
+    <div id="broadcast-notification" class="${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg fixed top-4 right-4 z-50 flex items-center gap-3 animate-fade-in">
+      <i class="fas ${icons[type]}"></i>
+      <span>${message}</span>
+    </div>
+  `;
+  
+  // Remove existing notification if any
+  const existingNotification = document.getElementById('broadcast-notification');
+  if (existingNotification) {
+    existingNotification.remove();
+  }
+  
+  document.body.insertAdjacentHTML('beforeend', notificationHtml);
+  
+  // Auto remove after 3 seconds
+  setTimeout(() => {
+    const notification = document.getElementById('broadcast-notification');
+    if (notification) {
+      notification.style.opacity = '0';
+      notification.style.transition = 'opacity 0.3s ease-out';
+      setTimeout(() => notification.remove(), 300);
+    }
+  }, 3000);
+}
+
+// ===========================================
 // Broadcast Functions
 // ===========================================
 
