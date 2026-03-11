@@ -6616,10 +6616,51 @@ async function renderBroadcastPage() {
           
           <div class="mb-4">
             <label class="block text-sm font-semibold text-gray-700 mb-2">
-              <i class="fas fa-image mr-1"></i>添付画像URL（任意）
+              <i class="fas fa-image mr-1"></i>添付画像（任意）
             </label>
-            <input type="text" id="broadcast-image-url" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="https://example.com/image.png">
-            <p class="text-xs text-gray-500 mt-1">※画像URLを入力してください。空欄の場合は画像なしで送信されます。</p>
+            
+            <!-- Image Upload Section -->
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+              <!-- File Input -->
+              <input type="file" id="broadcast-image-file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" class="hidden" onchange="handleImageUpload(event)">
+              
+              <!-- Upload Button -->
+              <button type="button" onclick="document.getElementById('broadcast-image-file').click()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition mb-2">
+                <i class="fas fa-upload mr-2"></i>画像をアップロード
+              </button>
+              
+              <p class="text-xs text-gray-500 mb-2">対応形式: JPEG, PNG, GIF, WebP（最大8MB）</p>
+              
+              <!-- Image Preview -->
+              <div id="broadcast-image-preview" class="hidden mt-3">
+                <img id="broadcast-image-preview-img" src="" alt="Preview" class="max-w-full max-h-48 rounded border border-gray-300">
+                <button type="button" onclick="removeImagePreview()" class="mt-2 text-red-600 hover:text-red-800 text-sm">
+                  <i class="fas fa-times mr-1"></i>画像を削除
+                </button>
+              </div>
+              
+              <!-- Upload Status -->
+              <div id="broadcast-image-upload-status" class="hidden mt-2"></div>
+              
+              <!-- Hidden field for image URL -->
+              <input type="hidden" id="broadcast-image-url">
+            </div>
+            
+            <!-- Discord Markdown Help -->
+            <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p class="text-sm font-semibold text-blue-900 mb-2">
+                <i class="fas fa-info-circle mr-1"></i>Discord マークダウン対応
+              </p>
+              <div class="text-xs text-gray-700 space-y-1">
+                <p><code class="bg-white px-1 rounded">**太字**</code> → <strong>太字</strong></p>
+                <p><code class="bg-white px-1 rounded">*斜体*</code> → <em>斜体</em></p>
+                <p><code class="bg-white px-1 rounded">__下線__</code> → <u>下線</u></p>
+                <p><code class="bg-white px-1 rounded">~~取り消し線~~</code> → <del>取り消し線</del></p>
+                <p><code class="bg-white px-1 rounded"># 見出し1</code> → 大きな見出し</p>
+                <p><code class="bg-white px-1 rounded">## 見出し2</code> → 中くらいの見出し</p>
+                <p><code class="bg-white px-1 rounded">### 見出し3</code> → 小さな見出し</p>
+              </div>
+            </div>
           </div>
           
           <!-- Preview Section -->
@@ -7151,4 +7192,81 @@ function renderBroadcastLogs() {
   }).join('');
   
   container.innerHTML = logsHtml;
+}
+
+/**
+ * Handle image upload
+ */
+async function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Validate file size (max 8MB)
+  if (file.size > 8 * 1024 * 1024) {
+    showNotification('画像ファイルが大きすぎます（最大8MB）', 'error');
+    return;
+  }
+  
+  // Validate file type
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    showNotification('対応していないファイル形式です', 'error');
+    return;
+  }
+  
+  // Show upload status
+  const statusElement = document.getElementById('broadcast-image-upload-status');
+  statusElement.className = 'mt-2 text-blue-600';
+  statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>アップロード中...';
+  statusElement.classList.remove('hidden');
+  
+  try {
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    // Upload to server
+    const response = await axios.post(`${API_BASE}/api/broadcast/upload-image`, formData, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    
+    if (response.data.success) {
+      const imageUrl = response.data.imageUrl;
+      
+      // Set hidden URL field
+      document.getElementById('broadcast-image-url').value = imageUrl;
+      
+      // Show preview
+      const previewImg = document.getElementById('broadcast-image-preview-img');
+      previewImg.src = imageUrl;
+      document.getElementById('broadcast-image-preview').classList.remove('hidden');
+      
+      // Update status
+      statusElement.className = 'mt-2 text-green-600';
+      statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>アップロード完了';
+      
+      showNotification('✅ 画像をアップロードしました', 'success');
+    } else {
+      throw new Error(response.data.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    statusElement.className = 'mt-2 text-red-600';
+    statusElement.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>アップロード失敗';
+    showNotification('画像のアップロードに失敗しました', 'error');
+  }
+}
+
+/**
+ * Remove image preview
+ */
+function removeImagePreview() {
+  document.getElementById('broadcast-image-url').value = '';
+  document.getElementById('broadcast-image-file').value = '';
+  document.getElementById('broadcast-image-preview').classList.add('hidden');
+  document.getElementById('broadcast-image-upload-status').classList.add('hidden');
+  showNotification('画像を削除しました', 'info');
 }

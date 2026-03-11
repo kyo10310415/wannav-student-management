@@ -319,4 +319,84 @@ app.get('/tutors', async (c) => {
   }
 });
 
+/**
+ * POST /api/broadcast/upload-image
+ * Upload image to Discord CDN via webhook
+ */
+app.post('/upload-image', async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.parseBody();
+    const file = body['image'];
+    
+    if (!file || !file.size) {
+      return c.json({
+        success: false,
+        error: 'No image file provided'
+      }, 400);
+    }
+    
+    // Check file size (max 8MB)
+    if (file.size > 8 * 1024 * 1024) {
+      return c.json({
+        success: false,
+        error: 'Image file too large (max 8MB)'
+      }, 400);
+    }
+    
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return c.json({
+        success: false,
+        error: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP'
+      }, 400);
+    }
+    
+    // Import axios and FormData
+    const axios = (await import('axios')).default;
+    const FormData = (await import('form-data')).default;
+    
+    // Use test webhook to upload image
+    const testWebhookUrl = 'https://discord.com/api/webhooks/1282616705817903146/M4KSUtmoHYSDqySMBgtgjU0wZywkUkVtfh3KOOA-BNzgXMnwVnEphKwuleMXhFn60MYd';
+    
+    // Create FormData and append file
+    const formData = new FormData();
+    
+    // Convert file to buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    formData.append('file', buffer, {
+      filename: file.name,
+      contentType: file.type
+    });
+    
+    // Send to Discord webhook
+    const response = await axios.post(testWebhookUrl, formData, {
+      headers: {
+        ...formData.getHeaders()
+      }
+    });
+    
+    // Extract image URL from Discord response
+    const imageUrl = response.data.attachments?.[0]?.url;
+    
+    if (!imageUrl) {
+      throw new Error('Failed to get image URL from Discord');
+    }
+    
+    return c.json({
+      success: true,
+      imageUrl: imageUrl
+    });
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;
