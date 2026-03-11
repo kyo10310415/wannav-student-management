@@ -392,16 +392,24 @@ async function loadTodayLessonDates() {
       const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
       const [yearStr, monthStr, dayStr] = dateStr.split('-');
       
-      // Extract time from lesson_date (stored as JST in UTC format)
-      const timeStr = lesson.lesson_date.split('T')[1]?.split('.')[0] || '00:00:00';
-      const [hourStr, minuteStr] = timeStr.split(':');
-      const hour = parseInt(hourStr);
-      const minute = parseInt(minuteStr);
+      // Extract time from lesson_date (stored as JST in UTC format) or use lesson_time from sheet
+      let timeStr;
+      if (lesson.lesson_time) {
+        // Use time from spreadsheet (J column)
+        timeStr = lesson.lesson_time;
+      } else {
+        // Fallback: extract from lesson_date
+        const timePart = lesson.lesson_date.split('T')[1]?.split('.')[0] || '00:00:00';
+        const [hourStr, minuteStr] = timePart.split(':');
+        const hour = parseInt(hourStr);
+        const minute = parseInt(minuteStr);
+        timeStr = `${hour}:${minute.toString().padStart(2, '0')}`;
+      }
       
       lessonDates[lesson.student_id].push({
         date: utcDate,
         formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`,
-        time: `${hour}:${minute.toString().padStart(2, '0')}`,
+        time: timeStr,
         meet_link: lesson.meet_link || null
       });
     });

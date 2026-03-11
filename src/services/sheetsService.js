@@ -53,7 +53,7 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: spreadsheetId,
-      range: `${sheetName}!A2:I`, // ヘッダー行をスキップ（A2から開始）
+      range: `${sheetName}!A2:J`, // ヘッダー行をスキップ（A2から開始）、J列まで取得
     });
 
     const rows = response.data.values || [];
@@ -71,6 +71,7 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
         title: row[5] || null,
         description: row[6] || null,
         meet_link: row[7] || null,
+        lesson_time: row[9] || null, // J列: 時間 (HH:MM形式)
       };
     }).filter(lesson => lesson.student_id); // 学籍番号がないものは除外
 

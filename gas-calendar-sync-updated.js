@@ -224,8 +224,8 @@ function syncLessonsIncremental() {
         // Tutor名を抽出
         const tutorName = extractTutorName(title);
         
-        // Meetリンクを抽出
-        const meetLink = extractMeetLink(description);
+        // Meetリンクを抽出（getHangoutLink()を優先、なければ説明文から）
+        const meetLink = extractMeetLink(event, description);
         
         const rowData = [
           eventId,
@@ -275,44 +275,69 @@ function syncLessonsIncremental() {
     }
   });
   
-  // 削除されたイベントを検出（改善版 - 未来のイベントのみ対象）
-  // 過去のイベントは完了した可能性があるため削除検知しない
+  // ========================================
+  // 削除機能を一時的に無効化（デバッグ中）
+  // ========================================
+  /*
+  // 削除されたイベントを検出（改善版）
+  // 1. 取得範囲内でカレンダーから消えたイベント（キャンセル/リスケ）
+  // 2. 取得範囲外のイベント（古すぎる/遠すぎる未来）
   const now = new Date();
   const rowsToDelete = [];
   const deletedEventsData = []; // 削除されたイベントのデータを保存
+  let outOfRangeCount = 0; // 範囲外削除のカウント
   
   existingData.forEach((value, eventId) => {
     const eventDate = new Date(value.data[4]); // レッスン日時
     
-    // 未来のイベントのみ削除検知（今日以降）
-    if (eventDate >= today && eventDate <= endDate) {
-      // カレンダーから取得できなかった = 削除された
+    // ケース1: 取得範囲外のイベント（古すぎる過去 or 遠すぎる未来）
+    if (eventDate < startDate || eventDate > endDate) {
+      rowsToDelete.push(value.rowNumber);
+      deletedEvents++;
+      outOfRangeCount++;
+      
+      // 削除されたイベントのデータを保存（削除日時と削除理由を追加）
+      const deletedData = [...value.data]; // 既存データをコピー
+      deletedData.push(new Date()); // 削除検知日時を追加
+      deletedData.push('取得範囲外'); // 削除理由を追加
+      deletedEventsData.push(deletedData);
+      
+      // 削除ログ（最初の5件のみ）
+      if (outOfRangeCount <= 5) {
+        Logger.log(`削除検知（範囲外）: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
+      }
+    }
+    // ケース2: 取得範囲内だがカレンダーから取得できなかった（削除/キャンセル）
+    else if (eventDate >= startDate && eventDate <= endDate) {
       if (!fetchedEventIds.has(eventId)) {
         rowsToDelete.push(value.rowNumber);
         deletedEvents++;
         
-        // 削除されたイベントのデータを保存（削除日時を追加）
+        // 削除されたイベントのデータを保存（削除日時と削除理由を追加）
         const deletedData = [...value.data]; // 既存データをコピー
         deletedData.push(new Date()); // 削除検知日時を追加
+        deletedData.push('カレンダーから削除'); // 削除理由を追加
         deletedEventsData.push(deletedData);
         
         // 削除ログ（最初の10件のみ）
-        if (deletedEvents <= 10) {
-          Logger.log(`削除検知（未来）: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
+        if (deletedEvents - outOfRangeCount <= 10) {
+          Logger.log(`削除検知（キャンセル）: ${value.data[1]} - ${value.data[2]} - ${formatDate(eventDate)}`);
         }
       }
     }
-    // 過去のイベントは削除検知しない（完了したイベントのため保持）
-    else if (eventDate < today) {
-      // 何もしない（過去のイベントは保持）
-    }
   });
+  */
   
-  if (deletedEvents > 10) {
-    Logger.log(`...他 ${deletedEvents - 10}件の削除イベント`);
+  // 削除機能を無効化（一時的）
+  const rowsToDelete = [];
+  const deletedEventsData = [];
+  let outOfRangeCount = 0;
+  
+  if (deletedEvents > 15) {
+    Logger.log(`...他 ${deletedEvents - 15}件の削除イベント`);
   }
   
-  Logger.log(`差分検出: 新規${newEvents}件、更新${updatedEvents}件、削除${deletedEvents}件`);
+  Logger.log(`差分検出: 新規${newEvents}件、更新${updatedEvents}件、削除${deletedEvents}件（範囲外: ${outOfRangeCount}件、キャンセル: ${deletedEvents - outOfRangeCount}件）`);
   
   // 削除されたイベントを別シートに保存
   if (deletedEventsData.length > 0) {
@@ -340,7 +365,7 @@ function syncLessonsIncremental() {
   Logger.log(`新規: ${newEvents}件、更新: ${updatedEvents}件、削除: ${deletedEvents}件`);
   
   // メタ情報を記録
-  updateMetaSheet(ss, totalEvents, newEvents + updatedEvents + deletedEvents, successCalendars, failedCalendars, executionTime, notionEmails.length, TUTOR_EMAILS.length, newEvents, updatedEvents, deletedEvents);
+  updateMetaSheet(ss, totalEvents, newEvents + updatedEvents + deletedEvents, successCalendars, failedCalendars, executionTime, notionEmails.length, TUTOR_EMAILS.length, newEvents, updatedEvents, deletedEvents, outOfRangeCount);
 }
 
 /**
@@ -367,16 +392,17 @@ function saveDeletedEvents(ss, deletedEventsData) {
       '説明',
       'Meetリンク',
       '最終更新日時',
-      '削除検知日時'
+      '削除検知日時',
+      '削除理由'
     ]);
     
     // ヘッダー行を太字に
-    deletedSheet.getRange(1, 1, 1, 10).setFontWeight('bold');
+    deletedSheet.getRange(1, 1, 1, 11).setFontWeight('bold');
   }
   
   // 削除されたイベントを追記（末尾に追加）
   const lastRow = deletedSheet.getLastRow();
-  deletedSheet.getRange(lastRow + 1, 1, deletedEventsData.length, 10).setValues(deletedEventsData);
+  deletedSheet.getRange(lastRow + 1, 1, deletedEventsData.length, 11).setValues(deletedEventsData);
   
   Logger.log(`✅ 削除されたイベントを保存完了: ${deletedEventsData.length}件`);
 }
@@ -483,7 +509,7 @@ function applyBatchUpdates(sheet, rowsToUpdate, rowsToAdd, rowsToDelete) {
 /**
  * 同期メタ情報を記録
  */
-function updateMetaSheet(ss, totalEvents, validEvents, successCalendars, failedCalendars, executionTime, notionTutorCount, accessibleTutorCount, newEvents, updatedEvents, deletedEvents) {
+function updateMetaSheet(ss, totalEvents, validEvents, successCalendars, failedCalendars, executionTime, notionTutorCount, accessibleTutorCount, newEvents, updatedEvents, deletedEvents, outOfRangeCount = 0) {
   const metaSheetName = '同期メタ情報';
   let metaSheet = ss.getSheetByName(metaSheetName);
   
@@ -499,14 +525,16 @@ function updateMetaSheet(ss, totalEvents, validEvents, successCalendars, failedC
   
   // データ
   metaSheet.appendRow(['最終同期日時', new Date()]);
-  metaSheet.appendRow(['同期方式', '差分更新（削除検知強化版）']);
+  metaSheet.appendRow(['同期方式', '差分更新（範囲外削除対応版）']);
   metaSheet.appendRow(['更新対象期間', `過去${INCREMENTAL_DAYS_BACK}日～未来${INCREMENTAL_DAYS_FORWARD}日`]);
   metaSheet.appendRow(['Notion Tutor総数', notionTutorCount]);
   metaSheet.appendRow(['アクセス可能カレンダー数', accessibleTutorCount]);
   metaSheet.appendRow(['更新対象イベント数', totalEvents]);
   metaSheet.appendRow(['新規追加', newEvents]);
   metaSheet.appendRow(['更新', updatedEvents]);
-  metaSheet.appendRow(['削除', deletedEvents]);
+  metaSheet.appendRow(['削除合計', deletedEvents]);
+  metaSheet.appendRow(['　├ 範囲外削除', outOfRangeCount]);
+  metaSheet.appendRow(['　└ キャンセル削除', deletedEvents - outOfRangeCount]);
   metaSheet.appendRow(['成功カレンダー数', successCalendars]);
   metaSheet.appendRow(['失敗カレンダー数', failedCalendars]);
   metaSheet.appendRow(['実行時間（秒）', executionTime]);
@@ -523,8 +551,11 @@ function updateMetaSheet(ss, totalEvents, validEvents, successCalendars, failedC
 function extractStudentId(description) {
   if (!description) return null;
   
+  // 文字列に変換（オブジェクトや配列の場合に対応）
+  const descStr = String(description);
+  
   // HTMLタグを削除してから抽出（<b>, </b>, <br>など）
-  const cleanDescription = description.replace(/<[^>]*>/g, '');
+  const cleanDescription = descStr.replace(/<[^>]*>/g, '');
   
   // パターン1: 学籍番号：OLTS240488-AR または 学籍番号: OLTS240488-AR
   let match = cleanDescription.match(/学籍番号[：:\s]*([A-Z0-9-]+)/i);
@@ -550,17 +581,46 @@ function extractStudentId(description) {
  */
 function extractTutorName(title) {
   if (!title) return null;
-  const match = title.match(/WannaVレッスン予約\s*[（(]([^)）]+)[)）]/);
+  
+  // 文字列に変換（オブジェクトや配列の場合に対応）
+  const titleStr = String(title);
+  
+  const match = titleStr.match(/WannaVレッスン予約\s*[（(]([^)）]+)[)）]/);
   return match ? match[1] : null;
 }
 
 /**
- * Meetリンクを抽出
+ * Meetリンクを抽出（改善版）
+ * @param {CalendarEvent} event - カレンダーイベントオブジェクト
+ * @param {string} description - イベントの説明文
+ * @returns {string|null} - MeetリンクURL
  */
-function extractMeetLink(description) {
+function extractMeetLink(event, description) {
+  // 方法1: getHangoutLink()を使用（最も確実）
+  try {
+    const hangoutLink = event.getHangoutLink();
+    if (hangoutLink) {
+      return hangoutLink;
+    }
+  } catch (error) {
+    // getHangoutLink()が失敗した場合は次の方法へ
+  }
+  
+  // 方法2: 説明文から正規表現で抽出
   if (!description) return null;
-  const match = description.match(/https?:\/\/meet\.google\.com\/[a-z-]+/i);
-  return match ? match[0] : null;
+  
+  // 文字列に変換（オブジェクトや配列の場合に対応）
+  const descStr = String(description);
+  
+  // パターン1: https://meet.google.com/xxx-xxxx-xxx
+  let match = descStr.match(/https?:\/\/meet\.google\.com\/[a-z-]+/i);
+  if (match) return match[0];
+  
+  // パターン2: meet.google.com/xxx-xxxx-xxx (httpsなし)
+  match = descStr.match(/meet\.google\.com\/[a-z-]+/i);
+  if (match) return 'https://' + match[0];
+  
+  return null;
 }
 
 // ========== ユーティリティ関数 ==========
@@ -731,7 +791,7 @@ function debugEventExtraction() {
     Logger.log(`抽出されたTutor名: ${tutorName || '❌ 抽出失敗'}`);
     
     // Meetリンク抽出テスト
-    const meetLink = extractMeetLink(description);
+    const meetLink = extractMeetLink(event, description);
     Logger.log(`抽出されたMeetリンク: ${meetLink || '(なし)'}`);
   });
   
@@ -860,7 +920,7 @@ function debugSpecificSchedule(searchKeyword) {
     }
     
     // Meetリンク抽出
-    const meetLink = extractMeetLink(item.description);
+    const meetLink = extractMeetLink(item.event, item.description);
     Logger.log(`Meetリンク: ${meetLink || '(なし)'}`);
     
     // スプレッドシートに存在するか確認
@@ -956,3 +1016,176 @@ function testSpecificTutor() {
   Logger.log(`検索対象: ${tutorName}`);
   debugSpecificSchedule(tutorName);
 }
+
+/**
+ * 削除原因を診断する関数
+ */
+function diagnoseDeletionIssue() {
+  Logger.log('========== 削除原因診断 ==========');
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const deletedSheet = ss.getSheetByName(DELETED_SHEET_NAME);
+  
+  if (!deletedSheet) {
+    Logger.log('❌ 削除されたレッスンデータシートが見つかりません');
+    return;
+  }
+  
+  // 削除されたデータを取得
+  const deletedData = deletedSheet.getDataRange().getValues();
+  Logger.log(`削除されたイベント総数: ${deletedData.length - 1}件（ヘッダー除く）`);
+  
+  if (deletedData.length < 2) {
+    Logger.log('削除されたデータがありません');
+    return;
+  }
+  
+  // 削除理由の集計
+  const reasonCount = {
+    '取得範囲外': 0,
+    'カレンダーから削除': 0,
+    'その他': 0
+  };
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDate = new Date(today.getTime() - INCREMENTAL_DAYS_BACK * 24 * 60 * 60 * 1000);
+  const endDate = new Date(today.getTime() + (INCREMENTAL_DAYS_FORWARD + 1) * 24 * 60 * 60 * 1000);
+  
+  Logger.log(`現在の取得範囲: ${formatDate(startDate)} ～ ${formatDate(endDate)}`);
+  Logger.log('');
+  
+  // ヘッダー行をスキップ（インデックス0）
+  for (let i = 1; i < Math.min(deletedData.length, 21); i++) {
+    const row = deletedData[i];
+    const studentId = row[1]; // 学籍番号
+    const tutorName = row[2]; // Tutor名
+    const eventDate = new Date(row[4]); // レッスン日時
+    const deleteReason = row[10] || 'その他'; // 削除理由
+    const deleteTime = row[9]; // 削除検知日時
+    
+    // 削除理由をカウント
+    if (reasonCount.hasOwnProperty(deleteReason)) {
+      reasonCount[deleteReason]++;
+    } else {
+      reasonCount['その他']++;
+    }
+    
+    // 最初の20件を詳細表示
+    if (i <= 20) {
+      Logger.log(`[${i}] ${studentId} - ${tutorName}`);
+      Logger.log(`    レッスン日時: ${formatDate(eventDate)}`);
+      Logger.log(`    削除理由: ${deleteReason}`);
+      Logger.log(`    削除検知: ${formatDate(new Date(deleteTime))}`);
+      
+      // 範囲内かチェック
+      const isInRange = eventDate >= startDate && eventDate <= endDate;
+      Logger.log(`    範囲判定: ${isInRange ? '✅ 範囲内' : '❌ 範囲外'}`);
+      Logger.log('');
+    }
+  }
+  
+  if (deletedData.length > 21) {
+    Logger.log(`...他 ${deletedData.length - 21}件の削除イベント`);
+  }
+  
+  Logger.log('========== 削除理由の集計 ==========');
+  Logger.log(`取得範囲外: ${reasonCount['取得範囲外']}件`);
+  Logger.log(`カレンダーから削除: ${reasonCount['カレンダーから削除']}件`);
+  Logger.log(`その他: ${reasonCount['その他']}件`);
+  Logger.log(`合計: ${deletedData.length - 1}件`);
+  Logger.log('');
+  
+  // カレンダーから削除された件数が多い場合の警告
+  if (reasonCount['カレンダーから削除'] > 10) {
+    Logger.log('⚠️ 警告: カレンダーから削除されたイベントが多すぎます');
+    Logger.log('考えられる原因:');
+    Logger.log('1. description.match エラーで学籍番号が抽出できなかった');
+    Logger.log('2. イベントIDの形式が変わった');
+    Logger.log('3. カレンダーのアクセス権限が変わった');
+    Logger.log('');
+    Logger.log('💡 解決方法: restoreDeletedEvents() を実行してデータを復元してください');
+  }
+}
+
+/**
+ * 削除されたイベントを復元する関数
+ * 「カレンダーから削除」理由のみを復元（取得範囲外は復元しない）
+ */
+function restoreDeletedEvents() {
+  Logger.log("========== 削除されたイベントの復元 ==========");
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const deletedSheet = ss.getSheetByName(DELETED_SHEET_NAME);
+  
+  if (!deletedSheet) {
+    Logger.log("❌ 削除されたレッスンデータシートが見つかりません");
+    return;
+  }
+  
+  // 削除されたデータを取得
+  const deletedData = deletedSheet.getDataRange().getValues();
+  
+  if (deletedData.length < 2) {
+    Logger.log("復元するデータがありません");
+    return;
+  }
+  
+  // 復元対象: 「カレンダーから削除」理由のみ
+  const rowsToRestore = [];
+  
+  for (let i = 1; i < deletedData.length; i++) {
+    const row = deletedData[i];
+    const deleteReason = row[10]; // 削除理由（K列）
+    
+    // 「カレンダーから削除」のみを復元（取得範囲外は復元しない）
+    if (deleteReason === "カレンダーから削除") {
+      // 元の9列のデータのみを復元（削除検知日時と削除理由を除外）
+      const originalData = row.slice(0, 9);
+      rowsToRestore.push(originalData);
+    }
+  }
+  
+  Logger.log(`復元対象: ${rowsToRestore.length}件（「カレンダーから削除」理由のみ）`);
+  
+  if (rowsToRestore.length === 0) {
+    Logger.log("復元するデータがありません");
+    return;
+  }
+  
+  // 既存データのイベントIDを取得（重複チェック用）
+  const existingData = loadExistingData(sheet);
+  const existingEventIds = new Set(existingData.keys());
+  
+  // 重複を除いて復元
+  const uniqueRowsToRestore = rowsToRestore.filter(row => {
+    const eventId = row[0];
+    return !existingEventIds.has(eventId);
+  });
+  
+  Logger.log(`重複を除外: ${uniqueRowsToRestore.length}件を復元`);
+  
+  if (uniqueRowsToRestore.length === 0) {
+    Logger.log("復元するデータがありません（全て既に存在）");
+    return;
+  }
+  
+  // レッスン予約データシートに復元
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow + 1, 1, uniqueRowsToRestore.length, 9).setValues(uniqueRowsToRestore);
+  
+  // 日付でソート（昇順）
+  if (sheet.getLastRow() > 1) {
+    sheet.sort(5); // 5列目（レッスン日時）でソート
+  }
+  
+  Logger.log(`✅ 復元完了: ${uniqueRowsToRestore.length}件`);
+  Logger.log("");
+  Logger.log("次のステップ:");
+  Logger.log("1. スプレッドシート「レッスン予約データ」を確認");
+  Logger.log("2. データが正しく復元されているか確認");
+  Logger.log("3. 問題なければ syncLessonsIncremental() を実行して同期");
+}
+

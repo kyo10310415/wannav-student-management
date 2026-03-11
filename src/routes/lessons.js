@@ -118,8 +118,8 @@ app.get('/sync/:year/:month', async (c) => {
       try {
         await query(
           `INSERT INTO lessons 
-            (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+            (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, lesson_time, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
           ON CONFLICT (calendar_event_id) 
           DO UPDATE SET
             student_id = EXCLUDED.student_id,
@@ -128,6 +128,7 @@ app.get('/sync/:year/:month', async (c) => {
             title = EXCLUDED.title,
             description = EXCLUDED.description,
             meet_link = EXCLUDED.meet_link,
+            lesson_time = EXCLUDED.lesson_time,
             updated_at = CURRENT_TIMESTAMP`,
           [
             lesson.calendar_event_id,
@@ -136,7 +137,8 @@ app.get('/sync/:year/:month', async (c) => {
             lesson.lesson_date,
             lesson.title,
             lesson.description,
-            lesson.meet_link
+            lesson.meet_link,
+            lesson.lesson_time
           ]
         );
         validLessons++;
@@ -361,8 +363,8 @@ app.get('/sync-from-sheet', async (c) => {
       try {
         await query(
           `INSERT INTO lessons 
-            (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+            (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, lesson_time, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
           ON CONFLICT (calendar_event_id) 
           DO UPDATE SET
             student_id = EXCLUDED.student_id,
@@ -371,6 +373,7 @@ app.get('/sync-from-sheet', async (c) => {
             title = EXCLUDED.title,
             description = EXCLUDED.description,
             meet_link = EXCLUDED.meet_link,
+            lesson_time = EXCLUDED.lesson_time,
             updated_at = CURRENT_TIMESTAMP`,
           [
             lesson.calendar_event_id,
@@ -379,7 +382,8 @@ app.get('/sync-from-sheet', async (c) => {
             lesson.lesson_date,
             lesson.title,
             lesson.description,
-            lesson.meet_link
+            lesson.meet_link,
+            lesson.lesson_time
           ]
         );
         validLessons++;

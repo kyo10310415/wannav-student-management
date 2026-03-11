@@ -165,11 +165,12 @@ function syncLessonsIncrementalFixed() {
       'タイトル',
       '説明',
       'Meetリンク',
-      '最終更新日時'
+      '最終更新日時',
+      '時間'
     ]);
     
     // ヘッダー行を太字に
-    sheet.getRange(1, 1, 1, 9).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, 10).setFontWeight('bold');
   }
   
   // 既存データを読み込み（イベントIDをキーにしたマップ）
@@ -289,6 +290,9 @@ function syncLessonsIncrementalFixed() {
           eventsWithoutMeet++;
         }
         
+        // 時間を抽出（HH:MM形式）
+        const lessonTime = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'HH:mm');
+        
         const rowData = [
           eventId,
           studentId,
@@ -298,7 +302,8 @@ function syncLessonsIncrementalFixed() {
           title,
           description || '',
           meetLink || '',
-          new Date()
+          new Date(),
+          lessonTime
         ];
         
         // 既存データと比較
@@ -441,17 +446,18 @@ function saveDeletedEvents(ss, deletedEventsData) {
       '説明',
       'Meetリンク',
       '最終更新日時',
+      '時間',
       '削除検知日時',
       '削除理由'
     ]);
     
     // ヘッダー行を太字に
-    deletedSheet.getRange(1, 1, 1, 11).setFontWeight('bold');
+    deletedSheet.getRange(1, 1, 1, 12).setFontWeight('bold');
   }
   
   // 削除されたイベントを追記（末尾に追加）
   const lastRow = deletedSheet.getLastRow();
-  deletedSheet.getRange(lastRow + 1, 1, deletedEventsData.length, 11).setValues(deletedEventsData);
+  deletedSheet.getRange(lastRow + 1, 1, deletedEventsData.length, 12).setValues(deletedEventsData);
   
   Logger.log(`✅ 削除されたイベントを保存完了: ${deletedEventsData.length}件`);
 }
@@ -567,7 +573,7 @@ function applyBatchUpdates(sheet, rowsToUpdate, rowsToAdd, rowsToDelete) {
     // バッチ処理で一度に更新
     rowsToUpdate.forEach(item => {
       try {
-        sheet.getRange(item.rowNumber, 1, 1, 9).setValues([item.data]);
+        sheet.getRange(item.rowNumber, 1, 1, 10).setValues([item.data]);
       } catch (error) {
         Logger.log(`⚠️ 更新エラー（行${item.rowNumber}）: ${error.message}`);
       }
@@ -582,7 +588,7 @@ function applyBatchUpdates(sheet, rowsToUpdate, rowsToAdd, rowsToDelete) {
     
     // 一度に全行追加
     const lastRow = sheet.getLastRow();
-    sheet.getRange(lastRow + 1, 1, rowsToAdd.length, 9).setValues(rowsToAdd);
+    sheet.getRange(lastRow + 1, 1, rowsToAdd.length, 10).setValues(rowsToAdd);
     
     Logger.log(`✅ 追加完了: ${rowsToAdd.length}件`);
   }
