@@ -392,9 +392,16 @@ async function loadTodayLessonDates() {
       const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
       const [yearStr, monthStr, dayStr] = dateStr.split('-');
       
+      // Extract time from lesson_date (stored as JST in UTC format)
+      const timeStr = lesson.lesson_date.split('T')[1]?.split('.')[0] || '00:00:00';
+      const [hourStr, minuteStr] = timeStr.split(':');
+      const hour = parseInt(hourStr);
+      const minute = parseInt(minuteStr);
+      
       lessonDates[lesson.student_id].push({
         date: utcDate,
         formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`,
+        time: `${hour}:${minute.toString().padStart(2, '0')}`,
         meet_link: lesson.meet_link || null
       });
     });
@@ -705,7 +712,7 @@ function renderStudentRows() {
     const colorClass = getLessonCountColor(lessonCount);
     const dates = lessonDates[student.student_id] || [];
     const datesStr = dates.length > 0 
-      ? dates.map(d => d.formatted).join(', ')
+      ? dates.map(d => `${d.formatted} ${d.time || ''}`).join(', ')
       : '-';
     
     // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
@@ -2632,6 +2639,7 @@ async function renderTodayLessonsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
@@ -2696,18 +2704,20 @@ function renderTodayStudentRows(todayStudents) {
     const suspensionMonths = student.suspension_months || 0;
     const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
     
-    // Get Meet link for today's lesson
+    // Get Meet link and time for today's lesson
     const studentLessonDates = lessonDates[student.student_id] || [];
     const today = new Date();
     const todayFormatted = `${today.getMonth() + 1}/${today.getDate()}`;
     const todayLesson = studentLessonDates.find(d => d.formatted === todayFormatted);
     const meetLink = todayLesson?.meet_link || null;
+    const lessonTime = todayLesson?.time || null;
     
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${lessonTime || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
