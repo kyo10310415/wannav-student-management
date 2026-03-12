@@ -31,7 +31,6 @@ import broadcastRoutes from './routes/broadcast.js';
 import { sendDailyReminders } from './services/reminderService.js';
 import { sendDailyStatsReport } from './services/statsReportService.js';
 import { checkAndExecuteSchedules } from './services/schedulerService.js';
-import { imageStorage } from './routes/broadcast.js';
 
 const app = new Hono();
 
@@ -147,7 +146,7 @@ if (process.env.DISCORD_STATS_REPORT_ENABLED !== 'false') {
 console.log('Broadcast scheduler: ENABLED (checks every minute)');
 cron.schedule('* * * * *', async () => {
   try {
-    await checkAndExecuteSchedules(imageStorage);
+    await checkAndExecuteSchedules();
   } catch (error) {
     console.error('Error checking broadcast schedules:', error);
   }

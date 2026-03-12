@@ -82,7 +82,7 @@ export async function getActiveSchedules() {
  * @param {number} scheduleId - Schedule ID
  * @returns {Object} - Execution result
  */
-export async function executeScheduledBroadcast(scheduleId, imageStorage = null) {
+export async function executeScheduledBroadcast(scheduleId) {
   try {
     // Get schedule details
     const scheduleResult = await query(
@@ -133,7 +133,7 @@ export async function executeScheduledBroadcast(scheduleId, imageStorage = null)
     };
     
     // Send broadcast
-    const result = await sendBroadcast(messageData, targetStudents, schedule.created_by, imageStorage);
+    const result = await sendBroadcast(messageData, targetStudents, schedule.created_by);
     
     // Update last_sent_at
     await query(
@@ -166,7 +166,7 @@ export async function executeScheduledBroadcast(scheduleId, imageStorage = null)
  * Check and execute due schedules
  * This function should be called periodically (e.g., every minute)
  */
-export async function checkAndExecuteSchedules(imageStorage = null) {
+export async function checkAndExecuteSchedules() {
   try {
     const schedules = await getActiveSchedules();
     
@@ -203,7 +203,7 @@ export async function checkAndExecuteSchedules(imageStorage = null) {
           
           if (!lastSent || lastSent < oneHourAgo) {
             console.log('[Scheduler] Executing schedule:', schedule.id, schedule.name);
-            await executeScheduledBroadcast(schedule.id, imageStorage);
+            await executeScheduledBroadcast(schedule.id);
           } else {
             console.log('[Scheduler] Schedule already sent recently:', schedule.id);
           }
