@@ -404,23 +404,12 @@ app.post('/upload-image', async (c) => {
       throw new Error('Failed to get image URL from Discord');
     }
     
-    // Delete the upload message immediately to avoid duplicate images
-    // Extract webhook ID and token from URL
-    const webhookMatch = testWebhookUrl.match(/webhooks\/(\d+)\/([^\/]+)/);
-    if (webhookMatch && messageId) {
-      const webhookId = webhookMatch[1];
-      const webhookToken = webhookMatch[2];
-      
-      try {
-        await axios.delete(
-          `https://discord.com/api/webhooks/${webhookId}/${webhookToken}/messages/${messageId}`
-        );
-        console.log('[Broadcast] Deleted upload preview message');
-      } catch (deleteError) {
-        console.warn('[Broadcast] Failed to delete upload message:', deleteError.message);
-        // Don't fail the upload if deletion fails
-      }
-    }
+    // NOTE: We do NOT delete the upload message because:
+    // 1. Deleting the message invalidates the image URL
+    // 2. Discord CDN URLs are tied to the message they're attached to
+    // 3. Keeping the message ensures the image URL remains accessible
+    // The upload message is sent to a test channel, so it won't interfere with actual broadcasts
+    console.log('[Broadcast] Keeping upload message (ID:', messageId, ') to preserve image URL');
     
     console.log('[Broadcast] Returning image URL to client:', imageUrl);
     
