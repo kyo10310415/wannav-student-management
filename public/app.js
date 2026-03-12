@@ -6582,7 +6582,9 @@ async function renderBroadcastPage() {
                 <i class="fas fa-users mr-1"></i>送信対象
               </label>
               <select id="broadcast-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                <option value="active">アクティブ生徒のみ</option>
+                <option value="アクティブ">アクティブ生徒のみ</option>
+                <option value="レッスン準備中">レッスン準備中</option>
+                <option value="休会">休会中</option>
               </select>
             </div>
             
@@ -6766,7 +6768,7 @@ async function loadBroadcastTutors() {
  * Update preview count
  */
 async function updatePreviewCount() {
-  const targetStatus = document.getElementById('broadcast-target-status')?.value || 'active';
+  const targetStatus = document.getElementById('broadcast-target-status')?.value || 'アクティブ';
   const targetTutor = document.getElementById('broadcast-target-tutor')?.value || 'all';
   const previewElement = document.getElementById('preview-count');
   

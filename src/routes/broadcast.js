@@ -68,18 +68,8 @@ app.post('/preview', async (c) => {
     const user = c.get('user');
     const { targetStatus, targetTutor } = await c.req.json();
     
-    // Debug: Check what status values exist in database
-    const statusCheck = await query(
-      'SELECT DISTINCT status, COUNT(*) as count FROM students GROUP BY status'
-    );
-    console.log('[Broadcast] Available status values in database:', statusCheck.rows);
-    
-    // Debug: Check total student count
-    const totalCount = await query('SELECT COUNT(*) as total FROM students');
-    console.log('[Broadcast] Total students in database:', totalCount.rows[0].total);
-    
     const students = await getTargetStudents(
-      targetStatus || 'active',
+      targetStatus || 'アクティブ',
       targetTutor,
       user.email,
       user.role
@@ -151,7 +141,7 @@ app.post('/send', async (c) => {
     
     // Get target students for normal mode
     const targetStudents = await getTargetStudents(
-      messageData.targetStatus || 'active',
+      messageData.targetStatus || 'アクティブ',
       messageData.targetTutor,
       user.email,
       user.role
@@ -506,7 +496,7 @@ app.post('/schedules', async (c) => {
           scheduleData.content,
           scheduleData.imageId || null,
           scheduleData.channelType,
-          scheduleData.targetStatus || 'active',
+          scheduleData.targetStatus || 'アクティブ',
           scheduleData.targetTutor || null,
           scheduleData.scheduleCron,
           scheduleData.scheduleEnabled !== false,
@@ -540,7 +530,7 @@ app.post('/schedules', async (c) => {
           scheduleData.content,
           scheduleData.imageId || null,
           scheduleData.channelType,
-          scheduleData.targetStatus || 'active',
+          scheduleData.targetStatus || 'アクティブ',
           scheduleData.targetTutor || null,
           user.email,
           scheduleData.scheduleCron,
