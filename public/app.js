@@ -6583,6 +6583,7 @@ async function renderBroadcastPage() {
               </label>
               <select id="broadcast-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <option value="アクティブ">アクティブ生徒のみ</option>
+                <option value="レッスン中">レッスン中（永久会員除く）</option>
                 <option value="レッスン準備中">レッスン準備中</option>
                 <option value="休会">休会中</option>
               </select>
@@ -7104,8 +7105,23 @@ function loadTemplate(templateId) {
   if (!template) return;
   
   document.getElementById('broadcast-content').value = template.content;
-  document.getElementById('broadcast-image-url').value = template.image_url || '';
   document.getElementById('broadcast-channel-type').value = template.channel_type;
+  
+  // Load image if exists
+  if (template.image_url) {
+    document.getElementById('broadcast-image-url').value = template.image_url;
+    
+    // Show upload status message (can't show preview for server-stored images)
+    const statusElement = document.getElementById('broadcast-image-upload-status');
+    statusElement.className = 'mt-2 text-blue-600';
+    statusElement.innerHTML = '<i class="fas fa-image mr-2"></i>画像が設定されています（imageId: ' + template.image_url.substring(0, 20) + '...)';
+    statusElement.classList.remove('hidden');
+  } else {
+    // Clear image
+    document.getElementById('broadcast-image-url').value = '';
+    document.getElementById('broadcast-image-preview').classList.add('hidden');
+    document.getElementById('broadcast-image-upload-status').classList.add('hidden');
+  }
   
   if (template.target_tutor) {
     document.getElementById('broadcast-target-tutor').value = template.target_tutor;
@@ -7485,6 +7501,7 @@ function showScheduleModal(scheduleId = null) {
           </label>
           <select id="schedule-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
             <option value="アクティブ">アクティブ生徒のみ</option>
+            <option value="レッスン中">レッスン中（永久会員除く）</option>
             <option value="レッスン準備中">レッスン準備中</option>
             <option value="休会">休会中</option>
           </select>
@@ -7518,6 +7535,28 @@ function showScheduleModal(scheduleId = null) {
             <i class="fas fa-comment-alt mr-1"></i>メッセージ内容
           </label>
           <textarea id="schedule-content" rows="4" placeholder="送信するメッセージを入力してください..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">${schedule ? schedule.content : ''}</textarea>
+        </div>
+        
+        <!-- Image Upload for Schedule -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-image mr-1"></i>添付画像（任意）
+          </label>
+          <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+            <input type="file" id="schedule-image-file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" class="hidden" onchange="handleScheduleImageUpload(event)">
+            <button type="button" onclick="document.getElementById('schedule-image-file').click()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition mb-2">
+              <i class="fas fa-upload mr-2"></i>画像をアップロード
+            </button>
+            <p class="text-xs text-gray-500 mb-2">対応形式: JPEG, PNG, GIF, WebP（最大8MB）</p>
+            <div id="schedule-image-preview" class="hidden mt-3">
+              <img id="schedule-image-preview-img" src="" alt="Preview" class="max-w-full max-h-48 rounded border border-gray-300">
+              <button type="button" onclick="removeScheduleImagePreview()" class="mt-2 text-red-600 hover:text-red-800 text-sm">
+                <i class="fas fa-times mr-1"></i>画像を削除
+              </button>
+            </div>
+            <div id="schedule-image-upload-status" class="hidden mt-2"></div>
+            <input type="hidden" id="schedule-image-id">
+          </div>
         </div>
         
         <!-- Enabled -->
@@ -7563,6 +7602,19 @@ function showScheduleModal(scheduleId = null) {
     document.getElementById('schedule-target-tutor').value = schedule.target_tutor || '';
     document.getElementById('schedule-channel-type').value = schedule.channel_type;
     
+    // Set image if exists
+    if (schedule.image_url) {
+      document.getElementById('schedule-image-id').value = schedule.image_url;
+      // Note: We store imageId in image_url field
+      // If it's a valid imageId, we can't show preview as it's stored in server memory
+      // Show a placeholder message instead
+      const previewContainer = document.getElementById('schedule-image-preview');
+      const statusElement = document.getElementById('schedule-image-upload-status');
+      statusElement.className = 'mt-2 text-blue-600';
+      statusElement.innerHTML = '<i class="fas fa-image mr-2"></i>画像が設定されています';
+      statusElement.classList.remove('hidden');
+    }
+    
     // Determine frequency
     if (cronParts[2] === '1-7') {
       document.getElementById('schedule-frequency').value = 'monthly';
@@ -7585,6 +7637,7 @@ async function saveSchedule(scheduleId = null) {
   const channelType = document.getElementById('schedule-channel-type').value;
   const content = document.getElementById('schedule-content').value.trim();
   const enabled = document.getElementById('schedule-enabled').checked;
+  const imageId = document.getElementById('schedule-image-id').value.trim();
   
   if (!name || !content) {
     showNotification('スケジュール名とメッセージ内容は必須です', 'error');
@@ -7614,6 +7667,7 @@ async function saveSchedule(scheduleId = null) {
       id: scheduleId,
       name,
       content,
+      imageId: imageId || null,
       channelType,
       targetStatus,
       targetTutor: targetTutor || null,
@@ -7686,3 +7740,88 @@ async function deleteSchedule(scheduleId) {
 
 // Store schedules globally
 let broadcastSchedules = [];
+
+/**
+ * Handle image upload for schedule
+ */
+async function handleScheduleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Validate file size (max 8MB)
+  if (file.size > 8 * 1024 * 1024) {
+    showNotification('画像ファイルが大きすぎます（最大8MB）', 'error');
+    return;
+  }
+  
+  // Validate file type
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    showNotification('対応していないファイル形式です', 'error');
+    return;
+  }
+  
+  // Show upload status
+  const statusElement = document.getElementById('schedule-image-upload-status');
+  statusElement.className = 'mt-2 text-purple-600';
+  statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>アップロード中...';
+  statusElement.classList.remove('hidden');
+  
+  try {
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    // Upload to server
+    const response = await axios.post(`${API_BASE}/api/broadcast/upload-image`, formData, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    
+    if (response.data.success) {
+      const imageId = response.data.imageId;
+      const filename = response.data.filename;
+      
+      // Store imageId in hidden field
+      document.getElementById('schedule-image-id').value = imageId;
+      
+      // Show preview using a placeholder or local object URL
+      const previewImg = document.getElementById('schedule-image-preview-img');
+      
+      // Create object URL for preview
+      const objectUrl = URL.createObjectURL(file);
+      previewImg.src = objectUrl;
+      document.getElementById('schedule-image-preview').classList.remove('hidden');
+      
+      // Update status
+      statusElement.className = 'mt-2 text-green-600';
+      statusElement.innerHTML = `<i class="fas fa-check-circle mr-2"></i>アップロード完了: ${filename}`;
+      
+      showNotification('✅ 画像をアップロードしました', 'success');
+    } else {
+      throw new Error(response.data.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    console.error('Error details:', error.response?.data);
+    
+    const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+    
+    statusElement.className = 'mt-2 text-red-600';
+    statusElement.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i>アップロード失敗: ${errorMessage}`;
+    showNotification(`画像のアップロードに失敗しました: ${errorMessage}`, 'error');
+  }
+}
+
+/**
+ * Remove image preview for schedule
+ */
+function removeScheduleImagePreview() {
+  document.getElementById('schedule-image-id').value = '';
+  document.getElementById('schedule-image-file').value = '';
+  document.getElementById('schedule-image-preview').classList.add('hidden');
+  document.getElementById('schedule-image-upload-status').classList.add('hidden');
+  showNotification('画像を削除しました', 'info');
+}

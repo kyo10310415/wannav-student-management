@@ -21,23 +21,40 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
     });
     
     let sqlQuery = `
-      SELECT s.student_id, s.name, s.status, s.homeroom_tutor
+      SELECT s.student_id, s.name, s.status, s.homeroom_tutor, s.contract_plan
       FROM students s
       LEFT JOIN tutors t ON s.homeroom_tutor = t.notion_name
-      WHERE s.status = $1
     `;
     
-    const params = [targetStatus];
+    const params = [];
+    let whereConditions = [];
+    
+    // Handle special "レッスン中" status (active students excluding permanent members)
+    if (targetStatus === 'レッスン中') {
+      whereConditions.push(`s.status = $${params.length + 1}`);
+      params.push('アクティブ');
+      whereConditions.push(`(s.contract_plan IS NULL OR s.contract_plan != $${params.length + 1})`);
+      params.push('永久会員');
+      console.log('[Broadcast] レッスン中 mode: アクティブ excluding 永久会員');
+    } else {
+      whereConditions.push(`s.status = $${params.length + 1}`);
+      params.push(targetStatus);
+    }
+    
+    // Add WHERE clause
+    if (whereConditions.length > 0) {
+      sqlQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+    }
     
     // Role-based filtering
     if (userRole === 'crew') {
       // Crew can only send to their own students
-      sqlQuery += ' AND t.email = $2';
+      sqlQuery += ` AND t.email = $${params.length + 1}`;
       params.push(userEmail);
       console.log('[Broadcast] Crew mode: filtering by email', userEmail);
     } else if (targetTutor && targetTutor !== 'all') {
       // Leader/Admin can filter by tutor
-      sqlQuery += ' AND s.homeroom_tutor = $2';
+      sqlQuery += ` AND s.homeroom_tutor = $${params.length + 1}`;
       params.push(targetTutor);
       console.log('[Broadcast] Leader/Admin mode: filtering by tutor', targetTutor);
     } else {
