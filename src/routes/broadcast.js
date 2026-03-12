@@ -68,6 +68,16 @@ app.post('/preview', async (c) => {
     const user = c.get('user');
     const { targetStatus, targetTutor } = await c.req.json();
     
+    // Debug: Check what status values exist in database
+    const statusCheck = await query(
+      'SELECT DISTINCT status, COUNT(*) as count FROM students GROUP BY status'
+    );
+    console.log('[Broadcast] Available status values in database:', statusCheck.rows);
+    
+    // Debug: Check total student count
+    const totalCount = await query('SELECT COUNT(*) as total FROM students');
+    console.log('[Broadcast] Total students in database:', totalCount.rows[0].total);
+    
     const students = await getTargetStudents(
       targetStatus || 'active',
       targetTutor,
