@@ -29,13 +29,14 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
     const params = [];
     let whereConditions = [];
     
-    // Handle special "レッスン中" status (active students excluding permanent members)
+    // Handle special "レッスン中" status (active students excluding permanent members and enrollment plan)
     if (targetStatus === 'レッスン中') {
       whereConditions.push(`s.status = $${params.length + 1}`);
       params.push('アクティブ');
-      whereConditions.push(`(s.contract_plan IS NULL OR s.contract_plan != $${params.length + 1})`);
+      whereConditions.push(`(s.contract_plan IS NULL OR (s.contract_plan != $${params.length + 1} AND s.contract_plan != $${params.length + 2}))`);
       params.push('永久会員');
-      console.log('[Broadcast] レッスン中 mode: アクティブ excluding 永久会員');
+      params.push('在籍プラン');
+      console.log('[Broadcast] レッスン中 mode: アクティブ excluding 永久会員 and 在籍プラン');
     } else {
       whereConditions.push(`s.status = $${params.length + 1}`);
       params.push(targetStatus);

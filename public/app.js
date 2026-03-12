@@ -6583,7 +6583,7 @@ async function renderBroadcastPage() {
               </label>
               <select id="broadcast-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <option value="アクティブ">アクティブ生徒のみ</option>
-                <option value="レッスン中">レッスン中（永久会員除く）</option>
+                <option value="レッスン中">レッスン中（永久会員・在籍プラン除く）</option>
                 <option value="レッスン準備中">レッスン準備中</option>
                 <option value="休会">休会中</option>
               </select>
@@ -7508,7 +7508,7 @@ function showScheduleModal(scheduleId = null) {
           </label>
           <select id="schedule-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
             <option value="アクティブ">アクティブ生徒のみ</option>
-            <option value="レッスン中">レッスン中（永久会員除く）</option>
+            <option value="レッスン中">レッスン中（永久会員・在籍プラン除く）</option>
             <option value="レッスン準備中">レッスン準備中</option>
             <option value="休会">休会中</option>
           </select>
