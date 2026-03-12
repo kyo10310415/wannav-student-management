@@ -30,6 +30,8 @@ import broadcastRoutes from './routes/broadcast.js';
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
 import { sendDailyStatsReport } from './services/statsReportService.js';
+import { checkAndExecuteSchedules } from './services/schedulerService.js';
+import { imageStorage } from './routes/broadcast.js';
 
 const app = new Hono();
 
@@ -140,6 +142,18 @@ if (process.env.DISCORD_STATS_REPORT_ENABLED !== 'false') {
 } else {
   console.log('Discord daily statistics report: DISABLED (DISCORD_STATS_REPORT_ENABLED=false)');
 }
+
+// Schedule broadcast scheduler check (runs every minute)
+console.log('Broadcast scheduler: ENABLED (checks every minute)');
+cron.schedule('* * * * *', async () => {
+  try {
+    await checkAndExecuteSchedules(imageStorage);
+  } catch (error) {
+    console.error('Error checking broadcast schedules:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
 
 const port = process.env.PORT || 3000;
 

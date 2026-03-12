@@ -411,4 +411,232 @@ app.post('/upload-image', async (c) => {
   }
 });
 
+/**
+ * GET /api/broadcast/schedules
+ * Get all scheduled broadcasts
+ */
+app.get('/schedules', async (c) => {
+  try {
+    const user = c.get('user');
+    
+    let sqlQuery = `
+      SELECT id, name, content, image_url, channel_type, target_status, target_tutor, 
+             schedule_cron, schedule_enabled, last_sent_at, created_at, updated_at
+      FROM broadcast_messages
+      WHERE is_scheduled = true
+    `;
+    
+    // Crew can only see their own schedules
+    if (user.role === 'crew') {
+      sqlQuery += ` AND created_by = $1`;
+      const result = await query(sqlQuery, [user.email]);
+      return c.json({
+        success: true,
+        schedules: result.rows
+      });
+    } else {
+      const result = await query(sqlQuery);
+      return c.json({
+        success: true,
+        schedules: result.rows
+      });
+    }
+  } catch (error) {
+    console.error('Error getting schedules:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/broadcast/schedules
+ * Create or update scheduled broadcast
+ * Body: { id (optional), name, content, imageId, channelType, targetStatus, targetTutor, scheduleCron, scheduleEnabled }
+ */
+app.post('/schedules', async (c) => {
+  try {
+    const user = c.get('user');
+    const scheduleData = await c.req.json();
+    
+    // Validate required fields
+    if (!scheduleData.name) {
+      return c.json({
+        success: false,
+        error: 'Schedule name is required'
+      }, 400);
+    }
+    
+    if (!scheduleData.content) {
+      return c.json({
+        success: false,
+        error: 'Message content is required'
+      }, 400);
+    }
+    
+    if (!scheduleData.scheduleCron) {
+      return c.json({
+        success: false,
+        error: 'Schedule cron expression is required'
+      }, 400);
+    }
+    
+    if (scheduleData.id) {
+      // Update existing schedule
+      const updateResult = await query(
+        `UPDATE broadcast_messages 
+        SET name = $1, content = $2, image_url = $3, channel_type = $4, 
+            target_status = $5, target_tutor = $6, schedule_cron = $7, 
+            schedule_enabled = $8, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $9 AND created_by = $10
+        RETURNING id`,
+        [
+          scheduleData.name,
+          scheduleData.content,
+          scheduleData.imageId || null,
+          scheduleData.channelType,
+          scheduleData.targetStatus || 'active',
+          scheduleData.targetTutor || null,
+          scheduleData.scheduleCron,
+          scheduleData.scheduleEnabled !== false,
+          scheduleData.id,
+          user.email
+        ]
+      );
+      
+      if (updateResult.rows.length === 0) {
+        return c.json({
+          success: false,
+          error: 'Schedule not found or permission denied'
+        }, 404);
+      }
+      
+      return c.json({
+        success: true,
+        message: 'Schedule updated',
+        id: scheduleData.id
+      });
+    } else {
+      // Create new schedule
+      const insertResult = await query(
+        `INSERT INTO broadcast_messages 
+          (name, content, image_url, channel_type, target_status, target_tutor, 
+           created_by, is_template, is_scheduled, schedule_cron, schedule_enabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, true, $8, $9)
+        RETURNING id`,
+        [
+          scheduleData.name,
+          scheduleData.content,
+          scheduleData.imageId || null,
+          scheduleData.channelType,
+          scheduleData.targetStatus || 'active',
+          scheduleData.targetTutor || null,
+          user.email,
+          scheduleData.scheduleCron,
+          scheduleData.scheduleEnabled !== false
+        ]
+      );
+      
+      return c.json({
+        success: true,
+        message: 'Schedule created',
+        id: insertResult.rows[0].id
+      });
+    }
+  } catch (error) {
+    console.error('Error saving schedule:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * DELETE /api/broadcast/schedules/:id
+ * Delete scheduled broadcast
+ */
+app.delete('/schedules/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    const scheduleId = c.req.param('id');
+    
+    let deleteQuery = `DELETE FROM broadcast_messages WHERE id = $1 AND is_scheduled = true`;
+    const params = [scheduleId];
+    
+    // Crew can only delete their own schedules
+    if (user.role === 'crew') {
+      deleteQuery += ` AND created_by = $2`;
+      params.push(user.email);
+    }
+    
+    const result = await query(deleteQuery, params);
+    
+    if (result.rowCount === 0) {
+      return c.json({
+        success: false,
+        error: 'Schedule not found or permission denied'
+      }, 404);
+    }
+    
+    return c.json({
+      success: true,
+      message: 'Schedule deleted'
+    });
+  } catch (error) {
+    console.error('Error deleting schedule:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/broadcast/schedules/:id/toggle
+ * Toggle schedule enabled/disabled
+ */
+app.post('/schedules/:id/toggle', async (c) => {
+  try {
+    const user = c.get('user');
+    const scheduleId = c.req.param('id');
+    
+    let updateQuery = `
+      UPDATE broadcast_messages 
+      SET schedule_enabled = NOT schedule_enabled, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND is_scheduled = true
+    `;
+    const params = [scheduleId];
+    
+    // Crew can only toggle their own schedules
+    if (user.role === 'crew') {
+      updateQuery += ` AND created_by = $2`;
+      params.push(user.email);
+    }
+    
+    updateQuery += ` RETURNING schedule_enabled`;
+    
+    const result = await query(updateQuery, params);
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Schedule not found or permission denied'
+      }, 404);
+    }
+    
+    return c.json({
+      success: true,
+      enabled: result.rows[0].schedule_enabled
+    });
+  } catch (error) {
+    console.error('Error toggling schedule:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

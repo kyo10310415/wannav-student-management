@@ -13,6 +13,13 @@ import { client as discordClient } from './discordService.js';
  */
 export async function getTargetStudents(targetStatus, targetTutor, userEmail, userRole) {
   try {
+    console.log('[Broadcast] getTargetStudents called with:', {
+      targetStatus,
+      targetTutor,
+      userEmail,
+      userRole
+    });
+    
     let sqlQuery = `
       SELECT s.student_id, s.name, s.status, s.homeroom_tutor
       FROM students s
@@ -27,13 +34,20 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
       // Crew can only send to their own students
       sqlQuery += ' AND t.email = $2';
       params.push(userEmail);
+      console.log('[Broadcast] Crew mode: filtering by email', userEmail);
     } else if (targetTutor && targetTutor !== 'all') {
       // Leader/Admin can filter by tutor
       sqlQuery += ' AND s.homeroom_tutor = $2';
       params.push(targetTutor);
+      console.log('[Broadcast] Leader/Admin mode: filtering by tutor', targetTutor);
+    } else {
+      console.log('[Broadcast] Leader/Admin mode: no tutor filter (all students)');
     }
     
     sqlQuery += ' ORDER BY s.student_id';
+    
+    console.log('[Broadcast] Executing SQL:', sqlQuery);
+    console.log('[Broadcast] With params:', params);
     
     const result = await query(sqlQuery, params);
     
