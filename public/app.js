@@ -6689,6 +6689,23 @@ async function renderBroadcastPage() {
           </div>
         </div>
         
+        <!-- Schedule Management Section -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-800">
+              <i class="fas fa-clock mr-2 text-purple-600"></i>定期送信スケジュール
+            </h2>
+            <button onclick="showScheduleModal()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">
+              <i class="fas fa-plus mr-2"></i>新規スケジュール
+            </button>
+          </div>
+          <div id="schedule-list-container">
+            <p class="text-gray-500 text-center py-8">
+              <i class="fas fa-spinner fa-spin mr-2"></i>スケジュールを読み込み中...
+            </p>
+          </div>
+        </div>
+        
         <!-- Logs Section -->
         <div class="bg-white rounded-xl shadow-md p-6">
           <div class="flex justify-between items-center mb-4">
@@ -6712,6 +6729,7 @@ async function renderBroadcastPage() {
   // Load tutors and initial preview
   await loadBroadcastTutors();
   await updatePreviewCount();
+  await loadSchedules();
   await loadBroadcastLogs();
 }
 
@@ -7293,3 +7311,378 @@ function removeImagePreview() {
   document.getElementById('broadcast-image-upload-status').classList.add('hidden');
   showNotification('画像を削除しました', 'info');
 }
+
+// ===========================================
+// Schedule Functions
+// ===========================================
+
+/**
+ * Load all schedules
+ */
+async function loadSchedules() {
+  try {
+    const response = await axios.get(`${API_BASE}/api/broadcast/schedules`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      broadcastSchedules = response.data.schedules;
+      renderScheduleList(broadcastSchedules);
+    }
+  } catch (error) {
+    console.error('Error loading schedules:', error);
+    document.getElementById('schedule-list-container').innerHTML = `
+      <p class="text-red-600 text-center py-8">
+        <i class="fas fa-exclamation-triangle mr-2"></i>スケジュールの取得に失敗しました
+      </p>
+    `;
+  }
+}
+
+/**
+ * Render schedule list
+ */
+function renderScheduleList(schedules) {
+  const container = document.getElementById('schedule-list-container');
+  
+  if (schedules.length === 0) {
+    container.innerHTML = `
+      <p class="text-gray-500 text-center py-8">
+        <i class="fas fa-inbox mr-2"></i>スケジュールがありません
+      </p>
+    `;
+    return;
+  }
+  
+  const schedulesHtml = schedules.map(schedule => {
+    const enabled = schedule.schedule_enabled;
+    const statusBadge = enabled 
+      ? '<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">有効</span>'
+      : '<span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-semibold">無効</span>';
+    
+    // Parse cron expression
+    const cronParts = schedule.schedule_cron.split(' ');
+    const minute = cronParts[0];
+    const hour = cronParts[1];
+    const dayOfWeek = cronParts[4];
+    
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+    const dayName = dayNames[parseInt(dayOfWeek)] || '毎日';
+    const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    
+    let frequencyStr = '毎週';
+    if (cronParts[2] === '1-7') {
+      frequencyStr = '毎月第1';
+    }
+    
+    const scheduleStr = `${frequencyStr}${dayName}曜日 ${timeStr}`;
+    
+    const lastSent = schedule.last_sent_at 
+      ? new Date(schedule.last_sent_at).toLocaleString('ja-JP')
+      : '未送信';
+    
+    return `
+      <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+        <div class="flex justify-between items-start mb-2">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <h3 class="text-lg font-semibold text-gray-800">${schedule.name}</h3>
+              ${statusBadge}
+            </div>
+            <p class="text-sm text-purple-600 mb-1">
+              <i class="fas fa-clock mr-1"></i>${scheduleStr}
+            </p>
+            <p class="text-xs text-gray-600 mb-2">
+              <i class="fas fa-hashtag mr-1"></i>${schedule.channel_type} | 
+              <i class="fas fa-users mr-1"></i>${schedule.target_status} | 
+              <i class="fas fa-chalkboard-teacher mr-1"></i>${schedule.target_tutor || '全て'}
+            </p>
+            <p class="text-sm text-gray-700 line-clamp-2">${schedule.content}</p>
+            <p class="text-xs text-gray-500 mt-2">
+              最終送信: ${lastSent}
+            </p>
+          </div>
+          <div class="flex flex-col gap-2 ml-4">
+            <button onclick="toggleSchedule(${schedule.id})" class="px-3 py-1 rounded ${enabled ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'} text-white text-xs transition">
+              <i class="fas fa-${enabled ? 'pause' : 'play'} mr-1"></i>${enabled ? '無効化' : '有効化'}
+            </button>
+            <button onclick="editSchedule(${schedule.id})" class="px-3 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white text-xs transition">
+              <i class="fas fa-edit mr-1"></i>編集
+            </button>
+            <button onclick="deleteSchedule(${schedule.id})" class="px-3 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-xs transition">
+              <i class="fas fa-trash mr-1"></i>削除
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = `<div class="space-y-3">${schedulesHtml}</div>`;
+}
+
+/**
+ * Show schedule modal
+ */
+function showScheduleModal(scheduleId = null) {
+  const schedule = scheduleId ? broadcastSchedules.find(s => s.id === scheduleId) : null;
+  
+  const modalContent = `
+    <div class="max-w-2xl mx-auto">
+      <h2 class="text-2xl font-bold mb-6">
+        <i class="fas fa-clock mr-2 text-purple-600"></i>${schedule ? 'スケジュール編集' : '新規スケジュール作成'}
+      </h2>
+      
+      <div class="space-y-4">
+        <!-- Name -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-tag mr-1"></i>スケジュール名
+          </label>
+          <input type="text" id="schedule-name" value="${schedule ? schedule.name : ''}" placeholder="例: 毎週金曜日のお知らせ" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+        
+        <!-- Frequency -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-repeat mr-1"></i>頻度
+          </label>
+          <select id="schedule-frequency" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="weekly">毎週</option>
+            <option value="biweekly">2週間ごと</option>
+            <option value="monthly">毎月第1</option>
+          </select>
+        </div>
+        
+        <!-- Day of Week -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-calendar-day mr-1"></i>曜日
+          </label>
+          <select id="schedule-day" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="0">日曜日</option>
+            <option value="1">月曜日</option>
+            <option value="2">火曜日</option>
+            <option value="3">水曜日</option>
+            <option value="4">木曜日</option>
+            <option value="5" selected>金曜日</option>
+            <option value="6">土曜日</option>
+          </select>
+        </div>
+        
+        <!-- Time -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-clock mr-1"></i>時刻
+          </label>
+          <input type="time" id="schedule-time" value="${schedule ? '17:00' : '17:00'}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+        
+        <!-- Target Status -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-users mr-1"></i>送信対象
+          </label>
+          <select id="schedule-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="アクティブ">アクティブ生徒のみ</option>
+            <option value="レッスン準備中">レッスン準備中</option>
+            <option value="休会">休会中</option>
+          </select>
+        </div>
+        
+        <!-- Target Tutor -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-chalkboard-teacher mr-1"></i>担当Tutor
+          </label>
+          <select id="schedule-target-tutor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="">全てのTutor</option>
+          </select>
+        </div>
+        
+        <!-- Channel Type -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-hashtag mr-1"></i>送信先チャンネル
+          </label>
+          <select id="schedule-channel-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="notice">お知らせ</option>
+            <option value="tips">お役立ち情報</option>
+            <option value="chat">チャット</option>
+          </select>
+        </div>
+        
+        <!-- Content -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-comment-alt mr-1"></i>メッセージ内容
+          </label>
+          <textarea id="schedule-content" rows="4" placeholder="送信するメッセージを入力してください..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">${schedule ? schedule.content : ''}</textarea>
+        </div>
+        
+        <!-- Enabled -->
+        <div class="flex items-center">
+          <input type="checkbox" id="schedule-enabled" ${schedule ? (schedule.schedule_enabled ? 'checked' : '') : 'checked'} class="mr-2 w-4 h-4 text-purple-600 focus:ring-purple-500">
+          <label for="schedule-enabled" class="text-sm font-semibold text-gray-700">
+            スケジュールを有効にする
+          </label>
+        </div>
+      </div>
+      
+      <div class="mt-6 flex gap-3">
+        <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">
+          <i class="fas fa-times mr-2"></i>キャンセル
+        </button>
+        <button onclick="saveSchedule(${scheduleId})" class="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition">
+          <i class="fas fa-save mr-2"></i>保存
+        </button>
+      </div>
+    </div>
+  `;
+  
+  showModal(modalContent);
+  
+  // Load tutors for selector
+  if (broadcastTutors && broadcastTutors.length > 0) {
+    const tutorSelect = document.getElementById('schedule-target-tutor');
+    broadcastTutors.forEach(tutor => {
+      const option = document.createElement('option');
+      option.value = tutor.notion_name;
+      option.textContent = tutor.notion_name;
+      tutorSelect.appendChild(option);
+    });
+  }
+  
+  // Set values if editing
+  if (schedule) {
+    // Parse cron to set form values
+    const cronParts = schedule.schedule_cron.split(' ');
+    document.getElementById('schedule-time').value = `${cronParts[1].padStart(2, '0')}:${cronParts[0].padStart(2, '0')}`;
+    document.getElementById('schedule-day').value = cronParts[4];
+    document.getElementById('schedule-target-status').value = schedule.target_status;
+    document.getElementById('schedule-target-tutor').value = schedule.target_tutor || '';
+    document.getElementById('schedule-channel-type').value = schedule.channel_type;
+    
+    // Determine frequency
+    if (cronParts[2] === '1-7') {
+      document.getElementById('schedule-frequency').value = 'monthly';
+    } else {
+      document.getElementById('schedule-frequency').value = 'weekly';
+    }
+  }
+}
+
+/**
+ * Save schedule
+ */
+async function saveSchedule(scheduleId = null) {
+  const name = document.getElementById('schedule-name').value.trim();
+  const frequency = document.getElementById('schedule-frequency').value;
+  const dayOfWeek = document.getElementById('schedule-day').value;
+  const time = document.getElementById('schedule-time').value;
+  const targetStatus = document.getElementById('schedule-target-status').value;
+  const targetTutor = document.getElementById('schedule-target-tutor').value;
+  const channelType = document.getElementById('schedule-channel-type').value;
+  const content = document.getElementById('schedule-content').value.trim();
+  const enabled = document.getElementById('schedule-enabled').checked;
+  
+  if (!name || !content) {
+    showNotification('スケジュール名とメッセージ内容は必須です', 'error');
+    return;
+  }
+  
+  // Generate cron expression
+  const [hour, minute] = time.split(':');
+  let cronExpression;
+  
+  switch (frequency) {
+    case 'weekly':
+      cronExpression = `${minute} ${hour} * * ${dayOfWeek}`;
+      break;
+    case 'biweekly':
+      cronExpression = `${minute} ${hour} * * ${dayOfWeek}`;
+      break;
+    case 'monthly':
+      cronExpression = `${minute} ${hour} 1-7 * ${dayOfWeek}`;
+      break;
+    default:
+      cronExpression = `${minute} ${hour} * * ${dayOfWeek}`;
+  }
+  
+  try {
+    const response = await axios.post(`${API_BASE}/api/broadcast/schedules`, {
+      id: scheduleId,
+      name,
+      content,
+      channelType,
+      targetStatus,
+      targetTutor: targetTutor || null,
+      scheduleCron: cronExpression,
+      scheduleEnabled: enabled
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      showNotification(`✅ スケジュールを${scheduleId ? '更新' : '作成'}しました`, 'success');
+      closeModal();
+      await loadSchedules();
+    }
+  } catch (error) {
+    console.error('Error saving schedule:', error);
+    showNotification('スケジュールの保存に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
+  }
+}
+
+/**
+ * Toggle schedule enabled/disabled
+ */
+async function toggleSchedule(scheduleId) {
+  try {
+    const response = await axios.post(`${API_BASE}/api/broadcast/schedules/${scheduleId}/toggle`, {}, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      const status = response.data.enabled ? '有効' : '無効';
+      showNotification(`✅ スケジュールを${status}にしました`, 'success');
+      await loadSchedules();
+    }
+  } catch (error) {
+    console.error('Error toggling schedule:', error);
+    showNotification('スケジュールの切り替えに失敗しました', 'error');
+  }
+}
+
+/**
+ * Edit schedule
+ */
+function editSchedule(scheduleId) {
+  showScheduleModal(scheduleId);
+}
+
+/**
+ * Delete schedule
+ */
+async function deleteSchedule(scheduleId) {
+  if (!confirm('このスケジュールを削除しますか？\nこの操作は取り消せません。')) {
+    return;
+  }
+  
+  try {
+    const response = await axios.delete(`${API_BASE}/api/broadcast/schedules/${scheduleId}`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      showNotification('✅ スケジュールを削除しました', 'success');
+      await loadSchedules();
+    }
+  } catch (error) {
+    console.error('Error deleting schedule:', error);
+    showNotification('スケジュールの削除に失敗しました', 'error');
+  }
+}
+
+// Store schedules globally
+let broadcastSchedules = [];
