@@ -54,9 +54,13 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
  */
 async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
   try {
-    console.log('[Broadcast] Sending via webhook:', {
+    console.log('[Broadcast] sendViaWebhook called with:', {
+      webhookUrl: webhookUrl ? webhookUrl.substring(0, 50) + '...' : 'none',
+      discordId: discordId || 'none',
+      contentLength: content ? content.length : 0,
       hasImage: !!imageUrl,
-      imageUrl: imageUrl ? imageUrl.substring(0, 50) + '...' : 'none'
+      imageUrl: imageUrl || 'none',
+      imageUrlType: typeof imageUrl
     });
     
     const embed = {
@@ -65,11 +69,11 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
       timestamp: new Date().toISOString()
     };
     
-    if (imageUrl) {
-      embed.image = { url: imageUrl };
-      console.log('[Broadcast] Image added to embed');
+    if (imageUrl && imageUrl.trim()) {
+      embed.image = { url: imageUrl.trim() };
+      console.log('[Broadcast] Image added to embed:', imageUrl);
     } else {
-      console.log('[Broadcast] No image URL provided');
+      console.log('[Broadcast] No image URL provided or imageUrl is empty');
     }
     
     const payload = {
@@ -81,9 +85,10 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
       payload.content = `<@${discordId}>`;
     }
     
-    console.log('[Broadcast] Sending payload:', JSON.stringify(payload, null, 2));
+    console.log('[Broadcast] Final payload:', JSON.stringify(payload, null, 2));
     
-    await axios.post(webhookUrl, payload);
+    const response = await axios.post(webhookUrl, payload);
+    console.log('[Broadcast] Webhook response status:', response.status);
     
     return { success: true };
   } catch (error) {

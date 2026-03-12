@@ -114,6 +114,12 @@ app.post('/send', async (c) => {
     // Handle test mode - skip student lookup
     if (messageData.isTest) {
       console.log('[Broadcast] Test mode: Skipping student lookup');
+      console.log('[Broadcast] Test mode message data:', {
+        hasContent: !!messageData.content,
+        hasImageUrl: !!messageData.imageUrl,
+        imageUrl: messageData.imageUrl || 'none',
+        channelType: messageData.channelType
+      });
       
       // Send broadcast in test mode (empty student array)
       const result = await sendBroadcast(messageData, [], user.email);
@@ -372,6 +378,8 @@ app.post('/upload-image', async (c) => {
       contentType: file.type
     });
     
+    console.log('[Broadcast] Uploading image to Discord webhook');
+    
     // Send to Discord webhook with wait=true to get message data
     const response = await axios.post(testWebhookUrl + '?wait=true', formData, {
       headers: {
@@ -379,11 +387,20 @@ app.post('/upload-image', async (c) => {
       }
     });
     
+    console.log('[Broadcast] Discord response received:', {
+      hasAttachments: !!response.data.attachments,
+      attachmentsCount: response.data.attachments?.length,
+      messageId: response.data.id
+    });
+    
     // Extract image URL from Discord response
     const imageUrl = response.data.attachments?.[0]?.url;
     const messageId = response.data.id;
     
+    console.log('[Broadcast] Image URL extracted:', imageUrl);
+    
     if (!imageUrl) {
+      console.error('[Broadcast] No image URL in response:', response.data);
       throw new Error('Failed to get image URL from Discord');
     }
     
@@ -404,6 +421,8 @@ app.post('/upload-image', async (c) => {
         // Don't fail the upload if deletion fails
       }
     }
+    
+    console.log('[Broadcast] Returning image URL to client:', imageUrl);
     
     return c.json({
       success: true,

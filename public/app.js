@@ -6904,6 +6904,15 @@ async function sendBroadcast() {
   const targetStatus = document.getElementById('broadcast-target-status').value;
   const targetTutor = document.getElementById('broadcast-target-tutor').value;
   
+  console.log('[Frontend] sendBroadcast called with:', {
+    hasContent: !!content,
+    hasImageUrl: !!imageUrl,
+    imageUrl: imageUrl || 'none',
+    channelType,
+    targetStatus,
+    targetTutor
+  });
+  
   if (!content) {
     showNotification('メッセージ内容を入力してください', 'error');
     return;
@@ -6919,7 +6928,7 @@ async function sendBroadcast() {
     
     const isTest = targetTutor === 'test';
     
-    const response = await axios.post(`${API_BASE}/api/broadcast/send`, {
+    const requestData = {
       content,
       imageUrl: imageUrl || null,
       channelType,
@@ -6928,7 +6937,11 @@ async function sendBroadcast() {
       name: isTest ? `Test Broadcast ${new Date().toLocaleString('ja-JP')}` : `Broadcast ${new Date().toLocaleString('ja-JP')}`,
       saveAsTemplate: false,
       isTest: isTest
-    }, {
+    };
+    
+    console.log('[Frontend] Sending request data:', requestData);
+    
+    const response = await axios.post(`${API_BASE}/api/broadcast/send`, requestData, {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
     
