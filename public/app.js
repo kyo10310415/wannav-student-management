@@ -7109,12 +7109,18 @@ function loadTemplate(templateId) {
   
   // Load image if exists
   if (template.image_url) {
-    document.getElementById('broadcast-image-url').value = template.image_url;
+    const imageId = template.image_url;
+    document.getElementById('broadcast-image-url').value = imageId;
     
-    // Show upload status message (can't show preview for server-stored images)
+    // Show image preview from server
+    const previewImg = document.getElementById('broadcast-image-preview-img');
+    previewImg.src = `${API_BASE}/api/broadcast/images/${imageId}`;
+    document.getElementById('broadcast-image-preview').classList.remove('hidden');
+    
+    // Show upload status message
     const statusElement = document.getElementById('broadcast-image-upload-status');
-    statusElement.className = 'mt-2 text-blue-600';
-    statusElement.innerHTML = '<i class="fas fa-image mr-2"></i>画像が設定されています（imageId: ' + template.image_url.substring(0, 20) + '...)';
+    statusElement.className = 'mt-2 text-green-600';
+    statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>画像を読み込みました';
     statusElement.classList.remove('hidden');
   } else {
     // Clear image
@@ -7412,6 +7418,7 @@ function renderScheduleList(schedules) {
               <i class="fas fa-hashtag mr-1"></i>${schedule.channel_type} | 
               <i class="fas fa-users mr-1"></i>${schedule.target_status} | 
               <i class="fas fa-chalkboard-teacher mr-1"></i>${schedule.target_tutor || '全て'}
+              ${schedule.image_url ? ' | <i class="fas fa-image text-purple-600 mr-1"></i>画像あり' : ''}
             </p>
             <p class="text-sm text-gray-700 line-clamp-2">${schedule.content}</p>
             <p class="text-xs text-gray-500 mt-2">
@@ -7604,14 +7611,17 @@ function showScheduleModal(scheduleId = null) {
     
     // Set image if exists
     if (schedule.image_url) {
-      document.getElementById('schedule-image-id').value = schedule.image_url;
-      // Note: We store imageId in image_url field
-      // If it's a valid imageId, we can't show preview as it's stored in server memory
-      // Show a placeholder message instead
-      const previewContainer = document.getElementById('schedule-image-preview');
+      const imageId = schedule.image_url;
+      document.getElementById('schedule-image-id').value = imageId;
+      
+      // Show image preview from server
+      const previewImg = document.getElementById('schedule-image-preview-img');
+      previewImg.src = `${API_BASE}/api/broadcast/images/${imageId}`;
+      document.getElementById('schedule-image-preview').classList.remove('hidden');
+      
       const statusElement = document.getElementById('schedule-image-upload-status');
-      statusElement.className = 'mt-2 text-blue-600';
-      statusElement.innerHTML = '<i class="fas fa-image mr-2"></i>画像が設定されています';
+      statusElement.className = 'mt-2 text-green-600';
+      statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>画像を読み込みました';
       statusElement.classList.remove('hidden');
     }
     

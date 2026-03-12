@@ -9,12 +9,8 @@ import {
 } from '../services/broadcastService.js';
 import { query } from '../db/connection.js';
 
-// In-memory storage for uploaded images (temporary)
-// Key: imageId, Value: { buffer, contentType, filename, uploadedAt }
-const imageStorage = new Map();
-
-// Export imageStorage for use in broadcastService
-export { imageStorage };
+// Images are now stored in database (broadcast_images table)
+// No need for in-memory storage
 
 const app = new Hono();
 
@@ -129,7 +125,7 @@ app.post('/send', async (c) => {
       });
       
       // Send broadcast in test mode (empty student array)
-      const result = await sendBroadcast(messageData, [], user.email, imageStorage);
+      const result = await sendBroadcast(messageData, [], user.email);
       
       return c.json({
         success: true,
@@ -155,7 +151,7 @@ app.post('/send', async (c) => {
     }
     
     // Send broadcast
-    const result = await sendBroadcast(messageData, targetStudents, user.email, imageStorage);
+    const result = await sendBroadcast(messageData, targetStudents, user.email);
     
     return c.json({
       success: true,
@@ -334,7 +330,7 @@ app.get('/tutors', async (c) => {
 
 /**
  * POST /api/broadcast/upload-image
- * Store image temporarily in server memory
+ * Store image in database (persistent storage)
  */
 app.post('/upload-image', async (c) => {
   try {
@@ -373,29 +369,21 @@ app.post('/upload-image', async (c) => {
     // Generate unique image ID
     const imageId = `img_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
-    // Store image in memory temporarily
-    imageStorage.set(imageId, {
-      buffer: buffer,
-      contentType: file.type,
-      filename: file.name,
-      uploadedAt: Date.now()
-    });
-    
-    console.log('[Broadcast] Image stored in memory:', {
+    console.log('[Broadcast] Storing image in database:', {
       imageId,
       size: buffer.length,
       type: file.type,
       filename: file.name
     });
     
-    // Clean up old images (older than 1 hour)
-    const oneHourAgo = Date.now() - (60 * 60 * 1000);
-    for (const [id, data] of imageStorage.entries()) {
-      if (data.uploadedAt < oneHourAgo) {
-        imageStorage.delete(id);
-        console.log('[Broadcast] Cleaned up old image:', id);
-      }
-    }
+    // Store image in database
+    await query(
+      `INSERT INTO broadcast_images (image_id, filename, content_type, file_size, image_data, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [imageId, file.name, file.type, buffer.length, buffer, user.email]
+    );
+    
+    console.log('[Broadcast] Image stored successfully:', imageId);
     
     return c.json({
       success: true,
@@ -632,6 +620,54 @@ app.post('/schedules/:id/toggle', async (c) => {
     });
   } catch (error) {
     console.error('Error toggling schedule:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/broadcast/images/:imageId
+ * Get image data from database
+ */
+app.get('/images/:imageId', async (c) => {
+  try {
+    const imageId = c.req.param('imageId');
+    
+    console.log('[Broadcast] Retrieving image from database:', imageId);
+    
+    const result = await query(
+      'SELECT filename, content_type, image_data FROM broadcast_images WHERE image_id = $1',
+      [imageId]
+    );
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Image not found'
+      }, 404);
+    }
+    
+    const image = result.rows[0];
+    
+    console.log('[Broadcast] Image retrieved:', {
+      imageId,
+      filename: image.filename,
+      contentType: image.content_type,
+      size: image.image_data.length
+    });
+    
+    // Return image data
+    return new Response(image.image_data, {
+      headers: {
+        'Content-Type': image.content_type,
+        'Content-Disposition': `inline; filename="${image.filename}"`,
+        'Cache-Control': 'public, max-age=31536000' // Cache for 1 year
+      }
+    });
+  } catch (error) {
+    console.error('Error retrieving image:', error);
     return c.json({
       success: false,
       error: error.message

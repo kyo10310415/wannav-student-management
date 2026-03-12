@@ -81,10 +81,9 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
  * @param {string} webhookUrl - Discord webhook URL
  * @param {string} discordId - Discord user ID for mention
  * @param {string} content - Message content
- * @param {string} imageId - Image ID (for server-stored images)
- * @param {Object} imageStorage - Image storage Map (optional)
+ * @param {string} imageId - Image ID (for database-stored images)
  */
-async function sendViaWebhook(webhookUrl, discordId, content, imageId, imageStorage = null) {
+async function sendViaWebhook(webhookUrl, discordId, content, imageId) {
   try {
     console.log('[Broadcast] sendViaWebhook called with:', {
       webhookUrl: webhookUrl ? webhookUrl.substring(0, 50) + '...' : 'none',
@@ -110,51 +109,69 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageId, imageStor
       payload.content = `<@${discordId}>`;
     }
     
-    // If image exists, attach it as a file
-    if (imageId && imageStorage && imageStorage.has(imageId)) {
-      const imageData = imageStorage.get(imageId);
+    // If image exists, get it from database and attach as file
+    if (imageId) {
+      console.log('[Broadcast] Fetching image from database:', imageId);
       
-      console.log('[Broadcast] Attaching image from storage:', {
-        imageId,
-        size: imageData.buffer.length,
-        type: imageData.contentType,
-        filename: imageData.filename
-      });
-      
-      // Use FormData to send image as attachment
-      const FormData = (await import('form-data')).default;
-      const formData = new FormData();
-      
-      // Attach the image file
-      formData.append('files[0]', imageData.buffer, {
-        filename: imageData.filename,
-        contentType: imageData.contentType
-      });
-      
-      // Attach the payload as JSON
-      formData.append('payload_json', JSON.stringify(payload));
-      
-      console.log('[Broadcast] Sending webhook with file attachment');
-      
-      const response = await axios.post(webhookUrl, formData, {
-        headers: {
-          ...formData.getHeaders()
+      try {
+        // Get image from database
+        const imageResult = await query(
+          'SELECT filename, content_type, image_data FROM broadcast_images WHERE image_id = $1',
+          [imageId]
+        );
+        
+        if (imageResult.rows.length > 0) {
+          const imageData = imageResult.rows[0];
+          
+          console.log('[Broadcast] Attaching image from database:', {
+            imageId,
+            size: imageData.image_data.length,
+            type: imageData.content_type,
+            filename: imageData.filename
+          });
+          
+          // Use FormData to send image as attachment
+          const FormData = (await import('form-data')).default;
+          const formData = new FormData();
+          
+          // Attach the image file
+          formData.append('files[0]', imageData.image_data, {
+            filename: imageData.filename,
+            contentType: imageData.content_type
+          });
+          
+          // Attach the payload as JSON
+          formData.append('payload_json', JSON.stringify(payload));
+          
+          console.log('[Broadcast] Sending webhook with file attachment');
+          
+          const response = await axios.post(webhookUrl, formData, {
+            headers: {
+              ...formData.getHeaders()
+            }
+          });
+          
+          console.log('[Broadcast] Webhook response status:', response.status);
+          
+          return { success: true };
+        } else {
+          console.warn('[Broadcast] Image not found in database:', imageId);
+          // Continue without image
         }
-      });
-      
-      console.log('[Broadcast] Webhook response status:', response.status);
-      
-      return { success: true };
-    } else {
-      // No image, send as normal
-      console.log('[Broadcast] Sending webhook without image');
-      console.log('[Broadcast] Payload:', JSON.stringify(payload, null, 2));
-      
-      const response = await axios.post(webhookUrl, payload);
-      console.log('[Broadcast] Webhook response status:', response.status);
-      
-      return { success: true };
+      } catch (imageError) {
+        console.error('[Broadcast] Error fetching image:', imageError);
+        // Continue without image
+      }
     }
+    
+    // No image or image fetch failed, send as normal
+    console.log('[Broadcast] Sending webhook without image');
+    console.log('[Broadcast] Payload:', JSON.stringify(payload, null, 2));
+    
+    const response = await axios.post(webhookUrl, payload);
+    console.log('[Broadcast] Webhook response status:', response.status);
+    
+    return { success: true };
   } catch (error) {
     console.error('[Broadcast] Webhook send error:', error.message);
     throw error;
@@ -215,10 +232,9 @@ async function sendViaBot(chatUrl, discordId, content, imageUrl) {
  * @param {Object} messageData - Message data
  * @param {Array} targetStudents - Array of target students
  * @param {string} userEmail - Current user email
- * @param {Object} imageStorage - Image storage Map (optional)
  * @returns {Object} - Send results
  */
-export async function sendBroadcast(messageData, targetStudents, userEmail, imageStorage = null) {
+export async function sendBroadcast(messageData, targetStudents, userEmail) {
   const { content, imageId, channelType, name, saveAsTemplate, isTest } = messageData;
   
   let broadcastId = null;
