@@ -50,17 +50,17 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
  * @param {string} webhookUrl - Discord webhook URL
  * @param {string} discordId - Discord user ID for mention
  * @param {string} content - Message content
- * @param {string} imageUrl - Image URL (optional)
+ * @param {string} imageId - Image ID (for server-stored images)
+ * @param {Object} imageStorage - Image storage Map (optional)
  */
-async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
+async function sendViaWebhook(webhookUrl, discordId, content, imageId, imageStorage = null) {
   try {
     console.log('[Broadcast] sendViaWebhook called with:', {
       webhookUrl: webhookUrl ? webhookUrl.substring(0, 50) + '...' : 'none',
       discordId: discordId || 'none',
       contentLength: content ? content.length : 0,
-      hasImage: !!imageUrl,
-      imageUrl: imageUrl || 'none',
-      imageUrlType: typeof imageUrl
+      hasImage: !!imageId,
+      imageId: imageId || 'none'
     });
     
     const embed = {
@@ -69,13 +69,7 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
       timestamp: new Date().toISOString()
     };
     
-    if (imageUrl && imageUrl.trim()) {
-      embed.image = { url: imageUrl.trim() };
-      console.log('[Broadcast] Image added to embed:', imageUrl);
-    } else {
-      console.log('[Broadcast] No image URL provided or imageUrl is empty');
-    }
-    
+    // Build payload
     const payload = {
       embeds: [embed]
     };
@@ -85,12 +79,51 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageUrl) {
       payload.content = `<@${discordId}>`;
     }
     
-    console.log('[Broadcast] Final payload:', JSON.stringify(payload, null, 2));
-    
-    const response = await axios.post(webhookUrl, payload);
-    console.log('[Broadcast] Webhook response status:', response.status);
-    
-    return { success: true };
+    // If image exists, attach it as a file
+    if (imageId && imageStorage && imageStorage.has(imageId)) {
+      const imageData = imageStorage.get(imageId);
+      
+      console.log('[Broadcast] Attaching image from storage:', {
+        imageId,
+        size: imageData.buffer.length,
+        type: imageData.contentType,
+        filename: imageData.filename
+      });
+      
+      // Use FormData to send image as attachment
+      const FormData = (await import('form-data')).default;
+      const formData = new FormData();
+      
+      // Attach the image file
+      formData.append('files[0]', imageData.buffer, {
+        filename: imageData.filename,
+        contentType: imageData.contentType
+      });
+      
+      // Attach the payload as JSON
+      formData.append('payload_json', JSON.stringify(payload));
+      
+      console.log('[Broadcast] Sending webhook with file attachment');
+      
+      const response = await axios.post(webhookUrl, formData, {
+        headers: {
+          ...formData.getHeaders()
+        }
+      });
+      
+      console.log('[Broadcast] Webhook response status:', response.status);
+      
+      return { success: true };
+    } else {
+      // No image, send as normal
+      console.log('[Broadcast] Sending webhook without image');
+      console.log('[Broadcast] Payload:', JSON.stringify(payload, null, 2));
+      
+      const response = await axios.post(webhookUrl, payload);
+      console.log('[Broadcast] Webhook response status:', response.status);
+      
+      return { success: true };
+    }
   } catch (error) {
     console.error('[Broadcast] Webhook send error:', error.message);
     throw error;
@@ -151,10 +184,11 @@ async function sendViaBot(chatUrl, discordId, content, imageUrl) {
  * @param {Object} messageData - Message data
  * @param {Array} targetStudents - Array of target students
  * @param {string} userEmail - Current user email
+ * @param {Object} imageStorage - Image storage Map (optional)
  * @returns {Object} - Send results
  */
-export async function sendBroadcast(messageData, targetStudents, userEmail) {
-  const { content, imageUrl, channelType, name, saveAsTemplate, isTest } = messageData;
+export async function sendBroadcast(messageData, targetStudents, userEmail, imageStorage = null) {
+  const { content, imageId, channelType, name, saveAsTemplate, isTest } = messageData;
   
   let broadcastId = null;
   
@@ -168,7 +202,7 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
       [
         name || `Broadcast ${new Date().toISOString()}`,
         content,
-        imageUrl,
+        imageId || null,  // Store imageId instead of imageUrl
         channelType,
         'active',
         messageData.targetTutor || null,
@@ -187,7 +221,7 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
       const testDiscordId = '766666980086120470';
       
       try {
-        await sendViaWebhook(testWebhookUrl, testDiscordId, content, imageUrl);
+        await sendViaWebhook(testWebhookUrl, testDiscordId, content, imageId, imageStorage);
         
         // Log test send
         await logBroadcastSend(

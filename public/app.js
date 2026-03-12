@@ -6899,15 +6899,15 @@ async function previewBroadcast() {
  */
 async function sendBroadcast() {
   const content = document.getElementById('broadcast-content').value.trim();
-  const imageUrl = document.getElementById('broadcast-image-url').value.trim();
+  const imageId = document.getElementById('broadcast-image-url').value.trim();
   const channelType = document.getElementById('broadcast-channel-type').value;
   const targetStatus = document.getElementById('broadcast-target-status').value;
   const targetTutor = document.getElementById('broadcast-target-tutor').value;
   
   console.log('[Frontend] sendBroadcast called with:', {
     hasContent: !!content,
-    hasImageUrl: !!imageUrl,
-    imageUrl: imageUrl || 'none',
+    hasImageId: !!imageId,
+    imageId: imageId || 'none',
     channelType,
     targetStatus,
     targetTutor
@@ -6930,7 +6930,7 @@ async function sendBroadcast() {
     
     const requestData = {
       content,
-      imageUrl: imageUrl || null,
+      imageId: imageId || null,
       channelType,
       targetStatus,
       targetTutor: (targetTutor === 'all' || targetTutor === 'test') ? null : targetTutor,
@@ -6988,7 +6988,7 @@ async function sendBroadcast() {
  */
 async function saveTemplate() {
   const content = document.getElementById('broadcast-content').value.trim();
-  const imageUrl = document.getElementById('broadcast-image-url').value.trim();
+  const imageId = document.getElementById('broadcast-image-url').value.trim();
   const channelType = document.getElementById('broadcast-channel-type').value;
   const targetTutor = document.getElementById('broadcast-target-tutor').value;
   
@@ -7004,7 +7004,7 @@ async function saveTemplate() {
     const response = await axios.post(`${API_BASE}/api/broadcast/templates`, {
       name,
       content,
-      imageUrl: imageUrl || null,
+      imageUrl: imageId || null,  // Send imageId as imageUrl for now
       channelType,
       targetTutor: targetTutor === 'all' ? null : targetTutor
     }, {
@@ -7247,19 +7247,23 @@ async function handleImageUpload(event) {
     });
     
     if (response.data.success) {
-      const imageUrl = response.data.imageUrl;
+      const imageId = response.data.imageId;
+      const filename = response.data.filename;
       
-      // Set hidden URL field
-      document.getElementById('broadcast-image-url').value = imageUrl;
+      // Store imageId in hidden field
+      document.getElementById('broadcast-image-url').value = imageId;
       
-      // Show preview
+      // Show preview using a placeholder or local object URL
       const previewImg = document.getElementById('broadcast-image-preview-img');
-      previewImg.src = imageUrl;
+      
+      // Create object URL for preview
+      const objectUrl = URL.createObjectURL(file);
+      previewImg.src = objectUrl;
       document.getElementById('broadcast-image-preview').classList.remove('hidden');
       
       // Update status
       statusElement.className = 'mt-2 text-green-600';
-      statusElement.innerHTML = '<i class="fas fa-check-circle mr-2"></i>アップロード完了';
+      statusElement.innerHTML = `<i class="fas fa-check-circle mr-2"></i>アップロード完了: ${filename}`;
       
       showNotification('✅ 画像をアップロードしました', 'success');
     } else {

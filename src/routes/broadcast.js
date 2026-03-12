@@ -9,6 +9,13 @@ import {
 } from '../services/broadcastService.js';
 import { query } from '../db/connection.js';
 
+// In-memory storage for uploaded images (temporary)
+// Key: imageId, Value: { buffer, contentType, filename, uploadedAt }
+const imageStorage = new Map();
+
+// Export imageStorage for use in broadcastService
+export { imageStorage };
+
 const app = new Hono();
 
 /**
@@ -116,13 +123,13 @@ app.post('/send', async (c) => {
       console.log('[Broadcast] Test mode: Skipping student lookup');
       console.log('[Broadcast] Test mode message data:', {
         hasContent: !!messageData.content,
-        hasImageUrl: !!messageData.imageUrl,
-        imageUrl: messageData.imageUrl || 'none',
+        hasImageId: !!messageData.imageId,
+        imageId: messageData.imageId || 'none',
         channelType: messageData.channelType
       });
       
       // Send broadcast in test mode (empty student array)
-      const result = await sendBroadcast(messageData, [], user.email);
+      const result = await sendBroadcast(messageData, [], user.email, imageStorage);
       
       return c.json({
         success: true,
@@ -148,7 +155,7 @@ app.post('/send', async (c) => {
     }
     
     // Send broadcast
-    const result = await sendBroadcast(messageData, targetStudents, user.email);
+    const result = await sendBroadcast(messageData, targetStudents, user.email, imageStorage);
     
     return c.json({
       success: true,
@@ -327,7 +334,7 @@ app.get('/tutors', async (c) => {
 
 /**
  * POST /api/broadcast/upload-image
- * Upload image to Discord CDN via webhook
+ * Store image temporarily in server memory
  */
 app.post('/upload-image', async (c) => {
   try {
@@ -359,66 +366,44 @@ app.post('/upload-image', async (c) => {
       }, 400);
     }
     
-    // Import axios and FormData
-    const axios = (await import('axios')).default;
-    const FormData = (await import('form-data')).default;
-    
-    // Use test webhook to upload image
-    const testWebhookUrl = 'https://discord.com/api/webhooks/1282616705817903146/M4KSUtmoHYSDqySMBgtgjU0wZywkUkVtfh3KOOA-BNzgXMnwVnEphKwuleMXhFn60MYd';
-    
-    // Create FormData and append file
-    const formData = new FormData();
-    
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    formData.append('file', buffer, {
+    // Generate unique image ID
+    const imageId = `img_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    
+    // Store image in memory temporarily
+    imageStorage.set(imageId, {
+      buffer: buffer,
+      contentType: file.type,
       filename: file.name,
-      contentType: file.type
+      uploadedAt: Date.now()
     });
     
-    console.log('[Broadcast] Uploading image to Discord webhook');
+    console.log('[Broadcast] Image stored in memory:', {
+      imageId,
+      size: buffer.length,
+      type: file.type,
+      filename: file.name
+    });
     
-    // Send to Discord webhook with wait=true to get message data
-    const response = await axios.post(testWebhookUrl + '?wait=true', formData, {
-      headers: {
-        ...formData.getHeaders()
+    // Clean up old images (older than 1 hour)
+    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+    for (const [id, data] of imageStorage.entries()) {
+      if (data.uploadedAt < oneHourAgo) {
+        imageStorage.delete(id);
+        console.log('[Broadcast] Cleaned up old image:', id);
       }
-    });
-    
-    console.log('[Broadcast] Discord response received:', {
-      hasAttachments: !!response.data.attachments,
-      attachmentsCount: response.data.attachments?.length,
-      messageId: response.data.id
-    });
-    
-    // Extract image URL from Discord response
-    const imageUrl = response.data.attachments?.[0]?.url;
-    const messageId = response.data.id;
-    
-    console.log('[Broadcast] Image URL extracted:', imageUrl);
-    
-    if (!imageUrl) {
-      console.error('[Broadcast] No image URL in response:', response.data);
-      throw new Error('Failed to get image URL from Discord');
     }
-    
-    // NOTE: We do NOT delete the upload message because:
-    // 1. Deleting the message invalidates the image URL
-    // 2. Discord CDN URLs are tied to the message they're attached to
-    // 3. Keeping the message ensures the image URL remains accessible
-    // The upload message is sent to a test channel, so it won't interfere with actual broadcasts
-    console.log('[Broadcast] Keeping upload message (ID:', messageId, ') to preserve image URL');
-    
-    console.log('[Broadcast] Returning image URL to client:', imageUrl);
     
     return c.json({
       success: true,
-      imageUrl: imageUrl
+      imageId: imageId,
+      filename: file.name
     });
   } catch (error) {
-    console.error('Error uploading image:', error);
+    console.error('Error storing image:', error);
     return c.json({
       success: false,
       error: error.message
