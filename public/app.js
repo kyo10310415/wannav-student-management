@@ -4430,12 +4430,19 @@ function getFilteredSchedules() {
     }
     
     // Leader filter
-    if (selectedLeader !== 'all' && schedule.leader_name !== selectedLeader) {
-      return false;
+    if (selectedLeader !== 'all') {
+      // If leader filter is set, show schedules where user is leader OR attendee
+      const attendees = schedule.attendee_names || [];
+      const isLeader = schedule.leader_name === selectedLeader;
+      const isAttendee = attendees.includes(selectedLeader);
+      
+      if (!isLeader && !isAttendee) {
+        return false;
+      }
     }
     
-    // Attendee filter
-    if (selectedAttendee !== 'all') {
+    // Attendee filter (independent from leader filter)
+    if (selectedAttendee !== 'all' && selectedAttendee !== selectedLeader) {
       const attendees = schedule.attendee_names || [];
       if (!attendees.includes(selectedAttendee)) {
         return false;
