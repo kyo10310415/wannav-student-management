@@ -407,23 +407,41 @@ app.get('/schedules', async (c) => {
   try {
     const user = c.get('user');
     
+    console.log('[Broadcast] GET /schedules called by:', {
+      email: user.email,
+      role: user.role
+    });
+    
     let sqlQuery = `
       SELECT id, name, content, image_url, channel_type, target_status, target_tutor, 
-             schedule_cron, schedule_enabled, last_sent_at, schedule_start_date, created_at, updated_at
+             schedule_cron, schedule_enabled, last_sent_at, schedule_start_date, created_at, updated_at, created_by
       FROM broadcast_messages
       WHERE is_scheduled = true
     `;
     
     // Crew can only see their own schedules
     if (user.role === 'crew') {
-      sqlQuery += ` AND created_by = $1`;
+      sqlQuery += ` AND LOWER(created_by) = LOWER($1)`;
       const result = await query(sqlQuery, [user.email]);
+      console.log('[Broadcast] Crew schedules found:', result.rows.length);
+      if (result.rows.length > 0) {
+        console.log('[Broadcast] Sample schedule:', {
+          created_by: result.rows[0].created_by,
+          user_email: user.email
+        });
+      } else {
+        console.log('[Broadcast] No schedules found for crew:', user.email);
+        // Check if any schedules exist at all
+        const allSchedulesResult = await query(`SELECT COUNT(*) as count, created_by FROM broadcast_messages WHERE is_scheduled = true GROUP BY created_by`);
+        console.log('[Broadcast] All scheduled broadcasts:', allSchedulesResult.rows);
+      }
       return c.json({
         success: true,
         schedules: result.rows
       });
     } else {
       const result = await query(sqlQuery);
+      console.log('[Broadcast] All schedules found:', result.rows.length);
       return c.json({
         success: true,
         schedules: result.rows
