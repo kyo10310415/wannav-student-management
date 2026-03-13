@@ -165,6 +165,22 @@ const migrations = [
       ALTER TABLE students DROP COLUMN IF EXISTS x_account_id;
       ALTER TABLE students DROP COLUMN IF EXISTS youtube_channel_id;
     `
+  },
+  {
+    version: 9,
+    name: 'add_schedule_start_date',
+    up: `
+      -- Add schedule_start_date column to broadcast_messages table
+      ALTER TABLE broadcast_messages ADD COLUMN IF NOT EXISTS schedule_start_date TIMESTAMP;
+      
+      -- Set default start date to created_at for existing scheduled broadcasts
+      UPDATE broadcast_messages 
+      SET schedule_start_date = created_at 
+      WHERE is_scheduled = true AND schedule_start_date IS NULL;
+    `,
+    down: `
+      ALTER TABLE broadcast_messages DROP COLUMN IF EXISTS schedule_start_date;
+    `
   }
 ];
 

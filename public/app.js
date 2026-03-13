@@ -7353,9 +7353,13 @@ async function loadSchedules() {
     }
   } catch (error) {
     console.error('Error loading schedules:', error);
+    const errorMessage = error.response?.data?.error || error.message || '不明なエラー';
     document.getElementById('schedule-list-container').innerHTML = `
       <p class="text-red-600 text-center py-8">
         <i class="fas fa-exclamation-triangle mr-2"></i>スケジュールの取得に失敗しました
+      </p>
+      <p class="text-xs text-gray-600 text-center">
+        エラー詳細: ${errorMessage}
       </p>
     `;
   }
