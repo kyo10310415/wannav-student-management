@@ -172,11 +172,20 @@ export async function checkAndExecuteSchedules() {
     
     console.log(`[Scheduler] Checking ${schedules.length} active schedules`);
     
+    // Use Japan time (JST) for comparison
     const now = new Date();
-    const currentMinute = now.getMinutes();
-    const currentHour = now.getHours();
-    const currentDayOfWeek = now.getDay();
-    const currentDayOfMonth = now.getDate();
+    const jstTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    const currentMinute = jstTime.getMinutes();
+    const currentHour = jstTime.getHours();
+    const currentDayOfWeek = jstTime.getDay();
+    const currentDayOfMonth = jstTime.getDate();
+    
+    console.log('[Scheduler] Current JST time:', jstTime.toISOString(), {
+      minute: currentMinute,
+      hour: currentHour,
+      dayOfWeek: currentDayOfWeek,
+      dayOfMonth: currentDayOfMonth
+    });
     
     for (const schedule of schedules) {
       try {
@@ -239,7 +248,7 @@ export async function checkAndExecuteSchedules() {
           // For biweekly schedules, check if it's the right week
           if (isBiweekly) {
             const startDate = schedule.schedule_start_date ? new Date(schedule.schedule_start_date) : new Date(schedule.created_at);
-            const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+            const daysSinceStart = Math.floor((jstTime - startDate) / (1000 * 60 * 60 * 24));
             const weeksSinceStart = Math.floor(daysSinceStart / 7);
             
             // Only send on even weeks (0, 2, 4, ...) from start date
@@ -253,7 +262,7 @@ export async function checkAndExecuteSchedules() {
           
           // Check if already sent in the last hour to avoid duplicate sends
           const lastSent = schedule.last_sent_at ? new Date(schedule.last_sent_at) : null;
-          const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          const oneHourAgo = new Date(jstTime.getTime() - 60 * 60 * 1000);
           
           if (!lastSent || lastSent < oneHourAgo) {
             console.log('[Scheduler] Executing schedule:', schedule.id, schedule.name);
