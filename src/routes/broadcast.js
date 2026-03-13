@@ -409,7 +409,7 @@ app.get('/schedules', async (c) => {
     
     let sqlQuery = `
       SELECT id, name, content, image_url, channel_type, target_status, target_tutor, 
-             schedule_cron, schedule_enabled, last_sent_at, created_at, updated_at
+             schedule_cron, schedule_enabled, last_sent_at, schedule_start_date, created_at, updated_at
       FROM broadcast_messages
       WHERE is_scheduled = true
     `;
@@ -510,8 +510,8 @@ app.post('/schedules', async (c) => {
       const insertResult = await query(
         `INSERT INTO broadcast_messages 
           (name, content, image_url, channel_type, target_status, target_tutor, 
-           created_by, is_template, is_scheduled, schedule_cron, schedule_enabled)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, false, true, $8, $9)
+           created_by, is_template, is_scheduled, schedule_cron, schedule_enabled, schedule_start_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, true, $8, $9, CURRENT_TIMESTAMP)
         RETURNING id`,
         [
           scheduleData.name,

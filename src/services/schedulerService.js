@@ -65,7 +65,7 @@ export async function getActiveSchedules() {
   try {
     const result = await query(
       `SELECT id, name, content, image_url, channel_type, target_status, target_tutor, 
-              schedule_cron, created_by, last_sent_at
+              schedule_cron, created_by, last_sent_at, schedule_start_date, created_at
        FROM broadcast_messages
        WHERE is_scheduled = true AND schedule_enabled = true`
     );
@@ -197,6 +197,24 @@ export async function checkAndExecuteSchedules() {
         }
         
         if (minuteMatch && hourMatch && dayOfWeekMatch && dayOfMonthMatch) {
+          // Check for biweekly schedules (cron expression contains 'biweekly')
+          const isBiweekly = schedule.schedule_cron.includes('biweekly');
+          
+          // For biweekly schedules, check if it's the right week
+          if (isBiweekly) {
+            const startDate = schedule.schedule_start_date ? new Date(schedule.schedule_start_date) : new Date(schedule.created_at);
+            const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+            const weeksSinceStart = Math.floor(daysSinceStart / 7);
+            
+            // Only send on even weeks (0, 2, 4, ...) from start date
+            if (weeksSinceStart % 2 !== 0) {
+              console.log('[Scheduler] Biweekly schedule - skipping odd week:', schedule.id, schedule.name, `week ${weeksSinceStart} since`, startDate.toISOString());
+              continue;
+            }
+            
+            console.log('[Scheduler] Biweekly schedule - even week OK:', schedule.id, schedule.name, `week ${weeksSinceStart} since`, startDate.toISOString());
+          }
+          
           // Check if already sent in the last hour to avoid duplicate sends
           const lastSent = schedule.last_sent_at ? new Date(schedule.last_sent_at) : null;
           const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);

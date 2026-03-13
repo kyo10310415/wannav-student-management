@@ -7395,6 +7395,8 @@ function renderScheduleList(schedules) {
     let frequencyStr = '毎週';
     if (cronParts[2] === '1-7') {
       frequencyStr = '毎月第1';
+    } else if (schedule.schedule_cron.includes('biweekly')) {
+      frequencyStr = '2週間ごとの';
     }
     
     const scheduleStr = `${frequencyStr}${dayName}曜日 ${timeStr}`;
@@ -7628,6 +7630,8 @@ function showScheduleModal(scheduleId = null) {
     // Determine frequency
     if (cronParts[2] === '1-7') {
       document.getElementById('schedule-frequency').value = 'monthly';
+    } else if (schedule.schedule_cron.includes('biweekly')) {
+      document.getElementById('schedule-frequency').value = 'biweekly';
     } else {
       document.getElementById('schedule-frequency').value = 'weekly';
     }
@@ -7663,7 +7667,8 @@ async function saveSchedule(scheduleId = null) {
       cronExpression = `${minute} ${hour} * * ${dayOfWeek}`;
       break;
     case 'biweekly':
-      cronExpression = `${minute} ${hour} * * ${dayOfWeek}`;
+      // Add 'biweekly' marker as a comment in the cron expression
+      cronExpression = `${minute} ${hour} * * ${dayOfWeek} biweekly`;
       break;
     case 'monthly':
       cronExpression = `${minute} ${hour} 1-7 * ${dayOfWeek}`;
