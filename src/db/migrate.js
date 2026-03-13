@@ -181,6 +181,30 @@ const migrations = [
     down: `
       ALTER TABLE broadcast_messages DROP COLUMN IF EXISTS schedule_start_date;
     `
+  },
+  {
+    version: 10,
+    name: 'create_broadcast_images_table',
+    up: `
+      -- Create broadcast_images table for persistent image storage
+      CREATE TABLE IF NOT EXISTS broadcast_images (
+        id SERIAL PRIMARY KEY,
+        image_id VARCHAR(100) UNIQUE NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        content_type VARCHAR(50) NOT NULL,
+        file_size INTEGER NOT NULL,
+        image_data BYTEA NOT NULL,
+        uploaded_by VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      -- Create indexes
+      CREATE INDEX IF NOT EXISTS idx_broadcast_images_image_id ON broadcast_images(image_id);
+      CREATE INDEX IF NOT EXISTS idx_broadcast_images_uploaded_by ON broadcast_images(uploaded_by);
+    `,
+    down: `
+      DROP TABLE IF EXISTS broadcast_images;
+    `
   }
 ];
 
