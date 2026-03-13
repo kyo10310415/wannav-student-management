@@ -180,21 +180,57 @@ export async function checkAndExecuteSchedules() {
     
     for (const schedule of schedules) {
       try {
-        const cronParts = schedule.schedule_cron.split(' ');
-        if (cronParts.length !== 5) continue;
+        console.log('[Scheduler] Checking schedule:', {
+          id: schedule.id,
+          name: schedule.name,
+          cron: schedule.schedule_cron,
+          last_sent: schedule.last_sent_at
+        });
+        
+        // Remove 'biweekly' marker if present for parsing
+        const cronString = schedule.schedule_cron.replace(/\s+biweekly\s*$/, '').trim();
+        const cronParts = cronString.split(' ');
+        
+        if (cronParts.length < 5) {
+          console.log('[Scheduler] Invalid cron expression:', schedule.schedule_cron, 'parsed:', cronString);
+          continue;
+        }
         
         const [minute, hour, dayOfMonth, month, dayOfWeek] = cronParts;
+        
+        console.log('[Scheduler] Current time:', {
+          minute: currentMinute,
+          hour: currentHour,
+          dayOfWeek: currentDayOfWeek,
+          dayOfMonth: currentDayOfMonth
+        });
+        
+        console.log('[Scheduler] Cron parts:', {
+          minute,
+          hour,
+          dayOfMonth,
+          month,
+          dayOfWeek
+        });
         
         // Check if current time matches cron expression
         const minuteMatch = minute === '*' || parseInt(minute) === currentMinute;
         const hourMatch = hour === '*' || parseInt(hour) === currentHour;
         const dayOfWeekMatch = dayOfWeek === '*' || parseInt(dayOfWeek) === currentDayOfWeek;
         
+        console.log('[Scheduler] Match results:', {
+          minuteMatch,
+          hourMatch,
+          dayOfWeekMatch
+        });
+        
         // For monthly schedules (day 1-7)
         let dayOfMonthMatch = dayOfMonth === '*';
         if (dayOfMonth === '1-7' && currentDayOfMonth <= 7 && dayOfWeekMatch) {
           dayOfMonthMatch = true;
         }
+        
+        console.log('[Scheduler] Day of month match:', dayOfMonthMatch);
         
         if (minuteMatch && hourMatch && dayOfWeekMatch && dayOfMonthMatch) {
           // Check for biweekly schedules (cron expression contains 'biweekly')
