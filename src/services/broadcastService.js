@@ -361,9 +361,9 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
         
         // Send via webhook or bot
         if (channelType === 'chat') {
-          await sendViaBot(webhookUrl, broadcastInfo.discordId, content, imageUrl);
+          await sendViaBot(webhookUrl, broadcastInfo.discordId, content, imageId);
         } else {
-          await sendViaWebhook(webhookUrl, broadcastInfo.discordId, content, imageUrl);
+          await sendViaWebhook(webhookUrl, broadcastInfo.discordId, content, imageId);
         }
         
         results.sent++;
