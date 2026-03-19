@@ -26,11 +26,14 @@ import suspensionRoutes from './routes/suspensions.js';
 import statsRoutes from './routes/stats.js';
 import databaseRoutes from './routes/database.js';
 import broadcastRoutes from './routes/broadcast.js';
+import surveyRoutes from './routes/survey.js';
+import rouletteRoutes from './routes/roulette.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
 import { sendDailyStatsReport } from './services/statsReportService.js';
 import { checkAndExecuteSchedules } from './services/schedulerService.js';
+import { checkStampRallyAchievements } from './services/stampRallyService.js';
 
 const app = new Hono();
 
@@ -63,6 +66,8 @@ app.route('/api/suspensions', suspensionRoutes);
 app.route('/api/stats', statsRoutes);
 app.route('/api/database', databaseRoutes);
 app.route('/api/broadcast', broadcastRoutes);
+app.route('/api/survey', surveyRoutes);
+app.route('/api/roulette', rouletteRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
@@ -149,6 +154,19 @@ cron.schedule('* * * * *', async () => {
     await checkAndExecuteSchedules();
   } catch (error) {
     console.error('Error checking broadcast schedules:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule stamp rally achievement check (daily at 10:00 JST)
+console.log('Stamp rally checker: ENABLED (daily at 10:00 JST)');
+cron.schedule('0 10 * * *', async () => {
+  console.log('Running stamp rally achievement check at 10:00 JST...');
+  try {
+    await checkStampRallyAchievements();
+  } catch (error) {
+    console.error('Error in stamp rally achievement check:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
