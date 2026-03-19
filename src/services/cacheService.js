@@ -173,6 +173,41 @@ export async function fetchSatisfactionFromCache(spreadsheetId) {
 }
 
 /**
+ * Fetch survey response counts from cache spreadsheet
+ * Count rows by student_id from satisfaction data
+ */
+export async function fetchSurveyResponsesFromCache(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'レッスン満足度データ!A2:F', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由
+    });
+
+    const rows = response.data.values || [];
+    console.log(`Fetched ${rows.length} satisfaction records for survey count`);
+
+    // Count occurrences of each student name
+    const responseCountMap = {};
+    
+    rows.forEach(row => {
+      const studentName = row[2]; // 生徒名
+      if (studentName) {
+        responseCountMap[studentName] = (responseCountMap[studentName] || 0) + 1;
+      }
+    });
+    
+    console.log(`Survey response counts calculated for ${Object.keys(responseCountMap).length} students`);
+    
+    return responseCountMap;
+  } catch (error) {
+    console.error('Error fetching survey responses from cache:', error);
+    throw error;
+  }
+}
+
+/**
  * Get last sync time from meta sheet
  */
 export async function getCacheSyncTime(spreadsheetId) {

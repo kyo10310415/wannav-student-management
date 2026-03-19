@@ -1,8 +1,44 @@
 import { Hono } from 'hono';
 import { getPool } from '../db/connection.js';
 import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
+import { fetchSurveyResponsesFromCache } from '../services/cacheService.js';
 
 const app = new Hono();
+
+// Cache for survey response counts (24 hours)
+let surveyResponseCache = null;
+let surveyResponseCacheTime = null;
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Get survey response counts from cache spreadsheet
+ */
+async function getSurveyResponseCounts() {
+  const now = Date.now();
+  
+  // Return cached data if still valid
+  if (surveyResponseCache && surveyResponseCacheTime && (now - surveyResponseCacheTime < CACHE_DURATION)) {
+    console.log('[Survey] Using cached survey response counts');
+    return surveyResponseCache;
+  }
+  
+  // Fetch fresh data
+  const cacheSpreadsheetId = process.env.CACHE_SPREADSHEET_ID;
+  if (!cacheSpreadsheetId) {
+    console.warn('[Survey] CACHE_SPREADSHEET_ID not configured');
+    return {};
+  }
+  
+  try {
+    surveyResponseCache = await fetchSurveyResponsesFromCache(cacheSpreadsheetId);
+    surveyResponseCacheTime = now;
+    console.log(`[Survey] Survey response counts fetched and cached for ${Object.keys(surveyResponseCache).length} students`);
+    return surveyResponseCache;
+  } catch (error) {
+    console.error('[Survey] Error fetching survey response counts:', error);
+    return surveyResponseCache || {}; // Return old cache if available
+  }
+}
 
 /**
  * GET /api/survey/responses/:studentId
@@ -40,11 +76,14 @@ app.get('/responses/:studentId', async (c) => {
 
 /**
  * GET /api/survey/stats-all
- * 全生徒のアンケート統計を一括取得（キャッシュ対応）
+ * 全生徒のアンケート統計を一括取得（スプレッドシートから）
  */
 app.get('/stats-all', async (c) => {
   try {
     const pool = getPool();
+    
+    // Get survey response counts from spreadsheet
+    const surveyResponseCounts = await getSurveyResponseCounts();
     
     // Get all students with their continued months and lesson start date
     const studentsResult = await pool.query(`
@@ -57,16 +96,6 @@ app.get('/stats-all', async (c) => {
         s.result_overall
       FROM students s
       WHERE s.status IN ('アクティブ', 'レッスン準備中')
-    `);
-    
-    // Get all survey responses
-    const responsesResult = await pool.query(`
-      SELECT 
-        student_id,
-        response_month,
-        responded_at
-      FROM survey_responses
-      ORDER BY student_id, response_month
     `);
     
     // Get all roulette results
@@ -102,14 +131,6 @@ app.get('/stats-all', async (c) => {
     }
     
     // Create lookup maps
-    const responsesMap = {};
-    responsesResult.rows.forEach(row => {
-      if (!responsesMap[row.student_id]) {
-        responsesMap[row.student_id] = [];
-      }
-      responsesMap[row.student_id].push(row);
-    });
-    
     const rouletteMap = {};
     rouletteResult.rows.forEach(row => {
       rouletteMap[row.student_id] = row;
@@ -125,9 +146,11 @@ app.get('/stats-all', async (c) => {
     
     studentsResult.rows.forEach(student => {
       const studentId = student.student_id;
-      const responses = responsesMap[studentId] || [];
+      const studentName = student.name;
+      
+      // Get response count from spreadsheet by student name
+      const responseCount = surveyResponseCounts[studentName] || 0;
       const continuedMonths = student.continued_months || 0;
-      const responseCount = responses.length;
       const responseRate = continuedMonths > 0 ? Math.round((responseCount / continuedMonths) * 100) : 0;
       
       // Check eligibility (simplified logic for bulk fetch)
@@ -151,7 +174,7 @@ app.get('/stats-all', async (c) => {
       
       statsMap[studentId] = {
         studentId,
-        name: student.name,
+        name: studentName,
         status: student.status,
         continuedMonths,
         responseCount,
@@ -166,7 +189,7 @@ app.get('/stats-all', async (c) => {
       };
     });
     
-    console.log(`[Survey] Bulk stats loaded for ${Object.keys(statsMap).length} students`);
+    console.log(`[Survey] Bulk stats loaded for ${Object.keys(statsMap).length} students (from spreadsheet)`);
     
     return c.json({
       success: true,
@@ -276,15 +299,12 @@ app.get('/stats/:studentId', async (c) => {
     }
 
     const student = studentResult.rows[0];
+    const studentName = student.name;
 
-    // アンケート回答数取得
-    const responseResult = await pool.query(`
-      SELECT COUNT(*) as response_count
-      FROM survey_responses
-      WHERE student_id = $1
-    `, [studentId]);
-
-    const responseCount = parseInt(responseResult.rows[0].response_count);
+    // Get survey response count from spreadsheet
+    const surveyResponseCounts = await getSurveyResponseCounts();
+    const responseCount = surveyResponseCounts[studentName] || 0;
+    
     const continuedMonths = student.continued_months || 0;
     const responseRate = continuedMonths > 0 
       ? Math.round((responseCount / continuedMonths) * 100 * 10) / 10 
@@ -377,6 +397,9 @@ app.get('/eligible-students', async (c) => {
 
     const students = studentsResult.rows;
     const eligibleStudents = [];
+    
+    // Get survey response counts from spreadsheet
+    const surveyResponseCounts = await getSurveyResponseCounts();
 
     // 延長審査データ取得
     let extensionMap = {};
@@ -401,14 +424,10 @@ app.get('/eligible-students', async (c) => {
 
     // 各生徒の特典対象判定
     for (const student of students) {
-      // アンケート回答数取得
-      const responseResult = await pool.query(`
-        SELECT COUNT(*) as response_count
-        FROM survey_responses
-        WHERE student_id = $1
-      `, [student.student_id]);
-
-      const responseCount = parseInt(responseResult.rows[0].response_count);
+      const studentName = student.name;
+      
+      // Get survey response count from spreadsheet
+      const responseCount = surveyResponseCounts[studentName] || 0;
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 
         ? Math.round((responseCount / continuedMonths) * 100 * 10) / 10 
