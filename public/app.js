@@ -639,6 +639,17 @@ function renderReservationsPage() {
       renderReservationsPage();
     });
   }
+  
+  // Load roulette markers for filtered students
+  const filteredStudents = getFilteredStudents();
+  filteredStudents.forEach(async (student) => {
+    try {
+      const stats = await loadStudentSurveyStats(student.student_id);
+      updateRouletteMarker(student.student_id, stats);
+    } catch (error) {
+      console.error(`Failed to load roulette marker for ${student.student_id}:`, error);
+    }
+  });
 }
 
 // Get tutor options for filter (only cached tutors)
@@ -782,7 +793,12 @@ function renderStudentRows() {
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+          <div class="flex items-center gap-2">
+            <span>${student.name || '-'}</span>
+            <span class="roulette-marker-loading" data-student-id="${student.student_id}"></span>
+          </div>
+        </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
@@ -7987,4 +8003,34 @@ function updateSurveyStatsDisplay(studentId, stats) {
   } else {
     rouletteCell.innerHTML = '<span class="text-gray-400 text-xs">未達成</span>';
   }
+}
+
+/**
+ * Update roulette marker on reservation/today pages
+ */
+function updateRouletteMarker(studentId, stats) {
+  const markerCell = document.querySelector(`.roulette-marker-loading[data-student-id="${studentId}"]`);
+  
+  if (!markerCell) return;
+  
+  if (!stats || !stats.isEligible || !stats.isEligible.isEligible) {
+    markerCell.innerHTML = '';
+    return;
+  }
+  
+  // Determine marker color based on result_overall score
+  const isS = stats.resultScore === 'S';
+  const probability = isS ? 100 : 50;
+  const colorClass = isS ? 'text-yellow-500' : 'text-green-500';
+  const bgClass = isS ? 'bg-yellow-100 border-yellow-500' : 'bg-green-100 border-green-500';
+  
+  markerCell.innerHTML = `
+    <span 
+      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold border-2 ${bgClass} ${colorClass} animate-pulse"
+      title="アンケート特典対象 (抽選確率: ${probability}%)"
+    >
+      <i class="fas fa-dice text-base mr-1"></i>
+      ${probability}%
+    </span>
+  `;
 }
