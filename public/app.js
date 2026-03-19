@@ -1483,6 +1483,9 @@ function renderStudentsPage() {
   
   // Load Wanami usage data asynchronously (batch load for all students)
   loadWanamiUsageDataBatch();
+  
+  // Load survey stats asynchronously (batch load for all students)
+  loadSurveyStats();
 }
 
 // Load Wanami usage data for all visible students (batch mode with cache)
@@ -7922,11 +7925,15 @@ async function loadStudentSurveyStats(studentId) {
     if (response.data.success) {
       const stats = response.data.data;
       updateSurveyStatsDisplay(studentId, stats);
+      updateRouletteMarker(studentId, stats);
+      return stats;
     }
   } catch (error) {
     console.error(`Error loading survey stats for ${studentId}:`, error);
     updateSurveyStatsDisplay(studentId, null);
+    updateRouletteMarker(studentId, null);
   }
+  return null;
 }
 
 /**
