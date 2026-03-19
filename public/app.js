@@ -7898,21 +7898,46 @@ function removeScheduleImagePreview() {
 
 // ========== Survey & Roulette Functions ==========
 
+// Cache for survey stats
+let surveyStatsCache = {};
+let surveyStatsCacheTime = null;
+const SURVEY_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
 /**
- * Load survey statistics for all students
+ * Load survey statistics for all students (bulk fetch with cache)
  */
 async function loadSurveyStats() {
   try {
-    // Load survey stats for each student in batches
-    const batchSize = 10;
-    for (let i = 0; i < students.length; i += batchSize) {
-      const batch = students.slice(i, i + batchSize);
-      await Promise.all(batch.map(student => loadStudentSurveyStats(student.student_id)));
+    // Check cache
+    if (surveyStatsCacheTime && (Date.now() - surveyStatsCacheTime < SURVEY_CACHE_DURATION)) {
+      console.log('Using cached survey stats');
+      updateAllSurveyDisplay();
+      return;
     }
-    console.log('Survey stats loaded for all students');
+    
+    console.log('Fetching survey stats from API...');
+    const response = await axios.get(`${API_BASE}/api/survey/stats-all`);
+    
+    if (response.data.success) {
+      surveyStatsCache = response.data.data;
+      surveyStatsCacheTime = Date.now();
+      console.log(`Survey stats loaded for ${Object.keys(surveyStatsCache).length} students`);
+      updateAllSurveyDisplay();
+    }
   } catch (error) {
     console.error('Error loading survey stats:', error);
   }
+}
+
+/**
+ * Update all survey displays from cache
+ */
+function updateAllSurveyDisplay() {
+  Object.keys(surveyStatsCache).forEach(studentId => {
+    const stats = surveyStatsCache[studentId];
+    updateSurveyStatsDisplay(studentId, stats);
+    updateRouletteMarker(studentId, stats);
+  });
 }
 
 /**

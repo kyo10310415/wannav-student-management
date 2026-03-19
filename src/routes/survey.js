@@ -39,6 +39,149 @@ app.get('/responses/:studentId', async (c) => {
 });
 
 /**
+ * GET /api/survey/stats-all
+ * 全生徒のアンケート統計を一括取得（キャッシュ対応）
+ */
+app.get('/stats-all', async (c) => {
+  try {
+    const pool = getPool();
+    
+    // Get all students with their continued months and lesson start date
+    const studentsResult = await pool.query(`
+      SELECT 
+        s.student_id,
+        s.name,
+        s.status,
+        s.continued_months,
+        s.lesson_start_date,
+        s.result_overall
+      FROM students s
+      WHERE s.status IN ('アクティブ', 'レッスン準備中')
+    `);
+    
+    // Get all survey responses
+    const responsesResult = await pool.query(`
+      SELECT 
+        student_id,
+        response_month,
+        responded_at
+      FROM survey_responses
+      ORDER BY student_id, response_month
+    `);
+    
+    // Get all roulette results
+    const rouletteResult = await pool.query(`
+      SELECT 
+        r.student_id,
+        r.result,
+        r.probability,
+        r.created_at
+      FROM roulette_results r
+      INNER JOIN (
+        SELECT student_id, MAX(created_at) as max_created
+        FROM roulette_results
+        GROUP BY student_id
+      ) latest ON r.student_id = latest.student_id AND r.created_at = latest.max_created
+    `);
+    
+    // Get extension results
+    const extensionPool = getExtensionPool();
+    let extensionResults = [];
+    
+    if (extensionPool) {
+      try {
+        const extResult = await extensionPool.query(`
+          SELECT student_id, examination_result_2
+          FROM student_extensions
+          WHERE examination_result_2 IS NOT NULL
+        `);
+        extensionResults = extResult.rows;
+      } catch (error) {
+        console.warn('[Survey] Extension DB not available:', error.message);
+      }
+    }
+    
+    // Create lookup maps
+    const responsesMap = {};
+    responsesResult.rows.forEach(row => {
+      if (!responsesMap[row.student_id]) {
+        responsesMap[row.student_id] = [];
+      }
+      responsesMap[row.student_id].push(row);
+    });
+    
+    const rouletteMap = {};
+    rouletteResult.rows.forEach(row => {
+      rouletteMap[row.student_id] = row;
+    });
+    
+    const extensionMap = {};
+    extensionResults.forEach(row => {
+      extensionMap[row.student_id] = row.examination_result_2;
+    });
+    
+    // Build stats for each student
+    const statsMap = {};
+    
+    studentsResult.rows.forEach(student => {
+      const studentId = student.student_id;
+      const responses = responsesMap[studentId] || [];
+      const continuedMonths = student.continued_months || 0;
+      const responseCount = responses.length;
+      const responseRate = continuedMonths > 0 ? Math.round((responseCount / continuedMonths) * 100) : 0;
+      
+      // Check eligibility (simplified logic for bulk fetch)
+      const extensionResult = extensionMap[studentId];
+      const isExtensionApproved = extensionResult === '延長';
+      const isActive = student.status === 'アクティブ';
+      
+      let isEligible = false;
+      let eligibilityReason = '';
+      
+      if (!isActive) {
+        eligibilityReason = 'Status is not active';
+      } else if (!isExtensionApproved) {
+        eligibilityReason = 'Extension result is not 延長';
+      } else if (responseRate >= 80) {
+        isEligible = true;
+        eligibilityReason = 'Eligible: Response rate >= 80%';
+      } else {
+        eligibilityReason = 'Response rate < 80%';
+      }
+      
+      statsMap[studentId] = {
+        studentId,
+        name: student.name,
+        status: student.status,
+        continuedMonths,
+        responseCount,
+        responseRate,
+        latestRouletteResult: rouletteMap[studentId] || null,
+        isEligible: {
+          isEligible,
+          reason: eligibilityReason
+        },
+        extensionResult: extensionResult || null,
+        resultScore: student.result_overall || null
+      };
+    });
+    
+    console.log(`[Survey] Bulk stats loaded for ${Object.keys(statsMap).length} students`);
+    
+    return c.json({
+      success: true,
+      data: statsMap
+    });
+  } catch (error) {
+    console.error('Error fetching bulk survey stats:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * POST /api/survey/responses
  * アンケート回答を記録
  * Body: { studentId, responseMonth }
