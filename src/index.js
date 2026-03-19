@@ -28,6 +28,7 @@ import databaseRoutes from './routes/database.js';
 import broadcastRoutes from './routes/broadcast.js';
 import surveyRoutes from './routes/survey.js';
 import rouletteRoutes from './routes/roulette.js';
+import settingsRoutes from './routes/settings.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -68,6 +69,7 @@ app.route('/api/database', databaseRoutes);
 app.route('/api/broadcast', broadcastRoutes);
 app.route('/api/survey', surveyRoutes);
 app.route('/api/roulette', rouletteRoutes);
+app.route('/api/settings', settingsRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {

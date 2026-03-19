@@ -121,6 +121,21 @@ function renderHeader() {
             
             <!-- User info and logout -->
             <div class="flex items-center gap-4">
+              ${currentUser.role === 'admin' || currentUser.role === 'leader' ? `
+                <!-- Survey Notification Toggle (Leader+) -->
+                <div class="flex items-center gap-2 px-3 py-2 bg-blue-700 rounded-lg">
+                  <span class="text-sm text-white">特典通知:</span>
+                  <button 
+                    id="survey-notification-toggle" 
+                    onclick="toggleSurveyNotification()" 
+                    class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600"
+                  >
+                    <span class="sr-only">特典通知の切り替え</span>
+                    <span id="survey-toggle-indicator" class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
+                  </button>
+                  <span id="survey-toggle-label" class="text-xs font-semibold text-white">OFF</span>
+                </div>
+              ` : ''}
               <div class="text-right">
                 <div class="text-sm text-blue-100">ログイン中</div>
                 <div class="font-semibold">${currentUser.tutorName || currentUser.email}</div>
@@ -278,6 +293,9 @@ async function loadInitialData() {
     
     // Load survey stats for all students
     await loadSurveyStats();
+    
+    // Load survey notification setting
+    await loadSurveyNotificationSetting();
     
     // Set default filter to current tutor if available
     if (currentTutorName) {
@@ -8065,4 +8083,79 @@ function updateRouletteMarker(studentId, stats) {
       ${probability}%
     </span>
   `;
+}
+
+// ========== Survey Notification Toggle ==========
+
+let surveyNotificationEnabled = false;
+
+/**
+ * Load survey notification setting
+ */
+async function loadSurveyNotificationSetting() {
+  try {
+    const response = await axios.get(`${API_BASE}/api/settings/survey_notification_enabled`);
+    
+    if (response.data.success) {
+      surveyNotificationEnabled = response.data.data.setting_value === 'true';
+      updateSurveyToggleUI();
+    }
+  } catch (error) {
+    console.error('Error loading survey notification setting:', error);
+  }
+}
+
+/**
+ * Toggle survey notification ON/OFF
+ */
+async function toggleSurveyNotification() {
+  try {
+    const newValue = !surveyNotificationEnabled;
+    
+    const response = await axios.put(
+      `${API_BASE}/api/settings/survey_notification_enabled`,
+      {
+        value: newValue.toString(),
+        updatedBy: currentUser.tutorName || currentUser.email
+      }
+    );
+    
+    if (response.data.success) {
+      surveyNotificationEnabled = newValue;
+      updateSurveyToggleUI();
+      
+      showNotification(
+        `特典通知を${newValue ? 'ON' : 'OFF'}にしました`,
+        newValue ? 'success' : 'info'
+      );
+    }
+  } catch (error) {
+    console.error('Error toggling survey notification:', error);
+    showNotification('特典通知の切り替えに失敗しました', 'error');
+  }
+}
+
+/**
+ * Update survey toggle UI
+ */
+function updateSurveyToggleUI() {
+  const toggle = document.getElementById('survey-notification-toggle');
+  const indicator = document.getElementById('survey-toggle-indicator');
+  const label = document.getElementById('survey-toggle-label');
+  
+  if (!toggle || !indicator || !label) return;
+  
+  if (surveyNotificationEnabled) {
+    // ON state
+    toggle.classList.remove('bg-gray-400');
+    toggle.classList.add('bg-green-500');
+    indicator.classList.add('translate-x-5');
+    label.textContent = 'ON';
+  } else {
+    // OFF state
+    toggle.classList.remove('bg-green-500');
+    toggle.classList.add('bg-gray-400');
+    indicator.classList.remove('translate-x-5');
+    label.textContent = 'OFF';
+  }
 }

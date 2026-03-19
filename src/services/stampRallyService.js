@@ -10,6 +10,22 @@ export async function checkStampRallyAchievements() {
   
   try {
     const pool = getPool();
+    
+    // 通知設定を確認
+    const settingResult = await pool.query(`
+      SELECT setting_value
+      FROM system_settings
+      WHERE setting_key = 'survey_notification_enabled'
+    `);
+    
+    const notificationEnabled = settingResult.rows[0]?.setting_value === 'true';
+    
+    if (!notificationEnabled) {
+      console.log('[StampRally] Notifications are DISABLED. Skipping achievement check.');
+      return;
+    }
+    
+    console.log('[StampRally] Notifications are ENABLED. Proceeding with achievement check...');
 
     // 特典対象の生徒を取得
     const response = await axios.get('http://localhost:3000/api/survey/eligible-students');
