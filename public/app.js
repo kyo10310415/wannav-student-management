@@ -276,6 +276,9 @@ async function loadInitialData() {
     // Load extension tutor stats for badge count
     await loadExtensionTutorStats();
     
+    // Load survey stats for all students
+    await loadSurveyStats();
+    
     // Set default filter to current tutor if available
     if (currentTutorName) {
       // Convert tutor_name to notion_name for filtering
@@ -1409,6 +1412,18 @@ function renderStudentsPage() {
                   </button>
                 </div>
               </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <i class="fas fa-clipboard-check text-blue-600"></i>
+                  <span>アンケート</span>
+                </div>
+              </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div class="flex items-center justify-center gap-2">
+                  <i class="fas fa-dice text-purple-600"></i>
+                  <span>ルーレット</span>
+                </div>
+              </th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
@@ -1657,6 +1672,16 @@ function renderStudentRowsSimple() {
           <span class="wanami-usage-loading text-gray-400" data-student-id="${student.student_id}">...</span>
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
+          <div class="survey-stats-loading text-gray-400" data-student-id="${student.student_id}">
+            <i class="fas fa-spinner fa-spin"></i>
+          </div>
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
+          <div class="roulette-result-loading text-gray-400" data-student-id="${student.student_id}">
+            <i class="fas fa-spinner fa-spin"></i>
+          </div>
+        </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
@@ -7850,4 +7875,116 @@ function removeScheduleImagePreview() {
   document.getElementById('schedule-image-preview').classList.add('hidden');
   document.getElementById('schedule-image-upload-status').classList.add('hidden');
   showNotification('画像を削除しました', 'info');
+}
+
+// ========== Survey & Roulette Functions ==========
+
+/**
+ * Load survey statistics for all students
+ */
+async function loadSurveyStats() {
+  try {
+    // Load survey stats for each student in batches
+    const batchSize = 10;
+    for (let i = 0; i < students.length; i += batchSize) {
+      const batch = students.slice(i, i + batchSize);
+      await Promise.all(batch.map(student => loadStudentSurveyStats(student.student_id)));
+    }
+    console.log('Survey stats loaded for all students');
+  } catch (error) {
+    console.error('Error loading survey stats:', error);
+  }
+}
+
+/**
+ * Load survey stats for a single student
+ */
+async function loadStudentSurveyStats(studentId) {
+  try {
+    const response = await axios.get(`${API_BASE}/api/survey/stats/${studentId}`);
+    
+    if (response.data.success) {
+      const stats = response.data.data;
+      updateSurveyStatsDisplay(studentId, stats);
+    }
+  } catch (error) {
+    console.error(`Error loading survey stats for ${studentId}:`, error);
+    updateSurveyStatsDisplay(studentId, null);
+  }
+}
+
+/**
+ * Update survey stats display in the table
+ */
+function updateSurveyStatsDisplay(studentId, stats) {
+  const surveyCell = document.querySelector(`.survey-stats-loading[data-student-id="${studentId}"]`);
+  const rouletteCell = document.querySelector(`.roulette-result-loading[data-student-id="${studentId}"]`);
+  
+  if (!surveyCell || !rouletteCell) return;
+  
+  if (!stats) {
+    surveyCell.innerHTML = '<span class="text-gray-400">-</span>';
+    rouletteCell.innerHTML = '<span class="text-gray-400">-</span>';
+    return;
+  }
+  
+  // Survey stats display
+  const responseCount = stats.responseCount || 0;
+  const responseRate = stats.responseRate || 0;
+  const continuedMonths = stats.continuedMonths || 0;
+  
+  let surveyHtml = `
+    <div class="text-xs">
+      <div class="font-semibold text-blue-600">${responseCount}/${continuedMonths}回</div>
+      <div class="mt-1">
+        <div class="w-full bg-gray-200 rounded-full h-2">
+          <div class="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full" style="width: ${Math.min(responseRate, 100)}%"></div>
+        </div>
+        <div class="text-xs font-semibold mt-0.5 ${responseRate >= 80 ? 'text-green-600' : responseRate >= 50 ? 'text-orange-600' : 'text-gray-600'}">${responseRate}%</div>
+      </div>
+    </div>
+  `;
+  
+  // Add eligible badge if student is eligible
+  if (stats.isEligible && stats.isEligible.isEligible) {
+    surveyHtml += `
+      <div class="mt-1 px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-full animate-pulse">
+        <i class="fas fa-gift mr-1"></i>特典対象
+      </div>
+    `;
+  }
+  
+  surveyCell.innerHTML = surveyHtml;
+  
+  // Roulette result display
+  const rouletteResult = stats.latestRouletteResult;
+  
+  if (rouletteResult) {
+    const isWin = rouletteResult.result === '当たり';
+    const probability = rouletteResult.probability;
+    
+    rouletteCell.innerHTML = `
+      <div class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+        isWin 
+          ? 'bg-gradient-to-r from-red-400 to-pink-500 text-white' 
+          : 'bg-gray-300 text-gray-700'
+      }">
+        <i class="fas ${isWin ? 'fa-trophy' : 'fa-times-circle'} mr-1"></i>
+        ${rouletteResult.result}
+      </div>
+      <div class="text-xs text-gray-500 mt-0.5">${probability}%</div>
+    `;
+  } else if (stats.isEligible && stats.isEligible.isEligible) {
+    // Eligible but not yet drawn
+    const probability = stats.resultScore === 'S' ? 100 : 50;
+    rouletteCell.innerHTML = `
+      <div class="text-xs text-purple-600 font-semibold">
+        <i class="fas fa-dice mr-1"></i>
+        抽選可能<br>
+        <span class="text-xs text-gray-500">(${probability}%)</span>
+      </div>
+    `;
+  } else {
+    rouletteCell.innerHTML = '<span class="text-gray-400 text-xs">未達成</span>';
+  }
 }
