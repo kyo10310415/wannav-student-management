@@ -205,6 +205,59 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS broadcast_images;
     `
+  },
+  {
+    version: 11,
+    name: 'create_survey_stamp_rally_tables',
+    up: `
+      -- 1. アンケート回答記録テーブル
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) NOT NULL,
+        response_month VARCHAR(7) NOT NULL,
+        responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+        UNIQUE (student_id, response_month)
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_survey_responses_student_id ON survey_responses(student_id);
+      CREATE INDEX IF NOT EXISTS idx_survey_responses_response_month ON survey_responses(response_month);
+      
+      -- 2. ルーレット結果テーブル
+      CREATE TABLE IF NOT EXISTS roulette_results (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) NOT NULL,
+        result VARCHAR(20) NOT NULL,
+        probability INTEGER NOT NULL,
+        roulette_url TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_roulette_results_student_id ON roulette_results(student_id);
+      CREATE INDEX IF NOT EXISTS idx_roulette_results_created_at ON roulette_results(created_at);
+      
+      -- 3. スタンプラリー達成記録テーブル
+      CREATE TABLE IF NOT EXISTS stamp_rally_achievements (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) NOT NULL,
+        achievement_type VARCHAR(50) NOT NULL,
+        achievement_date DATE NOT NULL,
+        notified_at TIMESTAMP,
+        roulette_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_stamp_rally_achievements_student_id ON stamp_rally_achievements(student_id);
+      CREATE INDEX IF NOT EXISTS idx_stamp_rally_achievements_achievement_date ON stamp_rally_achievements(achievement_date);
+    `,
+    down: `
+      DROP TABLE IF EXISTS stamp_rally_achievements;
+      DROP TABLE IF EXISTS roulette_results;
+      DROP TABLE IF EXISTS survey_responses;
+    `
   }
 ];
 

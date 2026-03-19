@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アンケートスタンプラリー機能 - 完全デザインカンプ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin-slow 3s linear infinite;
+        }
+        /* スムーズスクロール */
+        html {
+            scroll-behavior: smooth;
+        }
+        /* ナビゲーション固定 */
+        .sticky-nav {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- ナビゲーション -->
+    <nav class="sticky-nav bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">
+                        <i class="fas fa-poll mr-2"></i>
+                        アンケートスタンプラリー機能
+                    </h1>
+                    <p class="text-blue-100 text-sm">完全デザインカンプ & 仕様書</p>
+                </div>
+                <div class="flex space-x-2">
+                    <a href="#overview" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">概要</a>
+                    <a href="#database" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">DB設計</a>
+                    <a href="#student-management" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">学生管理</a>
+                    <a href="#lesson-today" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">予約/Today</a>
+                    <a href="#discord" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">Discord</a>
+                    <a href="#roulette" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">ルーレット</a>
+                    <a href="#implementation" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded transition text-sm">実装ガイド</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8 space-y-12">
+        <!-- セクション1: 機能概要 -->
+        <section id="overview" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fas fa-lightbulb mr-3 text-yellow-500"></i>
+                    機能概要
+                </h2>
+                
+                <div class="prose max-w-none">
+                    <p class="text-lg text-gray-700 leading-relaxed mb-6">
+                        アンケートスタンプラリー機能は、生徒が毎月のアンケートに回答することでスタンプを集め、
+                        一定の条件を満たした際に特典（1時間コンサル権）のルーレット抽選に参加できるシステムです。
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border-l-4 border-blue-500">
+                            <div class="text-4xl mb-3">📊</div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">回答率管理</h3>
+                            <p class="text-gray-700 text-sm">
+                                継続月数に対するアンケート回答数の割合を自動計算し、視覚的に表示
+                            </p>
+                        </div>
+                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border-l-4 border-purple-500">
+                            <div class="text-4xl mb-3">🎁</div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">特典判定</h3>
+                            <p class="text-gray-700 text-sm">
+                                複数の条件パターンに基づいて自動判定し、達成者にDiscord通知を送信
+                            </p>
+                        </div>
+                        <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-6 border-l-4 border-yellow-500">
+                            <div class="text-4xl mb-3">🎰</div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">ルーレット抽選</h3>
+                            <p class="text-gray-700 text-sm">
+                                S評価は100%当たり、通常評価は50%の確率で特典を獲得
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border-2 border-purple-300">
+                        <h3 class="text-2xl font-bold text-purple-900 mb-4">
+                            <i class="fas fa-trophy mr-2"></i>
+                            特典付与条件
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="flex items-start bg-white rounded-lg p-4 shadow">
+                                <div class="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-3">1</div>
+                                <div>
+                                    <h4 class="font-semibold text-gray-900">2026/3以前開始：回答率80%以上</h4>
+                                    <p class="text-sm text-gray-600">レッスン開始が2026年3月以前で、回答率≧80%</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start bg-white rounded-lg p-4 shadow">
+                                <div class="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-3">2</div>
+                                <div>
+                                    <h4 class="font-semibold text-gray-900">2026/4以降開始：6ヶ月連続回答</h4>
+                                    <p class="text-sm text-gray-600">レッスン開始が2026年4月以降で、6ヶ月連続でアンケート回答</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start bg-white rounded-lg p-4 shadow">
+                                <div class="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-3">3</div>
+                                <div>
+                                    <h4 class="font-semibold text-gray-900">2026/3以前開始（継続6ヶ月未満）：100%達成</h4>
+                                    <p class="text-sm text-gray-600">2026年4月から継続6ヶ月まで100%の回答率を維持</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start bg-white rounded-lg p-4 shadow">
+                                <div class="flex-shrink-0 w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mr-3">✓</div>
+                                <div>
+                                    <h4 class="font-semibold text-gray-900">共通条件</h4>
+                                    <p class="text-sm text-gray-600">
+                                        • 最新の延長審査結果が「延長」<br>
+                                        • 生徒ステータスが「アクティブ」
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-start bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg p-4 shadow border-2 border-yellow-400">
+                                <div class="flex-shrink-0 w-8 h-8 bg-yellow-500 text-white rounded-full flex items-center justify-center mr-3">
+                                    <i class="fas fa-redo"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-gray-900">特典付与後のリセット</h4>
+                                    <p class="text-sm text-gray-600">
+                                        特典を一度付与した後は条件をリセット。その後は全生徒共通で「6ヶ月連続回答」の条件2のみ適用
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション2: データベース設計 -->
+        <section id="database" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fas fa-database mr-3 text-green-600"></i>
+                    データベース設計
+                </h2>
+
+                <div class="space-y-6">
+                    <!-- テーブル1: survey_responses -->
+                    <div class="border-2 border-blue-300 rounded-lg overflow-hidden">
+                        <div class="bg-blue-50 px-6 py-4 border-b-2 border-blue-300">
+                            <h3 class="text-xl font-bold text-blue-900">
+                                <i class="fas fa-table mr-2"></i>
+                                survey_responses（アンケート回答記録）
+                            </h3>
+                            <p class="text-sm text-blue-700 mt-1">生徒ごとの月別アンケート回答を記録</p>
+                        </div>
+                        <div class="p-6 bg-white">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left font-semibold">カラム名</th>
+                                        <th class="px-4 py-2 text-left font-semibold">型</th>
+                                        <th class="px-4 py-2 text-left font-semibold">制約</th>
+                                        <th class="px-4 py-2 text-left font-semibold">説明</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">id</td>
+                                        <td class="px-4 py-2">SERIAL</td>
+                                        <td class="px-4 py-2">PRIMARY KEY</td>
+                                        <td class="px-4 py-2">連番ID</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">student_id</td>
+                                        <td class="px-4 py-2">VARCHAR(50)</td>
+                                        <td class="px-4 py-2">NOT NULL, FK</td>
+                                        <td class="px-4 py-2">生徒ID（studentsテーブル参照）</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">response_month</td>
+                                        <td class="px-4 py-2">VARCHAR(7)</td>
+                                        <td class="px-4 py-2">NOT NULL</td>
+                                        <td class="px-4 py-2">回答月（YYYY-MM形式）</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">responded_at</td>
+                                        <td class="px-4 py-2">TIMESTAMP</td>
+                                        <td class="px-4 py-2">DEFAULT CURRENT_TIMESTAMP</td>
+                                        <td class="px-4 py-2">回答日時</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">created_at</td>
+                                        <td class="px-4 py-2">TIMESTAMP</td>
+                                        <td class="px-4 py-2">DEFAULT CURRENT_TIMESTAMP</td>
+                                        <td class="px-4 py-2">レコード作成日時</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div class="mt-4 bg-blue-50 rounded p-3 border-l-4 border-blue-500">
+                                <p class="text-xs text-blue-900">
+                                    <strong>ユニーク制約:</strong> (student_id, response_month)<br>
+                                    <strong>インデックス:</strong> student_id, response_month
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- テーブル2: roulette_results -->
+                    <div class="border-2 border-purple-300 rounded-lg overflow-hidden">
+                        <div class="bg-purple-50 px-6 py-4 border-b-2 border-purple-300">
+                            <h3 class="text-xl font-bold text-purple-900">
+                                <i class="fas fa-table mr-2"></i>
+                                roulette_results（ルーレット結果）
+                            </h3>
+                            <p class="text-sm text-purple-700 mt-1">スタンプラリー達成者のルーレット抽選結果を記録</p>
+                        </div>
+                        <div class="p-6 bg-white">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left font-semibold">カラム名</th>
+                                        <th class="px-4 py-2 text-left font-semibold">型</th>
+                                        <th class="px-4 py-2 text-left font-semibold">制約</th>
+                                        <th class="px-4 py-2 text-left font-semibold">説明</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">id</td>
+                                        <td class="px-4 py-2">SERIAL</td>
+                                        <td class="px-4 py-2">PRIMARY KEY</td>
+                                        <td class="px-4 py-2">連番ID</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">student_id</td>
+                                        <td class="px-4 py-2">VARCHAR(50)</td>
+                                        <td class="px-4 py-2">NOT NULL, FK</td>
+                                        <td class="px-4 py-2">生徒ID</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">result</td>
+                                        <td class="px-4 py-2">VARCHAR(20)</td>
+                                        <td class="px-4 py-2">NOT NULL</td>
+                                        <td class="px-4 py-2">抽選結果（'当たり' or 'はずれ'）</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">probability</td>
+                                        <td class="px-4 py-2">INTEGER</td>
+                                        <td class="px-4 py-2">NOT NULL</td>
+                                        <td class="px-4 py-2">当選確率（100=必ず当たり、50=50%）</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">roulette_url</td>
+                                        <td class="px-4 py-2">TEXT</td>
+                                        <td class="px-4 py-2">NOT NULL</td>
+                                        <td class="px-4 py-2">ルーレットページのURL</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">created_at</td>
+                                        <td class="px-4 py-2">TIMESTAMP</td>
+                                        <td class="px-4 py-2">DEFAULT CURRENT_TIMESTAMP</td>
+                                        <td class="px-4 py-2">抽選日時</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div class="mt-4 bg-purple-50 rounded p-3 border-l-4 border-purple-500">
+                                <p class="text-xs text-purple-900">
+                                    <strong>インデックス:</strong> student_id, created_at
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- テーブル3: stamp_rally_achievements -->
+                    <div class="border-2 border-green-300 rounded-lg overflow-hidden">
+                        <div class="bg-green-50 px-6 py-4 border-b-2 border-green-300">
+                            <h3 class="text-xl font-bold text-green-900">
+                                <i class="fas fa-table mr-2"></i>
+                                stamp_rally_achievements（スタンプラリー達成記録）
+                            </h3>
+                            <p class="text-sm text-green-700 mt-1">特典達成条件を満たした生徒を記録</p>
+                        </div>
+                        <div class="p-6 bg-white">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left font-semibold">カラム名</th>
+                                        <th class="px-4 py-2 text-left font-semibold">型</th>
+                                        <th class="px-4 py-2 text-left font-semibold">制約</th>
+                                        <th class="px-4 py-2 text-left font-semibold">説明</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">id</td>
+                                        <td class="px-4 py-2">SERIAL</td>
+                                        <td class="px-4 py-2">PRIMARY KEY</td>
+                                        <td class="px-4 py-2">連番ID</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">student_id</td>
+                                        <td class="px-4 py-2">VARCHAR(50)</td>
+                                        <td class="px-4 py-2">NOT NULL, FK</td>
+                                        <td class="px-4 py-2">生徒ID</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">achievement_type</td>
+                                        <td class="px-4 py-2">VARCHAR(50)</td>
+                                        <td class="px-4 py-2">NOT NULL</td>
+                                        <td class="px-4 py-2">達成条件タイプ（initial_80/continuous_6/catch_up_100/reset_6）</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">achievement_date</td>
+                                        <td class="px-4 py-2">DATE</td>
+                                        <td class="px-4 py-2">NOT NULL</td>
+                                        <td class="px-4 py-2">達成日</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">notified_at</td>
+                                        <td class="px-4 py-2">TIMESTAMP</td>
+                                        <td class="px-4 py-2">NULL</td>
+                                        <td class="px-4 py-2">Discord通知送信日時（NULL=未送信）</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">roulette_url</td>
+                                        <td class="px-4 py-2">TEXT</td>
+                                        <td class="px-4 py-2">NULL</td>
+                                        <td class="px-4 py-2">送信したルーレットURL</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 font-mono text-xs">created_at</td>
+                                        <td class="px-4 py-2">TIMESTAMP</td>
+                                        <td class="px-4 py-2">DEFAULT CURRENT_TIMESTAMP</td>
+                                        <td class="px-4 py-2">レコード作成日時</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div class="mt-4 bg-green-50 rounded p-3 border-l-4 border-green-500">
+                                <p class="text-xs text-green-900">
+                                    <strong>インデックス:</strong> student_id, achievement_date
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション3: 学生管理画面UI -->
+        <section id="student-management" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fas fa-users mr-3 text-blue-600"></i>
+                    学生管理画面UI
+                </h2>
+                
+                <p class="text-gray-700 mb-6">
+                    既存の学生管理テーブルに以下のカラムを追加します:
+                </p>
+
+                <div class="bg-blue-50 rounded-lg p-6 mb-6 border-l-4 border-blue-500">
+                    <h3 class="font-bold text-blue-900 mb-3">追加カラム</h3>
+                    <ul class="space-y-2 text-sm text-blue-800">
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle mr-2 text-blue-600"></i>
+                            <strong>アンケート回答数:</strong> 生徒が回答したアンケートの累計回数
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle mr-2 text-blue-600"></i>
+                            <strong>回答率:</strong> 回答数 ÷ 継続月数 × 100%（プログレスバー表示）
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle mr-2 text-blue-600"></i>
+                            <strong>ルーレット結果:</strong> 最新の抽選結果（当たり/はずれ/未達成）
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="border rounded-lg overflow-hidden">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 400'%3E%3Crect fill='%23f3f4f6' width='1200' height='400'/%3E%3Ctext x='600' y='200' font-size='24' text-anchor='middle' fill='%23666'%3E学生管理画面のスクリーンショットがここに表示されます%3C/text%3E%3C/svg%3E" alt="学生管理画面UI" class="w-full">
+                    <div class="p-4 bg-gray-50 text-center text-sm text-gray-600">
+                        実装時は wireframes/01_student_management_survey.html を参照してください
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション4: レッスン予約・Today画面UI -->
+        <section id="lesson-today" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fas fa-calendar-check mr-3 text-green-600"></i>
+                    レッスン予約・Today画面UI
+                </h2>
+                
+                <p class="text-gray-700 mb-6">
+                    特典対象の生徒をルーレットアイコン（🎰）で表示し、一目で判別できるようにします。
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-yellow-50 rounded-lg p-6 border-l-4 border-yellow-500">
+                        <div class="flex items-center mb-3">
+                            <span class="text-3xl mr-3 animate-spin-slow">🎰</span>
+                            <h3 class="font-bold text-yellow-900">S評価生徒（金色）</h3>
+                        </div>
+                        <p class="text-sm text-yellow-800">
+                            必ず当たり（100%）の特典対象生徒に表示。金色のグラデーション背景で目立たせます。
+                        </p>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
+                        <div class="flex items-center mb-3">
+                            <span class="text-3xl mr-3 animate-spin-slow">🎰</span>
+                            <h3 class="font-bold text-green-900">通常評価生徒（緑色）</h3>
+                        </div>
+                        <p class="text-sm text-green-800">
+                            50%当たりの特典対象生徒に表示。緑色のグラデーション背景で表示します。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="border rounded-lg overflow-hidden">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 600'%3E%3Crect fill='%23f3f4f6' width='1200' height='600'/%3E%3Ctext x='600' y='300' font-size='24' text-anchor='middle' fill='%23666'%3Eレッスン予約・Today画面のスクリーンショットがここに表示されます%3C/text%3E%3C/svg%3E" alt="レッスン予約・Today画面UI" class="w-full">
+                    <div class="p-4 bg-gray-50 text-center text-sm text-gray-600">
+                        実装時は wireframes/02_lesson_today_markers.html を参照してください
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション5: Discord通知 -->
+        <section id="discord" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fab fa-discord mr-3 text-indigo-600"></i>
+                    Discord通知メッセージ
+                </h2>
+                
+                <div class="bg-indigo-50 rounded-lg p-6 mb-6 border-l-4 border-indigo-500">
+                    <h3 class="font-bold text-indigo-900 mb-3">通知タイミング</h3>
+                    <p class="text-sm text-indigo-800">
+                        特典達成条件を満たした際に、自動的に生徒のDiscordアカウントに通知が送信されます。
+                        通知には一意のルーレットURLが含まれ、30日間有効です。
+                    </p>
+                </div>
+
+                <div class="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg p-6 border-2 border-yellow-400 mb-6">
+                    <h3 class="text-2xl font-bold text-center mb-4">
+                        🎉 おめでとうございます！ 🎉
+                    </h3>
+                    <h4 class="text-xl font-bold text-center mb-4">
+                        見事アンケートスタンプラリーを達成しました！！
+                    </h4>
+                    <div class="border-t-2 border-yellow-400 my-4"></div>
+                    <p class="text-gray-800 mb-3">山田太郎 様</p>
+                    <p class="text-gray-700 mb-4">
+                        日頃からアンケートにご協力いただき、誠にありがとうございます。<br>
+                        この度、アンケートスタンプラリーの条件を達成されましたので、特典をご用意いたしました！
+                    </p>
+                    <div class="bg-white rounded-lg p-4 mb-4">
+                        <div class="text-center mb-3">
+                            <span class="text-4xl">🎰</span>
+                            <span class="text-xl font-bold text-purple-600 ml-2">ルーレットに挑戦！</span>
+                        </div>
+                        <div class="bg-blue-50 border border-blue-300 rounded p-2 text-center text-xs font-mono text-blue-600">
+                            https://olts-system.example.com/roulette?id=abc123xyz456
+                        </div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 border-l-4 border-purple-500">
+                        <h5 class="font-bold text-purple-800 mb-2">🎁 特典内容</h5>
+                        <p class="text-gray-800 font-semibold">1時間コンサル権</p>
+                    </div>
+                </div>
+
+                <div class="border rounded-lg overflow-hidden">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'%3E%3Crect fill='%23f3f4f6' width='800' height='600'/%3E%3Ctext x='400' y='300' font-size='20' text-anchor='middle' fill='%23666'%3EDiscord通知のスクリーンショットがここに表示されます%3C/text%3E%3C/svg%3E" alt="Discord通知UI" class="w-full">
+                    <div class="p-4 bg-gray-50 text-center text-sm text-gray-600">
+                        実装時は wireframes/03_discord_roulette.html を参照してください
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション6: ルーレット画面 -->
+        <section id="roulette" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fas fa-dice mr-3 text-purple-600"></i>
+                    ルーレット抽選画面
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-purple-50 rounded-lg p-6 border-l-4 border-purple-500">
+                        <h3 class="font-bold text-purple-900 mb-3">
+                            <i class="fas fa-cog mr-2"></i>
+                            抽選ロジック
+                        </h3>
+                        <ul class="space-y-2 text-sm text-purple-800">
+                            <li><strong>S評価:</strong> 必ず「当たり」（probability=100）</li>
+                            <li><strong>通常評価:</strong> 50%の確率で「当たり」（probability=50）</li>
+                            <li><strong>記録:</strong> 結果はroulette_resultsテーブルに保存</li>
+                        </ul>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-6 border-l-4 border-blue-500">
+                        <h3 class="font-bold text-blue-900 mb-3">
+                            <i class="fas fa-shield-alt mr-2"></i>
+                            セキュリティ
+                        </h3>
+                        <ul class="space-y-2 text-sm text-blue-800">
+                            <li><strong>1回限り:</strong> URLは使用後無効化</li>
+                            <li><strong>有効期限:</strong> 発行から30日間</li>
+                            <li><strong>認証:</strong> 生徒本人のみアクセス可能</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 当たり画面 -->
+                    <div class="border-2 border-red-300 rounded-lg overflow-hidden">
+                        <div class="bg-gradient-to-r from-red-400 to-pink-500 p-4 text-center">
+                            <h3 class="text-2xl font-bold text-white">🎊 当たり！ 🎊</h3>
+                        </div>
+                        <div class="p-6 bg-gradient-to-br from-yellow-50 to-orange-50">
+                            <div class="text-center">
+                                <div class="text-7xl mb-4">🎁</div>
+                                <h4 class="text-xl font-bold text-gray-900 mb-2">おめでとうございます！</h4>
+                                <div class="bg-yellow-100 rounded-lg p-4 border-2 border-yellow-400">
+                                    <p class="font-bold text-gray-900">獲得特典</p>
+                                    <p class="text-2xl font-bold text-purple-600">1時間コンサル権</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- はずれ画面 -->
+                    <div class="border-2 border-gray-300 rounded-lg overflow-hidden">
+                        <div class="bg-gradient-to-r from-gray-400 to-gray-500 p-4 text-center">
+                            <h3 class="text-2xl font-bold text-white">残念...</h3>
+                        </div>
+                        <div class="p-6 bg-gradient-to-br from-gray-50 to-blue-50">
+                            <div class="text-center">
+                                <div class="text-7xl mb-4">😢</div>
+                                <h4 class="text-xl font-bold text-gray-700 mb-2">今回は はずれ でした</h4>
+                                <div class="bg-blue-50 rounded-lg p-4 border-2 border-blue-200">
+                                    <p class="text-sm text-gray-700">
+                                        次回のスタンプラリー達成時に<br>
+                                        また挑戦できます！
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション7: 実装ガイド -->
+        <section id="implementation" class="scroll-mt-20">
+            <div class="bg-white rounded-lg shadow-xl p-8">
+                <h2 class="text-4xl font-bold text-gray-900 mb-6">
+                    <i class="fas fa-code mr-3 text-orange-600"></i>
+                    実装ガイド
+                </h2>
+
+                <div class="space-y-6">
+                    <!-- ステップ1 -->
+                    <div class="border-l-4 border-blue-500 pl-6 py-4 bg-blue-50 rounded-r-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-3">1</div>
+                            <h3 class="text-xl font-bold text-gray-900">データベースマイグレーション実行</h3>
+                        </div>
+                        <div class="ml-13 space-y-2">
+                            <p class="text-sm text-gray-700">
+                                <code class="bg-white px-2 py-1 rounded border text-xs">migrations/20260319_add_survey_stamp_rally.sql</code> を実行
+                            </p>
+                            <p class="text-sm text-gray-700">
+                                または <code class="bg-white px-2 py-1 rounded border text-xs">node src/db/migrate.js</code> で自動マイグレーション
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- ステップ2 -->
+                    <div class="border-l-4 border-green-500 pl-6 py-4 bg-green-50 rounded-r-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mr-3">2</div>
+                            <h3 class="text-xl font-bold text-gray-900">APIエンドポイント作成</h3>
+                        </div>
+                        <div class="ml-13 space-y-2 text-sm text-gray-700">
+                            <p><strong>必要なエンドポイント:</strong></p>
+                            <ul class="list-disc list-inside space-y-1 ml-4">
+                                <li><code class="bg-white px-2 py-1 rounded border text-xs">GET /api/survey/responses/:studentId</code> - 回答記録取得</li>
+                                <li><code class="bg-white px-2 py-1 rounded border text-xs">POST /api/survey/responses</code> - 回答記録登録</li>
+                                <li><code class="bg-white px-2 py-1 rounded border text-xs">GET /api/survey/eligible-students</code> - 特典対象生徒一覧</li>
+                                <li><code class="bg-white px-2 py-1 rounded border text-xs">POST /api/roulette/generate</code> - ルーレットURL生成</li>
+                                <li><code class="bg-white px-2 py-1 rounded border text-xs">POST /api/roulette/spin</code> - ルーレット抽選実行</li>
+                                <li><code class="bg-white px-2 py-1 rounded border text-xs">GET /api/roulette/result/:token</code> - 抽選結果取得</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- ステップ3 -->
+                    <div class="border-l-4 border-purple-500 pl-6 py-4 bg-purple-50 rounded-r-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 bg-purple-500 text-white rounded-full flex items-center justify-center font-bold mr-3">3</div>
+                            <h3 class="text-xl font-bold text-gray-900">フロントエンド実装</h3>
+                        </div>
+                        <div class="ml-13 space-y-2 text-sm text-gray-700">
+                            <p><strong>学生管理画面:</strong></p>
+                            <ul class="list-disc list-inside space-y-1 ml-4">
+                                <li>回答数・回答率カラムを追加</li>
+                                <li>ルーレット結果カラムを追加</li>
+                                <li>特典対象バッジの表示</li>
+                            </ul>
+                            <p class="mt-3"><strong>レッスン予約・Today画面:</strong></p>
+                            <ul class="list-disc list-inside space-y-1 ml-4">
+                                <li>ルーレットアイコン（🎰）の表示</li>
+                                <li>S評価と通常評価の色分け</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- ステップ4 -->
+                    <div class="border-l-4 border-yellow-500 pl-6 py-4 bg-yellow-50 rounded-r-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 bg-yellow-500 text-white rounded-full flex items-center justify-center font-bold mr-3">4</div>
+                            <h3 class="text-xl font-bold text-gray-900">Discord通知実装</h3>
+                        </div>
+                        <div class="ml-13 space-y-2 text-sm text-gray-700">
+                            <ul class="list-disc list-inside space-y-1 ml-4">
+                                <li>特典達成判定のバッチ処理を作成（日次実行推奨）</li>
+                                <li>Discord Webhook APIを使用して通知送信</li>
+                                <li>通知テンプレートを実装（HTML Embedに対応）</li>
+                                <li>ルーレットURLを生成して通知に含める</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- ステップ5 -->
+                    <div class="border-l-4 border-red-500 pl-6 py-4 bg-red-50 rounded-r-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center font-bold mr-3">5</div>
+                            <h3 class="text-xl font-bold text-gray-900">ルーレットページ実装</h3>
+                        </div>
+                        <div class="ml-13 space-y-2 text-sm text-gray-700">
+                            <ul class="list-disc list-inside space-y-1 ml-4">
+                                <li>URLトークン検証機能の実装</li>
+                                <li>ルーレット抽選ロジックの実装（S評価100%、通常50%）</li>
+                                <li>回転アニメーション（2秒間、720度回転）</li>
+                                <li>結果画面の表示（当たり/はずれ）</li>
+                                <li>結果のDB保存</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- ステップ6 -->
+                    <div class="border-l-4 border-indigo-500 pl-6 py-4 bg-indigo-50 rounded-r-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold mr-3">6</div>
+                            <h3 class="text-xl font-bold text-gray-900">テスト・デプロイ</h3>
+                        </div>
+                        <div class="ml-13 space-y-2 text-sm text-gray-700">
+                            <ul class="list-disc list-inside space-y-1 ml-4">
+                                <li>テストデータでの動作確認</li>
+                                <li>各条件パターンのテスト（条件1、条件2、条件3、リセット後）</li>
+                                <li>Discord通知のテスト送信</li>
+                                <li>ルーレット抽選のテスト（S評価/通常評価）</li>
+                                <li>本番環境へのデプロイ</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 技術スタック -->
+                <div class="mt-8 bg-gray-50 rounded-lg p-6 border-2 border-gray-300">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">
+                        <i class="fas fa-tools mr-2 text-gray-600"></i>
+                        推奨技術スタック
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <h4 class="font-semibold text-gray-800 mb-2">バックエンド</h4>
+                            <ul class="space-y-1 text-gray-700">
+                                <li>• Node.js + Hono (既存)</li>
+                                <li>• PostgreSQL (既存)</li>
+                                <li>• node-cron (バッチ処理)</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-gray-800 mb-2">フロントエンド</h4>
+                            <ul class="space-y-1 text-gray-700">
+                                <li>• Vanilla JavaScript (既存)</li>
+                                <li>• TailwindCSS (既存)</li>
+                                <li>• Font Awesome Icons (既存)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- フッター -->
+        <footer class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-8 text-white text-center">
+            <h3 class="text-2xl font-bold mb-2">
+                <i class="fas fa-check-circle mr-2"></i>
+                ワイヤーフレーム完成
+            </h3>
+            <p class="text-blue-100 mb-4">アンケートスタンプラリー機能の設計と仕様が完了しました</p>
+            <div class="flex justify-center space-x-4 text-sm">
+                <div class="bg-white/20 rounded-lg px-4 py-2">
+                    <i class="fas fa-database mr-2"></i>
+                    DB設計完了
+                </div>
+                <div class="bg-white/20 rounded-lg px-4 py-2">
+                    <i class="fas fa-palette mr-2"></i>
+                    UIデザイン完了
+                </div>
+                <div class="bg-white/20 rounded-lg px-4 py-2">
+                    <i class="fas fa-code mr-2"></i>
+                    実装ガイド完了
+                </div>
+            </div>
+            <p class="text-xs text-blue-100 mt-6">
+                作成日: 2026年3月19日 | 
+                <a href="#overview" class="hover:underline">トップに戻る</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

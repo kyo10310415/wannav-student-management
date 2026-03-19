@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アンケートスタンプラリー - ワイヤーフレーム</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        h2 {
+            color: #555;
+            margin: 40px 0 20px;
+            font-size: 22px;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 10px;
+        }
+        .wireframe {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .screen-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #3b82f6;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+        }
+        .table-wireframe {
+            border: 2px dashed #999;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .table-row {
+            display: grid;
+            grid-template-columns: 120px 150px 100px 100px 150px 100px 150px 1fr;
+            gap: 10px;
+            padding: 12px;
+            border-bottom: 1px solid #e5e5e5;
+            align-items: center;
+        }
+        .table-header {
+            background: #f9fafb;
+            font-weight: bold;
+            border-bottom: 2px solid #d1d5db;
+        }
+        .table-cell {
+            padding: 8px;
+            background: #fafafa;
+            border: 1px dashed #ddd;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        .badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fbbf24;
+        }
+        .badge-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #60a5fa;
+        }
+        .note {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .roulette-icon {
+            font-size: 24px;
+        }
+        .discord-message {
+            background: #36393f;
+            color: #dcddde;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Whitney', sans-serif;
+            margin: 20px 0;
+        }
+        .discord-message h1 {
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        .discord-message h2 {
+            color: #fbbf24;
+            font-size: 18px;
+            border: none;
+            margin: 15px 0 10px;
+            padding: 0;
+        }
+        .discord-message a {
+            color: #00aff4;
+            text-decoration: none;
+        }
+        .roulette-preview {
+            border: 2px dashed #3b82f6;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            background: #f0f9ff;
+        }
+        .roulette-wheel {
+            width: 300px;
+            height: 300px;
+            border: 4px solid #333;
+            border-radius: 50%;
+            margin: 20px auto;
+            background: linear-gradient(to right, #22c55e 50%, #ef4444 50%);
+            position: relative;
+        }
+        .roulette-pointer {
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #333;
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .legend {
+            margin-top: 15px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin: 0 15px;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 アンケートスタンプラリー機能 - ワイヤーフレーム</h1>
+
+        <!-- 画面1: 生徒管理画面 -->
+        <h2>画面1: 生徒管理画面（拡張）</h2>
+        <div class="wireframe">
+            <div class="screen-title">生徒管理 - アンケート情報追加</div>
+            
+            <div class="note">
+                <strong>📌 追加要素:</strong>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>アンケート回答数カラム</li>
+                    <li>回答率カラム（色分け表示）</li>
+                    <li>スタンプラリー達成状況</li>
+                    <li>ルーレット結果カラム</li>
+                </ul>
+            </div>
+
+            <div class="table-wireframe">
+                <div class="table-row table-header">
+                    <div class="table-cell">生徒ID</div>
+                    <div class="table-cell">名前</div>
+                    <div class="table-cell">継続月数</div>
+                    <div class="table-cell">回答数</div>
+                    <div class="table-cell">回答率</div>
+                    <div class="table-cell">特典対象</div>
+                    <div class="table-cell">ルーレット結果</div>
+                    <div class="table-cell">アクション</div>
+                </div>
+                
+                <div class="table-row">
+                    <div class="table-cell">OLTS001</div>
+                    <div class="table-cell">山田太郎</div>
+                    <div class="table-cell">8ヶ月</div>
+                    <div class="table-cell">7回</div>
+                    <div class="table-cell">
+                        <span class="badge badge-success">87.5%</span>
+                    </div>
+                    <div class="table-cell">
+                        <span class="badge badge-info">✅ 達成</span>
+                    </div>
+                    <div class="table-cell">
+                        <span class="badge badge-success">🎉 当たり</span>
+                    </div>
+                    <div class="table-cell">
+                        <button style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">詳細</button>
+                    </div>
+                </div>
+
+                <div class="table-row">
+                    <div class="table-cell">OLTS002</div>
+                    <div class="table-cell">佐藤花子</div>
+                    <div class="table-cell">12ヶ月</div>
+                    <div class="table-cell">8回</div>
+                    <div class="table-cell">
+                        <span class="badge badge-warning">66.7%</span>
+                    </div>
+                    <div class="table-cell">
+                        <span style="color: #999;">未達成</span>
+                    </div>
+                    <div class="table-cell">
+                        <span style="color: #999;">-</span>
+                    </div>
+                    <div class="table-cell">
+                        <button style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">詳細</button>
+                    </div>
+                </div>
+
+                <div class="table-row">
+                    <div class="table-cell">OLTS003</div>
+                    <div class="table-cell">田中一郎</div>
+                    <div class="table-cell">6ヶ月</div>
+                    <div class="table-cell">6回</div>
+                    <div class="table-cell">
+                        <span class="badge badge-success">100%</span>
+                    </div>
+                    <div class="table-cell">
+                        <span class="roulette-icon">🎰</span>
+                    </div>
+                    <div class="table-cell">
+                        <span style="color: #999;">未実施</span>
+                    </div>
+                    <div class="table-cell">
+                        <button style="padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">特典送信</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 画面2: レッスン予約ページ -->
+        <h2>画面2: レッスン予約ページ（マーク追加）</h2>
+        <div class="wireframe">
+            <div class="screen-title">レッスン予約 - 特典対象者表示</div>
+            
+            <div class="note">
+                <strong>📌 追加要素:</strong>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>特典対象者に 🎰 マークを表示</li>
+                    <li>マウスホバーで「スタンプラリー達成！」と表示</li>
+                </ul>
+            </div>
+
+            <div class="table-wireframe">
+                <div class="table-row table-header">
+                    <div class="table-cell">日時</div>
+                    <div class="table-cell">生徒名</div>
+                    <div class="table-cell" style="grid-column: span 2;">レッスン内容</div>
+                    <div class="table-cell">講師</div>
+                    <div class="table-cell" style="grid-column: span 2;">ステータス</div>
+                </div>
+                
+                <div class="table-row" style="background: #fef3c7;">
+                    <div class="table-cell">2026/3/15 10:00</div>
+                    <div class="table-cell">
+                        <strong>山田太郎</strong> <span class="roulette-icon" title="スタンプラリー達成！">🎰</span>
+                    </div>
+                    <div class="table-cell" style="grid-column: span 2;">週次レビュー</div>
+                    <div class="table-cell">佐藤先生</div>
+                    <div class="table-cell" style="grid-column: span 2;">
+                        <span class="badge badge-success">予約済み</span>
+                    </div>
+                </div>
+
+                <div class="table-row">
+                    <div class="table-cell">2026/3/15 14:00</div>
+                    <div class="table-cell">佐藤花子</div>
+                    <div class="table-cell" style="grid-column: span 2;">進捗確認</div>
+                    <div class="table-cell">田中先生</div>
+                    <div class="table-cell" style="grid-column: span 2;">
+                        <span class="badge badge-success">予約済み</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 画面3: Discord送信メッセージ -->
+        <h2>画面3: Discord送信メッセージ</h2>
+        <div class="wireframe">
+            <div class="screen-title">特典通知メッセージ</div>
+            
+            <div class="discord-message">
+                <h1>🎉 おめでとうございます！</h1>
+                <p>見事アンケートスタンプラリーを達成しました！！</p>
+                <p style="margin-top: 15px;">以下のURLからルーレットに挑戦できます！</p>
+                <p style="margin-top: 10px;">当たりが出ると・・・</p>
+                <h2>🎁 なんと弊社プロダクションマネージャーからの「1時間コンサル権」が付与されます！！</h2>
+                <p style="margin-top: 15px;">是非挑戦してみましょう！！</p>
+                <p style="margin-top: 20px;"><strong>URL:</strong> <a href="#">https://wannav-roulette.pages.dev/student/OLTS001</a></p>
+            </div>
+        </div>
+
+        <!-- 画面4: ルーレット画面 -->
+        <h2>画面4: ルーレット画面</h2>
+        <div class="wireframe">
+            <div class="screen-title">抽選ルーレット</div>
+            
+            <div class="roulette-preview">
+                <h3 style="font-size: 24px; margin-bottom: 20px;">🎰 特典抽選ルーレット</h3>
+                
+                <div style="position: relative;">
+                    <div class="roulette-pointer"></div>
+                    <div class="roulette-wheel">
+                        <div style="position: absolute; top: 50%; left: 25%; transform: translate(-50%, -50%); font-size: 48px; font-weight: bold; color: white;">当たり</div>
+                        <div style="position: absolute; top: 50%; right: 25%; transform: translate(50%, -50%); font-size: 48px; font-weight: bold; color: white;">はずれ</div>
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #22c55e;"></span>
+                        <span>当たり (50% or 100%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #ef4444;"></span>
+                        <span>はずれ (50% or 0%)</span>
+                    </div>
+                </div>
+
+                <button style="margin-top: 30px; padding: 15px 40px; font-size: 18px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                    🎲 ルーレットを回す
+                </button>
+
+                <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 8px; border: 2px dashed #3b82f6;">
+                    <p><strong>生徒情報:</strong> 山田太郎 (OLTS001)</p>
+                    <p><strong>リザルト総合:</strong> <span class="badge badge-success">S</span></p>
+                    <p><strong>当たり確率:</strong> <span style="color: #22c55e; font-weight: bold;">100%</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 画面5: ルーレット結果画面 -->
+        <h2>画面5: ルーレット結果画面</h2>
+        <div class="wireframe">
+            <div class="screen-title">抽選結果</div>
+            
+            <!-- 当たりの場合 -->
+            <div style="border: 3px solid #22c55e; padding: 40px; text-align: center; background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-radius: 12px; margin-bottom: 30px;">
+                <div style="font-size: 72px; margin-bottom: 20px;">🎉</div>
+                <h2 style="font-size: 36px; color: #065f46; border: none; margin: 0 0 20px;">🎊 当たり！！ 🎊</h2>
+                <p style="font-size: 20px; color: #065f46; margin-bottom: 30px;">
+                    おめでとうございます！<br>
+                    プロダクションマネージャーとの<br>
+                    <strong style="font-size: 24px;">1時間コンサル権</strong>を獲得しました！
+                </p>
+                <button style="padding: 15px 40px; font-size: 18px; background: #065f46; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                    担当講師に連絡する
+                </button>
+            </div>
+
+            <!-- はずれの場合 -->
+            <div style="border: 3px solid #ef4444; padding: 40px; text-align: center; background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border-radius: 12px;">
+                <div style="font-size: 72px; margin-bottom: 20px;">😢</div>
+                <h2 style="font-size: 36px; color: #991b1b; border: none; margin: 0 0 20px;">残念... はずれ</h2>
+                <p style="font-size: 18px; color: #991b1b; margin-bottom: 30px;">
+                    今回は残念でしたが、<br>
+                    次回のスタンプラリーもぜひチャレンジしてください！<br>
+                    引き続きアンケートへのご協力をお願いします。
+                </p>
+                <button style="padding: 15px 40px; font-size: 18px; background: #991b1b; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                    閉じる
+                </button>
+            </div>
+        </div>
+
+        <!-- データベース設計 -->
+        <h2>📊 データベース設計</h2>
+        <div class="wireframe">
+            <div class="screen-title">新規テーブル設計</div>
+            
+            <div style="margin: 20px 0;">
+                <h3 style="font-size: 18px; margin-bottom: 15px; color: #1f2937;">1. survey_responses (アンケート回答記録)</h3>
+                <pre style="background: #f9fafb; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; overflow-x: auto;">
+CREATE TABLE survey_responses (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(50) NOT NULL,
+  response_month VARCHAR(7) NOT NULL,  -- 'YYYY-MM'
+  responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, response_month)
+);
+
+CREATE INDEX idx_survey_responses_student ON survey_responses(student_id);
+CREATE INDEX idx_survey_responses_month ON survey_responses(response_month);
+                </pre>
+            </div>
+
+            <div style="margin: 20px 0;">
+                <h3 style="font-size: 18px; margin-bottom: 15px; color: #1f2937;">2. stamp_rally_achievements (スタンプラリー達成記録)</h3>
+                <pre style="background: #f9fafb; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; overflow-x: auto;">
+CREATE TABLE stamp_rally_achievements (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(50) NOT NULL,
+  achievement_type VARCHAR(50) NOT NULL,  -- 'initial_80', 'continuous_6', 'catch_up_100', 'reset_6'
+  achieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  notified_at TIMESTAMP,
+  roulette_completed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_achievements_student ON stamp_rally_achievements(student_id);
+                </pre>
+            </div>
+
+            <div style="margin: 20px 0;">
+                <h3 style="font-size: 18px; margin-bottom: 15px; color: #1f2937;">3. roulette_results (ルーレット結果)</h3>
+                <pre style="background: #f9fafb; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; overflow-x: auto;">
+CREATE TABLE roulette_results (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(50) NOT NULL,
+  achievement_id INTEGER REFERENCES stamp_rally_achievements(id),
+  result VARCHAR(10) NOT NULL,  -- 'win', 'lose'
+  probability INTEGER NOT NULL,  -- 50, 100
+  grade VARCHAR(5),  -- 'S', 'A', 'B', 'C'
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_roulette_student ON roulette_results(student_id);
+                </pre>
+            </div>
+        </div>
+
+        <!-- ロジック説明 -->
+        <h2>⚙️ 特典条件判定ロジック</h2>
+        <div class="wireframe">
+            <div class="screen-title">条件判定フローチャート</div>
+            
+            <div style="background: #f9fafb; padding: 25px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <pre style="font-family: monospace; line-height: 1.8;">
+📋 基本条件チェック（全員共通）
+├─ ステータス == 'アクティブ' ?
+├─ 延長審査結果 == '延長' ?
+└─ 条件OK → 次へ
+
+🎯 特典条件判定（開始時期による分岐）
+├─ 【パターンA】2026/3以前開始
+│   ├─ 継続月数 >= 6 ?
+│   │   ├─ YES → 回答率 >= 80% ? → ✅ 特典対象 (initial_80)
+│   │   └─ NO → パターンCへ
+│   └─ 
+├─ 【パターンB】2026/4以降開始
+│   └─ 直近6ヶ月連続回答 ? → ✅ 特典対象 (continuous_6)
+│
+├─ 【パターンC】2026/3以前開始 & 継続月数 < 6
+│   └─ 2026/4以降の回答率 == 100% ? → ✅ 特典対象 (catch_up_100)
+│
+└─ 【パターンD】リセット後（全員共通）
+    └─ 直近6ヶ月連続回答 ? → ✅ 特典対象 (reset_6)
+
+🎁 特典送信
+├─ Discord通知送信
+├─ ルーレットURL生成 (student_id埋め込み)
+├─ achievement レコード作成
+└─ notified_at 更新
+
+🎰 ルーレット確率
+├─ リザルト総合 == 'S' → 100% 当たり
+└─ それ以外 → 50% / 50%
+                </pre>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>
