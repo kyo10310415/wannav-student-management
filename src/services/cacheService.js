@@ -188,23 +188,23 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     const rows = response.data.values || [];
     console.log(`Fetched ${rows.length} satisfaction records for survey count`);
 
-    // Count occurrences of each student name
+    // Count occurrences of each student_id (column D)
     const responseCountMap = {};
     
     rows.forEach((row, index) => {
-      const studentName = row[2]; // 生徒名
-      if (studentName) {
-        responseCountMap[studentName] = (responseCountMap[studentName] || 0) + 1;
+      const studentId = row[3]; // D列: 学籍番号
+      if (studentId) {
+        responseCountMap[studentId] = (responseCountMap[studentId] || 0) + 1;
       }
     });
     
     console.log(`Survey response counts calculated for ${Object.keys(responseCountMap).length} students`);
     
-    // Debug: Log first 5 student names and their counts
-    const sampleNames = Object.keys(responseCountMap).slice(0, 5);
-    console.log('[Survey Debug] Sample student names from spreadsheet:');
-    sampleNames.forEach(name => {
-      console.log(`  - "${name}": ${responseCountMap[name]} responses`);
+    // Debug: Log first 5 student IDs and their counts
+    const sampleIds = Object.keys(responseCountMap).slice(0, 5);
+    console.log('[Survey Debug] Sample student IDs from spreadsheet:');
+    sampleIds.forEach(id => {
+      console.log(`  - "${id}": ${responseCountMap[id]} responses`);
     });
     
     return responseCountMap;
