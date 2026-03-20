@@ -187,6 +187,17 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
 
     const rows = response.data.values || [];
     console.log(`Fetched ${rows.length} satisfaction records for survey count`);
+    
+    // Debug: Show first row structure
+    if (rows.length > 0) {
+      console.log('[Survey Debug] First row structure:');
+      console.log(`  - Column A (row[0]): "${rows[0][0] || '(empty)'}"`);
+      console.log(`  - Column B (row[1]): "${rows[0][1] || '(empty)'}"`);
+      console.log(`  - Column C (row[2]): "${rows[0][2] || '(empty)'}"`);
+      console.log(`  - Column D (row[3]): "${rows[0][3] || '(empty)'}"`);
+      console.log(`  - Column E (row[4]): "${rows[0][4] || '(empty)'}"`);
+      console.log(`  - Column F (row[5]): "${rows[0][5] || '(empty)'}"`);
+    }
 
     // Count occurrences of each student_id (column D)
     const responseCountMap = {};
@@ -202,10 +213,14 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     
     // Debug: Log first 5 student IDs and their counts
     const sampleIds = Object.keys(responseCountMap).slice(0, 5);
-    console.log('[Survey Debug] Sample student IDs from spreadsheet:');
-    sampleIds.forEach(id => {
-      console.log(`  - "${id}": ${responseCountMap[id]} responses`);
-    });
+    console.log('[Survey Debug] Sample student IDs from spreadsheet (column D):');
+    if (sampleIds.length === 0) {
+      console.log('  ⚠️ NO STUDENT IDs FOUND - Column D might be empty!');
+    } else {
+      sampleIds.forEach(id => {
+        console.log(`  - "${id}": ${responseCountMap[id]} responses`);
+      });
+    }
     
     return responseCountMap;
   } catch (error) {
