@@ -144,6 +144,9 @@ app.get('/stats-all', async (c) => {
     // Build stats for each student
     const statsMap = {};
     
+    // Debug: Log first 3 students for comparison
+    let debugCount = 0;
+    
     studentsResult.rows.forEach(student => {
       const studentId = student.student_id;
       const studentName = student.name;
@@ -152,6 +155,15 @@ app.get('/stats-all', async (c) => {
       const responseCount = surveyResponseCounts[studentName] || 0;
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 ? Math.round((responseCount / continuedMonths) * 100) : 0;
+      
+      // Debug: Log first 3 students
+      if (debugCount < 3) {
+        console.log(`[Survey Debug] Student: "${studentName}" (${studentId})`);
+        console.log(`  - DB name: "${studentName}"`);
+        console.log(`  - Spreadsheet match: ${surveyResponseCounts[studentName] !== undefined ? 'YES' : 'NO'}`);
+        console.log(`  - Response count: ${responseCount}`);
+        debugCount++;
+      }
       
       // Check eligibility (simplified logic for bulk fetch)
       const extensionResult = extensionMap[studentId];

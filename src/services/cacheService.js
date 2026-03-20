@@ -191,7 +191,7 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     // Count occurrences of each student name
     const responseCountMap = {};
     
-    rows.forEach(row => {
+    rows.forEach((row, index) => {
       const studentName = row[2]; // 生徒名
       if (studentName) {
         responseCountMap[studentName] = (responseCountMap[studentName] || 0) + 1;
@@ -199,6 +199,13 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     });
     
     console.log(`Survey response counts calculated for ${Object.keys(responseCountMap).length} students`);
+    
+    // Debug: Log first 5 student names and their counts
+    const sampleNames = Object.keys(responseCountMap).slice(0, 5);
+    console.log('[Survey Debug] Sample student names from spreadsheet:');
+    sampleNames.forEach(name => {
+      console.log(`  - "${name}": ${responseCountMap[name]} responses`);
+    });
     
     return responseCountMap;
   } catch (error) {
