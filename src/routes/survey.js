@@ -5,10 +5,10 @@ import { fetchSurveyResponsesFromCache } from '../services/cacheService.js';
 
 const app = new Hono();
 
-// Cache for survey response counts (24 hours)
+// Cache for survey response counts (1 hour for faster updates)
 let surveyResponseCache = null;
 let surveyResponseCacheTime = null;
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (was 24 hours)
 
 /**
  * Get survey response counts from cache spreadsheet
@@ -613,5 +613,29 @@ async function checkConsecutiveMonths(studentId, pool) {
 
   return consecutive;
 }
+
+/**
+ * POST /api/survey/clear-cache
+ * Clear survey response cache (force refresh on next request)
+ */
+app.post('/clear-cache', async (c) => {
+  try {
+    surveyResponseCache = null;
+    surveyResponseCacheTime = null;
+    
+    console.log('[Survey] Cache cleared manually');
+    
+    return c.json({
+      success: true,
+      message: 'Survey response cache cleared successfully'
+    });
+  } catch (error) {
+    console.error('[Survey] Error clearing cache:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
 
 export default app;
