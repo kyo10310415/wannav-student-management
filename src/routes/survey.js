@@ -23,9 +23,9 @@ async function getSurveyResponseCounts() {
   }
   
   // Fetch fresh data
-  const cacheSpreadsheetId = process.env.CACHE_SPREADSHEET_ID;
+  const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
   if (!cacheSpreadsheetId) {
-    console.warn('[Survey] CACHE_SPREADSHEET_ID not configured');
+    console.warn('[Survey] GOOGLE_CACHE_SHEET_ID or GOOGLE_SHEET_ID not configured');
     return {};
   }
   
