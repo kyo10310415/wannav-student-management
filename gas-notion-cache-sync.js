@@ -77,9 +77,8 @@ function syncAllData() {
     Logger.log('✓ レッスン進捗データ同期完了');
     
     // 11. レッスン満足度データを同期
-    // TEMPORARY: Commented out to avoid timeout - sync satisfaction data separately
-    // syncSatisfactionData();
-    // Logger.log('✓ レッスン満足度データ同期完了');
+    syncSatisfactionData();
+    Logger.log('✓ レッスン満足度データ同期完了');
     
     const endTime = new Date();
     const executionTime = Math.round((endTime - startTime) / 1000);
@@ -271,9 +270,22 @@ function fetchStudentsFromNotion() {
   
   while (hasMore) {
     pageCount++;
-    const payload = startCursor 
-      ? { start_cursor: startCursor, page_size: 100 } 
-      : { page_size: 100 };
+    
+    // Add filter to only get students with non-empty 契約プラン
+    const payload = {
+      page_size: 100,
+      filter: {
+        property: '契約プラン',
+        select: {
+          is_not_empty: true
+        }
+      }
+    };
+    
+    // Add cursor for pagination
+    if (startCursor) {
+      payload.start_cursor = startCursor;
+    }
     
     const options = {
       ...baseOptions,
