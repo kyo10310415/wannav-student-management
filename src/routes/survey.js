@@ -1,13 +1,18 @@
 import { Hono } from 'hono';
 import { getPool } from '../db/connection.js';
 import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
-import { fetchSurveyResponsesFromCache } from '../services/cacheService.js';
+import { fetchSurveyResponsesFromCache, fetchCurrentMonthSurveyResponses } from '../services/cacheService.js';
 
 const app = new Hono();
 
 // Cache for survey response counts (1 hour for faster updates)
 let surveyResponseCache = null;
 let surveyResponseCacheTime = null;
+
+// Cache for current month responders (1 hour)
+let currentMonthRespondersCache = null;
+let currentMonthRespondersCacheTime = null;
+
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (was 24 hours)
 
 /**
@@ -50,6 +55,36 @@ async function getSurveyResponseCounts() {
   } catch (error) {
     console.error('[Survey] Error fetching survey response counts:', error);
     return surveyResponseCache || {}; // Return old cache if available
+  }
+}
+
+/**
+ * Get current month survey responders from cache spreadsheet
+ */
+async function getCurrentMonthResponders() {
+  const now = Date.now();
+  
+  // Return cached data if still valid
+  if (currentMonthRespondersCache && currentMonthRespondersCacheTime && (now - currentMonthRespondersCacheTime < CACHE_DURATION)) {
+    console.log('[Survey] Using cached current month responders');
+    return currentMonthRespondersCache;
+  }
+  
+  // Fetch fresh data
+  const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+  if (!cacheSpreadsheetId) {
+    console.warn('[Survey] GOOGLE_CACHE_SHEET_ID or GOOGLE_SHEET_ID not configured');
+    return new Set();
+  }
+  
+  try {
+    currentMonthRespondersCache = await fetchCurrentMonthSurveyResponses(cacheSpreadsheetId);
+    currentMonthRespondersCacheTime = now;
+    console.log(`[Survey] Current month responders fetched and cached: ${currentMonthRespondersCache.size} students`);
+    return currentMonthRespondersCache;
+  } catch (error) {
+    console.error('[Survey] Error fetching current month responders:', error);
+    return currentMonthRespondersCache || new Set(); // Return old cache if available
   }
 }
 
@@ -97,6 +132,9 @@ app.get('/stats-all', async (c) => {
     
     // Get survey response counts from spreadsheet
     const surveyResponseCounts = await getSurveyResponseCounts();
+    
+    // Get current month responders from spreadsheet
+    const currentMonthResponders = await getCurrentMonthResponders();
     
     // Get all students with their continued months and lesson start date
     const studentsResult = await pool.query(`
@@ -170,6 +208,9 @@ app.get('/stats-all', async (c) => {
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 ? Math.round((responseCount / continuedMonths) * 100) : 0;
       
+      // Check if student responded this month
+      const respondedThisMonth = currentMonthResponders.has(normalizedStudentId);
+      
       // Debug: Log first 3 students
       if (debugCount < 3) {
         console.log(`[Survey Debug] Student: "${studentName}" (${studentId})`);
@@ -177,6 +218,7 @@ app.get('/stats-all', async (c) => {
         console.log(`  - Normalized ID: "${normalizedStudentId}"`);
         console.log(`  - Spreadsheet match: ${surveyResponseCounts[normalizedStudentId] !== undefined ? 'YES' : 'NO'}`);
         console.log(`  - Response count: ${responseCount}`);
+        console.log(`  - Responded this month: ${respondedThisMonth ? 'YES' : 'NO'}`);
         debugCount++;
       }
       
@@ -206,6 +248,7 @@ app.get('/stats-all', async (c) => {
         continuedMonths,
         responseCount,
         responseRate,
+        respondedThisMonth,  // 今月の回答状況を追加
         latestRouletteResult: rouletteMap[studentId] || null,
         isEligible: {
           isEligible,
@@ -639,8 +682,10 @@ app.post('/clear-cache', async (c) => {
   try {
     surveyResponseCache = null;
     surveyResponseCacheTime = null;
+    currentMonthRespondersCache = null;
+    currentMonthRespondersCacheTime = null;
     
-    console.log('[Survey] Cache cleared manually');
+    console.log('[Survey] All survey caches cleared manually');
     
     return c.json({
       success: true,

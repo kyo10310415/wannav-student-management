@@ -897,6 +897,14 @@ function getFilteredStudents() {
   
   // Apply column filters (only on students page)
   if (currentPage === 'students') {
+    // Apply survey filter for unreplied students
+    if (surveyFilter === 'unreplied') {
+      filtered = filtered.filter(s => {
+        const stats = surveyStatsCache[s.student_id];
+        return stats && !stats.respondedThisMonth;
+      });
+    }
+    
     Object.keys(columnFilters).forEach(column => {
       const filterValue = columnFilters[column];
       if (filterValue && filterValue !== 'all') {
@@ -1450,6 +1458,9 @@ function renderStudentsPage() {
                 <div class="flex items-center justify-center gap-2">
                   <i class="fas fa-clipboard-check text-blue-600"></i>
                   <span>アンケート</span>
+                  <button onclick="toggleSurveyFilter()" class="hover:text-blue-600 transition" title="今月未回答でフィルター">
+                    <i class="fas fa-filter ${surveyFilter === 'unreplied' ? 'text-red-600' : ''}"></i>
+                  </button>
                 </div>
               </th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -7920,6 +7931,7 @@ function removeScheduleImagePreview() {
 let surveyStatsCache = {};
 let surveyStatsCacheTime = null;
 const SURVEY_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+let surveyFilter = ''; // '', 'unreplied'
 
 /**
  * Load survey statistics for all students (bulk fetch with cache)
@@ -7998,10 +8010,14 @@ function updateSurveyStatsDisplay(studentId, stats) {
   const responseCount = stats.responseCount || 0;
   const responseRate = stats.responseRate || 0;
   const continuedMonths = stats.continuedMonths || 0;
+  const respondedThisMonth = stats.respondedThisMonth || false;
   
   let surveyHtml = `
     <div class="text-xs">
-      <div class="font-semibold text-blue-600">${responseCount}/${continuedMonths}回</div>
+      <div class="flex items-center gap-1">
+        <div class="font-semibold text-blue-600">${responseCount}/${continuedMonths}回</div>
+        ${!respondedThisMonth ? '<span class="px-1.5 py-0.5 text-xs font-bold bg-red-500 text-white rounded animate-pulse" title="今月未回答">!</span>' : '<span class="text-green-500 text-sm" title="今月回答済み">✓</span>'}
+      </div>
       <div class="mt-1">
         <div class="w-full bg-gray-200 rounded-full h-2">
           <div class="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full" style="width: ${Math.min(responseRate, 100)}%"></div>
@@ -8083,6 +8099,25 @@ function updateRouletteMarker(studentId, stats) {
       ${probability}%
     </span>
   `;
+}
+
+// ========== Survey Filter ==========
+
+/**
+ * Toggle survey filter for unreplied students this month
+ */
+function toggleSurveyFilter() {
+  surveyFilter = surveyFilter === 'unreplied' ? '' : 'unreplied';
+  
+  // Re-render student list
+  if (typeof renderStudentRowsSimple === 'function') {
+    renderStudentRowsSimple();
+  }
+  
+  showNotification(
+    surveyFilter === 'unreplied' ? '今月未回答の生徒のみ表示' : 'フィルター解除',
+    'info'
+  );
 }
 
 // ========== Survey Notification Toggle ==========

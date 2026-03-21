@@ -250,6 +250,62 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
 }
 
 /**
+ * Fetch current month survey responses from cache spreadsheet
+ * Returns a Set of student_ids who responded this month
+ */
+export async function fetchCurrentMonthSurveyResponses(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'レッスン満足度データ!A2:G', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由, 学籍番号
+    });
+
+    const rows = response.data.values || [];
+    
+    // Get current year and month (YYYY/M format)
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}/${now.getMonth() + 1}`;
+    
+    console.log(`[Survey] Checking for current month responses: ${currentYearMonth}`);
+    
+    // Helper function to normalize student_id
+    const normalizeStudentId = (id) => {
+      if (!id) return '';
+      return id.toString()
+        .trim()
+        .replace(/[\s　]/g, '')
+        .replace(/－/g, '-')
+        .toUpperCase();
+    };
+
+    // Collect student_ids who responded in current month
+    const currentMonthResponders = new Set();
+    
+    rows.forEach((row, index) => {
+      const yearMonth = row[1]; // B列: 年月
+      const rawStudentId = row[6]; // G列: 学籍番号
+      
+      if (yearMonth && rawStudentId) {
+        // Check if this row is for current month
+        if (yearMonth.toString().trim() === currentYearMonth) {
+          const normalizedId = normalizeStudentId(rawStudentId);
+          currentMonthResponders.add(normalizedId);
+        }
+      }
+    });
+    
+    console.log(`[Survey] Found ${currentMonthResponders.size} students who responded in ${currentYearMonth}`);
+    
+    return currentMonthResponders;
+  } catch (error) {
+    console.error('Error fetching current month survey responses:', error);
+    throw error;
+  }
+}
+
+/**
  * Get last sync time from meta sheet
  */
 export async function getCacheSyncTime(spreadsheetId) {
