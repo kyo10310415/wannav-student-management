@@ -77,8 +77,9 @@ function syncAllData() {
     Logger.log('✓ レッスン進捗データ同期完了');
     
     // 11. レッスン満足度データを同期
-    syncSatisfactionData();
-    Logger.log('✓ レッスン満足度データ同期完了');
+    // TEMPORARY: Commented out to avoid timeout - sync satisfaction data separately
+    // syncSatisfactionData();
+    // Logger.log('✓ レッスン満足度データ同期完了');
     
     const endTime = new Date();
     const executionTime = Math.round((endTime - startTime) / 1000);
