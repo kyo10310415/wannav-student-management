@@ -267,13 +267,9 @@ function fetchStudentsFromNotion() {
   let hasMore = true;
   let startCursor = undefined;
   let pageCount = 0;
-  let consecutiveErrors = 0;
-  const MAX_CONSECUTIVE_ERRORS = 3;
   
-  while (hasMore && consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+  while (hasMore) {
     pageCount++;
-    Logger.log(`Notionデータ取得中... (ページ ${pageCount}, 現在 ${allResults.length}件)`);
-    
     const payload = startCursor 
       ? { start_cursor: startCursor, page_size: 100 } 
       : { page_size: 100 };
@@ -285,61 +281,26 @@ function fetchStudentsFromNotion() {
     
     try {
       const response = UrlFetchApp.fetch(url, options);
-      const contentText = response.getContentText();
-      
-      // Check if response is too large or corrupted
-      if (!contentText || contentText.length < 10) {
-        Logger.log(`⚠️ 警告: 空のレスポンス (ページ ${pageCount})`);
-        consecutiveErrors++;
-        Utilities.sleep(2000); // Wait longer before retry
-        continue;
-      }
-      
-      let data;
-      try {
-        data = JSON.parse(contentText);
-      } catch (parseError) {
-        Logger.log(`⚠️ JSON解析エラー (ページ ${pageCount}): ${parseError.message}`);
-        Logger.log(`レスポンスサイズ: ${contentText.length} 文字`);
-        consecutiveErrors++;
-        Utilities.sleep(2000);
-        continue;
-      }
+      const data = JSON.parse(response.getContentText());
       
       if (data.object === 'error') {
-        Logger.log(`Notion API エラー (ページ ${pageCount}): ${data.message}`);
-        consecutiveErrors++;
-        Utilities.sleep(2000);
-        continue;
+        Logger.log(`Notion API エラー: ${data.message}`);
+        break;
       }
-      
-      // Success - reset error counter
-      consecutiveErrors = 0;
       
       allResults = allResults.concat(data.results);
       hasMore = data.has_more;
       startCursor = data.next_cursor;
       
-      Logger.log(`✓ ページ ${pageCount} 取得完了 (累計 ${allResults.length}件)`);
-      
-      // Wait between API calls to avoid rate limiting
-      // Notion API limit: 3 requests per second
-      if (hasMore) {
-        Utilities.sleep(1000); // Wait 1 second between each request
+      if (hasMore && pageCount % 3 === 0) {
+        Utilities.sleep(1000);
       }
       
     } catch (error) {
-      Logger.log(`⚠️ リクエストエラー (ページ ${pageCount}): ${error.message}`);
-      consecutiveErrors++;
-      Utilities.sleep(2000);
+      Logger.log(`Notion API エラー: ${error.message}`);
+      break;
     }
   }
-  
-  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-    Logger.log(`❌ エラーが ${MAX_CONSECUTIVE_ERRORS}回連続で発生したため、データ取得を中断しました`);
-  }
-  
-  Logger.log(`📊 最終取得件数: ${allResults.length}件 (${pageCount}ページ)`);
   
   return allResults.map(page => {
     const props = page.properties;
@@ -456,13 +417,9 @@ function fetchTutorsFromNotion() {
   let hasMore = true;
   let startCursor = undefined;
   let pageCount = 0;
-  let consecutiveErrors = 0;
-  const MAX_CONSECUTIVE_ERRORS = 3;
   
-  while (hasMore && consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+  while (hasMore) {
     pageCount++;
-    Logger.log(`Tutorデータ取得中... (ページ ${pageCount}, 現在 ${allResults.length}件)`);
-    
     const payload = startCursor 
       ? { start_cursor: startCursor, page_size: 100 } 
       : { page_size: 100 };
@@ -474,56 +431,26 @@ function fetchTutorsFromNotion() {
     
     try {
       const response = UrlFetchApp.fetch(url, options);
-      const contentText = response.getContentText();
-      
-      if (!contentText || contentText.length < 10) {
-        Logger.log(`⚠️ 警告: 空のレスポンス (ページ ${pageCount})`);
-        consecutiveErrors++;
-        Utilities.sleep(2000);
-        continue;
-      }
-      
-      let data;
-      try {
-        data = JSON.parse(contentText);
-      } catch (parseError) {
-        Logger.log(`⚠️ JSON解析エラー (ページ ${pageCount}): ${parseError.message}`);
-        consecutiveErrors++;
-        Utilities.sleep(2000);
-        continue;
-      }
+      const data = JSON.parse(response.getContentText());
       
       if (data.object === 'error') {
-        Logger.log(`Notion API エラー (ページ ${pageCount}): ${data.message}`);
-        consecutiveErrors++;
-        Utilities.sleep(2000);
-        continue;
+        Logger.log(`Notion API エラー: ${data.message}`);
+        break;
       }
-      
-      consecutiveErrors = 0;
       
       allResults = allResults.concat(data.results);
       hasMore = data.has_more;
       startCursor = data.next_cursor;
       
-      Logger.log(`✓ ページ ${pageCount} 取得完了 (累計 ${allResults.length}件)`);
-      
-      if (hasMore) {
+      if (hasMore && pageCount % 3 === 0) {
         Utilities.sleep(1000);
       }
       
     } catch (error) {
-      Logger.log(`⚠️ リクエストエラー (ページ ${pageCount}): ${error.message}`);
-      consecutiveErrors++;
-      Utilities.sleep(2000);
+      Logger.log(`Notion API エラー: ${error.message}`);
+      break;
     }
   }
-  
-  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-    Logger.log(`❌ エラーが ${MAX_CONSECUTIVE_ERRORS}回連続で発生したため、データ取得を中断しました`);
-  }
-  
-  Logger.log(`📊 最終取得件数: ${allResults.length}件 (${pageCount}ページ)`);
   
   return allResults.map(page => {
     const props = page.properties;
