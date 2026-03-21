@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getPool } from '../db/connection.js';
 import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
-import { fetchSurveyResponsesFromCache, fetchCurrentMonthSurveyResponses } from '../services/cacheService.js';
+import { fetchSurveyResponsesFromCache, fetchCurrentMonthSurveyResponses, fetchExtensionResultsFromCache } from '../services/cacheService.js';
 
 const app = new Hono();
 
@@ -136,6 +136,19 @@ app.get('/stats-all', async (c) => {
     // Get current month responders from spreadsheet
     const currentMonthResponders = await getCurrentMonthResponders();
     
+    // Get extension results from cache spreadsheet
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    let extensionResultsFromCache = {};
+    
+    if (cacheSpreadsheetId) {
+      try {
+        extensionResultsFromCache = await fetchExtensionResultsFromCache(cacheSpreadsheetId);
+        console.log(`[Survey] Extension results loaded from cache: ${Object.keys(extensionResultsFromCache).length} students`);
+      } catch (error) {
+        console.error('[Survey] Failed to load extension results from cache:', error.message);
+      }
+    }
+    
     // Get all students with their continued months and lesson start date
     const studentsResult = await pool.query(`
       SELECT 
@@ -219,11 +232,13 @@ app.get('/stats-all', async (c) => {
         console.log(`  - Spreadsheet match: ${surveyResponseCounts[normalizedStudentId] !== undefined ? 'YES' : 'NO'}`);
         console.log(`  - Response count: ${responseCount}`);
         console.log(`  - Responded this month: ${respondedThisMonth ? 'YES' : 'NO'}`);
+        console.log(`  - Extension result (cache): ${extensionResultsFromCache[normalizedStudentId]}`);
         debugCount++;
       }
       
-      // Check eligibility (simplified logic for bulk fetch)
-      const extensionResult = extensionMap[studentId];
+      // Check eligibility (using cache spreadsheet for extension result)
+      // Fallback to extension DB if cache is not available
+      let extensionResult = extensionResultsFromCache[normalizedStudentId] || extensionMap[studentId];
       const isExtensionApproved = extensionResult === '延長';
       const isActive = student.status === 'アクティブ';
       

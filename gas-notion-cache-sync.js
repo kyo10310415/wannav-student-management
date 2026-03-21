@@ -10,6 +10,7 @@ const DISCORD_DESTINATION_SPREADSHEET_ID = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM
 const RESULT_SCORE_SPREADSHEET_ID = '1t571fqZJtUjNL7_gH6G2dSNBCmS98LTnDrWEtt7J92k'; // リザルトスコアスプレッドシートのID
 const SUSPENSION_SPREADSHEET_ID = '17ys2PZpDpffG3j4EQrXiLlwGbFxiNosBqMivL2quVEA'; // 休会情報スプレッドシートのID
 const SATISFACTION_SPREADSHEET_ID = '1UqJPI8LlzWRXXbgCA65RUrtA3GEEKIyK9gtuwkGpMps'; // レッスン満足度スプレッドシートのID
+const EXTENSION_RESULT_SPREADSHEET_ID = '1m7P2nsX-M9BGP2RHIj3CjAZiDPs2K9gu1Y_md7xiazQ'; // 延長結果スプレッドシートのID
 
 // バックエンドAPI設定（外部DB用）
 const BACKEND_API_URL = 'https://wannav-student-management.onrender.com/api/external/lesson-start-dates'; // バックエンドAPIのURL
@@ -59,19 +60,23 @@ function syncAllData() {
     const suspensionPeriods = fetchSuspensionPeriods();
     Logger.log(`✓ 休会期間: ${Object.keys(suspensionPeriods).length}件取得`);
     
-    // 7. 生徒データを同期（すべての追加情報を含む）
-    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts, lessonStartDates, suspensionPeriods);
+    // 7. 延長結果を取得
+    const extensionResults = fetchExtensionResults();
+    Logger.log(`✓ 延長結果: ${Object.keys(extensionResults).length}件取得`);
+    
+    // 8. 生徒データを同期（すべての追加情報を含む）
+    syncStudentsToSheet(discordDestinations, paymentStatuses, resultScores, absenceCounts, lessonStartDates, suspensionPeriods, extensionResults);
     Logger.log('✓ 生徒データ同期完了');
     
-    // 8. Tutorデータを同期
+    // 9. Tutorデータを同期
     syncTutorsToSheet();
     Logger.log('✓ Tutorデータ同期完了');
     
-    // 9. レッスン進捗データを同期
+    // 10. レッスン進捗データを同期
     syncProgressToSheet();
     Logger.log('✓ レッスン進捗データ同期完了');
     
-    // 10. レッスン満足度データを同期
+    // 11. レッスン満足度データを同期
     syncSatisfactionData();
     Logger.log('✓ レッスン満足度データ同期完了');
     
@@ -94,7 +99,7 @@ function syncAllData() {
 /**
  * Notionから生徒データを取得してスプレッドシートに保存
  */
-function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}, lessonStartDates = {}, suspensionPeriods = {}) {
+function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, resultScores = {}, absenceCounts = {}, lessonStartDates = {}, suspensionPeriods = {}, extensionResults = {}) {
   Logger.log('生徒データ同期開始...');
   
   const students = fetchStudentsFromNotion();
@@ -150,6 +155,14 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     
     // 休会期間（月数）
     student.suspension_months = suspensionPeriods[studentId] || 0;
+    
+    // 延長結果（正規化した学籍番号で照合）
+    const normalizedId = studentId ? studentId.toString()
+      .trim()
+      .replace(/[\s　]/g, '')
+      .replace(/－/g, '-')
+      .toUpperCase() : '';
+    student.extension_result = extensionResults[normalizedId] || '';
   });
   
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -166,8 +179,8 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     sheet.deleteRows(2, sheet.getLastRow() - 1);
   }
   
-  // ヘッダー行を設定（25列に拡張 - YouTubeとXのID追加）
-  sheet.getRange(1, 1, 1, 25).setValues([[
+  // ヘッダー行を設定（26列に拡張 - 延長結果を追加）
+  sheet.getRange(1, 1, 1, 26).setValues([[
     'notion_page_id',
     '学籍番号',
     '名前',
@@ -190,13 +203,14 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
     '欠席回数',
     'レッスン開始日',
     '休会期間（月）',
+    '延長結果',
     'YouTubeチャンネルID',
     'X ID',
     '最終更新日時'
   ]]);
-  sheet.getRange(1, 1, 1, 25).setFontWeight('bold');
+  sheet.getRange(1, 1, 1, 26).setFontWeight('bold');
   
-  // データを書き込み（25列に拡張）
+  // データを書き込み（26列に拡張）
   if (students.length > 0) {
     const rows = students.map(s => [
       s.notion_page_id || '',
@@ -221,12 +235,13 @@ function syncStudentsToSheet(discordDestinations = {}, paymentStatuses = {}, res
       s.absence_count || 0,
       s.lesson_start_date || '',
       s.suspension_months || 0,
-      s.youtube_channel_id || '',  // YouTube ID追加
-      s.x_account_id || '',         // X ID追加
+      s.extension_result || '',    // 延長結果追加
+      s.youtube_channel_id || '',  // YouTube ID
+      s.x_account_id || '',         // X ID
       new Date()
     ]);
     
-    sheet.getRange(2, 1, rows.length, 25).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 26).setValues(rows);
   }
   
   Logger.log(`${students.length}件の生徒データを書き込み完了`);
@@ -1092,6 +1107,62 @@ function parseSuspensionPeriod(period) {
   }
   
   return 0;
+}
+
+/**
+ * 延長結果を取得
+ * 同じ学籍番号が複数ある場合は最新（最後の行）を使用
+ * @return {Object} 学籍番号をキー、延長結果（"延長" or その他）を値とするマップ
+ */
+function fetchExtensionResults() {
+  Logger.log('延長結果データ取得開始...');
+  
+  try {
+    const ss = SpreadsheetApp.openById(EXTENSION_RESULT_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('フォームの回答 1');
+    
+    if (!sheet) {
+      Logger.log('⚠️ 警告: フォームの回答 1 シートが見つかりません');
+      return {};
+    }
+    
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('延長結果データがありません');
+      return {};
+    }
+    
+    // E列: 学籍番号, I列: 結果
+    const studentIds = sheet.getRange(2, 5, lastRow - 1, 1).getValues(); // E列
+    const results = sheet.getRange(2, 9, lastRow - 1, 1).getValues(); // I列
+    
+    const extensionResultsMap = {};
+    
+    for (let i = 0; i < studentIds.length; i++) {
+      const studentId = studentIds[i][0];
+      const result = results[i][0];
+      
+      if (studentId) {
+        // 学籍番号を正規化（前後のスペースを削除、全角ハイフンを半角に変換、大文字に統一）
+        const normalizedId = studentId.toString()
+          .trim()
+          .replace(/[\s　]/g, '')
+          .replace(/－/g, '-')
+          .toUpperCase();
+        
+        // 同じ学籍番号が複数ある場合は最後（最新）の行を使用
+        extensionResultsMap[normalizedId] = result ? result.toString().trim() : null;
+      }
+    }
+    
+    Logger.log(`延長結果: ${Object.keys(extensionResultsMap).length}件取得完了`);
+    return extensionResultsMap;
+    
+  } catch (error) {
+    Logger.log(`❌ 延長結果取得エラー: ${error.message}`);
+    Logger.log(error.stack);
+    return {};
+  }
 }
 
 /**

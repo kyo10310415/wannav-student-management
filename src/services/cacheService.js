@@ -306,6 +306,69 @@ export async function fetchCurrentMonthSurveyResponses(spreadsheetId) {
 }
 
 /**
+ * Fetch extension results from cache spreadsheet
+ * Returns an object mapping student_id to extension_result
+ */
+export async function fetchExtensionResultsFromCache(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: '生徒データ!A2:W', // A-W列 (26列: 延長結果はW列=23列目)
+    });
+
+    const rows = response.data.values || [];
+    
+    console.log(`[Extension] Fetched ${rows.length} student rows from cache spreadsheet`);
+    
+    // Helper function to normalize student_id
+    const normalizeStudentId = (id) => {
+      if (!id) return '';
+      return id.toString()
+        .trim()
+        .replace(/[\s　]/g, '')
+        .replace(/－/g, '-')
+        .toUpperCase();
+    };
+
+    // Build extension results map
+    const extensionResultsMap = {};
+    
+    rows.forEach((row, index) => {
+      const rawStudentId = row[1]; // B列: 学籍番号
+      const extensionResult = row[22]; // W列: 延長結果 (0-based index: 22)
+      
+      if (rawStudentId) {
+        const normalizedId = normalizeStudentId(rawStudentId);
+        extensionResultsMap[normalizedId] = extensionResult || null;
+      }
+    });
+    
+    console.log(`[Extension] Extension results loaded for ${Object.keys(extensionResultsMap).length} students`);
+    
+    // Debug: Log first 5 students with extension results
+    const sampleIds = Object.keys(extensionResultsMap)
+      .filter(id => extensionResultsMap[id])
+      .slice(0, 5);
+    
+    if (sampleIds.length > 0) {
+      console.log('[Extension Debug] Sample extension results:');
+      sampleIds.forEach(id => {
+        console.log(`  - "${id}": ${extensionResultsMap[id]}`);
+      });
+    } else {
+      console.log('  ⚠️ NO EXTENSION RESULTS FOUND - Column W might be empty!');
+    }
+    
+    return extensionResultsMap;
+  } catch (error) {
+    console.error('Error fetching extension results from cache:', error);
+    throw error;
+  }
+}
+
+/**
  * Get last sync time from meta sheet
  */
 export async function getCacheSyncTime(spreadsheetId) {
