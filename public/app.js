@@ -1511,6 +1511,63 @@ function renderStudentsPage() {
         </div>
       </div>
     </div>
+    
+    <!-- Roulette Eligibility Criteria -->
+    <div class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow-md p-6 mt-6">
+      <h3 class="text-lg font-bold text-purple-800 mb-3 flex items-center">
+        <i class="fas fa-dice mr-2"></i>
+        ルーレット特典の達成条件
+      </h3>
+      <div class="bg-white rounded-lg p-4 space-y-3">
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+            <span class="text-purple-600 font-bold">1</span>
+          </div>
+          <div class="flex-1">
+            <div class="font-semibold text-gray-800">ステータスが「アクティブ」</div>
+            <div class="text-sm text-gray-600 mt-1">休会中や退会済みの生徒は対象外です</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+            <span class="text-purple-600 font-bold">2</span>
+          </div>
+          <div class="flex-1">
+            <div class="font-semibold text-gray-800">延長審査結果が「延長」</div>
+            <div class="text-sm text-gray-600 mt-1">延長審査に合格している必要があります</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+            <span class="text-purple-600 font-bold">3</span>
+          </div>
+          <div class="flex-1">
+            <div class="font-semibold text-gray-800">アンケート回答率 ≥ 80%</div>
+            <div class="text-sm text-gray-600 mt-1">継続月数に対して80%以上のアンケート回答が必要です（例: 10ヶ月継続の場合、8回以上の回答）</div>
+          </div>
+        </div>
+        <div class="border-t pt-3 mt-3">
+          <div class="flex items-start gap-3">
+            <div class="flex-shrink-0">
+              <i class="fas fa-gift text-yellow-500 text-xl"></i>
+            </div>
+            <div class="flex-1">
+              <div class="font-semibold text-gray-800 mb-2">当選確率</div>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div class="bg-yellow-50 p-2 rounded">
+                  <span class="font-bold text-yellow-600">リザルト総合「S」</span>
+                  <div class="text-gray-600">→ 当選確率 <span class="font-bold text-yellow-600">100%</span></div>
+                </div>
+                <div class="bg-green-50 p-2 rounded">
+                  <span class="font-bold text-green-600">リザルト総合「A」「B」</span>
+                  <div class="text-gray-600">→ 当選確率 <span class="font-bold text-green-600">50%</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
   
   // Set tutor filter and add event listener
@@ -8052,6 +8109,20 @@ function updateSurveyStatsDisplay(studentId, stats) {
   
   // Roulette result display
   const rouletteResult = stats.latestRouletteResult;
+  const isEligible = stats.isEligible && stats.isEligible.isEligible;
+  
+  // Debug log for first 3 students
+  if (window.rouletteDebugCount === undefined) window.rouletteDebugCount = 0;
+  if (window.rouletteDebugCount < 3) {
+    console.log(`[Roulette Debug] Student: ${stats.name} (${studentId})`);
+    console.log(`  - Has roulette result:`, !!rouletteResult);
+    console.log(`  - Is eligible:`, isEligible);
+    console.log(`  - Eligibility reason:`, stats.isEligible?.reason);
+    console.log(`  - Extension result:`, stats.extensionResult);
+    console.log(`  - Status:`, stats.status);
+    console.log(`  - Response rate:`, stats.responseRate);
+    window.rouletteDebugCount++;
+  }
   
   if (rouletteResult) {
     const isWin = rouletteResult.result === '当たり';
