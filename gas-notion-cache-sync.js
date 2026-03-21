@@ -292,8 +292,10 @@ function fetchStudentsFromNotion() {
       hasMore = data.has_more;
       startCursor = data.next_cursor;
       
-      if (hasMore && pageCount % 3 === 0) {
-        Utilities.sleep(1000);
+      // Wait between API calls to avoid rate limiting
+      // Notion API limit: 3 requests per second
+      if (hasMore) {
+        Utilities.sleep(1000); // Wait 1 second between each request
       }
       
     } catch (error) {
@@ -442,8 +444,10 @@ function fetchTutorsFromNotion() {
       hasMore = data.has_more;
       startCursor = data.next_cursor;
       
-      if (hasMore && pageCount % 3 === 0) {
-        Utilities.sleep(1000);
+      // Wait between API calls to avoid rate limiting
+      // Notion API limit: 3 requests per second
+      if (hasMore) {
+        Utilities.sleep(1000); // Wait 1 second between each request
       }
       
     } catch (error) {
