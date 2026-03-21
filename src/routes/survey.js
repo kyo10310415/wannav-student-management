@@ -144,31 +144,23 @@ app.get('/stats-all', async (c) => {
     // Build stats for each student
     const statsMap = {};
     
-    // Helper function to normalize student name (remove all spaces)
-    const normalizeName = (name) => {
-      if (!name) return '';
-      return name.replace(/[\s　]/g, ''); // Remove both half-width and full-width spaces
-    };
-    
     // Debug: Log first 3 students for comparison
     let debugCount = 0;
     
     studentsResult.rows.forEach(student => {
       const studentId = student.student_id;
       const studentName = student.name;
-      const normalizedStudentName = normalizeName(studentName);
       
-      // Get response count from spreadsheet by normalized student name
-      const responseCount = surveyResponseCounts[normalizedStudentName] || 0;
+      // Get response count from spreadsheet by student_id (column G)
+      const responseCount = surveyResponseCounts[studentId] || 0;
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 ? Math.round((responseCount / continuedMonths) * 100) : 0;
       
       // Debug: Log first 3 students
       if (debugCount < 3) {
         console.log(`[Survey Debug] Student: "${studentName}" (${studentId})`);
-        console.log(`  - DB name: "${studentName}"`);
-        console.log(`  - Normalized name: "${normalizedStudentName}"`);
-        console.log(`  - Spreadsheet match: ${surveyResponseCounts[normalizedStudentName] !== undefined ? 'YES' : 'NO'}`);
+        console.log(`  - Student ID: "${studentId}"`);
+        console.log(`  - Spreadsheet match: ${surveyResponseCounts[studentId] !== undefined ? 'YES' : 'NO'}`);
         console.log(`  - Response count: ${responseCount}`);
         debugCount++;
       }
@@ -320,16 +312,9 @@ app.get('/stats/:studentId', async (c) => {
 
     const student = studentResult.rows[0];
 
-    // Helper function to normalize student name (remove all spaces)
-    const normalizeName = (name) => {
-      if (!name) return '';
-      return name.replace(/[\s　]/g, ''); // Remove both half-width and full-width spaces
-    };
-
-    // Get survey response count from spreadsheet by normalized student name
+    // Get survey response count from spreadsheet by student_id (column G)
     const surveyResponseCounts = await getSurveyResponseCounts();
-    const normalizedStudentName = normalizeName(student.name);
-    const responseCount = surveyResponseCounts[normalizedStudentName] || 0;
+    const responseCount = surveyResponseCounts[studentId] || 0;
     
     const continuedMonths = student.continued_months || 0;
     const responseRate = continuedMonths > 0 
@@ -426,12 +411,6 @@ app.get('/eligible-students', async (c) => {
     
     // Get survey response counts from spreadsheet
     const surveyResponseCounts = await getSurveyResponseCounts();
-    
-    // Helper function to normalize student name (remove all spaces)
-    const normalizeName = (name) => {
-      if (!name) return '';
-      return name.replace(/[\s　]/g, ''); // Remove both half-width and full-width spaces
-    };
 
     // 延長審査データ取得
     let extensionMap = {};
@@ -457,10 +436,9 @@ app.get('/eligible-students', async (c) => {
     // 各生徒の特典対象判定
     for (const student of students) {
       const studentId = student.student_id;
-      const normalizedStudentName = normalizeName(student.name);
       
-      // Get survey response count from spreadsheet by normalized student name
-      const responseCount = surveyResponseCounts[normalizedStudentName] || 0;
+      // Get survey response count from spreadsheet by student_id (column G)
+      const responseCount = surveyResponseCounts[studentId] || 0;
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 
         ? Math.round((responseCount / continuedMonths) * 100 * 10) / 10 

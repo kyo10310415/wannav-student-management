@@ -1116,9 +1116,10 @@ function syncSatisfactionData() {
       return;
     }
     
-    // A列: タイムスタンプ, C列: 名前（本名）, E列: 担任の先生の名前, M列: 担任の先生の対応, N列: 理由
+    // A列: タイムスタンプ, C列: 名前（本名）, D列: 学籍番号, E列: 担任の先生の名前, M列: 担任の先生の対応, N列: 理由
     const timestamps = sourceSheet.getRange(2, 1, lastRow - 1, 1).getValues(); // A列
     const studentNames = sourceSheet.getRange(2, 3, lastRow - 1, 1).getValues(); // C列
+    const studentIds = sourceSheet.getRange(2, 4, lastRow - 1, 1).getValues(); // D列: 学籍番号
     const tutorNames = sourceSheet.getRange(2, 5, lastRow - 1, 1).getValues(); // E列
     const satisfactionScores = sourceSheet.getRange(2, 13, lastRow - 1, 1).getValues(); // M列
     const reasons = sourceSheet.getRange(2, 14, lastRow - 1, 1).getValues(); // N列
@@ -1137,22 +1138,24 @@ function syncSatisfactionData() {
       destSheet.deleteRows(2, destSheet.getLastRow() - 1);
     }
     
-    // ヘッダー行を設定
-    destSheet.getRange(1, 1, 1, 6).setValues([[
+    // ヘッダー行を設定（7列に拡張 - 学籍番号追加）
+    destSheet.getRange(1, 1, 1, 7).setValues([[
       'タイムスタンプ',
       '年月',
       '生徒名',
       'Tutor名',
       '満足度',
-      '理由'
+      '理由',
+      '学籍番号'
     ]]);
-    destSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+    destSheet.getRange(1, 1, 1, 7).setFontWeight('bold');
     
     // データを整形
     const rows = [];
     for (let i = 0; i < timestamps.length; i++) {
       const timestamp = timestamps[i][0];
       const studentName = studentNames[i][0];
+      const studentId = studentIds[i][0]; // 学籍番号
       const tutorName = tutorNames[i][0];
       const score = satisfactionScores[i][0];
       const reason = reasons[i][0];
@@ -1175,14 +1178,15 @@ function syncSatisfactionData() {
           studentName || '',
           tutorName || '',
           score || '',
-          reason || ''
+          reason || '',
+          studentId || '' // 学籍番号をG列（7列目）に追加
         ]);
       }
     }
     
-    // データを書き込み
+    // データを書き込み（7列に拡張）
     if (rows.length > 0) {
-      destSheet.getRange(2, 1, rows.length, 6).setValues(rows);
+      destSheet.getRange(2, 1, rows.length, 7).setValues(rows);
     }
     
     Logger.log(`${rows.length}件の満足度データを書き込み完了`);

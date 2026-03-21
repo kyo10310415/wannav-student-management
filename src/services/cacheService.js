@@ -182,7 +182,7 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'レッスン満足度データ!A2:F', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由
+      range: 'レッスン満足度データ!A2:G', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由, 学籍番号
     });
 
     const rows = response.data.values || [];
@@ -197,35 +197,29 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
       console.log(`  - Column D (row[3]): "${rows[0][3] || '(empty)'}"`);
       console.log(`  - Column E (row[4]): "${rows[0][4] || '(empty)'}"`);
       console.log(`  - Column F (row[5]): "${rows[0][5] || '(empty)'}"`);
+      console.log(`  - Column G (row[6]): "${rows[0][6] || '(empty)'}"`);
     }
 
-    // Helper function to normalize student name (remove all spaces)
-    const normalizeName = (name) => {
-      if (!name) return '';
-      return name.replace(/[\s　]/g, ''); // Remove both half-width and full-width spaces
-    };
-    
-    // Count occurrences of each student name (column C)
+    // Count occurrences of each student_id (column G)
     const responseCountMap = {};
     
     rows.forEach((row, index) => {
-      const studentName = row[2]; // C列: 生徒名
-      if (studentName) {
-        const normalizedName = normalizeName(studentName);
-        responseCountMap[normalizedName] = (responseCountMap[normalizedName] || 0) + 1;
+      const studentId = row[6]; // G列: 学籍番号
+      if (studentId && studentId.toString().trim() !== '') {
+        responseCountMap[studentId] = (responseCountMap[studentId] || 0) + 1;
       }
     });
     
     console.log(`Survey response counts calculated for ${Object.keys(responseCountMap).length} students`);
     
-    // Debug: Log first 5 student names and their counts
-    const sampleNames = Object.keys(responseCountMap).slice(0, 5);
-    console.log('[Survey Debug] Sample student names from spreadsheet (column C, normalized):');
-    if (sampleNames.length === 0) {
-      console.log('  ⚠️ NO STUDENT NAMES FOUND - Column C might be empty!');
+    // Debug: Log first 5 student IDs and their counts
+    const sampleIds = Object.keys(responseCountMap).slice(0, 5);
+    console.log('[Survey Debug] Sample student IDs from spreadsheet (column G):');
+    if (sampleIds.length === 0) {
+      console.log('  ⚠️ NO STUDENT IDs FOUND - Column G might be empty!');
     } else {
-      sampleNames.forEach(name => {
-        console.log(`  - "${name}": ${responseCountMap[name]} responses`);
+      sampleIds.forEach(id => {
+        console.log(`  - "${id}": ${responseCountMap[id]} responses`);
       });
     }
     
