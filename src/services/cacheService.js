@@ -200,13 +200,32 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
       console.log(`  - Column G (row[6]): "${rows[0][6] || '(empty)'}"`);
     }
 
+    // Helper function to normalize student_id
+    const normalizeStudentId = (id) => {
+      if (!id) return '';
+      return id.toString()
+        .trim()                    // Remove leading/trailing spaces
+        .replace(/[\s　]/g, '')    // Remove all spaces (half-width and full-width)
+        .replace(/－/g, '-')       // Replace full-width hyphen with half-width
+        .toUpperCase();            // Normalize to uppercase
+    };
+
     // Count occurrences of each student_id (column G)
     const responseCountMap = {};
     
     rows.forEach((row, index) => {
-      const studentId = row[6]; // G列: 学籍番号
-      if (studentId && studentId.toString().trim() !== '') {
-        responseCountMap[studentId] = (responseCountMap[studentId] || 0) + 1;
+      const rawStudentId = row[6]; // G列: 学籍番号
+      if (rawStudentId && rawStudentId.toString().trim() !== '') {
+        const normalizedId = normalizeStudentId(rawStudentId);
+        
+        // Debug: Log first 3 normalization examples
+        if (index < 3) {
+          console.log(`[Survey Debug] Normalization example ${index + 1}:`);
+          console.log(`  - Original: "${rawStudentId}"`);
+          console.log(`  - Normalized: "${normalizedId}"`);
+        }
+        
+        responseCountMap[normalizedId] = (responseCountMap[normalizedId] || 0) + 1;
       }
     });
     
@@ -214,7 +233,7 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     
     // Debug: Log first 5 student IDs and their counts
     const sampleIds = Object.keys(responseCountMap).slice(0, 5);
-    console.log('[Survey Debug] Sample student IDs from spreadsheet (column G):');
+    console.log('[Survey Debug] Sample student IDs from spreadsheet (column G, normalized):');
     if (sampleIds.length === 0) {
       console.log('  ⚠️ NO STUDENT IDs FOUND - Column G might be empty!');
     } else {

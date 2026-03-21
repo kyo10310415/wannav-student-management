@@ -11,6 +11,19 @@ let surveyResponseCacheTime = null;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (was 24 hours)
 
 /**
+ * Normalize student_id for consistent matching
+ * Handles: leading/trailing spaces, full-width hyphens, case differences
+ */
+function normalizeStudentId(id) {
+  if (!id) return '';
+  return id.toString()
+    .trim()                    // Remove leading/trailing spaces
+    .replace(/[\s　]/g, '')    // Remove all spaces (half-width and full-width)
+    .replace(/－/g, '-')       // Replace full-width hyphen with half-width
+    .toUpperCase();            // Normalize to uppercase
+}
+
+/**
  * Get survey response counts from cache spreadsheet
  */
 async function getSurveyResponseCounts() {
@@ -150,17 +163,19 @@ app.get('/stats-all', async (c) => {
     studentsResult.rows.forEach(student => {
       const studentId = student.student_id;
       const studentName = student.name;
+      const normalizedStudentId = normalizeStudentId(studentId);
       
-      // Get response count from spreadsheet by student_id (column G)
-      const responseCount = surveyResponseCounts[studentId] || 0;
+      // Get response count from spreadsheet by normalized student_id (column G)
+      const responseCount = surveyResponseCounts[normalizedStudentId] || 0;
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 ? Math.round((responseCount / continuedMonths) * 100) : 0;
       
       // Debug: Log first 3 students
       if (debugCount < 3) {
         console.log(`[Survey Debug] Student: "${studentName}" (${studentId})`);
-        console.log(`  - Student ID: "${studentId}"`);
-        console.log(`  - Spreadsheet match: ${surveyResponseCounts[studentId] !== undefined ? 'YES' : 'NO'}`);
+        console.log(`  - DB Student ID: "${studentId}"`);
+        console.log(`  - Normalized ID: "${normalizedStudentId}"`);
+        console.log(`  - Spreadsheet match: ${surveyResponseCounts[normalizedStudentId] !== undefined ? 'YES' : 'NO'}`);
         console.log(`  - Response count: ${responseCount}`);
         debugCount++;
       }
@@ -312,9 +327,10 @@ app.get('/stats/:studentId', async (c) => {
 
     const student = studentResult.rows[0];
 
-    // Get survey response count from spreadsheet by student_id (column G)
+    // Get survey response count from spreadsheet by normalized student_id (column G)
     const surveyResponseCounts = await getSurveyResponseCounts();
-    const responseCount = surveyResponseCounts[studentId] || 0;
+    const normalizedStudentId = normalizeStudentId(studentId);
+    const responseCount = surveyResponseCounts[normalizedStudentId] || 0;
     
     const continuedMonths = student.continued_months || 0;
     const responseRate = continuedMonths > 0 
@@ -436,9 +452,10 @@ app.get('/eligible-students', async (c) => {
     // 各生徒の特典対象判定
     for (const student of students) {
       const studentId = student.student_id;
+      const normalizedStudentId = normalizeStudentId(studentId);
       
-      // Get survey response count from spreadsheet by student_id (column G)
-      const responseCount = surveyResponseCounts[studentId] || 0;
+      // Get survey response count from spreadsheet by normalized student_id (column G)
+      const responseCount = surveyResponseCounts[normalizedStudentId] || 0;
       const continuedMonths = student.continued_months || 0;
       const responseRate = continuedMonths > 0 
         ? Math.round((responseCount / continuedMonths) * 100 * 10) / 10 
