@@ -899,10 +899,22 @@ function getFilteredStudents() {
   if (currentPage === 'students') {
     // Apply survey filter for unreplied students
     if (surveyFilter === 'unreplied') {
+      console.log('[Survey Filter] Before filter:', filtered.length, 'students');
+      const beforeCount = filtered.length;
+      
       filtered = filtered.filter(s => {
         const stats = surveyStatsCache[s.student_id];
-        return stats && !stats.respondedThisMonth;
+        const hasStats = !!stats;
+        const notReplied = stats && !stats.respondedThisMonth;
+        
+        if (!hasStats && s.student_id) {
+          console.log('[Survey Filter] Missing stats for:', s.student_id, s.name);
+        }
+        
+        return notReplied;
       });
+      
+      console.log('[Survey Filter] After filter:', filtered.length, 'students (filtered out', beforeCount - filtered.length, ')');
     }
     
     Object.keys(columnFilters).forEach(column => {
@@ -8109,9 +8121,12 @@ function updateRouletteMarker(studentId, stats) {
 function toggleSurveyFilter() {
   surveyFilter = surveyFilter === 'unreplied' ? '' : 'unreplied';
   
-  // Re-render student list
-  if (typeof renderStudentRowsSimple === 'function') {
-    renderStudentRowsSimple();
+  console.log('[Survey Filter] Toggled to:', surveyFilter);
+  console.log('[Survey Filter] Cache has', Object.keys(surveyStatsCache).length, 'students');
+  
+  // Re-render student page
+  if (typeof renderStudentsPage === 'function') {
+    renderStudentsPage();
   }
   
   showNotification(
