@@ -302,19 +302,38 @@ app.get('/result/:studentId', async (c) => {
     const { studentId } = c.req.param();
     const pool = getPool();
 
-    const result = await pool.query(`
-      SELECT 
-        id,
-        student_id,
-        result,
-        probability,
-        roulette_url,
-        created_at
-      FROM roulette_results
-      WHERE student_id = $1 AND (is_test = FALSE OR is_test IS NULL)
-      ORDER BY created_at DESC
-      LIMIT 1
-    `, [studentId]);
+    let result;
+    try {
+      result = await pool.query(`
+        SELECT 
+          id,
+          student_id,
+          result,
+          probability,
+          roulette_url,
+          created_at
+        FROM roulette_results
+        WHERE student_id = $1 AND (is_test = FALSE OR is_test IS NULL)
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, [studentId]);
+    } catch (error) {
+      console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
+      // Fallback to query without is_test column
+      result = await pool.query(`
+        SELECT 
+          id,
+          student_id,
+          result,
+          probability,
+          roulette_url,
+          created_at
+        FROM roulette_results
+        WHERE student_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, [studentId]);
+    }
 
     if (result.rows.length === 0) {
       return c.json({
@@ -381,12 +400,24 @@ app.post('/test-draw', async (c) => {
     }
 
     // 結果を保存（is_test=true を追加）
-    const insertResult = await pool.query(`
-      INSERT INTO roulette_results 
-        (student_id, result, probability, roulette_url, is_test)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, result, probability, created_at
-    `, [studentId, result, probability, 'test-draw-' + Date.now(), true]);
+    let insertResult;
+    try {
+      insertResult = await pool.query(`
+        INSERT INTO roulette_results 
+          (student_id, result, probability, roulette_url, is_test)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, result, probability, created_at
+      `, [studentId, result, probability, 'test-draw-' + Date.now(), true]);
+    } catch (error) {
+      console.error('[Roulette TEST] Error inserting with is_test column:', error.message);
+      // Fallback to insert without is_test column
+      insertResult = await pool.query(`
+        INSERT INTO roulette_results 
+          (student_id, result, probability, roulette_url)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, result, probability, created_at
+      `, [studentId, result, probability, 'test-draw-' + Date.now()]);
+    }
 
     const rouletteResult = insertResult.rows[0];
 

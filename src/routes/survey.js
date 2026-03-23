@@ -296,22 +296,43 @@ app.get('/stats-all', async (c) => {
       WHERE s.status IN ('アクティブ', 'レッスン準備中')
     `);
     
-    // Get all roulette results
-    const rouletteResult = await pool.query(`
-      SELECT 
-        r.student_id,
-        r.result,
-        r.probability,
-        r.created_at
-      FROM roulette_results r
-      INNER JOIN (
-        SELECT student_id, MAX(created_at) as max_created
-        FROM roulette_results
-        WHERE is_test = FALSE OR is_test IS NULL
-        GROUP BY student_id
-      ) latest ON r.student_id = latest.student_id AND r.created_at = latest.max_created
-      WHERE r.is_test = FALSE OR r.is_test IS NULL
-    `);
+    // Get all roulette results (exclude test draws)
+    let rouletteResult;
+    try {
+      rouletteResult = await pool.query(`
+        SELECT 
+          r.student_id,
+          r.result,
+          r.probability,
+          r.created_at
+        FROM roulette_results r
+        INNER JOIN (
+          SELECT student_id, MAX(created_at) as max_created
+          FROM roulette_results
+          WHERE is_test = FALSE OR is_test IS NULL
+          GROUP BY student_id
+        ) latest ON r.student_id = latest.student_id AND r.created_at = latest.max_created
+        WHERE r.is_test = FALSE OR r.is_test IS NULL
+      `);
+      console.log(`[Survey] Roulette results fetched: ${rouletteResult.rows.length} records`);
+    } catch (error) {
+      console.error('[Survey] Error fetching roulette results:', error.message);
+      // If is_test column doesn't exist yet, fallback to simple query
+      rouletteResult = await pool.query(`
+        SELECT 
+          r.student_id,
+          r.result,
+          r.probability,
+          r.created_at
+        FROM roulette_results r
+        INNER JOIN (
+          SELECT student_id, MAX(created_at) as max_created
+          FROM roulette_results
+          GROUP BY student_id
+        ) latest ON r.student_id = latest.student_id AND r.created_at = latest.max_created
+      `);
+      console.log(`[Survey] Roulette results fetched (fallback): ${rouletteResult.rows.length} records`);
+    }
     
     // Get extension results
     const extensionPool = getExtensionPool();
@@ -559,16 +580,32 @@ app.get('/stats/:studentId', async (c) => {
       : 0;
 
     // 最新のルーレット結果取得（テスト抽選を除外）
-    const rouletteResult = await pool.query(`
-      SELECT 
-        result,
-        probability,
-        created_at
-      FROM roulette_results
-      WHERE student_id = $1 AND (is_test = FALSE OR is_test IS NULL)
-      ORDER BY created_at DESC
-      LIMIT 1
-    `, [studentId]);
+    let rouletteResult;
+    try {
+      rouletteResult = await pool.query(`
+        SELECT 
+          result,
+          probability,
+          created_at
+        FROM roulette_results
+        WHERE student_id = $1 AND (is_test = FALSE OR is_test IS NULL)
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, [studentId]);
+    } catch (error) {
+      console.error('[Survey] Error fetching roulette result with is_test filter:', error.message);
+      // Fallback to query without is_test column
+      rouletteResult = await pool.query(`
+        SELECT 
+          result,
+          probability,
+          created_at
+        FROM roulette_results
+        WHERE student_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, [studentId]);
+    }
 
     // 延長審査結果取得（extension DB）
     let extensionResult = null;
