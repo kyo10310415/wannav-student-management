@@ -561,9 +561,12 @@ function renderReservationsPage() {
       </div>
 
       <!-- Actions -->
-      <div class="mt-4 flex gap-2">
+      <div class="mt-4 flex gap-2 flex-wrap">
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+        <button onclick="resetTestRouletteResults()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+          <i class="fas fa-undo mr-2"></i>テスト抽選リセット
         </button>
         <button onclick="sendReminders()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
           <i class="fas fa-bell mr-2"></i>リマインド送信
@@ -8584,12 +8587,32 @@ async function spinRoulette() {
       // Calculate target rotation based on result
       // Always 2 segments: index 0 = あたり, index 1 = はずれ
       const isWin = result.result === '当たり';
-      const targetIndex = isWin ? 0 : 1; // 0 = あたり (gold), 1 = はずれ (gray)
       
-      // Add small random variation within the segment
-      const anglePerSegment = Math.PI; // 180 degrees for each segment
-      const randomOffset = (Math.random() - 0.5) * 0.8; // Random within 80% of segment
-      const targetAngle = targetIndex * anglePerSegment + (anglePerSegment / 2) + (anglePerSegment * randomOffset);
+      // Arrow points to top (270 degrees = 3π/2 radians in canvas coordinates)
+      // Segment 0 (あたり): 0 to π radians (0-180 degrees)
+      // Segment 1 (はずれ): π to 2π radians (180-360 degrees)
+      
+      // For the arrow to point at the center of a segment:
+      // - Center of segment 0 (あたり): π/2 radians (90 degrees)
+      // - Center of segment 1 (はずれ): 3π/2 radians (270 degrees)
+      
+      // We rotate the wheel, so the arrow (fixed at top = 270 degrees) points to the target
+      // Target rotation = (arrow position) - (segment center position)
+      
+      let targetAngle;
+      if (isWin) {
+        // Want segment 0 center (90 degrees) to align with arrow (270 degrees)
+        // Rotation = 270 - 90 = 180 degrees = π radians
+        targetAngle = Math.PI;
+      } else {
+        // Want segment 1 center (270 degrees) to align with arrow (270 degrees)
+        // Rotation = 270 - 270 = 0 degrees = 0 radians (or full circle 2π)
+        targetAngle = 0;
+      }
+      
+      // Add small random variation within segment (±20% of half segment = ±18 degrees)
+      const randomOffset = (Math.random() - 0.5) * 0.4 * Math.PI;
+      targetAngle += randomOffset;
       
       // Spin animation (5-8 full rotations + target angle)
       const fullRotations = 5 + Math.random() * 3;
@@ -8685,6 +8708,39 @@ function closeRouletteModal() {
   const modal = document.getElementById('rouletteModal');
   if (modal) {
     modal.remove();
+  }
+}
+
+/**
+ * Reset all test roulette results
+ * テスト抽選結果を全て削除し、生徒を「抽選可能」状態に戻す
+ */
+async function resetTestRouletteResults() {
+  try {
+    if (!confirm('全てのテスト抽選結果を削除します。\n生徒のUI表示が「抽選可能」に戻ります。\nよろしいですか？')) {
+      return;
+    }
+    
+    console.log('[Reset Test Roulette] Sending request to delete test results...');
+    
+    const response = await axios.post(`${API_BASE}/api/roulette/reset-test-results`);
+    
+    if (response.data.success) {
+      const { deletedCount, studentCount, message } = response.data.data;
+      console.log(`[Reset Test Roulette] Success: ${message}`);
+      console.log(`[Reset Test Roulette] Deleted ${deletedCount} records for ${studentCount} students`);
+      
+      showAlert('success', message);
+      
+      // Refresh page data to reflect changes
+      await refreshData();
+    } else {
+      console.error('[Reset Test Roulette] API returned error:', response.data.error);
+      showAlert('error', 'テスト抽選リセットに失敗しました: ' + response.data.error);
+    }
+  } catch (error) {
+    console.error('[Reset Test Roulette] Error:', error);
+    showAlert('error', 'テスト抽選リセットエラー: ' + (error.response?.data?.error || error.message));
   }
 }
 

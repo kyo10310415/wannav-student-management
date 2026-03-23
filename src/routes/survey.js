@@ -606,6 +606,7 @@ app.get('/stats-all', async (c) => {
     } catch (error) {
       console.error('[Survey] Error fetching roulette results:', error.message);
       // If is_test column doesn't exist yet, fallback to simple query
+      // Exclude test draws by checking roulette_url prefix
       rouletteResult = await pool.query(`
         SELECT 
           r.student_id,
@@ -616,10 +617,12 @@ app.get('/stats-all', async (c) => {
         INNER JOIN (
           SELECT student_id, MAX(created_at) as max_created
           FROM roulette_results
+          WHERE roulette_url NOT LIKE 'test-draw-%'
           GROUP BY student_id
         ) latest ON r.student_id = latest.student_id AND r.created_at = latest.max_created
+        WHERE r.roulette_url NOT LIKE 'test-draw-%'
       `);
-      console.log(`[Survey] Roulette results fetched (fallback): ${rouletteResult.rows.length} records`);
+      console.log(`[Survey] Roulette results fetched (fallback, excluding test draws): ${rouletteResult.rows.length} records`);
     }
     
     // Get extension results

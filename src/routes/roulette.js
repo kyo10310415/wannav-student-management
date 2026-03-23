@@ -444,4 +444,52 @@ app.post('/test-draw', async (c) => {
   }
 });
 
+/**
+ * POST /api/roulette/reset-test-results
+ * テスト抽選結果を全て削除（UIを「抽選可能」に戻す）
+ */
+app.post('/reset-test-results', async (c) => {
+  try {
+    const pool = getPool();
+    
+    // is_test=true のレコードを削除
+    let deleteResult;
+    try {
+      deleteResult = await pool.query(`
+        DELETE FROM roulette_results
+        WHERE is_test = true
+        RETURNING student_id
+      `);
+    } catch (error) {
+      console.error('[Roulette] Error deleting with is_test column:', error.message);
+      // Fallback: roulette_url が 'test-draw-' で始まるものを削除
+      deleteResult = await pool.query(`
+        DELETE FROM roulette_results
+        WHERE roulette_url LIKE 'test-draw-%'
+        RETURNING student_id
+      `);
+    }
+    
+    const deletedCount = deleteResult.rows.length;
+    const deletedStudents = [...new Set(deleteResult.rows.map(r => r.student_id))];
+    
+    console.log(`[Roulette] Deleted ${deletedCount} test results for ${deletedStudents.length} students`);
+    
+    return c.json({
+      success: true,
+      data: {
+        deletedCount: deletedCount,
+        studentCount: deletedStudents.length,
+        message: `${deletedStudents.length}名の生徒のテスト抽選結果を削除しました`
+      }
+    });
+  } catch (error) {
+    console.error('[Roulette] Error resetting test results:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;
