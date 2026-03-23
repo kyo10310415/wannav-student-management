@@ -8506,14 +8506,10 @@ function drawRouletteWheel(rotation = 0) {
   const centerY = canvas.height / 2;
   const radius = 150;
   
-  // Define segments
+  // Define segments - always 2 segments for visual consistency
   const segments = [
-    { text: 'ダイヤリー', color: '#FFE5B4', probability: 0.3 },
-    { text: 'オランジ', color: '#FFD4B2', probability: 0.15 },
-    { text: 'アメリカ', color: '#FFB6C1', probability: 0.15 },
-    { text: 'ソリシ', color: '#B0E0E6', probability: 0.15 },
-    { text: 'ハルメ', color: '#D8F0D8', probability: 0.15 },
-    { text: 'ムバイトケーキ', color: '#FFFFE0', probability: 0.1 }
+    { text: 'あたり', color: '#FFD700', probability: 0.5 },  // Gold
+    { text: 'はずれ', color: '#E0E0E0', probability: 0.5 }   // Gray
   ];
   
   const totalSegments = segments.length;
@@ -8545,7 +8541,7 @@ function drawRouletteWheel(rotation = 0) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#333';
-    ctx.font = 'bold 14px Arial';
+    ctx.font = 'bold 24px Arial';
     ctx.fillText(segment.text, radius * 0.65, 0);
     ctx.restore();
   });
@@ -8586,11 +8582,14 @@ async function spinRoulette() {
       const result = response.data.data;
       
       // Calculate target rotation based on result
-      const segments = ['ダイヤリー', 'オランジ', 'アメリカ', 'ソリシ', 'ハルメ', 'ムバイトケーキ'];
-      const targetIndex = result.result === '当たり' ? Math.floor(Math.random() * segments.length) : Math.floor(Math.random() * segments.length);
+      // Always 2 segments: index 0 = あたり, index 1 = はずれ
+      const isWin = result.result === '当たり';
+      const targetIndex = isWin ? 0 : 1; // 0 = あたり (gold), 1 = はずれ (gray)
       
-      const anglePerSegment = (2 * Math.PI) / segments.length;
-      const targetAngle = targetIndex * anglePerSegment;
+      // Add small random variation within the segment
+      const anglePerSegment = Math.PI; // 180 degrees for each segment
+      const randomOffset = (Math.random() - 0.5) * 0.8; // Random within 80% of segment
+      const targetAngle = targetIndex * anglePerSegment + (anglePerSegment / 2) + (anglePerSegment * randomOffset);
       
       // Spin animation (5-8 full rotations + target angle)
       const fullRotations = 5 + Math.random() * 3;
