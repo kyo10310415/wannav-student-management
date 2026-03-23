@@ -8254,9 +8254,16 @@ async function loadLessonCompletionBatch() {
     filteredStudents.forEach(student => {
       const dates = lessonDates[student.student_id] || [];
       dates.forEach(dateObj => {
+        // Convert Date object to YYYY-MM-DD format
+        const date = dateObj.date;
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const lessonDate = `${year}-${month}-${day}`;
+        
         items.push({
           studentId: student.student_id,
-          lessonDate: dateObj.date // YYYY-MM-DD format
+          lessonDate: lessonDate
         });
       });
     });
@@ -8267,6 +8274,7 @@ async function loadLessonCompletionBatch() {
     }
     
     console.log(`[Lesson Completion] Checking ${items.length} lesson dates for ${filteredStudents.length} students`);
+    console.log('[Lesson Completion] Sample items:', items.slice(0, 3));
     
     // Call batch API
     const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, {
@@ -8276,6 +8284,7 @@ async function loadLessonCompletionBatch() {
     if (response.data.success) {
       const results = response.data.data;
       console.log(`[Lesson Completion] Loaded ${results.length} lesson completion records`);
+      console.log('[Lesson Completion] Sample results:', results.slice(0, 3));
       
       // Group results by studentId
       const completionByStudent = {};
@@ -8340,7 +8349,17 @@ function updateLessonCompletionDisplay(studentId, completions) {
       ? '<i class="fas fa-check text-green-600"></i>' 
       : '<i class="fas fa-times text-red-600"></i>';
     const statusText = c.lessonResult || '未記入';
-    const dateStr = c.lessonDate.substring(5); // MM-DD
+    // Ensure lessonDate is a string and extract M/D format
+    const lessonDateStr = String(c.lessonDate);
+    let dateStr;
+    if (lessonDateStr.includes('-')) {
+      // Format: YYYY-MM-DD -> M/D
+      const parts = lessonDateStr.split('-');
+      dateStr = `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+    } else {
+      // Fallback
+      dateStr = lessonDateStr.substring(5);
+    }
     
     html += `<div class="text-xs text-gray-600 flex items-center justify-between gap-2">
       <span>${dateStr}</span>
