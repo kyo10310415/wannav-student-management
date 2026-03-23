@@ -30,12 +30,16 @@ import surveyRoutes from './routes/survey.js';
 import rouletteRoutes from './routes/roulette.js';
 import settingsRoutes from './routes/settings.js';
 import lessonCompletionRoutes from './routes/lessonCompletion.js';
+import lessonReportReminderRoutes from './routes/lessonReportReminder.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
 import { sendDailyStatsReport } from './services/statsReportService.js';
 import { checkAndExecuteSchedules } from './services/schedulerService.js';
 import { checkStampRallyAchievements } from './services/stampRallyService.js';
+
+// Jobs
+import sendLessonReportReminder from './jobs/lessonReportReminder.js';
 
 const app = new Hono();
 
@@ -72,6 +76,7 @@ app.route('/api/survey', surveyRoutes);
 app.route('/api/roulette', rouletteRoutes);
 app.route('/api/settings', settingsRoutes);
 app.route('/api/lesson-completion', lessonCompletionRoutes);
+app.route('/api/lesson-report-reminder', lessonReportReminderRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
@@ -175,6 +180,25 @@ cron.schedule('0 10 * * *', async () => {
 }, {
   timezone: 'Asia/Tokyo'
 });
+
+// Schedule lesson report reminder (daily at 17:00 JST)
+// Checks yesterday's lessons and sends reminders for unreported lessons
+if (process.env.LESSON_REPORT_REMINDER_ENABLED !== 'false') {
+  console.log('Lesson report reminder: ENABLED (17:00 JST daily)');
+  cron.schedule('0 17 * * *', async () => {
+    console.log('Running lesson report reminder at 17:00 JST...');
+    try {
+      await sendLessonReportReminder();
+      console.log('Lesson report reminders sent successfully');
+    } catch (error) {
+      console.error('Error sending lesson report reminders:', error);
+    }
+  }, {
+    timezone: 'Asia/Tokyo'
+  });
+} else {
+  console.log('Lesson report reminder: DISABLED (LESSON_REPORT_REMINDER_ENABLED=false)');
+}
 
 const port = process.env.PORT || 3000;
 
