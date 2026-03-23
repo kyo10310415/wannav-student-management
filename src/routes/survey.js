@@ -277,6 +277,208 @@ async function getCurrentMonthResponders() {
 }
 
 /**
+ * GET /api/survey/debug/:studentId
+ * 特定の生徒のアンケート判定デバッグ情報
+ */
+app.get('/debug/:studentId', async (c) => {
+  try {
+    const { studentId } = c.req.param();
+    const pool = getPool();
+    
+    // Get survey response counts from spreadsheet
+    const surveyResponseCounts = await getSurveyResponseCounts();
+    
+    // Get current month responders from spreadsheet
+    const currentMonthResponders = await getCurrentMonthResponders();
+    
+    // Get monthly response history from spreadsheet
+    const satisfactionSpreadsheetId = process.env.SATISFACTION_SPREADSHEET_ID || process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    let monthlyResponseHistory = new Map();
+    
+    if (satisfactionSpreadsheetId) {
+      monthlyResponseHistory = await fetchMonthlyResponseHistory(satisfactionSpreadsheetId);
+    }
+    
+    // Get extension results from cache
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    let extensionResultsFromCache = {};
+    
+    if (cacheSpreadsheetId) {
+      try {
+        extensionResultsFromCache = await fetchExtensionResultsFromCache(cacheSpreadsheetId);
+      } catch (error) {
+        console.error('[Survey Debug] Failed to load extension results from cache:', error.message);
+      }
+    }
+    
+    // Get achievement records
+    const achievementsResult = await pool.query(`
+      SELECT 
+        student_id,
+        achievement_type,
+        achievement_date,
+        notified_at
+      FROM stamp_rally_achievements
+      WHERE student_id = $1 AND notified_at IS NOT NULL
+      ORDER BY achievement_date DESC
+      LIMIT 1
+    `, [studentId]);
+    
+    // Get student info
+    const studentResult = await pool.query(`
+      SELECT 
+        student_id,
+        name,
+        status,
+        continued_months,
+        lesson_start_date,
+        result_overall
+      FROM students
+      WHERE student_id = $1
+    `, [studentId]);
+    
+    if (studentResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Student not found'
+      }, 404);
+    }
+    
+    const student = studentResult.rows[0];
+    const normalizedStudentId = normalizeStudentId(studentId);
+    
+    // Get response data
+    const responseCount = surveyResponseCounts[normalizedStudentId] || 0;
+    const continuedMonths = student.continued_months || 0;
+    const responseRate = continuedMonths > 0 ? (responseCount / continuedMonths) * 100 : 0;
+    const responseRateRounded = Math.round(responseRate);
+    const respondedThisMonth = currentMonthResponders.has(normalizedStudentId);
+    
+    // Get monthly response history
+    const studentResponseMonths = monthlyResponseHistory.get(normalizedStudentId) || new Set();
+    const responseMonthsArray = Array.from(studentResponseMonths).sort();
+    
+    // Get extension result
+    const extensionResult = extensionResultsFromCache[normalizedStudentId];
+    const isExtensionApproved = extensionResult === '延長';
+    const isActive = student.status === 'アクティブ';
+    
+    // Parse lesson start date
+    const lessonStartDate = student.lesson_start_date ? new Date(student.lesson_start_date) : null;
+    const april2026 = new Date('2026-04-01');
+    const march2026End = new Date('2026-03-31');
+    
+    // Check if student has achieved before
+    const previousAchievement = achievementsResult.rows[0] || null;
+    const hasAchievedBefore = previousAchievement && previousAchievement.notified_at;
+    
+    // Determine eligibility
+    let isEligible = false;
+    let eligibilityReason = '';
+    let conditionApplied = '';
+    
+    if (!isActive) {
+      eligibilityReason = 'Status is not アクティブ';
+      conditionApplied = 'pre-check';
+    } else if (!isExtensionApproved) {
+      eligibilityReason = `Extension result is not 延長 (current: ${extensionResult || 'null'})`;
+      conditionApplied = 'pre-check';
+    } else if (hasAchievedBefore) {
+      conditionApplied = 'reset';
+      if (hasConsecutive6Months(studentResponseMonths)) {
+        isEligible = true;
+        eligibilityReason = 'Eligible: 6 consecutive months (after reset)';
+      } else {
+        eligibilityReason = 'Need 6 consecutive months of responses (after previous achievement)';
+      }
+    } else if (!lessonStartDate) {
+      conditionApplied = 'condition_1_no_date';
+      if (responseRateRounded >= 80) {
+        isEligible = true;
+        eligibilityReason = `Eligible: Response rate >= 80% (actual: ${responseRate.toFixed(2)}%)`;
+      } else {
+        eligibilityReason = `Response rate < 80% (actual: ${responseRate.toFixed(2)}%)`;
+      }
+    } else if (lessonStartDate >= april2026) {
+      conditionApplied = 'condition_2';
+      if (hasConsecutive6Months(studentResponseMonths)) {
+        isEligible = true;
+        eligibilityReason = 'Eligible: 6 consecutive months (started after 2026/4)';
+      } else {
+        eligibilityReason = 'Need 6 consecutive months of responses (started after 2026/4)';
+      }
+    } else if (lessonStartDate <= march2026End && continuedMonths < 6) {
+      conditionApplied = 'condition_3';
+      if (has100PercentFrom202604(studentResponseMonths, continuedMonths, lessonStartDate)) {
+        isEligible = true;
+        eligibilityReason = 'Eligible: 100% response from 2026/4 (less than 6 months)';
+      } else {
+        eligibilityReason = 'Need 100% response rate from 2026/4 until 6 months';
+      }
+    } else {
+      conditionApplied = 'condition_1';
+      if (responseRateRounded >= 80) {
+        isEligible = true;
+        eligibilityReason = `Eligible: Response rate >= 80% (actual: ${responseRate.toFixed(2)}%)`;
+      } else {
+        eligibilityReason = `Response rate < 80% (actual: ${responseRate.toFixed(2)}%)`;
+      }
+    }
+    
+    // Return debug info
+    return c.json({
+      success: true,
+      debug: {
+        student_info: {
+          student_id: studentId,
+          normalized_student_id: normalizedStudentId,
+          name: student.name,
+          status: student.status,
+          continued_months: continuedMonths,
+          lesson_start_date: student.lesson_start_date,
+          result_overall: student.result_overall
+        },
+        survey_data: {
+          response_count: responseCount,
+          response_rate: responseRate,
+          response_rate_rounded: responseRateRounded,
+          responded_this_month: respondedThisMonth,
+          response_months: responseMonthsArray,
+          has_6_consecutive_months: hasConsecutive6Months(studentResponseMonths),
+          spreadsheet_match: surveyResponseCounts[normalizedStudentId] !== undefined
+        },
+        extension_data: {
+          extension_result: extensionResult || null,
+          is_extension_approved: isExtensionApproved
+        },
+        achievement_data: {
+          has_achieved_before: hasAchievedBefore,
+          previous_achievement: previousAchievement
+        },
+        eligibility: {
+          is_eligible: isEligible,
+          reason: eligibilityReason,
+          condition_applied: conditionApplied
+        },
+        date_checks: {
+          lesson_start_date: lessonStartDate ? lessonStartDate.toISOString() : null,
+          is_after_april_2026: lessonStartDate ? lessonStartDate >= april2026 : null,
+          is_before_march_2026: lessonStartDate ? lessonStartDate <= march2026End : null,
+          april_2026_threshold: april2026.toISOString(),
+          march_2026_end_threshold: march2026End.toISOString()
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in survey debug:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * GET /api/survey/responses/:studentId
  * 特定の生徒のアンケート回答記録を取得
  */
