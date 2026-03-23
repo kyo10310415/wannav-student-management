@@ -8062,15 +8062,21 @@ function updateAllSurveyDisplay() {
  */
 async function testDrawRoulette(studentId) {
   try {
+    console.log(`[Test Draw] Function called with studentId: ${studentId}`);
+    
     if (!confirm('テスト抽選を実行します（Discord通知なし）。よろしいですか？')) {
+      console.log('[Test Draw] User cancelled');
       return;
     }
     
     console.log(`[Test Draw] Starting test draw for student: ${studentId}`);
+    console.log(`[Test Draw] API endpoint: ${API_BASE}/api/roulette/test-draw`);
     
     const response = await axios.post(`${API_BASE}/api/roulette/test-draw`, {
       studentId: studentId
     });
+    
+    console.log('[Test Draw] Response received:', response);
     
     if (response.data.success) {
       const result = response.data.data;
@@ -8082,17 +8088,28 @@ async function testDrawRoulette(studentId) {
       );
       
       // Update UI immediately
-      surveyStatsCache[studentId].latestRouletteResult = {
-        result: result.result,
-        probability: result.probability,
-        created_at: result.drawnAt
-      };
-      updateSurveyStatsDisplay(studentId, surveyStatsCache[studentId]);
+      if (surveyStatsCache[studentId]) {
+        surveyStatsCache[studentId].latestRouletteResult = {
+          result: result.result,
+          probability: result.probability,
+          created_at: result.drawnAt
+        };
+        updateSurveyStatsDisplay(studentId, surveyStatsCache[studentId]);
+        console.log('[Test Draw] UI updated successfully');
+      } else {
+        console.warn('[Test Draw] Student not in cache:', studentId);
+      }
     } else {
+      console.error('[Test Draw] API returned error:', response.data.error);
       showAlert('error', 'テスト抽選に失敗しました: ' + response.data.error);
     }
   } catch (error) {
     console.error('[Test Draw] Error:', error);
+    console.error('[Test Draw] Error details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
     showAlert('error', 'テスト抽選エラー: ' + (error.response?.data?.error || error.message));
   }
 }
