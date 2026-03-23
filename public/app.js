@@ -628,6 +628,7 @@ function renderReservationsPage() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">お支払い</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">今月の予約</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン実施</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
@@ -668,6 +669,9 @@ function renderReservationsPage() {
       console.error(`Failed to load roulette marker for ${student.student_id}:`, error);
     }
   });
+  
+  // Load lesson completion status for all students
+  loadLessonCompletionBatch();
 }
 
 // Get tutor options for filter (only cached tutors)
@@ -745,7 +749,7 @@ function renderStudentRows() {
   if (filteredStudents.length === 0) {
     return `
       <tr>
-        <td colspan="11" class="px-6 py-4 text-center text-gray-500">
+        <td colspan="12" class="px-6 py-4 text-center text-gray-500">
           該当する生徒が見つかりません
         </td>
       </tr>
@@ -830,6 +834,11 @@ function renderStudentRows() {
         </td>
         <td class="px-4 py-3 text-sm text-gray-600" style="max-width: 180px;">
           <div class="overflow-x-auto whitespace-nowrap text-xs">${datesStr}</div>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+          <div class="lesson-completion-loading" data-student-id="${student.student_id}">
+            <i class="fas fa-spinner fa-spin text-gray-400"></i>
+          </div>
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
@@ -8231,6 +8240,117 @@ function closeRouletteModal() {
   if (modal) {
     modal.remove();
   }
+}
+
+/**
+ * Load lesson completion status for all students in batch
+ */
+async function loadLessonCompletionBatch() {
+  try {
+    const filteredStudents = getFilteredStudents();
+    
+    // Build items array: for each student, get their lesson dates
+    const items = [];
+    filteredStudents.forEach(student => {
+      const dates = lessonDates[student.student_id] || [];
+      dates.forEach(dateObj => {
+        items.push({
+          studentId: student.student_id,
+          lessonDate: dateObj.date // YYYY-MM-DD format
+        });
+      });
+    });
+    
+    if (items.length === 0) {
+      console.log('[Lesson Completion] No lesson dates to check');
+      return;
+    }
+    
+    console.log(`[Lesson Completion] Checking ${items.length} lesson dates for ${filteredStudents.length} students`);
+    
+    // Call batch API
+    const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, {
+      items
+    });
+    
+    if (response.data.success) {
+      const results = response.data.data;
+      console.log(`[Lesson Completion] Loaded ${results.length} lesson completion records`);
+      
+      // Group results by studentId
+      const completionByStudent = {};
+      results.forEach(result => {
+        if (!completionByStudent[result.studentId]) {
+          completionByStudent[result.studentId] = [];
+        }
+        completionByStudent[result.studentId].push(result);
+      });
+      
+      // Update UI for each student
+      filteredStudents.forEach(student => {
+        const studentCompletions = completionByStudent[student.student_id] || [];
+        updateLessonCompletionDisplay(student.student_id, studentCompletions);
+      });
+    }
+  } catch (error) {
+    console.error('[Lesson Completion] Error loading lesson completion:', error);
+  }
+}
+
+/**
+ * Update lesson completion display for a student
+ */
+function updateLessonCompletionDisplay(studentId, completions) {
+  const cell = document.querySelector(`.lesson-completion-loading[data-student-id="${studentId}"]`);
+  
+  if (!cell) return;
+  
+  if (completions.length === 0) {
+    cell.innerHTML = '<span class="text-gray-400">-</span>';
+    return;
+  }
+  
+  // Count completed lessons
+  const completedCount = completions.filter(c => c.completed).length;
+  const totalCount = completions.length;
+  
+  let html = '<div class="space-y-1">';
+  
+  // Show summary
+  if (completedCount === totalCount) {
+    html += `<div class="flex items-center justify-center gap-1 text-green-600 font-semibold">
+      <i class="fas fa-check-circle"></i>
+      <span>${completedCount}/${totalCount}</span>
+    </div>`;
+  } else if (completedCount === 0) {
+    html += `<div class="flex items-center justify-center gap-1 text-red-600 font-semibold">
+      <i class="fas fa-times-circle"></i>
+      <span>${completedCount}/${totalCount}</span>
+    </div>`;
+  } else {
+    html += `<div class="flex items-center justify-center gap-1 text-orange-600 font-semibold">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>${completedCount}/${totalCount}</span>
+    </div>`;
+  }
+  
+  // Show details for each lesson
+  completions.forEach(c => {
+    const statusIcon = c.completed 
+      ? '<i class="fas fa-check text-green-600"></i>' 
+      : '<i class="fas fa-times text-red-600"></i>';
+    const statusText = c.lessonResult || '未記入';
+    const dateStr = c.lessonDate.substring(5); // MM-DD
+    
+    html += `<div class="text-xs text-gray-600 flex items-center justify-between gap-2">
+      <span>${dateStr}</span>
+      ${statusIcon}
+    </div>`;
+  });
+  
+  html += '</div>';
+  
+  cell.innerHTML = html;
 }
 
 /**

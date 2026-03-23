@@ -360,6 +360,78 @@ export async function fetchMonthlyResponseHistory(spreadsheetId) {
 
 
 /**
+ * Fetch lesson completion status from progress spreadsheet
+ * Returns a Map: "studentId_YYYY-MM-DD" => { completed: boolean, lessonResult: string }
+ */
+export async function fetchLessonCompletionStatus(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: '24_12_30_フォームの回答 2!A2:I', // A-I列: タイムスタンプ～レッスン結果
+    });
+
+    const rows = response.data.values || [];
+    
+    console.log(`[Lesson Completion] Fetched ${rows.length} lesson records from progress spreadsheet`);
+    
+    // Helper function to normalize student_id
+    const normalizeStudentId = (id) => {
+      if (!id) return '';
+      return id.toString()
+        .trim()
+        .replace(/[\s　]/g, '')
+        .replace(/－/g, '-')
+        .toUpperCase();
+    };
+
+    // Helper function to extract date from timestamp "2025/07/15 22:01:59"
+    const extractDate = (timestamp) => {
+      if (!timestamp) return null;
+      const match = timestamp.match(/^(\d{4}\/\d{1,2}\/\d{1,2})/);
+      if (match) {
+        const [year, month, day] = match[1].split('/');
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+      return null;
+    };
+
+    // Build completion status map: "studentId_YYYY-MM-DD" => { completed, lessonResult }
+    const completionMap = new Map();
+    
+    rows.forEach((row) => {
+      const timestamp = row[0]; // A列: タイムスタンプ
+      const rawStudentId = row[5]; // F列: 学籍番号
+      const lessonResult = row[8]; // I列: レッスン結果
+      
+      if (timestamp && rawStudentId) {
+        const normalizedId = normalizeStudentId(rawStudentId);
+        const lessonDate = extractDate(timestamp);
+        
+        if (lessonDate) {
+          const key = `${normalizedId}_${lessonDate}`;
+          const completed = lessonResult === '実施済み';
+          
+          completionMap.set(key, {
+            completed,
+            lessonResult: lessonResult || '未記入',
+            timestamp
+          });
+        }
+      }
+    });
+    
+    console.log(`[Lesson Completion] Processed ${completionMap.size} lesson completion records`);
+    
+    return completionMap;
+  } catch (error) {
+    console.error('[Lesson Completion] Error fetching lesson completion status:', error);
+    return new Map();
+  }
+}
+
+/**
  * Fetch extension results from cache spreadsheet
  * Returns an object mapping student_id to extension_result
  */
