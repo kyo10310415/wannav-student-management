@@ -336,4 +336,81 @@ app.get('/result/:studentId', async (c) => {
   }
 });
 
+/**
+ * POST /api/roulette/test-draw
+ * テスト用ルーレット抽選（Discord通知なし）
+ * Body: { studentId }
+ */
+app.post('/test-draw', async (c) => {
+  try {
+    const { studentId } = await c.req.json();
+
+    if (!studentId) {
+      return c.json({
+        success: false,
+        error: 'studentId is required'
+      }, 400);
+    }
+
+    const pool = getPool();
+
+    // 生徒情報取得
+    const studentResult = await pool.query(`
+      SELECT student_id, name, result_overall as result_score
+      FROM students
+      WHERE student_id = $1
+    `, [studentId]);
+
+    if (studentResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Student not found'
+      }, 404);
+    }
+
+    const student = studentResult.rows[0];
+
+    // 抽選実行
+    const probability = student.result_score === 'S' ? 100 : 50;
+    let result;
+
+    if (probability === 100) {
+      result = '当たり';
+    } else {
+      result = Math.random() < 0.5 ? '当たり' : 'はずれ';
+    }
+
+    // 結果を保存（test_drawフラグを追加）
+    const insertResult = await pool.query(`
+      INSERT INTO roulette_results 
+        (student_id, result, probability, roulette_url)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, result, probability, created_at
+    `, [studentId, result, probability, 'test-draw-' + Date.now()]);
+
+    const rouletteResult = insertResult.rows[0];
+
+    console.log(`[Roulette TEST] ${studentId} (${student.name}) - ${result} (${probability}%) - NO DISCORD NOTIFICATION`);
+
+    return c.json({
+      success: true,
+      data: {
+        studentId: studentId,
+        studentName: student.name,
+        result: rouletteResult.result,
+        probability: rouletteResult.probability,
+        drawnAt: rouletteResult.created_at,
+        resultScore: student.result_score,
+        isTest: true
+      }
+    });
+  } catch (error) {
+    console.error('Error in test draw:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

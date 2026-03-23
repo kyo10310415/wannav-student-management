@@ -29,6 +29,140 @@ function normalizeStudentId(id) {
 }
 
 /**
+ * Check roulette eligibility based on lesson start date and survey responses
+ * 
+ * Conditions:
+ * ① Started before 2026/3: Response rate >= 80%
+ * ② Started from 2026/4 onwards: 6 consecutive months of responses
+ * ③ Started before 2026/3 but continued_months < 6: 100% response rate from 2026/4 until 6 months
+ * ④ Extension result = "延長"
+ * ⑤ Status = "アクティブ"
+ * 
+ * @param {Object} params
+ * @param {string} params.lessonStartDate - Lesson start date (YYYY-MM-DD)
+ * @param {number} params.continuedMonths - Continued months
+ * @param {number} params.responseCount - Total response count
+ * @param {number} params.responseRate - Response rate (%)
+ * @param {Array} params.recentResponses - Recent 6 months responses (boolean array)
+ * @param {string} params.status - Student status
+ * @param {string} params.extensionResult - Extension result
+ * @returns {Object} { isEligible: boolean, reason: string, condition: string }
+ */
+function checkRouletteEligibility({
+  lessonStartDate,
+  continuedMonths,
+  responseCount,
+  responseRate,
+  recentResponses,
+  status,
+  extensionResult
+}) {
+  // ⑤ Status must be "アクティブ"
+  if (status !== 'アクティブ') {
+    return {
+      isEligible: false,
+      reason: 'ステータスがアクティブではありません',
+      condition: 'status_check'
+    };
+  }
+  
+  // ④ Extension result must be "延長"
+  if (extensionResult !== '延長') {
+    return {
+      isEligible: false,
+      reason: '延長審査の結果が「延長」ではありません',
+      condition: 'extension_check'
+    };
+  }
+  
+  // Determine which condition applies
+  const startDate = new Date(lessonStartDate);
+  const cutoffDate = new Date('2026-04-01');
+  const april2026 = new Date('2026-04-01');
+  
+  // ① Started before 2026/4 (includes null/invalid dates as legacy)
+  if (!lessonStartDate || startDate < cutoffDate) {
+    // ③ If continued_months < 6, need 100% response rate from 2026/4
+    if (continuedMonths < 6) {
+      const now = new Date();
+      if (now >= april2026) {
+        // Calculate months from 2026/4 to now
+        const monthsFrom2026April = Math.floor((now - april2026) / (1000 * 60 * 60 * 24 * 30));
+        const requiredMonths = Math.min(6 - continuedMonths, monthsFrom2026April + 1);
+        
+        // Check if all recent months have responses
+        const recentResponseCount = recentResponses.filter(Boolean).length;
+        const hasAllRecentResponses = recentResponseCount >= requiredMonths;
+        
+        if (hasAllRecentResponses && continuedMonths >= 6) {
+          return {
+            isEligible: true,
+            reason: `条件③達成: 2026/4以降${requiredMonths}ヶ月連続回答（100%）で6ヶ月達成`,
+            condition: 'condition_3'
+          };
+        } else {
+          return {
+            isEligible: false,
+            reason: `条件③未達成: 2026/4以降6ヶ月になるまで100%回答が必要（現在${recentResponseCount}/${requiredMonths}ヶ月）`,
+            condition: 'condition_3'
+          };
+        }
+      } else {
+        // Before 2026/4, use legacy 80% rule
+        if (responseRate >= 80) {
+          return {
+            isEligible: true,
+            reason: `条件①達成: 回答率${responseRate}% (≥80%)`,
+            condition: 'condition_1'
+          };
+        } else {
+          return {
+            isEligible: false,
+            reason: `条件①未達成: 回答率${responseRate}% (<80%)`,
+            condition: 'condition_1'
+          };
+        }
+      }
+    }
+    
+    // ① Legacy students with continued_months >= 6
+    if (responseRate >= 80) {
+      return {
+        isEligible: true,
+        reason: `条件①達成: 回答率${responseRate}% (≥80%)`,
+        condition: 'condition_1'
+      };
+    } else {
+      return {
+        isEligible: false,
+        reason: `条件①未達成: 回答率${responseRate}% (<80%)`,
+        condition: 'condition_1'
+      };
+    }
+  }
+  
+  // ② Started from 2026/4 onwards: Need 6 consecutive months of responses
+  const consecutiveMonths = recentResponses.reduce((count, responded) => {
+    if (!responded) return 0; // Reset on missed month
+    return count + 1;
+  }, 0);
+  
+  if (consecutiveMonths >= 6) {
+    return {
+      isEligible: true,
+      reason: `条件②達成: 6ヶ月連続回答（${consecutiveMonths}ヶ月）`,
+      condition: 'condition_2'
+    };
+  } else {
+    return {
+      isEligible: false,
+      reason: `条件②未達成: 6ヶ月連続回答が必要（現在${consecutiveMonths}ヶ月）`,
+      condition: 'condition_2'
+    };
+  }
+}
+
+/**
  * Get survey response counts from cache spreadsheet
  */
 async function getSurveyResponseCounts() {
@@ -242,6 +376,11 @@ app.get('/stats-all', async (c) => {
       const isExtensionApproved = extensionResult === '延長';
       const isActive = student.status === 'アクティブ';
       
+      // Parse lesson start date to determine eligibility criteria
+      const lessonStartDate = student.lesson_start_date ? new Date(student.lesson_start_date) : null;
+      const april2026 = new Date('2026-04-01');
+      const march2026End = new Date('2026-03-31');
+      
       let isEligible = false;
       let eligibilityReason = '';
       
@@ -249,11 +388,33 @@ app.get('/stats-all', async (c) => {
         eligibilityReason = 'Status is not active';
       } else if (!isExtensionApproved) {
         eligibilityReason = 'Extension result is not 延長';
-      } else if (responseRate >= 80) {
-        isEligible = true;
-        eligibilityReason = 'Eligible: Response rate >= 80%';
       } else {
-        eligibilityReason = 'Response rate < 80%';
+        // Determine eligibility based on lesson start date
+        if (!lessonStartDate) {
+          // No lesson start date: use default 80% rule
+          if (responseRate >= 80) {
+            isEligible = true;
+            eligibilityReason = 'Eligible: Response rate >= 80% (no start date)';
+          } else {
+            eligibilityReason = 'Response rate < 80%';
+          }
+        } else if (lessonStartDate >= april2026) {
+          // ② Started after 2026/4: need 6 consecutive months
+          // TODO: Implement consecutive month tracking
+          eligibilityReason = 'Not implemented: 6 consecutive months tracking (started after 2026/4)';
+        } else if (lessonStartDate <= march2026End && continuedMonths < 6) {
+          // ③ Started before 2026/4 but less than 6 months: need 100% from 2026/4
+          // TODO: Implement 100% tracking from 2026/4
+          eligibilityReason = 'Not implemented: 100% response rate from 2026/4 (less than 6 months)';
+        } else {
+          // ① Started before 2026/4 with 6+ months: use 80% rule
+          if (responseRate >= 80) {
+            isEligible = true;
+            eligibilityReason = 'Eligible: Response rate >= 80% (started before 2026/4, 6+ months)';
+          } else {
+            eligibilityReason = 'Response rate < 80%';
+          }
+        }
       }
       
       statsMap[studentId] = {

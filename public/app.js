@@ -1542,8 +1542,26 @@ function renderStudentsPage() {
             <span class="text-purple-600 font-bold">3</span>
           </div>
           <div class="flex-1">
-            <div class="font-semibold text-gray-800">アンケート回答率 ≥ 80%</div>
-            <div class="text-sm text-gray-600 mt-1">継続月数に対して80%以上のアンケート回答が必要です（例: 10ヶ月継続の場合、8回以上の回答）</div>
+            <div class="font-semibold text-gray-800">アンケート回答条件</div>
+            <div class="text-sm text-gray-600 mt-2 space-y-2">
+              <div class="bg-blue-50 p-2 rounded">
+                <span class="font-semibold">① 2026/3までにレッスン開始した生徒</span>
+                <div class="ml-2">→ 回答率80%以上（例: 10ヶ月継続 → 8回以上）</div>
+              </div>
+              <div class="bg-green-50 p-2 rounded">
+                <span class="font-semibold">② 2026/4以降にレッスン開始する生徒</span>
+                <div class="ml-2">→ 6カ月連続でアンケートを回答</div>
+              </div>
+              <div class="bg-yellow-50 p-2 rounded">
+                <span class="font-semibold">③ 2026/3までに開始で継続月数6カ月未満の生徒</span>
+                <div class="ml-2">→ 2026/4から継続月数が6カ月になるまで回答率100%</div>
+              </div>
+              <div class="bg-purple-50 p-2 rounded mt-2">
+                <i class="fas fa-info-circle mr-1"></i>
+                <span class="font-semibold text-purple-700">条件達成後のリセット</span>
+                <div class="ml-5 text-xs">一度条件を達成して特典を送付すると、以降は「6カ月連続でアンケート回答」が共通条件になります</div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="border-t pt-3 mt-3">
@@ -8040,6 +8058,46 @@ function updateAllSurveyDisplay() {
 }
 
 /**
+ * Test roulette draw (no Discord notification)
+ */
+async function testDrawRoulette(studentId) {
+  try {
+    if (!confirm('テスト抽選を実行します（Discord通知なし）。よろしいですか？')) {
+      return;
+    }
+    
+    console.log(`[Test Draw] Starting test draw for student: ${studentId}`);
+    
+    const response = await axios.post(`${API_BASE}/api/roulette/test-draw`, {
+      studentId: studentId
+    });
+    
+    if (response.data.success) {
+      const result = response.data.data;
+      console.log('[Test Draw] Result:', result);
+      
+      showAlert(
+        'success',
+        `テスト抽選完了: ${result.studentName} - ${result.result} (確率: ${result.probability}%)`
+      );
+      
+      // Update UI immediately
+      surveyStatsCache[studentId].latestRouletteResult = {
+        result: result.result,
+        probability: result.probability,
+        created_at: result.drawnAt
+      };
+      updateSurveyStatsDisplay(studentId, surveyStatsCache[studentId]);
+    } else {
+      showAlert('error', 'テスト抽選に失敗しました: ' + response.data.error);
+    }
+  } catch (error) {
+    console.error('[Test Draw] Error:', error);
+    showAlert('error', 'テスト抽選エラー: ' + (error.response?.data?.error || error.message));
+  }
+}
+
+/**
  * Load survey stats for a single student
  */
 async function loadStudentSurveyStats(studentId) {
@@ -8143,11 +8201,18 @@ function updateSurveyStatsDisplay(studentId, stats) {
     // Eligible but not yet drawn
     const probability = stats.resultScore === 'S' ? 100 : 50;
     rouletteCell.innerHTML = `
-      <div class="text-xs text-purple-600 font-semibold">
+      <div class="text-xs text-purple-600 font-semibold mb-1">
         <i class="fas fa-dice mr-1"></i>
         抽選可能<br>
         <span class="text-xs text-gray-500">(${probability}%)</span>
       </div>
+      <button 
+        onclick="testDrawRoulette('${stats.studentId}')"
+        class="px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded transition-colors"
+        title="テスト抽選（Discord通知なし）"
+      >
+        <i class="fas fa-vial mr-1"></i>テスト抽選
+      </button>
     `;
   } else {
     rouletteCell.innerHTML = '<span class="text-gray-400 text-xs">未達成</span>';
