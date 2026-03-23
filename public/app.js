@@ -8058,7 +8058,7 @@ function updateAllSurveyDisplay() {
 }
 
 /**
- * Test roulette draw (no Discord notification)
+ * Test roulette draw (no Discord notification) - with animation
  */
 async function testDrawRoulette(studentId) {
   try {
@@ -8069,8 +8069,14 @@ async function testDrawRoulette(studentId) {
       return;
     }
     
+    // Show roulette animation modal
+    showRouletteModal(studentId);
+    
     console.log(`[Test Draw] Starting test draw for student: ${studentId}`);
     console.log(`[Test Draw] API endpoint: ${API_BASE}/api/roulette/test-draw`);
+    
+    // Wait for animation to start (1 second)
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     const response = await axios.post(`${API_BASE}/api/roulette/test-draw`, {
       studentId: studentId
@@ -8082,12 +8088,10 @@ async function testDrawRoulette(studentId) {
       const result = response.data.data;
       console.log('[Test Draw] Result:', result);
       
-      showAlert(
-        'success',
-        `テスト抽選完了: ${result.studentName} - ${result.result} (確率: ${result.probability}%)`
-      );
+      // Show result in modal (wait for spinning animation)
+      await showRouletteResult(result);
       
-      // Update UI immediately
+      // Update UI after modal closes
       if (surveyStatsCache[studentId]) {
         surveyStatsCache[studentId].latestRouletteResult = {
           result: result.result,
@@ -8101,12 +8105,146 @@ async function testDrawRoulette(studentId) {
       }
     } else {
       console.error('[Test Draw] API returned error:', response.data.error);
+      closeRouletteModal();
       showAlert('error', 'テスト抽選に失敗しました: ' + response.data.error);
     }
   } catch (error) {
     console.error('[Test Draw] Error:', error);
     console.error('[Test Draw] Error details:', {
       message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    closeRouletteModal();
+    showAlert('error', 'テスト抽選エラー: ' + (error.response?.data?.error || error.message));
+  }
+}
+
+/**
+ * Show roulette animation modal
+ */
+function showRouletteModal(studentId) {
+  const student = surveyStatsCache[studentId];
+  const studentName = student?.name || studentId;
+  const probability = student?.resultScore === 'S' ? 100 : 50;
+  
+  const modalHtml = `
+    <div id="rouletteModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+      <div class="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-white">
+        <div class="text-center">
+          <h2 class="text-3xl font-bold mb-2">${studentName}</h2>
+          <p class="text-xl mb-6">アンケート特典ルーレット</p>
+          
+          <!-- Roulette Spinner -->
+          <div class="relative w-64 h-64 mx-auto mb-6">
+            <div id="rouletteSpinner" class="absolute inset-0 flex items-center justify-center">
+              <div class="roulette-wheel w-full h-full rounded-full border-8 border-white flex items-center justify-center animate-spin">
+                <div class="text-6xl">🎰</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="text-lg mb-4">
+            <i class="fas fa-dice animate-pulse"></i>
+            抽選中...
+          </div>
+          
+          <div class="text-sm opacity-75">
+            当選確率: <span class="font-bold">${probability}%</span>
+          </div>
+          
+          <!-- Result container (hidden initially) -->
+          <div id="rouletteResult" class="hidden">
+            <div class="mt-6 pt-6 border-t border-white/30">
+              <div id="resultContent" class="text-4xl font-bold mb-4"></div>
+              <div id="resultMessage" class="text-lg mb-6"></div>
+              <button 
+                onclick="closeRouletteModal()" 
+                class="px-6 py-3 bg-white text-purple-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <style>
+      @keyframes spin-slow {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      
+      .roulette-wheel {
+        animation: spin-slow 0.5s linear infinite;
+      }
+      
+      @keyframes bounce-in {
+        0% { transform: scale(0); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      
+      .bounce-in {
+        animation: bounce-in 0.6s ease-out;
+      }
+    </style>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+/**
+ * Show roulette result with animation
+ */
+async function showRouletteResult(result) {
+  // Continue spinning for 2-3 seconds
+  const spinDuration = 2500;
+  await new Promise(resolve => setTimeout(resolve, spinDuration));
+  
+  // Stop spinning
+  const spinner = document.getElementById('rouletteSpinner');
+  if (spinner) {
+    spinner.classList.add('hidden');
+  }
+  
+  // Show result
+  const resultContainer = document.getElementById('rouletteResult');
+  const resultContent = document.getElementById('resultContent');
+  const resultMessage = document.getElementById('resultMessage');
+  
+  if (resultContainer && resultContent && resultMessage) {
+    resultContainer.classList.remove('hidden');
+    resultContainer.classList.add('bounce-in');
+    
+    const isWin = result.result === '当たり';
+    
+    if (isWin) {
+      resultContent.innerHTML = `
+        <i class="fas fa-trophy text-yellow-300"></i>
+        <div class="mt-2">${result.result}！</div>
+      `;
+      resultMessage.textContent = '🎉 おめでとうございます！特典をお送りします！';
+    } else {
+      resultContent.innerHTML = `
+        <i class="fas fa-times-circle text-gray-300"></i>
+        <div class="mt-2">${result.result}</div>
+      `;
+      resultMessage.textContent = '残念でした。また次回チャレンジしてください！';
+    }
+  }
+}
+
+/**
+ * Close roulette modal
+ */
+function closeRouletteModal() {
+  const modal = document.getElementById('rouletteModal');
+  if (modal) {
+    modal.remove();
+  }
+}
       response: error.response?.data,
       status: error.response?.status
     });
