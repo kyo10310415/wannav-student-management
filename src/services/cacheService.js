@@ -300,10 +300,64 @@ export async function fetchCurrentMonthSurveyResponses(spreadsheetId) {
     
     return currentMonthResponders;
   } catch (error) {
-    console.error('Error fetching current month survey responses:', error);
-    throw error;
+    console.error('[Survey] Error fetching current month survey responses:', error);
+    return new Set();
   }
 }
+
+/**
+ * Fetch monthly response history for all students from cache spreadsheet
+ * Returns a Map: studentId => [{ yearMonth: 'YYYY/M', responded: true }, ...]
+ */
+export async function fetchMonthlyResponseHistory(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'レッスン満足度データ!A2:G', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由, 学籍番号
+    });
+
+    const rows = response.data.values || [];
+    
+    // Helper function to normalize student_id
+    const normalizeStudentId = (id) => {
+      if (!id) return '';
+      return id.toString()
+        .trim()
+        .replace(/[\s　]/g, '')
+        .replace(/－/g, '-')
+        .toUpperCase();
+    };
+
+    // Map: studentId => Set of yearMonths they responded in
+    const responseHistory = new Map();
+    
+    rows.forEach((row) => {
+      const yearMonth = row[1]; // B列: 年月
+      const rawStudentId = row[6]; // G列: 学籍番号
+      
+      if (yearMonth && rawStudentId) {
+        const normalizedId = normalizeStudentId(rawStudentId);
+        const month = yearMonth.toString().trim();
+        
+        if (!responseHistory.has(normalizedId)) {
+          responseHistory.set(normalizedId, new Set());
+        }
+        responseHistory.get(normalizedId).add(month);
+      }
+    });
+    
+    console.log(`[Survey] Fetched monthly response history for ${responseHistory.size} students`);
+    
+    return responseHistory;
+  } catch (error) {
+    console.error('[Survey] Error fetching monthly response history:', error);
+    return new Map();
+  }
+}
+
+
 
 /**
  * Fetch extension results from cache spreadsheet

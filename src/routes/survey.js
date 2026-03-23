@@ -1,7 +1,12 @@
 import { Hono } from 'hono';
 import { getPool } from '../db/connection.js';
 import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
-import { fetchSurveyResponsesFromCache, fetchCurrentMonthSurveyResponses, fetchExtensionResultsFromCache } from '../services/cacheService.js';
+import { 
+  fetchSurveyResponsesFromCache, 
+  fetchCurrentMonthSurveyResponses, 
+  fetchMonthlyResponseHistory,
+  fetchExtensionResultsFromCache 
+} from '../services/cacheService.js';
 
 const app = new Hono();
 
@@ -26,6 +31,55 @@ function normalizeStudentId(id) {
     .replace(/[\s　]/g, '')    // Remove all spaces (half-width and full-width)
     .replace(/－/g, '-')       // Replace full-width hyphen with half-width
     .toUpperCase();            // Normalize to uppercase
+}
+
+/**
+ * Check if student has 6 consecutive months of responses
+ * @param {Set<string>} responseMonths - Set of 'YYYY/M' strings
+ * @param {Date} startDate - Start checking from this month (default: current month)
+ * @returns {boolean}
+ */
+function hasConsecutive6Months(responseMonths, startDate = new Date()) {
+  const months = [];
+  const endDate = new Date(startDate);
+  
+  // Get last 6 months (including current)
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(endDate);
+    d.setMonth(d.getMonth() - i);
+    months.push(`${d.getFullYear()}/${d.getMonth() + 1}`);
+  }
+  
+  // Check if all 6 months are in responseMonths
+  return months.every(month => responseMonths.has(month));
+}
+
+/**
+ * Check if student has 100% response rate from 2026/4 until they reach 6 months
+ * @param {Set<string>} responseMonths - Set of 'YYYY/M' strings
+ * @param {number} continuedMonths - Total continued months
+ * @param {Date} lessonStartDate - Lesson start date
+ * @returns {boolean}
+ */
+function has100PercentFrom202604(responseMonths, continuedMonths, lessonStartDate) {
+  if (continuedMonths >= 6) return false; // This check is only for < 6 months
+  
+  const april2026 = new Date('2026-04-01');
+  const now = new Date();
+  
+  // Get all months from 2026/4 to current month
+  const requiredMonths = [];
+  const current = new Date(april2026);
+  
+  while (current <= now) {
+    requiredMonths.push(`${current.getFullYear()}/${current.getMonth() + 1}`);
+    current.setMonth(current.getMonth() + 1);
+  }
+  
+  // Check if all required months are in responseMonths
+  const allPresent = requiredMonths.every(month => responseMonths.has(month));
+  
+  return allPresent;
 }
 
 /**
@@ -270,6 +324,38 @@ app.get('/stats-all', async (c) => {
     // Get current month responders from spreadsheet
     const currentMonthResponders = await getCurrentMonthResponders();
     
+    // Get monthly response history from spreadsheet
+    const satisfactionSpreadsheetId = process.env.SATISFACTION_SPREADSHEET_ID || process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    let monthlyResponseHistory = new Map();
+    
+    if (satisfactionSpreadsheetId) {
+      try {
+        monthlyResponseHistory = await fetchMonthlyResponseHistory(satisfactionSpreadsheetId);
+        console.log(`[Survey] Monthly response history loaded: ${monthlyResponseHistory.size} students`);
+      } catch (error) {
+        console.error('[Survey] Failed to load monthly response history:', error.message);
+      }
+    }
+    
+    // Get achievement records to check if student already achieved once (for reset logic)
+    const achievementsResult = await pool.query(`
+      SELECT 
+        student_id,
+        achievement_type,
+        achievement_date,
+        notified_at
+      FROM stamp_rally_achievements
+      WHERE notified_at IS NOT NULL
+      ORDER BY achievement_date DESC
+    `);
+    
+    const achievementMap = {};
+    achievementsResult.rows.forEach(row => {
+      if (!achievementMap[row.student_id]) {
+        achievementMap[row.student_id] = row; // Keep only the latest achievement
+      }
+    });
+    
     // Get extension results from cache spreadsheet
     const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     let extensionResultsFromCache = {};
@@ -413,7 +499,22 @@ app.get('/stats-all', async (c) => {
         eligibilityReason = 'Extension result is not 延長';
       } else {
         // Determine eligibility based on lesson start date
-        if (!lessonStartDate) {
+        // Get student's monthly response history
+        const studentResponseMonths = monthlyResponseHistory.get(normalizedStudentId) || new Set();
+        
+        // Check if student has already achieved once (reset logic)
+        const previousAchievement = achievementMap[studentId];
+        const hasAchievedBefore = previousAchievement && previousAchievement.notified_at;
+        
+        if (hasAchievedBefore) {
+          // リセット後: 全員共通で6カ月連続条件
+          if (hasConsecutive6Months(studentResponseMonths)) {
+            isEligible = true;
+            eligibilityReason = 'Eligible: 6 consecutive months (after reset)';
+          } else {
+            eligibilityReason = 'Need 6 consecutive months of responses (after previous achievement)';
+          }
+        } else if (!lessonStartDate) {
           // No lesson start date: use default 80% rule
           if (responseRate >= 80) {
             isEligible = true;
@@ -423,12 +524,20 @@ app.get('/stats-all', async (c) => {
           }
         } else if (lessonStartDate >= april2026) {
           // ② Started after 2026/4: need 6 consecutive months
-          // TODO: Implement consecutive month tracking
-          eligibilityReason = 'Not implemented: 6 consecutive months tracking (started after 2026/4)';
+          if (hasConsecutive6Months(studentResponseMonths)) {
+            isEligible = true;
+            eligibilityReason = 'Eligible: 6 consecutive months (started after 2026/4)';
+          } else {
+            eligibilityReason = 'Need 6 consecutive months of responses (started after 2026/4)';
+          }
         } else if (lessonStartDate <= march2026End && continuedMonths < 6) {
           // ③ Started before 2026/4 but less than 6 months: need 100% from 2026/4
-          // TODO: Implement 100% tracking from 2026/4
-          eligibilityReason = 'Not implemented: 100% response rate from 2026/4 (less than 6 months)';
+          if (has100PercentFrom202604(studentResponseMonths, continuedMonths, lessonStartDate)) {
+            isEligible = true;
+            eligibilityReason = 'Eligible: 100% response from 2026/4 (less than 6 months)';
+          } else {
+            eligibilityReason = 'Need 100% response rate from 2026/4 until 6 months';
+          }
         } else {
           // ① Started before 2026/4 with 6+ months: use 80% rule
           if (responseRate >= 80) {
