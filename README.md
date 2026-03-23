@@ -364,6 +364,28 @@ npm run db:migrate
 npm run dev
 ```
 
+#### ⚠️ 本番環境でのマイグレーション実行
+
+本番環境（Render）でマイグレーションを実行する場合:
+
+```bash
+# Renderのシェルから実行
+node run-migration.js
+```
+
+または、Render環境変数 `DATABASE_URL` を使用してローカルから実行:
+
+```bash
+# 環境変数を設定（Renderの DATABASE_URL を使用）
+export DATABASE_URL="postgresql://user:password@host:5432/database"
+
+# マイグレーション実行
+npm run db:migrate
+```
+
+**最新のマイグレーション:**
+- `20260323_add_is_test_to_roulette_results.sql` - テスト抽選フラグ追加
+
 ### 3. Renderデプロイ
 
 #### 方法1: render.yaml使用
