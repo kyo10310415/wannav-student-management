@@ -8181,9 +8181,9 @@ function showRouletteModal(studentId) {
       }
       
       @keyframes bounce-in {
-        0% { transform: scale(0); opacity: 0; }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
+        0${'%'} { transform: scale(0); opacity: 0; }
+        50${'%'} { transform: scale(1.1); }
+        100${'%'} { transform: scale(1); opacity: 1; }
       }
       
       .bounce-in {
@@ -8243,12 +8243,6 @@ function closeRouletteModal() {
   const modal = document.getElementById('rouletteModal');
   if (modal) {
     modal.remove();
-  }
-}
-      response: error.response?.data,
-      status: error.response?.status
-    });
-    showAlert('error', 'テスト抽選エラー: ' + (error.response?.data?.error || error.message));
   }
 }
 
