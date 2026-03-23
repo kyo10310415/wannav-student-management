@@ -52,6 +52,8 @@ app.get('/', requireAdmin, async (c) => {
         u.must_change_password, 
         u.created_at, 
         u.last_login,
+        u.discord_webhook_url,
+        u.discord_user_id,
         t.tutor_name as tutor_name
       FROM users u
       LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
@@ -167,6 +169,47 @@ app.put('/:id', requireAdmin, async (c) => {
     return c.json({
       success: false,
       error: 'ユーザー更新に失敗しました'
+    }, 500);
+  }
+});
+
+/**
+ * Delete user (admin only)
+ */
+/**
+ * Update user Discord settings (admin only)
+ */
+app.put('/:id/discord', requireAdmin, async (c) => {
+  try {
+    const userId = c.req.param('id');
+    const { discord_webhook_url, discord_user_id } = await c.req.json();
+    
+    // Check if user exists
+    const userResult = await query('SELECT id FROM users WHERE id = $1', [userId]);
+    
+    if (userResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'ユーザーが見つかりません'
+      }, 404);
+    }
+    
+    // Update Discord settings
+    await query(
+      'UPDATE users SET discord_webhook_url = $1, discord_user_id = $2, updated_at = NOW() WHERE id = $3',
+      [discord_webhook_url, discord_user_id, userId]
+    );
+    
+    return c.json({
+      success: true,
+      message: 'Discord設定を更新しました'
+    });
+    
+  } catch (error) {
+    console.error('Update Discord settings error:', error);
+    return c.json({
+      success: false,
+      error: 'Discord設定の更新に失敗しました'
     }, 500);
   }
 });

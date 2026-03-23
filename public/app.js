@@ -5702,6 +5702,7 @@ async function renderUsersPage() {
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">メールアドレス</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor名</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">権限</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Discord設定</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">パスワード変更必須</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">最終ログイン</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">操作</th>
@@ -5722,6 +5723,16 @@ async function renderUsersPage() {
                       <option value="leader" ${user.role === 'leader' ? 'selected' : ''}>リーダー</option>
                       <option value="crew" ${user.role === 'crew' ? 'selected' : ''}>クルー</option>
                     </select>
+                  </td>
+                  <td class="px-4 py-3">
+                    <button 
+                      onclick="showEditDiscordModal(${user.id}, '${user.email}', ${user.discord_webhook_url ? `'${user.discord_webhook_url}'` : 'null'}, ${user.discord_user_id ? `'${user.discord_user_id}'` : 'null'})"
+                      class="px-3 py-1 bg-indigo-500 text-white rounded text-sm hover:bg-indigo-600 transition"
+                      title="Discord設定を編集"
+                    >
+                      <i class="fab fa-discord mr-1"></i>
+                      ${user.discord_webhook_url || user.discord_user_id ? '設定済み' : '未設定'}
+                    </button>
                   </td>
                   <td class="px-4 py-3 text-sm">
                     ${user.must_change_password ? '<span class="text-orange-600">はい</span>' : '<span class="text-gray-500">いいえ</span>'}
@@ -5982,6 +5993,140 @@ async function deleteUser(userId, email) {
     }
   } catch (error) {
     alert('ユーザー削除に失敗しました: ' + (error.response?.data?.error || error.message));
+  }
+}
+
+/**
+ * Show edit Discord settings modal
+ */
+function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
+  const modal = document.createElement('div');
+  modal.id = 'edit-discord-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fab fa-discord mr-2 text-indigo-600"></i>Discord設定を編集
+        </h2>
+        <button onclick="closeEditDiscordModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      
+      <form id="edit-discord-form" class="p-6 space-y-6">
+        <input type="hidden" id="discord-user-id-field" value="${userId}">
+        
+        <!-- User info -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p class="text-sm text-blue-800">
+            <i class="fas fa-info-circle mr-2"></i>
+            <strong>${email}</strong> のDiscord設定
+          </p>
+        </div>
+        
+        <!-- Discord Webhook URL -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            <i class="fas fa-link mr-2"></i>Discord Webhook URL
+          </label>
+          <input 
+            type="url" 
+            id="discord-webhook-url" 
+            value="${webhookUrl || ''}"
+            placeholder="https://discord.com/api/webhooks/..."
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          >
+          <p class="mt-2 text-xs text-gray-500">
+            <i class="fas fa-question-circle mr-1"></i>
+            Discord チャンネルの設定から Webhook URL を取得してください
+          </p>
+        </div>
+        
+        <!-- Discord User ID -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            <i class="fas fa-user mr-2"></i>Discord User ID
+          </label>
+          <input 
+            type="text" 
+            id="discord-user-id-input" 
+            value="${discordUserId || ''}"
+            placeholder="123456789012345678"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          >
+          <p class="mt-2 text-xs text-gray-500">
+            <i class="fas fa-question-circle mr-1"></i>
+            Discord で開発者モードを有効にし、ユーザーを右クリックして「IDをコピー」
+          </p>
+        </div>
+        
+        <!-- Buttons -->
+        <div class="flex justify-end gap-3 pt-4 border-t">
+          <button 
+            type="button" 
+            onclick="closeEditDiscordModal()"
+            class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+          >
+            キャンセル
+          </button>
+          <button 
+            type="submit"
+            class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+          >
+            <i class="fas fa-save mr-2"></i>保存
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Handle form submission
+  document.getElementById('edit-discord-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await saveDiscordSettings();
+  });
+}
+
+/**
+ * Close edit Discord modal
+ */
+function closeEditDiscordModal() {
+  const modal = document.getElementById('edit-discord-modal');
+  if (modal) {
+    modal.remove();
+  }
+}
+
+/**
+ * Save Discord settings
+ */
+async function saveDiscordSettings() {
+  const userId = document.getElementById('discord-user-id-field').value;
+  const webhookUrl = document.getElementById('discord-webhook-url').value.trim();
+  const discordUserId = document.getElementById('discord-user-id-input').value.trim();
+  
+  try {
+    const response = await axios.put(`${API_BASE}/api/users/${userId}/discord`, {
+      discord_webhook_url: webhookUrl || null,
+      discord_user_id: discordUserId || null
+    }, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      alert('Discord設定を保存しました');
+      closeEditDiscordModal();
+      await renderUsersPage();
+    } else {
+      alert('エラー: ' + response.data.error);
+    }
+  } catch (error) {
+    alert('Discord設定の保存に失敗しました: ' + (error.response?.data?.error || error.message));
   }
 }
 
