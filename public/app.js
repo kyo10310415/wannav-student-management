@@ -5688,9 +5688,14 @@ async function renderUsersPage() {
             <i class="fas fa-users-cog mr-2 text-indigo-600"></i>
             ユーザー管理
           </h2>
-          <button onclick="showCreateUserModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-            <i class="fas fa-plus mr-2"></i>ユーザーを追加
-          </button>
+          <div class="flex gap-2">
+            <button onclick="checkDiscordMapping()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              <i class="fab fa-discord mr-2"></i>Discord紐付け確認
+            </button>
+            <button onclick="showCreateUserModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+              <i class="fas fa-plus mr-2"></i>ユーザーを追加
+            </button>
+          </div>
         </div>
         
         <!-- Users table -->
@@ -6133,6 +6138,182 @@ async function saveDiscordSettings() {
     }
   } catch (error) {
     alert('Discord設定の保存に失敗しました: ' + (error.response?.data?.error || error.message));
+  }
+}
+
+/**
+ * Check Discord mapping for tutors and leaders
+ */
+async function checkDiscordMapping() {
+  try {
+    // Show loading modal
+    const loadingModal = document.createElement('div');
+    loadingModal.id = 'discord-mapping-modal';
+    loadingModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    loadingModal.innerHTML = `
+      <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div class="flex justify-between items-center p-6 border-b">
+          <h2 class="text-2xl font-bold text-gray-800">
+            <i class="fab fa-discord mr-2 text-indigo-600"></i>Discord紐付け確認
+          </h2>
+          <button onclick="closeDiscordMappingModal()" class="text-gray-500 hover:text-gray-700">
+            <i class="fas fa-times text-2xl"></i>
+          </button>
+        </div>
+        
+        <div class="p-6 text-center">
+          <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+          <p class="mt-4 text-gray-600">データを読み込んでいます...</p>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(loadingModal);
+    
+    // Fetch mapping data
+    const response = await axios.get(`${API_BASE}/api/lesson-report-reminder/check-mapping`);
+    const data = response.data.data;
+    
+    // Build summary HTML
+    const summaryHtml = `
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-blue-50 p-4 rounded-lg">
+          <div class="text-sm text-blue-600 mb-1">アクティブTutor</div>
+          <div class="text-2xl font-bold text-blue-800">${data.summary.total_active_tutors}</div>
+        </div>
+        <div class="bg-green-50 p-4 rounded-lg">
+          <div class="text-sm text-green-600 mb-1">Discord設定済み</div>
+          <div class="text-2xl font-bold text-green-800">${data.summary.tutors_with_discord}</div>
+        </div>
+        <div class="bg-red-50 p-4 rounded-lg">
+          <div class="text-sm text-red-600 mb-1">Discord未設定</div>
+          <div class="text-2xl font-bold text-red-800">${data.summary.tutors_without_discord}</div>
+        </div>
+        <div class="bg-purple-50 p-4 rounded-lg">
+          <div class="text-sm text-purple-600 mb-1">リーダー数</div>
+          <div class="text-2xl font-bold text-purple-800">${data.summary.total_leaders}</div>
+        </div>
+      </div>
+      
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-yellow-800 mb-2">
+          <i class="fas fa-calendar-day mr-2"></i>前日のレッスン (${data.summary.yesterday_date})
+        </h3>
+        ${data.summary.yesterday_lessons.length === 0 ? '<p class="text-sm text-yellow-700">前日のレッスンはありません</p>' : `
+          <div class="space-y-2">
+            ${data.summary.yesterday_lessons.map(lesson => `
+              <div class="text-sm text-yellow-800">
+                <strong>${lesson.tutor_name || lesson.homeroom_tutor}</strong>: ${lesson.lesson_count}件
+                ${lesson.tutor_email ? `(${lesson.tutor_email})` : ''}
+                ${lesson.team ? `[${lesson.team}]` : ''}
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    `;
+    
+    // Build tutor mapping table
+    const tutorTableHtml = `
+      <div class="overflow-y-auto max-h-96">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 text-left font-semibold text-gray-700">Tutor名</th>
+              <th class="px-3 py-2 text-left font-semibold text-gray-700">メール</th>
+              <th class="px-3 py-2 text-left font-semibold text-gray-700">チーム</th>
+              <th class="px-3 py-2 text-center font-semibold text-gray-700">Discord設定</th>
+              <th class="px-3 py-2 text-left font-semibold text-gray-700">チームリーダー</th>
+              <th class="px-3 py-2 text-center font-semibold text-gray-700">通知</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.tutor_mapping.map(tutor => `
+              <tr class="border-b hover:bg-gray-50">
+                <td class="px-3 py-2">${tutor.tutor_name}</td>
+                <td class="px-3 py-2 text-xs">${tutor.email || '-'}</td>
+                <td class="px-3 py-2">
+                  <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                    ${tutor.team || '-'}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  ${tutor.has_discord_webhook 
+                    ? '<span class="text-green-600"><i class="fas fa-check-circle"></i> 設定済み</span>' 
+                    : '<span class="text-red-600"><i class="fas fa-times-circle"></i> 未設定</span>'}
+                </td>
+                <td class="px-3 py-2">
+                  ${tutor.team_leaders.length > 0 
+                    ? tutor.team_leaders.map(leader => `
+                        <div class="text-xs mb-1">
+                          <span class="font-medium">${leader.tutor_name || leader.email}</span>
+                          <span class="text-gray-500">(${leader.role})</span>
+                          ${leader.has_webhook 
+                            ? '<i class="fas fa-check text-green-600 ml-1"></i>' 
+                            : '<i class="fas fa-times text-red-600 ml-1"></i>'}
+                        </div>
+                      `).join('')
+                    : '<span class="text-gray-400 text-xs">リーダーなし</span>'}
+                </td>
+                <td class="px-3 py-2 text-center">
+                  ${tutor.will_receive_notifications 
+                    ? '<span class="text-green-600 font-semibold">○</span>' 
+                    : '<span class="text-red-600 font-semibold">×</span>'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    
+    // Update modal content
+    loadingModal.innerHTML = `
+      <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="flex justify-between items-center p-6 border-b">
+          <h2 class="text-2xl font-bold text-gray-800">
+            <i class="fab fa-discord mr-2 text-indigo-600"></i>Discord紐付け確認
+          </h2>
+          <button onclick="closeDiscordMappingModal()" class="text-gray-500 hover:text-gray-700">
+            <i class="fas fa-times text-2xl"></i>
+          </button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto">
+          ${summaryHtml}
+          
+          <h3 class="text-lg font-bold text-gray-800 mb-4">
+            <i class="fas fa-list mr-2"></i>Tutor一覧とDiscord設定
+          </h3>
+          
+          ${tutorTableHtml}
+        </div>
+        
+        <div class="p-4 border-t bg-gray-50 flex justify-end">
+          <button 
+            onclick="closeDiscordMappingModal()"
+            class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+          >
+            閉じる
+          </button>
+        </div>
+      </div>
+    `;
+    
+  } catch (error) {
+    console.error('Discord mapping check error:', error);
+    alert('Discord紐付け確認に失敗しました: ' + (error.response?.data?.error || error.message));
+    closeDiscordMappingModal();
+  }
+}
+
+/**
+ * Close Discord mapping modal
+ */
+function closeDiscordMappingModal() {
+  const modal = document.getElementById('discord-mapping-modal');
+  if (modal) {
+    modal.remove();
   }
 }
 
