@@ -8091,18 +8091,9 @@ async function testDrawRoulette(studentId) {
       // Show result in modal (wait for spinning animation)
       await showRouletteResult(result);
       
-      // Update UI after modal closes
-      if (surveyStatsCache[studentId]) {
-        surveyStatsCache[studentId].latestRouletteResult = {
-          result: result.result,
-          probability: result.probability,
-          created_at: result.drawnAt
-        };
-        updateSurveyStatsDisplay(studentId, surveyStatsCache[studentId]);
-        console.log('[Test Draw] UI updated successfully');
-      } else {
-        console.warn('[Test Draw] Student not in cache:', studentId);
-      }
+      // テスト抽選では UI を更新しない（「抽選可能」状態を維持）
+      // 本番抽選の結果のみが UI に反映される
+      console.log('[Test Draw] Test draw completed - UI remains unchanged (still shows 抽選可能)');
     } else {
       console.error('[Test Draw] API returned error:', response.data.error);
       closeRouletteModal();
@@ -8147,10 +8138,6 @@ function showRouletteModal(studentId) {
           <div class="text-lg mb-4">
             <i class="fas fa-dice animate-pulse"></i>
             抽選中...
-          </div>
-          
-          <div class="text-sm opacity-75">
-            当選確率: <span class="font-bold">${probability}%</span>
           </div>
           
           <!-- Result container (hidden initially) -->
