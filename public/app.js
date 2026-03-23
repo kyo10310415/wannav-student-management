@@ -8578,7 +8578,7 @@ async function spinRoulette() {
   
   try {
     // Call test draw API
-    const response = await axios.post(\`\${API_BASE}/api/roulette/test-draw\`, {
+    const response = await axios.post(`${API_BASE}/api/roulette/test-draw`, {
       studentId: studentId
     });
     
