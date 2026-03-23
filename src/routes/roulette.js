@@ -311,7 +311,7 @@ app.get('/result/:studentId', async (c) => {
         roulette_url,
         created_at
       FROM roulette_results
-      WHERE student_id = $1
+      WHERE student_id = $1 AND (is_test = FALSE OR is_test IS NULL)
       ORDER BY created_at DESC
       LIMIT 1
     `, [studentId]);
@@ -380,13 +380,13 @@ app.post('/test-draw', async (c) => {
       result = Math.random() < 0.5 ? '当たり' : 'はずれ';
     }
 
-    // 結果を保存（test_drawフラグを追加）
+    // 結果を保存（is_test=true を追加）
     const insertResult = await pool.query(`
       INSERT INTO roulette_results 
-        (student_id, result, probability, roulette_url)
-      VALUES ($1, $2, $3, $4)
+        (student_id, result, probability, roulette_url, is_test)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING id, result, probability, created_at
-    `, [studentId, result, probability, 'test-draw-' + Date.now()]);
+    `, [studentId, result, probability, 'test-draw-' + Date.now(), true]);
 
     const rouletteResult = insertResult.rows[0];
 

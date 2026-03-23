@@ -307,8 +307,10 @@ app.get('/stats-all', async (c) => {
       INNER JOIN (
         SELECT student_id, MAX(created_at) as max_created
         FROM roulette_results
+        WHERE is_test = FALSE OR is_test IS NULL
         GROUP BY student_id
       ) latest ON r.student_id = latest.student_id AND r.created_at = latest.max_created
+      WHERE r.is_test = FALSE OR r.is_test IS NULL
     `);
     
     // Get extension results
@@ -556,14 +558,14 @@ app.get('/stats/:studentId', async (c) => {
       ? Math.round((responseCount / continuedMonths) * 100 * 10) / 10 
       : 0;
 
-    // 最新のルーレット結果取得
+    // 最新のルーレット結果取得（テスト抽選を除外）
     const rouletteResult = await pool.query(`
       SELECT 
         result,
         probability,
         created_at
       FROM roulette_results
-      WHERE student_id = $1
+      WHERE student_id = $1 AND (is_test = FALSE OR is_test IS NULL)
       ORDER BY created_at DESC
       LIMIT 1
     `, [studentId]);
