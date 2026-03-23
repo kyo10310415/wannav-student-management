@@ -5766,11 +5766,17 @@ async function renderUsersPage() {
     
   } catch (error) {
     console.error('Failed to load users:', error);
+    console.error('Error details:', error.response?.data);
+    const errorMessage = error.response?.data?.error || error.message || '不明なエラー';
     content.innerHTML = `
       <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
         <i class="fas fa-exclamation-circle text-red-600 text-4xl mb-4"></i>
         <h2 class="text-xl font-bold text-red-800 mb-2">エラー</h2>
-        <p class="text-red-700">ユーザー一覧の読み込みに失敗しました</p>
+        <p class="text-red-700 mb-2">ユーザー一覧の読み込みに失敗しました</p>
+        <p class="text-sm text-red-600">${errorMessage}</p>
+        <button onclick="renderUsersPage()" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+          <i class="fas fa-sync-alt mr-2"></i>再試行
+        </button>
       </div>
     `;
   }

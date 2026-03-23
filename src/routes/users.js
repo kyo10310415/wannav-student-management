@@ -44,21 +44,41 @@ async function requireAdmin(c, next) {
  */
 app.get('/', requireAdmin, async (c) => {
   try {
-    const result = await query(`
-      SELECT 
-        u.id, 
-        u.email, 
-        u.role, 
-        u.must_change_password, 
-        u.created_at, 
-        u.last_login,
-        u.discord_webhook_url,
-        u.discord_user_id,
-        t.tutor_name as tutor_name
-      FROM users u
-      LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
-      ORDER BY u.created_at DESC
-    `);
+    // Try to query with Discord fields
+    let result;
+    try {
+      result = await query(`
+        SELECT 
+          u.id, 
+          u.email, 
+          u.role, 
+          u.must_change_password, 
+          u.created_at, 
+          u.last_login,
+          u.discord_webhook_url,
+          u.discord_user_id,
+          t.tutor_name as tutor_name
+        FROM users u
+        LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
+        ORDER BY u.created_at DESC
+      `);
+    } catch (discordError) {
+      // Fallback: Query without Discord fields if columns don't exist
+      console.warn('[Users] Discord columns not found, falling back to basic query:', discordError.message);
+      result = await query(`
+        SELECT 
+          u.id, 
+          u.email, 
+          u.role, 
+          u.must_change_password, 
+          u.created_at, 
+          u.last_login,
+          t.tutor_name as tutor_name
+        FROM users u
+        LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
+        ORDER BY u.created_at DESC
+      `);
+    }
     
     return c.json({
       success: true,
@@ -69,7 +89,7 @@ app.get('/', requireAdmin, async (c) => {
     console.error('Get users error:', error);
     return c.json({
       success: false,
-      error: 'ユーザー一覧取得に失敗しました'
+      error: `ユーザー一覧取得に失敗しました: ${error.message}`
     }, 500);
   }
 });
