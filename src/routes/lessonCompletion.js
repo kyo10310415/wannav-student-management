@@ -54,8 +54,33 @@ app.get('/check', async (c) => {
     }
     
     const normalizedId = normalizeStudentId(studentId);
-    const key = `${normalizedId}_${lessonDate}`;
-    const completionData = lessonCompletionCache.get(key);
+    
+    // Check lesson date ±2 days range
+    let completionData = null;
+    
+    for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
+      const checkDate = new Date(lessonDate);
+      checkDate.setDate(checkDate.getDate() + dayOffset);
+      
+      const year = checkDate.getFullYear();
+      const month = String(checkDate.getMonth() + 1).padStart(2, '0');
+      const day = String(checkDate.getDate()).padStart(2, '0');
+      const checkDateStr = `${year}-${month}-${day}`;
+      
+      const key = `${normalizedId}_${checkDateStr}`;
+      const data = lessonCompletionCache.get(key);
+      
+      // If found "実施済み", use this data
+      if (data && data.completed) {
+        completionData = data;
+        break;
+      }
+      
+      // Keep first found data (even if not completed) as fallback
+      if (!completionData && data) {
+        completionData = data;
+      }
+    }
     
     if (completionData) {
       return c.json({
@@ -125,8 +150,34 @@ app.post('/batch', async (c) => {
     const results = items.map(item => {
       const { studentId, lessonDate } = item;
       const normalizedId = normalizeStudentId(studentId);
-      const key = `${normalizedId}_${lessonDate}`;
-      const completionData = lessonCompletionCache.get(key);
+      
+      // Check lesson date ±2 days range
+      // Example: lessonDate = "2026-03-08" -> check 2026-03-08, 2026-03-09, 2026-03-10
+      let completionData = null;
+      
+      for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
+        const checkDate = new Date(lessonDate);
+        checkDate.setDate(checkDate.getDate() + dayOffset);
+        
+        const year = checkDate.getFullYear();
+        const month = String(checkDate.getMonth() + 1).padStart(2, '0');
+        const day = String(checkDate.getDate()).padStart(2, '0');
+        const checkDateStr = `${year}-${month}-${day}`;
+        
+        const key = `${normalizedId}_${checkDateStr}`;
+        const data = lessonCompletionCache.get(key);
+        
+        // If found "実施済み", use this data
+        if (data && data.completed) {
+          completionData = data;
+          break;
+        }
+        
+        // Keep first found data (even if not completed) as fallback
+        if (!completionData && data) {
+          completionData = data;
+        }
+      }
       
       return {
         studentId,
