@@ -8433,7 +8433,7 @@ async function testDrawRoulette(studentId) {
 }
 
 /**
- * Show roulette animation modal
+ * Show prize box modal (luxury design)
  */
 function showRouletteModal(studentId) {
   const student = surveyStatsCache[studentId];
@@ -8441,137 +8441,86 @@ function showRouletteModal(studentId) {
   const probability = student?.resultScore === 'S' ? 100 : 50;
   
   const modalHtml = `
-    <div id="rouletteModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full mx-4">
-        <div class="text-center">
-          <h2 class="text-3xl font-bold mb-2 text-gray-800">${studentName}</h2>
-          <p class="text-xl mb-6 text-gray-600">アンケート特典ルーレット</p>
+    <div id="rouletteModal" class="fixed inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-orange-900 bg-opacity-95 flex items-center justify-center z-50 animate-fade-in">
+      <div class="bg-gradient-to-br from-white via-yellow-50 to-orange-50 rounded-3xl shadow-2xl p-12 max-w-xl w-full mx-4 relative overflow-hidden border-4 border-yellow-400">
+        <!-- Decorative sparkles -->
+        <div class="absolute top-4 left-4 text-yellow-400 text-2xl animate-pulse">✨</div>
+        <div class="absolute top-4 right-4 text-yellow-400 text-2xl animate-pulse" style="animation-delay: 0.3s">✨</div>
+        <div class="absolute bottom-4 left-4 text-yellow-400 text-2xl animate-pulse" style="animation-delay: 0.6s">✨</div>
+        <div class="absolute bottom-4 right-4 text-yellow-400 text-2xl animate-pulse" style="animation-delay: 0.9s">✨</div>
+        
+        <div class="text-center relative z-10">
+          <h2 class="text-4xl font-bold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">${studentName}</h2>
+          <p class="text-2xl mb-8 text-gray-700 font-semibold">🎁 アンケート特典 🎁</p>
           
-          <!-- Roulette Wheel Canvas -->
-          <div class="relative w-80 h-80 mx-auto mb-6">
-            <!-- Arrow pointer at top -->
-            <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2 z-10">
-              <div class="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[30px] border-t-red-600"></div>
-            </div>
-            
-            <canvas id="rouletteCanvas" width="320" height="320" class="mx-auto"></canvas>
-            
-            <!-- Center circle -->
-            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full border-4 border-gray-300 shadow-lg flex items-center justify-center">
-              <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full"></div>
+          <!-- Gift box illustration -->
+          <div id="giftBox" class="relative w-64 h-64 mx-auto mb-8">
+            <div class="absolute inset-0 flex items-center justify-center">
+              <div class="text-9xl transform hover:scale-110 transition-transform duration-300 cursor-pointer animate-bounce">
+                🎁
+              </div>
             </div>
           </div>
           
-          <div id="spinStatus" class="text-lg mb-4 text-gray-700">
-            <i class="fas fa-hand-pointer animate-pulse"></i>
-            ルーレットを回してください
+          <div id="prizeStatus" class="text-xl mb-6 text-gray-700 font-semibold">
+            <i class="fas fa-hand-pointer animate-pulse mr-2"></i>
+            開封して特典を確認しましょう！
           </div>
           
           <button 
-            id="spinButton" 
-            onclick="spinRoulette()" 
-            class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all transform hover:scale-105 shadow-lg mb-4"
+            id="openButton" 
+            onclick="openPrizeBox()" 
+            class="px-12 py-4 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-500 text-white rounded-2xl font-bold text-xl hover:from-yellow-500 hover:via-orange-500 hover:to-pink-600 transition-all transform hover:scale-110 shadow-2xl animate-pulse"
           >
-            <i class="fas fa-play-circle mr-2"></i>回す
+            <i class="fas fa-gift mr-3"></i>開封する
           </button>
           
           <!-- Result container (hidden initially) -->
-          <div id="rouletteResult" class="hidden mt-6 pt-6 border-t border-gray-200">
-            <div id="resultContent" class="text-4xl font-bold mb-4"></div>
-            <div id="resultMessage" class="text-lg mb-6 text-gray-600"></div>
+          <div id="prizeResult" class="hidden mt-8">
+            <div id="resultContent" class="text-6xl font-bold mb-6"></div>
+            <div id="resultMessage" class="text-2xl mb-8 font-semibold"></div>
             <button 
               onclick="closeRouletteModal()" 
-              class="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+              class="px-8 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl font-semibold hover:from-gray-700 hover:to-gray-800 transition-all transform hover:scale-105 shadow-lg"
             >
-              閉じる
+              <i class="fas fa-times mr-2"></i>閉じる
             </button>
           </div>
         </div>
       </div>
     </div>
+    
+    <style>
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease-out;
+      }
+    </style>
   `;
   
   document.body.insertAdjacentHTML('beforeend', modalHtml);
-  
-  // Draw initial roulette wheel
-  drawRouletteWheel(0);
 }
 
 /**
- * Draw roulette wheel on canvas
+ * Open prize box and reveal result
  */
-function drawRouletteWheel(rotation = 0) {
-  const canvas = document.getElementById('rouletteCanvas');
-  if (!canvas) return;
+async function openPrizeBox() {
+  const openButton = document.getElementById('openButton');
+  const prizeStatus = document.getElementById('prizeStatus');
+  const giftBox = document.getElementById('giftBox');
   
-  const ctx = canvas.getContext('2d');
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
-  const radius = 150;
-  
-  // Define segments - always 2 segments for visual consistency
-  const segments = [
-    { text: 'あたり', color: '#FFD700', probability: 0.5 },  // Gold
-    { text: 'はずれ', color: '#E0E0E0', probability: 0.5 }   // Gray
-  ];
-  
-  const totalSegments = segments.length;
-  const anglePerSegment = (2 * Math.PI) / totalSegments;
-  
-  // Clear canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
-  // Draw segments
-  segments.forEach((segment, index) => {
-    const startAngle = rotation + (index * anglePerSegment);
-    const endAngle = startAngle + anglePerSegment;
-    
-    // Draw segment
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-    ctx.closePath();
-    ctx.fillStyle = segment.color;
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    
-    // Draw text
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(startAngle + anglePerSegment / 2);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 24px Arial';
-    ctx.fillText(segment.text, radius * 0.65, 0);
-    ctx.restore();
-  });
-}
-
-/**
- * Spin the roulette wheel
- */
-let isSpinning = false;
-let currentRotation = 0;
-
-async function spinRoulette() {
-  if (isSpinning) return;
-  
-  isSpinning = true;
-  const spinButton = document.getElementById('spinButton');
-  const spinStatus = document.getElementById('spinStatus');
-  
-  if (spinButton) spinButton.disabled = true;
-  if (spinStatus) spinStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 抽選中...';
+  if (openButton) openButton.disabled = true;
+  if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>開封中...';
   
   // Get student ID from modal
   const studentName = document.querySelector('#rouletteModal h2').textContent;
   const studentId = Object.keys(surveyStatsCache).find(id => surveyStatsCache[id]?.name === studentName);
   
   if (!studentId) {
-    console.error('[Roulette] Student ID not found');
+    console.error('[Prize] Student ID not found');
     return;
   }
   
@@ -8584,130 +8533,131 @@ async function spinRoulette() {
     if (response.data.success) {
       const result = response.data.data;
       
-      // Calculate target rotation based on result
-      // Always 2 segments: index 0 = あたり, index 1 = はずれ
-      const isWin = result.result === '当たり';
-      
-      // Canvas coordinate system:
-      // - 0 rad (0°) = right (3 o'clock)
-      // - π/2 rad (90°) = bottom (6 o'clock)
-      // - π rad (180°) = left (9 o'clock)
-      // - 3π/2 rad (270°) = top (12 o'clock) ← Arrow is here
-      
-      // Initial segment positions (rotation = 0):
-      // - Segment 0 (あたり): 0 to π (right → bottom → left, i.e., 3 o'clock to 9 o'clock via bottom)
-      //   Center at π/2 (bottom, 6 o'clock)
-      // - Segment 1 (はずれ): π to 2π (left → top → right, i.e., 9 o'clock to 3 o'clock via top)
-      //   Center at 3π/2 (top, 12 o'clock)
-      
-      // Arrow is at 3π/2 (top). Initial state: arrow points to segment 1 (はずれ)
-      
-      // To align arrow with a segment's center, we rotate the wheel:
-      // Target rotation = (arrow position 3π/2) - (segment center position)
-      
-      let targetAngle;
-      if (isWin) {
-        // Want segment 0 center (π/2) to align with arrow (3π/2)
-        // Rotation needed: 3π/2 - π/2 = π radians (180 degrees)
-        targetAngle = Math.PI;
-      } else {
-        // Want segment 1 center (3π/2) to align with arrow (3π/2)
-        // Already aligned at rotation = 0
-        // But for full spin effect, use 2π (one full rotation)
-        targetAngle = 2 * Math.PI;
+      // Animate gift box opening
+      if (giftBox) {
+        giftBox.style.transform = 'scale(1.5)';
+        giftBox.style.opacity = '0';
+        giftBox.style.transition = 'all 0.8s ease-out';
       }
       
-      // Add small random variation within segment (±20% of half segment = ±18 degrees = ±π/10)
-      const randomOffset = (Math.random() - 0.5) * 0.4 * Math.PI;
-      targetAngle += randomOffset;
+      // Wait for animation
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Spin animation (5-8 full rotations + target angle)
-      const fullRotations = 5 + Math.random() * 3;
-      const totalRotation = fullRotations * 2 * Math.PI + targetAngle;
+      // Hide button and status
+      if (openButton) openButton.style.display = 'none';
+      if (prizeStatus) prizeStatus.classList.add('hidden');
+      if (giftBox) giftBox.classList.add('hidden');
       
-      // Animate spinning
-      const duration = 3000; // 3 seconds
-      const startTime = Date.now();
-      const startRotation = currentRotation;
-      
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function (ease-out cubic)
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        
-        currentRotation = startRotation + totalRotation * easeOut;
-        drawRouletteWheel(currentRotation);
-        
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          // Spinning complete - show result
-          showRouletteResult(result);
-        }
-      };
-      
-      animate();
+      // Show result
+      showPrizeResult(result);
       
     } else {
-      console.error('[Roulette] API returned error:', response.data.error);
-      if (spinStatus) spinStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> エラーが発生しました';
-      if (spinButton) spinButton.disabled = false;
-      isSpinning = false;
+      console.error('[Prize] API returned error:', response.data.error);
+      if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> エラーが発生しました';
+      if (openButton) openButton.disabled = false;
     }
   } catch (error) {
-    console.error('[Roulette] Error:', error);
-    if (spinStatus) spinStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> エラーが発生しました';
-    if (spinButton) spinButton.disabled = false;
-    isSpinning = false;
+    console.error('[Prize] Error:', error);
+    if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> エラーが発生しました';
+    if (openButton) openButton.disabled = false;
+  }
+}
+
+/**
+ * Show prize result with celebration or sympathy
+ */
+async function showPrizeResult(result) {
+  const resultContainer = document.getElementById('prizeResult');
+  const resultContent = document.getElementById('resultContent');
+  const resultMessage = document.getElementById('resultMessage');
+  
+  if (resultContainer && resultContent && resultMessage) {
+    const isWin = result.result === '当たり';
+    
+    if (isWin) {
+      // Celebration theme for winner
+      resultContainer.parentElement.parentElement.className = 'bg-gradient-to-br from-yellow-100 via-orange-100 to-pink-100 rounded-3xl shadow-2xl p-12 max-w-xl w-full mx-4 relative overflow-hidden border-4 border-yellow-400';
+      
+      resultContent.innerHTML = `
+        <div class="animate-bounce">
+          <div class="text-8xl mb-4">🏆</div>
+          <div class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-orange-500 to-pink-500">当たり！</div>
+        </div>
+      `;
+      
+      resultMessage.innerHTML = `
+        <div class="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+          🎉 おめでとうございます！ 🎉<br>
+          <span class="text-xl">特典をお送りします！</span>
+        </div>
+      `;
+      
+      // Add confetti effect
+      createConfetti();
+      
+    } else {
+      // Sympathy theme for loser
+      resultContainer.parentElement.parentElement.className = 'bg-gradient-to-br from-gray-100 via-blue-50 to-purple-50 rounded-3xl shadow-2xl p-12 max-w-xl w-full mx-4 relative overflow-hidden border-4 border-gray-300';
+      
+      resultContent.innerHTML = `
+        <div class="text-8xl mb-4 opacity-60">😢</div>
+        <div class="text-gray-600">はずれ</div>
+      `;
+      
+      resultMessage.innerHTML = `
+        <div class="text-gray-600">
+          残念でした...<br>
+          <span class="text-xl">また次回チャレンジしてください！</span>
+        </div>
+      `;
+    }
+    
+    resultContainer.classList.remove('hidden');
+    resultContainer.style.animation = 'bounce 0.6s ease-out';
+  }
+}
+
+/**
+ * Create confetti animation for winners
+ */
+function createConfetti() {
+  const colors = ['#FFD700', '#FFA500', '#FF69B4', '#FF1493', '#8B008B'];
+  const confettiCount = 50;
+  
+  for (let i = 0; i < confettiCount; i++) {
+    const confetti = document.createElement('div');
+    confetti.style.position = 'fixed';
+    confetti.style.width = '10px';
+    confetti.style.height = '10px';
+    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.left = Math.random() * window.innerWidth + 'px';
+    confetti.style.top = '-10px';
+    confetti.style.opacity = '1';
+    confetti.style.transform = 'rotate(' + Math.random() * 360 + 'deg)';
+    confetti.style.transition = 'all 3s ease-out';
+    confetti.style.zIndex = '9999';
+    confetti.style.pointerEvents = 'none';
+    
+    document.body.appendChild(confetti);
+    
+    // Animate falling
+    setTimeout(() => {
+      confetti.style.top = window.innerHeight + 'px';
+      confetti.style.left = (parseFloat(confetti.style.left) + (Math.random() - 0.5) * 200) + 'px';
+      confetti.style.opacity = '0';
+      confetti.style.transform = 'rotate(' + (Math.random() * 720) + 'deg)';
+    }, 100);
+    
+    // Remove after animation
+    setTimeout(() => {
+      confetti.remove();
+    }, 3100);
   }
 }
 
 /**
  * Show roulette result with animation
  */
-async function showRouletteResult(result) {
-  isSpinning = false;
-  
-  const spinButton = document.getElementById('spinButton');
-  const spinStatus = document.getElementById('spinStatus');
-  
-  if (spinButton) {
-    spinButton.style.display = 'none';
-  }
-  
-  if (spinStatus) {
-    spinStatus.classList.add('hidden');
-  }
-  
-  // Show result
-  const resultContainer = document.getElementById('rouletteResult');
-  const resultContent = document.getElementById('resultContent');
-  const resultMessage = document.getElementById('resultMessage');
-  
-  if (resultContainer && resultContent && resultMessage) {
-    resultContainer.classList.remove('hidden');
-    
-    const isWin = result.result === '当たり';
-    
-    if (isWin) {
-      resultContent.innerHTML = `
-        <i class="fas fa-trophy text-yellow-500"></i>
-        <div class="mt-2 text-purple-600">${result.result}！</div>
-      `;
-      resultContent.classList.add('animate-bounce');
-      resultMessage.innerHTML = '🎉 おめでとうございます！<br>特典をお送りします！';
-    } else {
-      resultContent.innerHTML = `
-        <i class="fas fa-times-circle text-gray-400"></i>
-        <div class="mt-2 text-gray-600">${result.result}</div>
-      `;
-      resultMessage.textContent = '残念でした。また次回チャレンジしてください！';
-    }
-  }
-}
-
 /**
  * Close roulette modal
  */
