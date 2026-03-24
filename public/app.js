@@ -7964,8 +7964,25 @@ function renderScheduleList(schedules) {
 /**
  * Show schedule modal
  */
+/**
+ * Show schedule modal
+ */
 function showScheduleModal(scheduleId = null) {
   const schedule = scheduleId ? broadcastSchedules.find(s => s.id === scheduleId) : null;
+  
+  // Helper function to generate 30-minute interval time options
+  const generateTimeOptions = () => {
+    let options = '';
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute of [0, 30]) {
+        const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const selected = schedule && schedule.schedule_time === timeStr ? 'selected' : 
+                        (!schedule && timeStr === '17:00' ? 'selected' : '');
+        options += `<option value="${timeStr}" ${selected}>${timeStr}</option>`;
+      }
+    }
+    return options;
+  };
   
   const modalContent = `
     <div class="max-w-2xl mx-auto">
@@ -8013,9 +8030,14 @@ function showScheduleModal(scheduleId = null) {
         <!-- Time -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            <i class="fas fa-clock mr-1"></i>時刻
+            <i class="fas fa-clock mr-1"></i>時刻（30分単位）
           </label>
-          <input type="time" id="schedule-time" value="${schedule ? '17:00' : '17:00'}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+          <select id="schedule-time" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            ${generateTimeOptions()}
+          </select>
+          <p class="text-xs text-gray-500 mt-1">
+            <i class="fas fa-info-circle mr-1"></i>スケジュールチェックは30分ごとに実行されます
+          </p>
         </div>
         
         <!-- Target Status -->
@@ -8173,8 +8195,14 @@ async function saveSchedule(scheduleId = null) {
     return;
   }
   
-  // Generate cron expression
+  // Validate time format (30-minute intervals)
   const [hour, minute] = time.split(':');
+  if (minute !== '00' && minute !== '30') {
+    showNotification('時刻は30分単位で設定してください（00分または30分）', 'error');
+    return;
+  }
+  
+  // Generate cron expression
   let cronExpression;
   
   switch (frequency) {

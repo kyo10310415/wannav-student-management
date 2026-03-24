@@ -157,9 +157,9 @@ if (process.env.DISCORD_STATS_REPORT_ENABLED !== 'false') {
   console.log('Discord daily statistics report: DISABLED (DISCORD_STATS_REPORT_ENABLED=false)');
 }
 
-// Schedule broadcast scheduler check (runs every minute)
-console.log('Broadcast scheduler: ENABLED (checks every minute)');
-cron.schedule('* * * * *', async () => {
+// Schedule broadcast scheduler check (runs every 30 minutes)
+console.log('Broadcast scheduler: ENABLED (checks every 30 minutes)');
+cron.schedule('0,30 * * * *', async () => {
   try {
     await checkAndExecuteSchedules();
   } catch (error) {
