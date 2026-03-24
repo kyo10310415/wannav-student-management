@@ -40,6 +40,7 @@ import { checkStampRallyAchievements } from './services/stampRallyService.js';
 
 // Jobs
 import sendLessonReportReminder from './jobs/lessonReportReminder.js';
+import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotification.js';
 
 const app = new Hono();
 
@@ -197,6 +198,23 @@ if (process.env.LESSON_REPORT_REMINDER_ENABLED !== 'false') {
     timezone: 'Asia/Tokyo'
   });
 } else {
+  console.log('Lesson report reminder: DISABLED (LESSON_REPORT_REMINDER_ENABLED=false)');
+}
+
+// Schedule survey reminder notifications (runs every hour)
+// Checks for lessons 12 hours ago and sends reminders to students who haven't responded to survey
+console.log('Survey reminder notifications: ENABLED (checks every hour)');
+cron.schedule('0 * * * *', async () => {
+  console.log('Running survey reminder check...');
+  try {
+    await sendSurveyReminderNotifications();
+    console.log('Survey reminder check completed');
+  } catch (error) {
+    console.error('Error in survey reminder notifications:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
   console.log('Lesson report reminder: DISABLED (LESSON_REPORT_REMINDER_ENABLED=false)');
 }
 
