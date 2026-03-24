@@ -211,6 +211,21 @@ async function sendLessonReportReminder() {
 }
 
 /**
+ * Format date to Japanese format (YYYY/M/D)
+ */
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  
+  // Handle both YYYY-MM-DD and ISO format
+  const date = new Date(dateStr);
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1; // 0-indexed
+  const day = date.getDate();
+  
+  return `${year}/${month}/${day}`;
+}
+
+/**
  * Send Discord reminder message
  */
 async function sendDiscordReminder(webhookUrl, userId, lesson, recipientType) {
@@ -218,14 +233,17 @@ async function sendDiscordReminder(webhookUrl, userId, lesson, recipientType) {
     const mention = userId ? `<@${userId}>` : '';
     const roleLabel = recipientType === 'leader' ? '【チームリーダー通知】' : '';
     
+    // Format date to YYYY/M/D
+    const formattedDate = formatDate(lesson.lesson_date);
+    
     const embed = {
       title: `${roleLabel}レッスン報告未提出のお知らせ`,
-      description: `${mention}\nレッスン報告が提出されていないようです。提出をお願いします！`,
+      description: `レッスン報告が提出されていないようです。提出をお願いします！`,
       color: 0xFF6B6B, // Red color
       fields: [
         {
           name: '📅 レッスン日',
-          value: lesson.lesson_date,
+          value: formattedDate,
           inline: true
         },
         {
@@ -260,7 +278,9 @@ async function sendDiscordReminder(webhookUrl, userId, lesson, recipientType) {
       timestamp: new Date().toISOString()
     };
     
+    // IMPORTANT: Mentions must be in content, not in embed description
     const payload = {
+      content: mention, // Mention goes here, not in embed
       embeds: [embed]
     };
     
