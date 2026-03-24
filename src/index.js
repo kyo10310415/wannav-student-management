@@ -215,8 +215,6 @@ cron.schedule('0 * * * *', async () => {
 }, {
   timezone: 'Asia/Tokyo'
 });
-  console.log('Lesson report reminder: DISABLED (LESSON_REPORT_REMINDER_ENABLED=false)');
-}
 
 const port = process.env.PORT || 3000;
 
