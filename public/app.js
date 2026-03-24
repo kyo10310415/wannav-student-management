@@ -8588,29 +8588,36 @@ async function spinRoulette() {
       // Always 2 segments: index 0 = あたり, index 1 = はずれ
       const isWin = result.result === '当たり';
       
-      // Arrow points to top (270 degrees = 3π/2 radians in canvas coordinates)
-      // Segment 0 (あたり): 0 to π radians (0-180 degrees)
-      // Segment 1 (はずれ): π to 2π radians (180-360 degrees)
+      // Canvas coordinate system:
+      // - 0 rad (0°) = right (3 o'clock)
+      // - π/2 rad (90°) = bottom (6 o'clock)
+      // - π rad (180°) = left (9 o'clock)
+      // - 3π/2 rad (270°) = top (12 o'clock) ← Arrow is here
       
-      // For the arrow to point at the center of a segment:
-      // - Center of segment 0 (あたり): π/2 radians (90 degrees)
-      // - Center of segment 1 (はずれ): 3π/2 radians (270 degrees)
+      // Initial segment positions (rotation = 0):
+      // - Segment 0 (あたり): 0 to π (right → bottom → left, i.e., 3 o'clock to 9 o'clock via bottom)
+      //   Center at π/2 (bottom, 6 o'clock)
+      // - Segment 1 (はずれ): π to 2π (left → top → right, i.e., 9 o'clock to 3 o'clock via top)
+      //   Center at 3π/2 (top, 12 o'clock)
       
-      // We rotate the wheel, so the arrow (fixed at top = 270 degrees) points to the target
-      // Target rotation = (arrow position) - (segment center position)
+      // Arrow is at 3π/2 (top). Initial state: arrow points to segment 1 (はずれ)
+      
+      // To align arrow with a segment's center, we rotate the wheel:
+      // Target rotation = (arrow position 3π/2) - (segment center position)
       
       let targetAngle;
       if (isWin) {
-        // Want segment 0 center (90 degrees) to align with arrow (270 degrees)
-        // Rotation = 270 - 90 = 180 degrees = π radians
+        // Want segment 0 center (π/2) to align with arrow (3π/2)
+        // Rotation needed: 3π/2 - π/2 = π radians (180 degrees)
         targetAngle = Math.PI;
       } else {
-        // Want segment 1 center (270 degrees) to align with arrow (270 degrees)
-        // Rotation = 270 - 270 = 0 degrees = 0 radians (or full circle 2π)
-        targetAngle = 0;
+        // Want segment 1 center (3π/2) to align with arrow (3π/2)
+        // Already aligned at rotation = 0
+        // But for full spin effect, use 2π (one full rotation)
+        targetAngle = 2 * Math.PI;
       }
       
-      // Add small random variation within segment (±20% of half segment = ±18 degrees)
+      // Add small random variation within segment (±20% of half segment = ±18 degrees = ±π/10)
       const randomOffset = (Math.random() - 0.5) * 0.4 * Math.PI;
       targetAngle += randomOffset;
       
