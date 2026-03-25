@@ -173,7 +173,13 @@ function syncLessonsIncrementalFixed() {
     sheet.getRange(1, 1, 1, 10).setFontWeight('bold');
   }
   
-  // 既存データを読み込み（イベントIDをキーにしたマップ）
+  // ステップ1: 重複データを削除
+  const removedCount = removeDuplicateData(sheet);
+  if (removedCount > 0) {
+    Logger.log(`⚠️ ${removedCount}件の重複データを削除しました`);
+  }
+  
+  // ステップ2: 重複削除後のクリーンなデータを読み込み
   const existingData = loadExistingData(sheet);
   Logger.log(`既存データ: ${existingData.size}件`);
   
@@ -483,12 +489,13 @@ function saveDeletedEvents(ss, deletedEventsData) {
 // ========== ヘルパー関数 ==========
 
 /**
- * 既存データを読み込み（イベントIDをキーにしたマップ）
+ * 重複データを検出して削除
+ * @returns {number} 削除した行数
  */
-function loadExistingData(sheet) {
+function removeDuplicateData(sheet) {
   const data = sheet.getDataRange().getValues();
-  const map = new Map();
-  const duplicateRows = []; // 重複行を記録
+  const seen = new Set();
+  const duplicateRows = [];
   
   // ヘッダー行をスキップ（インデックス0）
   for (let i = 1; i < data.length; i++) {
@@ -500,16 +507,14 @@ function loadExistingData(sheet) {
       // イベントID + 開始時刻でユニークキーを生成
       const eventKey = `${eventId}_${new Date(startTime).getTime()}`;
       
-      if (map.has(eventKey)) {
+      if (seen.has(eventKey)) {
         // 重複が見つかった場合、後の行を削除対象に追加
         duplicateRows.push(i + 1); // スプレッドシートの行番号（1始まり）
-        Logger.log(`⚠️ 重複検出: 行${i + 1} - イベントID: ${eventId}, 日時: ${startTime}`);
+        if (duplicateRows.length <= 10) {
+          Logger.log(`⚠️ 重複検出: 行${i + 1} - イベントID: ${eventId}, 日時: ${startTime}`);
+        }
       } else {
-        map.set(eventKey, {
-          rowNumber: i + 1, // スプレッドシートの行番号（1始まり）
-          data: row,
-          eventId: eventId // イベントIDも保存（削除検知用）
-        });
+        seen.add(eventKey);
       }
     }
   }
@@ -531,6 +536,34 @@ function loadExistingData(sheet) {
     });
     
     Logger.log(`✅ 重複削除完了: ${duplicateRows.length}件`);
+  }
+  
+  return duplicateRows.length;
+}
+
+/**
+ * 既存データを読み込み（重複削除後のクリーンなデータ）
+ */
+function loadExistingData(sheet) {
+  const data = sheet.getDataRange().getValues();
+  const map = new Map();
+  
+  // ヘッダー行をスキップ（インデックス0）
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const eventId = row[0]; // イベントID
+    const startTime = row[4]; // レッスン日時
+    
+    if (eventId) {
+      // イベントID + 開始時刻でユニークキーを生成
+      const eventKey = `${eventId}_${new Date(startTime).getTime()}`;
+      
+      map.set(eventKey, {
+        rowNumber: i + 1, // スプレッドシートの行番号（1始まり）
+        data: row,
+        eventId: eventId // イベントIDも保存（削除検知用）
+      });
+    }
   }
   
   return map;
