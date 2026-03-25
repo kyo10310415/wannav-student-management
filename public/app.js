@@ -1505,6 +1505,22 @@ function renderStudentsPage() {
                   </button>
                 </div>
               </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
+                <div class="flex items-center justify-center gap-2">
+                  <span class="text-purple-700">PROプラン<br>開始日</span>
+                  <button onclick="toggleSort('pro_plan_start_date')" class="hover:text-purple-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'pro_plan_start_date' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
+                <div class="flex items-center justify-center gap-2">
+                  <span class="text-purple-700">PROプラン<br>継続月数</span>
+                  <button onclick="toggleSort('pro_plan_continued_months')" class="hover:text-purple-600 transition">
+                    <i class="fas fa-sort ${sortColumn === 'pro_plan_continued_months' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
+                  </button>
+                </div>
+              </th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>リザルト総合</span>
@@ -1823,7 +1839,7 @@ function renderStudentRowsSimple() {
   if (filtered.length === 0) {
     return `
       <tr>
-        <td colspan="13" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="15" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>該当する生徒が見つかりません</p>
         </td>
@@ -1868,6 +1884,16 @@ function renderStudentRowsSimple() {
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${rowBgColor} ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
         <td class="px-3 py-3 whitespace-nowrap text-xs text-center text-gray-700">${lessonStartDate}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center bg-purple-50">
+          <input type="month" 
+                 value="${student.pro_plan_start_date ? formatDateForMonthInput(student.pro_plan_start_date) : ''}"
+                 onchange="updateProPlanStartDate('${student.student_id}', this.value)"
+                 class="px-2 py-1 border border-purple-300 rounded text-xs text-purple-700 font-semibold focus:ring-2 focus:ring-purple-500"
+                 placeholder="未設定">
+        </td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-700 bg-purple-50">
+          ${student.pro_plan_continued_months ? student.pro_plan_continued_months + 'ヶ月' : '-'}
+        </td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center">
           <span class="wanami-usage-loading text-gray-400" data-student-id="${student.student_id}">...</span>
@@ -2882,12 +2908,6 @@ async function renderTodayLessonsPage() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
-              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
-                <span class="text-purple-700">PROプラン<br>開始日</span>
-              </th>
-              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
-                <span class="text-purple-700">PROプラン<br>継続月数</span>
-              </th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Meet</th>
@@ -2966,16 +2986,6 @@ function renderTodayStudentRows(todayStudents) {
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
-        <td class="px-2 py-3 whitespace-nowrap text-sm text-center bg-purple-50">
-          <input type="month" 
-                 value="${student.pro_plan_start_date ? formatDateForMonthInput(student.pro_plan_start_date) : ''}"
-                 onchange="updateProPlanStartDate('${student.student_id}', this.value)"
-                 class="px-2 py-1 border border-purple-300 rounded text-xs text-purple-700 font-semibold focus:ring-2 focus:ring-purple-500"
-                 placeholder="未設定">
-        </td>
-        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-700 bg-purple-50">
-          ${student.pro_plan_continued_months ? student.pro_plan_continued_months + 'ヶ月' : '-'}
-        </td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
