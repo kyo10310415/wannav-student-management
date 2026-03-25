@@ -196,6 +196,9 @@ function syncLessonsIncrementalFixed() {
   // カレンダーから取得したイベントIDのセット（削除検知用）
   const fetchedEventIds = new Set();
   
+  // イベントの重複を防ぐ（イベントID+開始時刻の組み合わせでユニークキーを生成）
+  const processedEvents = new Set();
+  
   // 新規・更新イベントの一時保存
   const rowsToUpdate = [];
   const rowsToAdd = [];
@@ -267,6 +270,13 @@ function syncLessonsIncrementalFixed() {
         const description = event.getDescription();
         const startTime = event.getStartTime();
         const eventId = event.getId();
+        
+        // 重複チェック：同じイベントID+開始時刻の組み合わせは1回だけ処理
+        const eventKey = `${eventId}_${startTime.getTime()}`;
+        if (processedEvents.has(eventKey)) {
+          return; // 既に処理済みのイベントはスキップ（重複防止）
+        }
+        processedEvents.add(eventKey);
         
         fetchedEventIds.add(eventId);
         
