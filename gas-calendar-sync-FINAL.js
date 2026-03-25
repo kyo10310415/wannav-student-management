@@ -316,10 +316,11 @@ function syncLessonsIncrementalFixed() {
           lessonTime
         ];
         
-        // 既存データと比較
-        if (existingData.has(eventId)) {
+        // 既存データと比較（イベントID + 開始時刻でユニークキーを使用）
+        const dataEventKey = `${eventId}_${startTime.getTime()}`;
+        if (existingData.has(dataEventKey)) {
           // 更新チェック（日時・タイトル・説明を比較）
-          const existing = existingData.get(eventId);
+          const existing = existingData.get(dataEventKey);
           if (needsUpdate(existing, rowData)) {
             rowsToUpdate.push({
               rowNumber: existing.rowNumber,
@@ -359,8 +360,9 @@ function syncLessonsIncrementalFixed() {
   const deletedEventsData = []; // 削除されたイベントのデータを保存
   let outOfRangeCount = 0; // 範囲外削除のカウント
   
-  existingData.forEach((value, eventId) => {
+  existingData.forEach((value, eventKey) => {
     const eventDate = new Date(value.data[4]); // レッスン日時
+    const eventId = value.eventId; // イベントID
     let deleteReason = null;
     
     // ケース1: 取得範囲外のイベント（古すぎる過去 or 遠すぎる未来）
@@ -486,18 +488,49 @@ function saveDeletedEvents(ss, deletedEventsData) {
 function loadExistingData(sheet) {
   const data = sheet.getDataRange().getValues();
   const map = new Map();
+  const duplicateRows = []; // 重複行を記録
   
   // ヘッダー行をスキップ（インデックス0）
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const eventId = row[0]; // イベントID
+    const startTime = row[4]; // レッスン日時
     
     if (eventId) {
-      map.set(eventId, {
-        rowNumber: i + 1, // スプレッドシートの行番号（1始まり）
-        data: row
-      });
+      // イベントID + 開始時刻でユニークキーを生成
+      const eventKey = `${eventId}_${new Date(startTime).getTime()}`;
+      
+      if (map.has(eventKey)) {
+        // 重複が見つかった場合、後の行を削除対象に追加
+        duplicateRows.push(i + 1); // スプレッドシートの行番号（1始まり）
+        Logger.log(`⚠️ 重複検出: 行${i + 1} - イベントID: ${eventId}, 日時: ${startTime}`);
+      } else {
+        map.set(eventKey, {
+          rowNumber: i + 1, // スプレッドシートの行番号（1始まり）
+          data: row,
+          eventId: eventId // イベントIDも保存（削除検知用）
+        });
+      }
     }
+  }
+  
+  // 重複行を削除
+  if (duplicateRows.length > 0) {
+    Logger.log(`🔧 重複データのクリーンアップ: ${duplicateRows.length}件の重複行を削除中...`);
+    
+    // 降順ソート（後ろから削除しないと行番号がズレる）
+    duplicateRows.sort((a, b) => b - a);
+    
+    // 1行ずつ削除
+    duplicateRows.forEach(rowNumber => {
+      try {
+        sheet.deleteRow(rowNumber);
+      } catch (error) {
+        Logger.log(`⚠️ 行${rowNumber}の削除エラー: ${error.message}`);
+      }
+    });
+    
+    Logger.log(`✅ 重複削除完了: ${duplicateRows.length}件`);
   }
   
   return map;
