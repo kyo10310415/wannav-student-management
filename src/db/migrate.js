@@ -289,6 +289,24 @@ const migrations = [
       COMMENT ON COLUMN system_settings.updated_at IS '最終更新日時';
     `,
     down: `DROP TABLE IF EXISTS system_settings;`
+  },
+  {
+    version: 13,
+    name: 'add_pro_plan_fields',
+    up: `
+      -- PROプラン関連のカラムを追加
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS pro_plan_start_date DATE;
+      
+      -- コメント追加
+      COMMENT ON COLUMN students.pro_plan_start_date IS 'PROプラン開始日（月初の1日）';
+      
+      -- インデックス作成
+      CREATE INDEX IF NOT EXISTS idx_students_pro_plan_start_date ON students(pro_plan_start_date);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_students_pro_plan_start_date;
+      ALTER TABLE students DROP COLUMN IF EXISTS pro_plan_start_date;
+    `
   }
 ];
 
