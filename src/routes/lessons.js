@@ -331,6 +331,10 @@ app.get('/sync-from-sheet', async (c) => {
     
     console.log(`Built student-tutor mapping for ${studentTutorMap.size} students`);
     
+    // Get all event IDs from spreadsheet (to detect deletions)
+    const sheetEventIds = new Set(lessons.map(l => l.calendar_event_id).filter(id => id));
+    console.log(`Event IDs in spreadsheet: ${sheetEventIds.size}`);
+    
     let validLessons = 0;
     let invalidLessons = 0;
     let unmatchedStudents = 0;
@@ -395,12 +399,52 @@ app.get('/sync-from-sheet', async (c) => {
     
     console.log(`Validation results: ${validLessons} valid, ${invalidLessons} invalid, ${unmatchedStudents} unmatched, ${mismatchedTutors} tutor mismatches`);
     
+    // Delete lessons from database that are no longer in the spreadsheet
+    let deletedCount = 0;
+    try {
+      // Get all event IDs from database
+      const dbEventsResult = await query('SELECT calendar_event_id FROM lessons');
+      const dbEventIds = dbEventsResult.rows.map(row => row.calendar_event_id);
+      
+      // Find event IDs that exist in DB but not in spreadsheet
+      const toDelete = dbEventIds.filter(id => !sheetEventIds.has(id));
+      
+      if (toDelete.length > 0) {
+        console.log(`Deleting ${toDelete.length} lessons that are no longer in spreadsheet...`);
+        
+        // Delete in batches to avoid query size limits
+        const batchSize = 100;
+        for (let i = 0; i < toDelete.length; i += batchSize) {
+          const batch = toDelete.slice(i, i + batchSize);
+          const placeholders = batch.map((_, index) => `$${index + 1}`).join(',');
+          
+          await query(
+            `DELETE FROM lessons WHERE calendar_event_id IN (${placeholders})`,
+            batch
+          );
+          
+          deletedCount += batch.length;
+          
+          if (deletedCount % 100 === 0 || deletedCount === toDelete.length) {
+            console.log(`Deleted ${deletedCount}/${toDelete.length} lessons`);
+          }
+        }
+        
+        console.log(`✅ Deletion complete: ${deletedCount} lessons removed from database`);
+      } else {
+        console.log('No lessons to delete');
+      }
+    } catch (deleteError) {
+      console.error('Error deleting lessons:', deleteError);
+    }
+    
     return c.json({
       success: true,
       message: `Synced ${validLessons} lessons from Google Sheets`,
       count: validLessons,
       skipped: unmatchedStudents + mismatchedTutors,
       errors: invalidLessons,
+      deleted: deletedCount,
       lastGasSync: syncMeta?.lastSync,
       totalEventsInSheet: lessons.length
     });
