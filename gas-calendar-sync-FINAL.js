@@ -490,6 +490,12 @@ function saveDeletedEvents(ss, deletedEventsData) {
 
 /**
  * 重複データを検出して削除
+ * 
+ * 注意: この関数で削除された重複データは「削除されたレッスンデータ」シートには記録されません。
+ * 「削除されたレッスンデータ」シートに記録されるのは以下の2種類のみ：
+ *   1. カレンダーから実際に削除されたイベント（キャンセル/リスケ）
+ *   2. 取得期間外になったイベント（古すぎる過去/遠すぎる未来）
+ * 
  * @returns {number} 削除した行数
  */
 function removeDuplicateData(sheet) {
@@ -519,9 +525,10 @@ function removeDuplicateData(sheet) {
     }
   }
   
-  // 重複行を削除
+  // 重複行を削除（「削除されたレッスンデータ」シートには記録しない）
   if (duplicateRows.length > 0) {
     Logger.log(`🔧 重複データのクリーンアップ: ${duplicateRows.length}件の重複行を削除中...`);
+    Logger.log(`📝 注意: 重複削除は「削除されたレッスンデータ」シートに記録されません`);
     
     // 降順ソート（後ろから削除しないと行番号がズレる）
     duplicateRows.sort((a, b) => b - a);
@@ -911,4 +918,85 @@ function listTriggers() {
     Logger.log(`    種類: ${trigger.getEventType()}`);
     Logger.log(`    トリガーID: ${trigger.getUniqueId()}`);
   });
+}
+
+// ========== クリーンアップ関数 ==========
+
+/**
+ * 「削除されたレッスンデータ」シートから重複データをクリーンアップ
+ * 
+ * このシートには以下の2種類のみが記録されるべき：
+ *   1. カレンダーから実際に削除されたイベント（削除理由: 「カレンダーから削除」）
+ *   2. 取得期間外になったイベント（削除理由: 「取得範囲外」）
+ * 
+ * 重複削除されたデータは記録すべきではないため、このシートから削除します。
+ */
+function cleanupDeletedEventsSheet() {
+  Logger.log('========== 削除されたレッスンデータのクリーンアップ開始 ==========');
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const deletedSheet = ss.getSheetByName(DELETED_SHEET_NAME);
+  
+  if (!deletedSheet) {
+    Logger.log('「削除されたレッスンデータ」シートが存在しません');
+    return;
+  }
+  
+  const data = deletedSheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    Logger.log('データがありません（ヘッダーのみ）');
+    return;
+  }
+  
+  const seen = new Set();
+  const duplicateRows = [];
+  let duplicateCount = 0;
+  
+  // ヘッダー行をスキップ（インデックス0）
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const eventId = row[0]; // イベントID
+    const startTime = row[4]; // レッスン日時
+    
+    if (eventId) {
+      // イベントID + 開始時刻でユニークキーを生成
+      const eventKey = `${eventId}_${new Date(startTime).getTime()}`;
+      
+      if (seen.has(eventKey)) {
+        // 重複が見つかった場合、後の行を削除対象に追加
+        duplicateRows.push(i + 1); // スプレッドシートの行番号（1始まり）
+        duplicateCount++;
+        
+        if (duplicateCount <= 10) {
+          Logger.log(`⚠️ 重複検出: 行${i + 1} - イベントID: ${eventId}, 日時: ${startTime}`);
+        }
+      } else {
+        seen.add(eventKey);
+      }
+    }
+  }
+  
+  // 重複行を削除
+  if (duplicateRows.length > 0) {
+    Logger.log(`🔧 重複データのクリーンアップ: ${duplicateRows.length}件の重複行を削除中...`);
+    
+    // 降順ソート（後ろから削除しないと行番号がズレる）
+    duplicateRows.sort((a, b) => b - a);
+    
+    // 1行ずつ削除
+    duplicateRows.forEach(rowNumber => {
+      try {
+        deletedSheet.deleteRow(rowNumber);
+      } catch (error) {
+        Logger.log(`⚠️ 行${rowNumber}の削除エラー: ${error.message}`);
+      }
+    });
+    
+    Logger.log(`✅ 重複削除完了: ${duplicateRows.length}件`);
+  } else {
+    Logger.log('✅ 重複データは見つかりませんでした');
+  }
+  
+  Logger.log(`========== クリーンアップ完了 ==========`);
 }
