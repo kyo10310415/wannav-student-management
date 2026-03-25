@@ -8,6 +8,27 @@ import { fetchLessonStartDates, calculateContinuedMonths } from '../services/ext
 const app = new Hono();
 
 /**
+ * Calculate PRO plan continued months
+ * @param {Date|string} proStartDate - PRO plan start date
+ * @returns {number} Number of months (1-based, 1 = first month)
+ */
+function calculateProPlanMonths(proStartDate) {
+  if (!proStartDate) return null;
+  
+  const start = new Date(proStartDate);
+  const now = new Date();
+  
+  // Calculate month difference
+  const yearDiff = now.getFullYear() - start.getFullYear();
+  const monthDiff = now.getMonth() - start.getMonth();
+  
+  // Total months difference (0-based) + 1 for 1-based counting
+  const totalMonths = yearDiff * 12 + monthDiff + 1;
+  
+  return totalMonths > 0 ? totalMonths : null;
+}
+
+/**
  * GET /api/students
  * Get all students
  */
@@ -17,10 +38,16 @@ app.get('/', async (c) => {
       'SELECT * FROM students ORDER BY name ASC'
     );
     
+    // Calculate PRO plan continued months for each student
+    const studentsWithProMonths = result.rows.map(student => ({
+      ...student,
+      pro_plan_continued_months: calculateProPlanMonths(student.pro_plan_start_date)
+    }));
+    
     return c.json({
       success: true,
-      data: result.rows,
-      count: result.rows.length
+      data: studentsWithProMonths,
+      count: studentsWithProMonths.length
     });
   } catch (error) {
     console.error('Error fetching students:', error);
@@ -347,6 +374,58 @@ app.get('/:studentId/wanami-history', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching Wanami usage history:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * PATCH /api/students/:id/pro-plan
+ * Update PRO plan start date for a student
+ */
+app.patch('/:id/pro-plan', async (c) => {
+  try {
+    const studentId = c.req.param('id');
+    const { proPlanStartDate } = await c.req.json();
+    
+    // Validate date format and ensure it's the 1st of the month
+    let formattedDate = null;
+    if (proPlanStartDate) {
+      const date = new Date(proPlanStartDate);
+      // Force to 1st of the month
+      date.setDate(1);
+      formattedDate = date.toISOString().split('T')[0];
+    }
+    
+    // Update student
+    const result = await query(
+      `UPDATE students 
+       SET pro_plan_start_date = $1
+       WHERE student_id = $2
+       RETURNING *`,
+      [formattedDate, studentId]
+    );
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Student not found'
+      }, 404);
+    }
+    
+    const student = result.rows[0];
+    
+    return c.json({
+      success: true,
+      data: {
+        ...student,
+        pro_plan_continued_months: calculateProPlanMonths(student.pro_plan_start_date)
+      }
+    });
+  } catch (error) {
+    console.error('Error updating PRO plan start date:', error);
     return c.json({
       success: false,
       error: error.message

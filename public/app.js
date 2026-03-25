@@ -1147,6 +1147,60 @@ function formatDate(dateString) {
   }
 }
 
+/**
+ * Format date for month input (YYYY-MM)
+ */
+function formatDateForMonthInput(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  } catch (error) {
+    return '';
+  }
+}
+
+/**
+ * Update PRO plan start date for a student
+ */
+async function updateProPlanStartDate(studentId, monthValue) {
+  try {
+    if (!monthValue) {
+      // User cleared the field
+      if (!confirm('PROプラン開始日をクリアしますか？')) {
+        // Reload to restore previous value
+        await refreshData();
+        return;
+      }
+    }
+    
+    // Force to 1st of the month
+    const date = monthValue ? new Date(monthValue + '-01') : null;
+    const proPlanStartDate = date ? date.toISOString().split('T')[0] : null;
+    
+    const response = await axios.patch(`${API_BASE}/api/students/${studentId}/pro-plan`, {
+      proPlanStartDate: proPlanStartDate
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      showAlert('success', 'PROプラン開始日を更新しました');
+      // Refresh to show updated continued months
+      await refreshData();
+    } else {
+      showAlert('error', 'PROプラン開始日の更新に失敗しました');
+      await refreshData();
+    }
+  } catch (error) {
+    console.error('Error updating PRO plan start date:', error);
+    showAlert('error', 'PROプラン開始日の更新中にエラーが発生しました: ' + (error.response?.data?.error || error.message));
+    await refreshData();
+  }
+}
+
 // Format month
 function formatMonth(date) {
   const year = date.getFullYear();
@@ -2828,6 +2882,12 @@ async function renderTodayLessonsPage() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
+                <span class="text-purple-700">PROプラン<br>開始日</span>
+              </th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
+                <span class="text-purple-700">PROプラン<br>継続月数</span>
+              </th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Meet</th>
@@ -2861,7 +2921,7 @@ function renderTodayStudentRows(todayStudents) {
   if (todayStudents.length === 0) {
     return `
       <tr>
-        <td colspan="11" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="13" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-calendar-times text-4xl mb-2"></i>
           <p>今日レッスンの生徒様はいません</p>
         </td>
@@ -2906,6 +2966,16 @@ function renderTodayStudentRows(todayStudents) {
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center bg-purple-50">
+          <input type="month" 
+                 value="${student.pro_plan_start_date ? formatDateForMonthInput(student.pro_plan_start_date) : ''}"
+                 onchange="updateProPlanStartDate('${student.student_id}', this.value)"
+                 class="px-2 py-1 border border-purple-300 rounded text-xs text-purple-700 font-semibold focus:ring-2 focus:ring-purple-500"
+                 placeholder="未設定">
+        </td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-700 bg-purple-50">
+          ${student.pro_plan_continued_months ? student.pro_plan_continued_months + 'ヶ月' : '-'}
+        </td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
