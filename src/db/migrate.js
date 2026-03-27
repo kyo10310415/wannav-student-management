@@ -342,6 +342,44 @@ const migrations = [
       DROP TABLE IF EXISTS vq_diagnosis_notifications;
       DELETE FROM system_settings WHERE setting_key = 'vq_diagnosis_notification_enabled';
     `
+  },
+  {
+    version: 15,
+    name: 'fix_vq_diagnosis_student_id_type',
+    up: `
+      -- VQ診断通知テーブルのstudent_idをVARCHAR(学籍番号)からINTEGER(students.id)に変更
+      DROP TABLE IF EXISTS vq_diagnosis_notifications CASCADE;
+      
+      CREATE TABLE vq_diagnosis_notifications (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+        student_name VARCHAR(255),
+        total_score INTEGER,
+        diagnosis_type VARCHAR(100),
+        overview TEXT,
+        details TEXT,
+        diagnosis_date VARCHAR(20),
+        discord_message_id VARCHAR(100),
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'sent',
+        error_message TEXT,
+        sheet_row_number INTEGER
+      );
+      
+      CREATE INDEX idx_vq_diagnosis_student_id ON vq_diagnosis_notifications(student_id);
+      CREATE INDEX idx_vq_diagnosis_sent_at ON vq_diagnosis_notifications(sent_at);
+      
+      COMMENT ON TABLE vq_diagnosis_notifications IS 'VQ診断結果のディスコード通知履歴';
+      COMMENT ON COLUMN vq_diagnosis_notifications.student_id IS '生徒ID（studentsテーブルのidへの外部キー）';
+      
+      -- システム設定追加
+      INSERT INTO system_settings (setting_key, setting_value, description, updated_by)
+      VALUES ('vq_diagnosis_last_checked_row', '1', 'VQ診断スプレッドシートの最終チェック行', 'system')
+      ON CONFLICT (setting_key) DO NOTHING;
+    `,
+    down: `
+      DROP TABLE IF EXISTS vq_diagnosis_notifications CASCADE;
+    `
   }
 ];
 
