@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { query } from '../db/connection.js';
+import { query as dbQuery } from '../db/connection.js';
 import { sendDiscordVQDiagnosis } from '../services/discordService.js';
 
 const app = new Hono();
@@ -14,7 +14,7 @@ app.use('/*', cors());
  */
 app.get('/status', async (c) => {
   try {
-    const result = await query(
+    const result = await dbQuery(
       `SELECT setting_value FROM system_settings WHERE setting_key = 'vq_diagnosis_notification_enabled'`
     );
     
@@ -42,7 +42,7 @@ app.post('/toggle', async (c) => {
   try {
     const { enabled } = await c.req.json();
     
-    await query(
+    await dbQuery(
       `UPDATE system_settings 
        SET setting_value = $1, updated_at = CURRENT_TIMESTAMP 
        WHERE setting_key = 'vq_diagnosis_notification_enabled'`,
@@ -116,7 +116,7 @@ app.get('/history', async (c) => {
       params.push(limit);
     }
     
-    const result = await query(query, params);
+    const result = await dbQuery(query, params);
     
     return c.json({
       success: true,
@@ -141,7 +141,7 @@ app.get('/student/:studentId', async (c) => {
   try {
     const studentId = c.req.param('studentId');
     
-    const result = await query(
+    const result = await dbQuery(
       `SELECT 
         vqd.*,
         s.student_id as student_id_code,
@@ -179,7 +179,7 @@ app.post('/resend/:id', async (c) => {
     const id = c.req.param('id');
     
     // 診断結果を取得
-    const result = await query(
+    const result = await dbQuery(
       `SELECT vqd.*, s.discord_url 
        FROM vq_diagnosis_notifications vqd
        LEFT JOIN students s ON vqd.student_id = s.id
@@ -215,7 +215,7 @@ app.post('/resend/:id', async (c) => {
     const discordResponse = await sendDiscordVQDiagnosis(diagnosis.discord_url, message);
     
     // 送信履歴を更新
-    await query(
+    await dbQuery(
       `UPDATE vq_diagnosis_notifications 
        SET discord_message_id = $1, 
            sent_at = CURRENT_TIMESTAMP,
