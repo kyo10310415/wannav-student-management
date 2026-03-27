@@ -9382,22 +9382,7 @@ async function renderVQDiagnosisPage() {
           </div>
         </div>
         
-        <!-- Help Text -->
-        <div class="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
-          <p class="text-sm text-purple-800">
-            <i class="fas fa-info-circle mr-2"></i>
-            <strong>自動送信について：</strong>Google Apps Script（GAS）で定期的にスプレッドシートから診断結果を取得し、自動的にDiscordに送信します。
-          </p>
-          <p class="text-sm text-purple-800 mt-2">
-            <i class="fas fa-link mr-2"></i>
-            <strong>スプレッドシート：</strong>
-            <a href="https://docs.google.com/spreadsheets/d/1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0/edit" 
-               target="_blank" 
-               class="underline hover:text-purple-900">
-              VQ診断結果シート
-            </a>
-          </p>
-        </div>
+
       </div>
       
       <!-- Stats -->
