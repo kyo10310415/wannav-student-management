@@ -218,6 +218,22 @@ cron.schedule('0 * * * *', async () => {
   timezone: 'Asia/Tokyo'
 });
 
+// Schedule VQ diagnosis checker (runs every 5 minutes)
+// Checks Google Sheets for new VQ diagnosis results and sends Discord notifications
+console.log('VQ diagnosis checker: ENABLED (checks every 5 minutes)');
+cron.schedule('*/5 * * * *', async () => {
+  console.log('Running VQ diagnosis check...');
+  try {
+    const checkAndSendVQDiagnosis = (await import('./jobs/vqDiagnosisChecker.js')).default;
+    await checkAndSendVQDiagnosis();
+    console.log('VQ diagnosis check completed');
+  } catch (error) {
+    console.error('Error in VQ diagnosis check:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
 const port = process.env.PORT || 3000;
 
 console.log(`Server is running on port ${port}`);

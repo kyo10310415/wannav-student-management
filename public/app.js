@@ -9445,6 +9445,27 @@ async function renderVQDiagnosisPage() {
         </div>
       </div>
       
+      <!-- Manual Check Button -->
+      <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">
+              <i class="fas fa-sync-alt mr-2"></i>
+              手動チェック
+            </h3>
+            <p class="text-sm text-gray-600">
+              スプレッドシートから新規診断結果を即座にチェックして送信します（5分に1回自動実行）
+            </p>
+          </div>
+          <button 
+            onclick="manualCheckVQDiagnosis()"
+            class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold"
+          >
+            <i class="fas fa-play mr-2"></i>今すぐチェック
+          </button>
+        </div>
+      </div>
+      
       <!-- History Table -->
       <div class="bg-white rounded-lg shadow-md overflow-hidden">
         <div class="p-6 border-b border-gray-200">
@@ -9458,7 +9479,9 @@ async function renderVQDiagnosisPage() {
           <table class="w-full">
             <thead class="bg-gray-50">
               <tr>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">診断日</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">送信日時</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">学籍番号</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">生徒名</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">合計点</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">診断タイプ</th>
@@ -9583,7 +9606,7 @@ function renderVQDiagnosisHistoryRows() {
   if (vqDiagnosisHistory.length === 0) {
     return `
       <tr>
-        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+        <td colspan="9" class="px-6 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>送信履歴がありません</p>
         </td>
@@ -9596,14 +9619,29 @@ function renderVQDiagnosisHistoryRows() {
     const statusIcon = record.status === 'sent' ? 'check-circle' : 'exclamation-circle';
     const statusText = record.status === 'sent' ? '送信済み' : 'エラー';
     
-    const overviewShort = (record.overview || '').length > 50 
-      ? record.overview.substring(0, 50) + '...' 
+    const overviewShort = (record.overview || '').length > 40 
+      ? record.overview.substring(0, 40) + '...' 
       : record.overview;
+    
+    const studentIdCode = record.student_id_code || '-';
+    const diagnosisDate = record.diagnosis_date || '-';
     
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-6 py-4 text-sm text-gray-900">
+          ${escapeHtml(diagnosisDate)}
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-900">
           ${formatDateTime(record.sent_at)}
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-900">
+          <button 
+            onclick="showStudentVQHistory('${studentIdCode}')"
+            class="text-blue-600 hover:underline font-mono"
+            title="この生徒の全履歴を表示"
+          >
+            ${escapeHtml(studentIdCode)}
+          </button>
         </td>
         <td class="px-6 py-4 text-sm font-medium text-gray-900">
           ${escapeHtml(record.student_name)}
@@ -9629,7 +9667,7 @@ function renderVQDiagnosisHistoryRows() {
         <td class="px-6 py-4 text-sm">
           <button 
             onclick="resendVQDiagnosis(${record.id})"
-            class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
+            class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-xs"
             title="再送信"
           >
             <i class="fas fa-redo mr-1"></i>再送信
@@ -9691,4 +9729,154 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+/**
+ * 生徒別のVQ診断履歴を表示
+ */
+async function showStudentVQHistory(studentId) {
+  try {
+    const response = await axios.get(
+      `${API_BASE}/api/vq-diagnosis/student/${studentId}`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    const history = response.data.history || [];
+    
+    if (history.length === 0) {
+      showNotification('この生徒の診断履歴はありません', 'info');
+      return;
+    }
+    
+    // モーダルで表示
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+          <h3 class="text-xl font-bold text-gray-800">
+            <i class="fas fa-history mr-2 text-purple-600"></i>
+            ${history[0].student_name} さんの診断履歴（全${history.length}件）
+          </h3>
+          <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
+            <i class="fas fa-times text-2xl"></i>
+          </button>
+        </div>
+        
+        <div class="p-6">
+          <div class="space-y-4">
+            ${history.map((record, index) => `
+              <div class="border border-gray-200 rounded-lg p-4 ${record.status === 'sent' ? 'bg-green-50' : 'bg-red-50'}">
+                <div class="flex items-start justify-between mb-2">
+                  <div>
+                    <span class="text-sm font-semibold text-gray-700">診断 ${history.length - index}回目</span>
+                    ${record.diagnosis_date ? `<span class="ml-3 text-sm text-gray-600">診断日: ${record.diagnosis_date}</span>` : ''}
+                  </div>
+                  <span class="px-2 py-1 rounded-full text-xs font-semibold ${record.status === 'sent' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                    ${record.status === 'sent' ? '送信済み' : 'エラー'}
+                  </span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <p class="text-xs text-gray-600">送信日時</p>
+                    <p class="text-sm font-medium">${formatDateTime(record.sent_at)}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-600">合計点</p>
+                    <p class="text-lg font-bold text-purple-600">${record.total_score}点</p>
+                  </div>
+                </div>
+                
+                <div class="mb-3">
+                  <p class="text-xs text-gray-600 mb-1">診断タイプ</p>
+                  <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                    ${escapeHtml(record.diagnosis_type)}
+                  </span>
+                </div>
+                
+                ${record.overview ? `
+                  <div class="mb-3">
+                    <p class="text-xs text-gray-600 mb-1">概要</p>
+                    <p class="text-sm text-gray-700">${escapeHtml(record.overview)}</p>
+                  </div>
+                ` : ''}
+                
+                ${record.details ? `
+                  <div class="mb-3">
+                    <p class="text-xs text-gray-600 mb-1">詳細</p>
+                    <p class="text-sm text-gray-700">${escapeHtml(record.details)}</p>
+                  </div>
+                ` : ''}
+                
+                ${record.error_message ? `
+                  <div class="mt-3 p-2 bg-red-100 rounded border border-red-300">
+                    <p class="text-xs text-red-800">
+                      <i class="fas fa-exclamation-triangle mr-1"></i>
+                      エラー: ${escapeHtml(record.error_message)}
+                    </p>
+                  </div>
+                ` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        <div class="p-6 border-t border-gray-200 bg-gray-50">
+          <button 
+            onclick="this.closest('.fixed').remove()" 
+            class="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+          >
+            閉じる
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+  } catch (error) {
+    console.error('生徒別履歴取得エラー:', error);
+    showNotification('履歴の取得に失敗しました', 'error');
+  }
+}
+
+/**
+ * 手動でVQ診断をチェック
+ */
+async function manualCheckVQDiagnosis() {
+  try {
+    showNotification('チェック中...', 'info');
+    
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/check`,
+      {},
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      const { processed, errors } = response.data;
+      showNotification(
+        `チェック完了: 送信 ${processed}件、エラー ${errors}件`,
+        processed > 0 ? 'success' : 'info'
+      );
+      
+      // ページを再読み込み
+      if (processed > 0 || errors > 0) {
+        await renderVQDiagnosisPage();
+      }
+    } else {
+      showNotification(
+        response.data.message || 'チェックに失敗しました',
+        'error'
+      );
+    }
+    
+  } catch (error) {
+    console.error('手動チェックエラー:', error);
+    showNotification(
+      error.response?.data?.error || 'チェックに失敗しました',
+      'error'
+    );
+  }
 }

@@ -66,154 +66,18 @@ app.post('/toggle', async (c) => {
 });
 
 /**
- * POST /api/vq-diagnosis/process
- * GASからのWebhook：VQ診断結果を受信してDiscordに送信
+ * POST /api/vq-diagnosis/check
+ * 手動でVQ診断結果をチェックして送信（テスト用）
  */
-app.post('/process', async (c) => {
+app.post('/check', async (c) => {
   try {
-    const { results, timestamp } = await c.req.json();
+    const checkAndSendVQDiagnosis = (await import('../jobs/vqDiagnosisChecker.js')).default;
+    const result = await checkAndSendVQDiagnosis();
     
-    console.log(`📥 VQ診断結果を受信: ${results.length}件 (${timestamp})`);
-    
-    // システムが有効かチェック
-    const statusResult = await db.query(
-      `SELECT setting_value FROM system_settings WHERE setting_key = 'vq_diagnosis_notification_enabled'`
-    );
-    
-    const enabled = statusResult.rows[0]?.setting_value === 'true';
-    
-    if (!enabled) {
-      console.log('⚠️ VQ診断通知システムがOFFのため処理をスキップします');
-      return c.json({
-        success: false,
-        message: 'システムがOFFです',
-        processed: 0,
-        errors: 0
-      });
-    }
-    
-    let processed = 0;
-    let errors = 0;
-    const errorDetails = [];
-    
-    // 各診断結果を処理
-    for (const result of results) {
-      try {
-        // 生徒情報を取得
-        const studentResult = await db.query(
-          `SELECT id, discord_url FROM students WHERE name = $1 LIMIT 1`,
-          [result.studentName]
-        );
-        
-        if (studentResult.rows.length === 0) {
-          console.log(`⚠️ 生徒が見つかりません: ${result.studentName}`);
-          errors++;
-          errorDetails.push({
-            studentName: result.studentName,
-            error: '生徒が見つかりません'
-          });
-          continue;
-        }
-        
-        const student = studentResult.rows[0];
-        
-        if (!student.discord_url) {
-          console.log(`⚠️ Discord URLが設定されていません: ${result.studentName}`);
-          errors++;
-          errorDetails.push({
-            studentName: result.studentName,
-            error: 'Discord URLが設定されていません'
-          });
-          continue;
-        }
-        
-        // 既に送信済みか確認（同じ生徒に対して重複送信を防ぐ）
-        const existingResult = await db.query(
-          `SELECT id FROM vq_diagnosis_notifications 
-           WHERE student_id = $1 
-           AND diagnosis_type = $2 
-           AND sent_at > NOW() - INTERVAL '30 days'`,
-          [student.id, result.diagnosisType]
-        );
-        
-        if (existingResult.rows.length > 0) {
-          console.log(`ℹ️ 既に送信済み: ${result.studentName} (${result.diagnosisType})`);
-          continue;
-        }
-        
-        // Discordに送信
-        const message = formatVQDiagnosisMessage(result);
-        const discordResponse = await sendDiscordVQDiagnosis(student.discord_url, message);
-        
-        // データベースに記録
-        await db.query(
-          `INSERT INTO vq_diagnosis_notifications 
-           (student_id, student_name, total_score, diagnosis_type, overview, details, discord_message_id, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            student.id,
-            result.studentName,
-            result.totalScore,
-            result.diagnosisType,
-            result.overview,
-            result.details,
-            discordResponse?.id || null,
-            'sent'
-          ]
-        );
-        
-        console.log(`✅ Discord送信成功: ${result.studentName} (${result.diagnosisType})`);
-        processed++;
-        
-      } catch (error) {
-        console.error(`❌ 処理エラー (${result.studentName}):`, error);
-        errors++;
-        errorDetails.push({
-          studentName: result.studentName,
-          error: error.message
-        });
-        
-        // エラーをデータベースに記録
-        try {
-          const studentResult = await db.query(
-            `SELECT id FROM students WHERE name = $1 LIMIT 1`,
-            [result.studentName]
-          );
-          
-          if (studentResult.rows.length > 0) {
-            await db.query(
-              `INSERT INTO vq_diagnosis_notifications 
-               (student_id, student_name, total_score, diagnosis_type, overview, details, status, error_message)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [
-                studentResult.rows[0].id,
-                result.studentName,
-                result.totalScore,
-                result.diagnosisType,
-                result.overview,
-                result.details,
-                'error',
-                error.message
-              ]
-            );
-          }
-        } catch (dbError) {
-          console.error('エラー記録の保存に失敗:', dbError);
-        }
-      }
-    }
-    
-    console.log(`📊 処理完了: 成功 ${processed}件、エラー ${errors}件`);
-    
-    return c.json({
-      success: true,
-      processed,
-      errors,
-      errorDetails: errorDetails.length > 0 ? errorDetails : undefined
-    });
+    return c.json(result);
     
   } catch (error) {
-    console.error('❌ VQ診断処理エラー:', error);
+    console.error('❌ VQ診断チェックエラー:', error);
     return c.json({
       success: false,
       error: error.message
@@ -228,18 +92,31 @@ app.post('/process', async (c) => {
 app.get('/history', async (c) => {
   try {
     const limit = c.req.query('limit') || '100';
+    const studentId = c.req.query('student_id'); // 学籍番号でフィルター（オプション）
     
-    const result = await db.query(
-      `SELECT 
+    let query = `
+      SELECT 
         vqd.*,
+        s.student_id as student_id_code,
         s.name as student_name_current,
         s.discord_url
        FROM vq_diagnosis_notifications vqd
        LEFT JOIN students s ON vqd.student_id = s.id
-       ORDER BY vqd.sent_at DESC
-       LIMIT $1`,
-      [limit]
-    );
+    `;
+    
+    const params = [];
+    
+    if (studentId) {
+      query += ` WHERE s.student_id = $1`;
+      params.push(studentId);
+      query += ` ORDER BY vqd.sent_at DESC LIMIT $2`;
+      params.push(limit);
+    } else {
+      query += ` ORDER BY vqd.sent_at DESC LIMIT $1`;
+      params.push(limit);
+    }
+    
+    const result = await db.query(query, params);
     
     return c.json({
       success: true,
@@ -249,6 +126,43 @@ app.get('/history', async (c) => {
     
   } catch (error) {
     console.error('❌ 履歴取得エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/vq-diagnosis/student/:studentId
+ * 特定の生徒のVQ診断履歴を取得（学籍番号で検索）
+ */
+app.get('/student/:studentId', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    
+    const result = await db.query(
+      `SELECT 
+        vqd.*,
+        s.student_id as student_id_code,
+        s.name as student_name_current,
+        s.discord_url
+       FROM vq_diagnosis_notifications vqd
+       LEFT JOIN students s ON vqd.student_id = s.id
+       WHERE s.student_id = $1
+       ORDER BY vqd.sent_at DESC`,
+      [studentId]
+    );
+    
+    return c.json({
+      success: true,
+      count: result.rows.length,
+      history: result.rows,
+      studentId
+    });
+    
+  } catch (error) {
+    console.error('❌ 生徒別履歴取得エラー:', error);
     return c.json({
       success: false,
       error: error.message

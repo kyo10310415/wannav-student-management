@@ -33,7 +33,10 @@ export function getSheets() {
 
     const auth = new google.auth.GoogleAuth({
       credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'https://www.googleapis.com/auth/spreadsheets' // 書き込み権限も追加
+      ],
     });
 
     sheets = google.sheets({ version: 'v4', auth });
@@ -734,6 +737,175 @@ export async function fetchStudentBroadcastInfo() {
     return studentInfo;
   } catch (error) {
     console.error('[Broadcast Info] Error fetching student broadcast info:', error);
+    throw error;
+  }
+}
+
+/**
+ * VQ診断結果をスプレッドシートから取得
+ * @param {number} startRow - 開始行（1始まり、ヘッダー含む）。デフォルトは2（ヘッダーの次）
+ */
+export async function fetchVQDiagnosisResults(startRow = 2) {
+  try {
+    const spreadsheetId = '1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0';
+    const sheetName = '診断結果';
+    
+    const sheets = getSheets();
+    
+    // A列からS列まで取得（タイムスタンプ～詳細＋メール送信済み）
+    const range = `${sheetName}!A${startRow}:S`;
+    
+    console.log(`📊 VQ診断データ取得開始: 行 ${startRow} から`);
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range
+    });
+    
+    const rows = response.data.values || [];
+    console.log(`📊 取得した行数: ${rows.length}`);
+    
+    if (rows.length === 0) {
+      return {
+        results: [],
+        lastRow: startRow - 1
+      };
+    }
+    
+    const results = [];
+    
+    rows.forEach((row, index) => {
+      const actualRow = startRow + index;
+      
+      // B列（学籍番号）が空の場合はスキップ
+      const studentId = String(row[1] || '').trim();
+      if (!studentId) {
+        console.log(`⚠️ 行 ${actualRow}: 学籍番号が空のためスキップ`);
+        return;
+      }
+      
+      // P列（診断タイプ）が空の場合はスキップ（まだ診断未完了）
+      const diagnosisType = String(row[15] || '').trim();
+      if (!diagnosisType) {
+        console.log(`⚠️ 行 ${actualRow}: 診断タイプが空のためスキップ (${studentId})`);
+        return;
+      }
+      
+      // R列（メール送信済み）をチェック
+      const emailSent = String(row[17] || '').trim();
+      if (emailSent === '完了') {
+        console.log(`✅ 行 ${actualRow}: 送信済みのためスキップ (${studentId})`);
+        return;
+      }
+      
+      // A列からタイムスタンプ取得（日付のみ抽出）
+      const timestamp = String(row[0] || '').trim();
+      let diagnosisDate = null;
+      if (timestamp) {
+        // "2025/05/28 15:08:59" → "2025/05/28"
+        const datePart = timestamp.split(' ')[0];
+        diagnosisDate = datePart;
+      }
+      
+      // スコア取得（数値に変換）
+      const typeAScore = parseFloat(row[6]) || 0;  // G列
+      const typeQScore = parseFloat(row[8]) || 0;  // I列
+      const typeVQScore = parseFloat(row[10]) || 0; // K列
+      const totalScore = typeAScore + typeQScore + typeVQScore;
+      
+      // 概要と詳細
+      const overview = String(row[18] || '').trim();  // S列
+      const details = String(row[19] || '').trim();   // T列
+      
+      results.push({
+        rowNumber: actualRow,
+        studentId,
+        diagnosisDate,
+        totalScore,
+        typeAScore,
+        typeQScore,
+        typeVQScore,
+        diagnosisType,
+        overview,
+        details,
+        emailSent
+      });
+    });
+    
+    const lastRow = startRow + rows.length - 1;
+    
+    console.log(`📊 処理対象: ${results.length}件 (最終行: ${lastRow})`);
+    
+    return {
+      results,
+      lastRow
+    };
+    
+  } catch (error) {
+    console.error('❌ VQ診断データ取得エラー:', error);
+    throw error;
+  }
+}
+
+/**
+ * スプレッドシートのR列（メール送信済み）を更新
+ * @param {number} rowNumber - 行番号（1始まり）
+ * @param {string} value - 設定する値（デフォルト: "完了"）
+ */
+export async function updateVQDiagnosisEmailStatus(rowNumber, value = '完了') {
+  try {
+    const spreadsheetId = '1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0';
+    const sheetName = '診断結果';
+    
+    const sheets = getSheets();
+    
+    const range = `${sheetName}!R${rowNumber}`;
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[value]]
+      }
+    });
+    
+    console.log(`✅ R列更新成功: 行 ${rowNumber} → "${value}"`);
+    
+  } catch (error) {
+    console.error(`❌ R列更新エラー (行 ${rowNumber}):`, error);
+    throw error;
+  }
+}
+
+/**
+ * 複数行のR列を一括更新
+ * @param {Array<{rowNumber: number, value: string}>} updates - 更新対象の配列
+ */
+export async function batchUpdateVQDiagnosisEmailStatus(updates) {
+  try {
+    const spreadsheetId = '1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0';
+    const sheetName = '診断結果';
+    
+    const sheets = getSheets();
+    
+    const data = updates.map(update => ({
+      range: `${sheetName}!R${update.rowNumber}`,
+      values: [[update.value || '完了']]
+    }));
+    
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        valueInputOption: 'RAW',
+        data
+      }
+    });
+    
+    console.log(`✅ R列一括更新成功: ${updates.length}件`);
+    
+  } catch (error) {
+    console.error('❌ R列一括更新エラー:', error);
     throw error;
   }
 }
