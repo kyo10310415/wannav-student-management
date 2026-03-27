@@ -1,4 +1,4 @@
-import db from '../db/index.js';
+import { query } from '../db/connection.js';
 import { 
   fetchVQDiagnosisResults, 
   batchUpdateVQDiagnosisEmailStatus 
@@ -14,7 +14,7 @@ export async function checkAndSendVQDiagnosis() {
     console.log('🔄 VQ診断チェック開始...');
     
     // システムが有効かチェック
-    const statusResult = await db.query(
+    const statusResult = await query(
       `SELECT setting_value FROM system_settings WHERE setting_key = 'vq_diagnosis_notification_enabled'`
     );
     
@@ -30,7 +30,7 @@ export async function checkAndSendVQDiagnosis() {
     }
     
     // 前回チェックした最終行を取得
-    const lastCheckResult = await db.query(
+    const lastCheckResult = await query(
       `SELECT setting_value FROM system_settings WHERE setting_key = 'vq_diagnosis_last_checked_row'`
     );
     
@@ -69,7 +69,7 @@ export async function checkAndSendVQDiagnosis() {
     for (const result of results) {
       try {
         // 学籍番号から生徒情報を取得
-        const studentResult = await db.query(
+        const studentResult = await query(
           `SELECT id, name, discord_url FROM students WHERE student_id = $1 LIMIT 1`,
           [result.studentId]
         );
@@ -82,7 +82,7 @@ export async function checkAndSendVQDiagnosis() {
           updates.push({ rowNumber: result.rowNumber, value: '完了（生徒不明）' });
           
           // エラーをデータベースに記録
-          await db.query(
+          await query(
             `INSERT INTO vq_diagnosis_notifications 
              (student_id, student_name, total_score, diagnosis_type, overview, details, diagnosis_date, status, error_message, sheet_row_number)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -111,7 +111,7 @@ export async function checkAndSendVQDiagnosis() {
           
           updates.push({ rowNumber: result.rowNumber, value: '完了（Discord URL未設定）' });
           
-          await db.query(
+          await query(
             `INSERT INTO vq_diagnosis_notifications 
              (student_id, student_name, total_score, diagnosis_type, overview, details, diagnosis_date, status, error_message, sheet_row_number)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -145,7 +145,7 @@ export async function checkAndSendVQDiagnosis() {
         const discordResponse = await sendDiscordVQDiagnosis(student.discord_url, message);
         
         // データベースに記録
-        await db.query(
+        await query(
           `INSERT INTO vq_diagnosis_notifications 
            (student_id, student_name, total_score, diagnosis_type, overview, details, diagnosis_date, discord_message_id, status, sheet_row_number)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -181,7 +181,7 @@ export async function checkAndSendVQDiagnosis() {
         
         // エラーをデータベースに記録
         try {
-          await db.query(
+          await query(
             `INSERT INTO vq_diagnosis_notifications 
              (student_id, student_name, total_score, diagnosis_type, overview, details, diagnosis_date, status, error_message, sheet_row_number)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -245,7 +245,7 @@ export async function checkAndSendVQDiagnosis() {
  */
 async function updateLastCheckedRow(rowNumber) {
   try {
-    await db.query(
+    await query(
       `INSERT INTO system_settings (setting_key, setting_value, updated_at)
        VALUES ('vq_diagnosis_last_checked_row', $1, CURRENT_TIMESTAMP)
        ON CONFLICT (setting_key) 
