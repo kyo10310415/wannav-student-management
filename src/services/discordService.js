@@ -488,3 +488,34 @@ export async function sendTestWebhook(webhookUrl, discordUserId = null, message 
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Send VQ diagnosis result to student's Discord webhook
+ * @param {string} webhookUrl - Student's Discord webhook URL
+ * @param {Object} messageData - Message data with content and embeds
+ * @returns {Promise<Object>} Result object with message ID
+ */
+export async function sendDiscordVQDiagnosis(webhookUrl, messageData) {
+  if (!webhookUrl) {
+    console.log('No webhook URL provided for VQ diagnosis');
+    return { success: false, reason: 'No webhook URL' };
+  }
+
+  try {
+    const axios = (await import('axios')).default;
+    
+    // Send webhook with wait=true to get response with message ID
+    const response = await axios.post(`${webhookUrl}?wait=true`, messageData);
+
+    console.log(`VQ diagnosis sent successfully to ${webhookUrl.substring(0, 50)}...`);
+    return { 
+      success: true, 
+      id: response.data.id, 
+      channelId: response.data.channel_id 
+    };
+    
+  } catch (error) {
+    console.error('Error sending VQ diagnosis to Discord:', error.message);
+    return { success: false, error: error.message };
+  }
+}

@@ -307,6 +307,41 @@ const migrations = [
       DROP INDEX IF EXISTS idx_students_pro_plan_start_date;
       ALTER TABLE students DROP COLUMN IF EXISTS pro_plan_start_date;
     `
+  },
+  {
+    version: 14,
+    name: 'add_vq_diagnosis_notifications',
+    up: `
+      -- VQ診断通知履歴テーブル
+      CREATE TABLE IF NOT EXISTS vq_diagnosis_notifications (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) NOT NULL,
+        student_name VARCHAR(255),
+        total_score INTEGER,
+        diagnosis_type VARCHAR(100),
+        overview TEXT,
+        details TEXT,
+        discord_message_id VARCHAR(100),
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'sent',
+        error_message TEXT,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_vq_diagnosis_student_id ON vq_diagnosis_notifications(student_id);
+      CREATE INDEX IF NOT EXISTS idx_vq_diagnosis_sent_at ON vq_diagnosis_notifications(sent_at);
+      
+      COMMENT ON TABLE vq_diagnosis_notifications IS 'VQ診断結果のディスコード通知履歴';
+      
+      -- システム設定追加
+      INSERT INTO system_settings (setting_key, setting_value, description, updated_by)
+      VALUES ('vq_diagnosis_notification_enabled', 'false', 'VQ診断通知のON/OFF', 'system')
+      ON CONFLICT (setting_key) DO NOTHING;
+    `,
+    down: `
+      DROP TABLE IF EXISTS vq_diagnosis_notifications;
+      DELETE FROM system_settings WHERE setting_key = 'vq_diagnosis_notification_enabled';
+    `
   }
 ];
 

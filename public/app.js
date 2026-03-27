@@ -182,6 +182,9 @@ function renderHeader() {
               <button id="nav-broadcast" onclick="changePage('broadcast')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'broadcast' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-bullhorn mr-2"></i>一斉送信
               </button>
+              <button id="nav-vq-diagnosis" onclick="changePage('vq-diagnosis')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'vq-diagnosis' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+                <i class="fas fa-clipboard-check mr-2"></i>VQ診断
+              </button>
             </div>
             
             <!-- Divider -->
@@ -485,6 +488,8 @@ async function renderApp() {
     await renderBroadcastPage();
   } else if (currentPage === 'database') {
     await renderDatabasePage();
+  } else if (currentPage === 'vq-diagnosis') {
+    await renderVQDiagnosisPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -9311,4 +9316,379 @@ function updateSurveyToggleUI() {
     indicator.classList.remove('translate-x-5');
     label.textContent = 'OFF';
   }
+}
+
+// ========================================
+// VQ診断管理
+// ========================================
+
+let vqDiagnosisEnabled = false;
+let vqDiagnosisHistory = [];
+
+/**
+ * VQ診断管理ページをレンダリング
+ */
+async function renderVQDiagnosisPage() {
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  
+  const content = document.getElementById('content');
+  
+  // ロード中表示
+  content.innerHTML = `
+    <div class="flex items-center justify-center py-12">
+      <div class="text-center">
+        <i class="fas fa-spinner fa-spin text-4xl text-purple-600 mb-4"></i>
+        <p class="text-gray-600">VQ診断データを読み込み中...</p>
+      </div>
+    </div>
+  `;
+  
+  // データ取得
+  await loadVQDiagnosisData();
+  
+  // ページレンダリング
+  content.innerHTML = `
+    <div class="max-w-7xl mx-auto">
+      <!-- Header -->
+      <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">
+              <i class="fas fa-clipboard-check mr-3 text-purple-600"></i>
+              VQ診断管理
+            </h2>
+            <p class="text-sm text-gray-600">
+              VQ診断結果を自動的にDiscordに送信します
+            </p>
+          </div>
+          
+          <!-- System Toggle -->
+          <div class="flex items-center gap-4">
+            <span class="text-sm font-semibold text-gray-700">システム</span>
+            <button 
+              id="vq-diagnosis-toggle" 
+              onclick="toggleVQDiagnosisSystem()"
+              class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${vqDiagnosisEnabled ? 'bg-green-500' : 'bg-gray-400'}"
+            >
+              <span 
+                id="vq-toggle-indicator"
+                class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${vqDiagnosisEnabled ? 'translate-x-6' : 'translate-x-1'}"
+              ></span>
+            </button>
+            <span id="vq-toggle-label" class="text-sm font-bold ${vqDiagnosisEnabled ? 'text-green-600' : 'text-gray-500'}">
+              ${vqDiagnosisEnabled ? 'ON' : 'OFF'}
+            </span>
+          </div>
+        </div>
+        
+        <!-- Help Text -->
+        <div class="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+          <p class="text-sm text-purple-800">
+            <i class="fas fa-info-circle mr-2"></i>
+            <strong>自動送信について：</strong>Google Apps Script（GAS）で定期的にスプレッドシートから診断結果を取得し、自動的にDiscordに送信します。
+          </p>
+          <p class="text-sm text-purple-800 mt-2">
+            <i class="fas fa-link mr-2"></i>
+            <strong>スプレッドシート：</strong>
+            <a href="https://docs.google.com/spreadsheets/d/1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0/edit" 
+               target="_blank" 
+               class="underline hover:text-purple-900">
+              VQ診断結果シート
+            </a>
+          </p>
+        </div>
+      </div>
+      
+      <!-- Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600 mb-1">送信済み（全期間）</p>
+              <p class="text-2xl font-bold text-gray-800">${vqDiagnosisHistory.filter(h => h.status === 'sent').length}件</p>
+            </div>
+            <i class="fas fa-check-circle text-3xl text-green-500"></i>
+          </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600 mb-1">エラー</p>
+              <p class="text-2xl font-bold text-gray-800">${vqDiagnosisHistory.filter(h => h.status === 'error').length}件</p>
+            </div>
+            <i class="fas fa-exclamation-circle text-3xl text-red-500"></i>
+          </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600 mb-1">今月の送信</p>
+              <p class="text-2xl font-bold text-gray-800">${getThisMonthVQCount()}件</p>
+            </div>
+            <i class="fas fa-calendar-alt text-3xl text-purple-500"></i>
+          </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600 mb-1">システム状態</p>
+              <p class="text-lg font-bold ${vqDiagnosisEnabled ? 'text-green-600' : 'text-gray-500'}">
+                ${vqDiagnosisEnabled ? '有効' : '無効'}
+              </p>
+            </div>
+            <i class="fas fa-power-off text-3xl ${vqDiagnosisEnabled ? 'text-green-500' : 'text-gray-400'}"></i>
+          </div>
+        </div>
+      </div>
+      
+      <!-- History Table -->
+      <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="p-6 border-b border-gray-200">
+          <h3 class="text-lg font-bold text-gray-800">
+            <i class="fas fa-history mr-2"></i>
+            送信履歴
+          </h3>
+        </div>
+        
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">送信日時</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">生徒名</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">合計点</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">診断タイプ</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">概要</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">状態</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              ${renderVQDiagnosisHistoryRows()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * VQ診断データを読み込み
+ */
+async function loadVQDiagnosisData() {
+  try {
+    // システム状態を取得
+    const statusResponse = await axios.get(`${API_BASE}/api/vq-diagnosis/status`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    vqDiagnosisEnabled = statusResponse.data.enabled;
+    
+    // 履歴を取得
+    const historyResponse = await axios.get(`${API_BASE}/api/vq-diagnosis/history`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    vqDiagnosisHistory = historyResponse.data.history || [];
+    
+  } catch (error) {
+    console.error('VQ診断データの読み込みエラー:', error);
+    showNotification('データの読み込みに失敗しました', 'error');
+  }
+}
+
+/**
+ * VQ診断システムのON/OFFを切り替え
+ */
+async function toggleVQDiagnosisSystem() {
+  try {
+    const newState = !vqDiagnosisEnabled;
+    
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/toggle`,
+      { enabled: newState },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      vqDiagnosisEnabled = newState;
+      updateVQDiagnosisToggle();
+      showNotification(
+        `VQ診断通知システムを${newState ? 'ON' : 'OFF'}にしました`,
+        'success'
+      );
+      
+      // ページを再読み込み
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('システム状態の切り替えエラー:', error);
+    showNotification('システム状態の切り替えに失敗しました', 'error');
+  }
+}
+
+/**
+ * VQ診断トグルUIを更新
+ */
+function updateVQDiagnosisToggle() {
+  const toggle = document.getElementById('vq-diagnosis-toggle');
+  const indicator = document.getElementById('vq-toggle-indicator');
+  const label = document.getElementById('vq-toggle-label');
+  
+  if (!toggle || !indicator || !label) return;
+  
+  if (vqDiagnosisEnabled) {
+    // ON state
+    toggle.classList.remove('bg-gray-400');
+    toggle.classList.add('bg-green-500');
+    indicator.classList.add('translate-x-6');
+    label.textContent = 'ON';
+    label.classList.remove('text-gray-500');
+    label.classList.add('text-green-600');
+  } else {
+    // OFF state
+    toggle.classList.remove('bg-green-500');
+    toggle.classList.add('bg-gray-400');
+    indicator.classList.remove('translate-x-6');
+    label.textContent = 'OFF';
+    label.classList.remove('text-green-600');
+    label.classList.add('text-gray-500');
+  }
+}
+
+/**
+ * 今月のVQ診断送信数を取得
+ */
+function getThisMonthVQCount() {
+  const now = new Date();
+  const thisMonth = now.getMonth();
+  const thisYear = now.getFullYear();
+  
+  return vqDiagnosisHistory.filter(h => {
+    const sentDate = new Date(h.sent_at);
+    return sentDate.getMonth() === thisMonth && 
+           sentDate.getFullYear() === thisYear &&
+           h.status === 'sent';
+  }).length;
+}
+
+/**
+ * VQ診断履歴テーブルの行をレンダリング
+ */
+function renderVQDiagnosisHistoryRows() {
+  if (vqDiagnosisHistory.length === 0) {
+    return `
+      <tr>
+        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+          <i class="fas fa-inbox text-4xl mb-2"></i>
+          <p>送信履歴がありません</p>
+        </td>
+      </tr>
+    `;
+  }
+  
+  return vqDiagnosisHistory.map(record => {
+    const statusColor = record.status === 'sent' ? 'green' : 'red';
+    const statusIcon = record.status === 'sent' ? 'check-circle' : 'exclamation-circle';
+    const statusText = record.status === 'sent' ? '送信済み' : 'エラー';
+    
+    const overviewShort = (record.overview || '').length > 50 
+      ? record.overview.substring(0, 50) + '...' 
+      : record.overview;
+    
+    return `
+      <tr class="hover:bg-gray-50">
+        <td class="px-6 py-4 text-sm text-gray-900">
+          ${formatDateTime(record.sent_at)}
+        </td>
+        <td class="px-6 py-4 text-sm font-medium text-gray-900">
+          ${escapeHtml(record.student_name)}
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-900">
+          <span class="font-bold text-purple-600">${record.total_score}点</span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-900">
+          <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-semibold">
+            ${escapeHtml(record.diagnosis_type)}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-600">
+          ${escapeHtml(overviewShort)}
+        </td>
+        <td class="px-6 py-4 text-sm">
+          <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-${statusColor}-100 text-${statusColor}-800">
+            <i class="fas fa-${statusIcon} mr-1"></i>
+            ${statusText}
+          </span>
+          ${record.error_message ? `<p class="text-xs text-red-600 mt-1">${escapeHtml(record.error_message)}</p>` : ''}
+        </td>
+        <td class="px-6 py-4 text-sm">
+          <button 
+            onclick="resendVQDiagnosis(${record.id})"
+            class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
+            title="再送信"
+          >
+            <i class="fas fa-redo mr-1"></i>再送信
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * VQ診断を再送信
+ */
+async function resendVQDiagnosis(id) {
+  if (!confirm('この診断結果を再送信しますか？')) {
+    return;
+  }
+  
+  try {
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/resend/${id}`,
+      {},
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      showNotification('再送信しました', 'success');
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('再送信エラー:', error);
+    showNotification(
+      error.response?.data?.error || '再送信に失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * 日時フォーマット（YYYY-MM-DD HH:MM）
+ */
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+/**
+ * HTMLエスケープ
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
