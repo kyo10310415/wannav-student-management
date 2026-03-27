@@ -76,6 +76,14 @@ node create-admin.js admin@example.com 1111
   - テンプレート保存・読み込み機能
   - 送信履歴の閲覧
   - 送信前プレビュー機能
+- **NEW: VQ診断管理ページ**: VQ診断結果の自動Discord通知
+  - Google Sheets から診断結果を自動取得（GAS）
+  - 生徒のDiscordチャンネルに診断結果を自動送信
+  - システムON/OFF切り替え機能
+  - 送信履歴の閲覧（送信日時、生徒名、合計点、診断タイプ、状態）
+  - エラー時の再送信機能
+  - 重複送信防止（同一診断タイプを30日以内に複数回送信しない）
+  - 月別統計表示（今月の送信数、全期間の送信数、エラー数）
 
 1. **生徒一覧**
    - Notion APIから生徒情報を取得（Google Sheets経由でキャッシュ、1日1回自動更新）
@@ -552,6 +560,35 @@ npm run db:migrate
 - 16,000件以上のイベントを効率的に処理
 
 ## 📝 最新の更新履歴
+
+### 2026-03-27: VQ診断通知システムの実装
+- **要望**: VQ診断結果をスプレッドシートから自動取得してDiscordに送信したい
+- **実装内容**:
+  - **データベース**: `vq_diagnosis_notifications` テーブル追加（送信履歴を記録）
+  - **GAS**: `gas-vq-diagnosis-sync.js` 作成
+    - スプレッドシート「診断結果」シートから診断結果を取得
+    - 合計点（G+I+K列）、診断タイプ（P列）、概要（S列）、詳細（T列）を読み取り
+    - Webhook経由でサーバーに送信
+    - 定期実行トリガー設定（毎日午前9時）
+  - **API**: VQ診断関連のエンドポイント追加
+    - `GET /api/vq-diagnosis/status`: システム状態取得
+    - `POST /api/vq-diagnosis/toggle`: システムON/OFF切り替え
+    - `POST /api/vq-diagnosis/process`: GASからのWebhook受信・Discord送信
+    - `GET /api/vq-diagnosis/history`: 送信履歴取得
+    - `POST /api/vq-diagnosis/resend/:id`: 再送信
+  - **Discord送信**: `sendDiscordVQDiagnosis()` 関数追加
+    - Webhook URLで送信（生徒のDiscordチャンネル）
+    - Embedメッセージ形式（合計点、診断タイプ、概要、詳細）
+    - 紫色テーマ（VQ診断専用）
+  - **フロントエンド**: VQ診断管理ページ追加
+    - システムON/OFFトグル
+    - 統計カード（送信済み、エラー、今月の送信、システム状態）
+    - 送信履歴テーブル（日時、生徒名、合計点、診断タイプ、状態、再送信ボタン）
+    - スプレッドシートへのリンク
+  - **重複送信防止**: 同一生徒・同一診断タイプを30日以内に複数回送信しない
+- **セットアップガイド**: `docs/VQ_DIAGNOSIS_SETUP.md` 作成
+- **データソース**: [VQ診断結果スプレッドシート](https://docs.google.com/spreadsheets/d/1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0/edit)
+- **結果**: VQ診断結果が自動的に生徒のDiscordに届くようになった
 
 ### 2026-03-10: Discord自動リマインド通知と今日のレッスンページにGoogle Meetリンクを追加
 - **要望**: 今日のレッスンページとDiscordへのリマインド通知にMeetリンク（H列）を追加したい
