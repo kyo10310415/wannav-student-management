@@ -9771,8 +9771,8 @@ async function showStudentVQHistory(studentId) {
                 
                 <div class="grid grid-cols-2 gap-4 mb-3">
                   <div>
-                    <p class="text-xs text-gray-600">送信日時</p>
-                    <p class="text-sm font-medium">${formatDateTime(record.sent_at)}</p>
+                    <p class="text-xs text-gray-600">状態</p>
+                    <p class="text-sm font-medium">${record.status === 'sent' ? '送信済み' : '未送信'}</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">合計点</p>

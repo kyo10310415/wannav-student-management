@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { query as dbQuery } from '../db/connection.js';
 import { sendDiscordVQDiagnosis } from '../services/discordService.js';
+import { fetchVQDiagnosisByStudentId } from '../services/sheetsService.js';
 
 const app = new Hono();
 
@@ -136,28 +137,46 @@ app.get('/history', async (c) => {
 /**
  * GET /api/vq-diagnosis/student/:studentId
  * 特定の生徒のVQ診断履歴を取得（学籍番号で検索）
+ * スプレッドシートから直接取得（R列の状態に関係なく全レコード）
  */
 app.get('/student/:studentId', async (c) => {
   try {
     const studentId = c.req.param('studentId');
     
-    const result = await dbQuery(
-      `SELECT 
-        vqd.*,
-        s.student_id as student_id_code,
-        s.name as student_name_current,
-        s.discord_url
-       FROM vq_diagnosis_notifications vqd
-       LEFT JOIN students s ON vqd.student_id = s.id
-       WHERE s.student_id = $1
-       ORDER BY vqd.sent_at DESC`,
-      [studentId]
-    );
+    console.log(`📊 VQ診断履歴取得: ${studentId}`);
+    
+    // スプレッドシートから直接取得
+    const results = await fetchVQDiagnosisByStudentId(studentId);
+    
+    // 生徒名を取得
+    let studentName = null;
+    if (results.length > 0) {
+      const studentResult = await dbQuery(
+        `SELECT name FROM students WHERE student_id = $1 LIMIT 1`,
+        [studentId]
+      );
+      studentName = studentResult.rows[0]?.name || studentId;
+    }
+    
+    // レスポンス用にフォーマット
+    const history = results.map(result => ({
+      student_name: studentName,
+      diagnosis_date: result.diagnosisDate,
+      total_score: result.totalScore,
+      diagnosis_type: result.diagnosisType,
+      overview: result.overview,
+      details: result.details,
+      status: result.emailSent === '完了' ? 'sent' : 'pending',
+      sent_at: result.diagnosisDate, // 診断日を送信日として使用
+      sheet_row_number: result.rowNumber
+    }));
+    
+    console.log(`✅ 取得件数: ${history.length}件 (${studentId})`);
     
     return c.json({
       success: true,
-      count: result.rows.length,
-      history: result.rows,
+      count: history.length,
+      history,
       studentId
     });
     

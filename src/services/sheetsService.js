@@ -909,3 +909,93 @@ export async function batchUpdateVQDiagnosisEmailStatus(updates) {
     throw error;
   }
 }
+
+/**
+ * 特定の学籍番号のVQ診断結果を全件取得（R列の状態に関係なく）
+ * @param {string} studentId - 学籍番号（例: "OLTS240499-HK"）
+ */
+export async function fetchVQDiagnosisByStudentId(studentId) {
+  try {
+    const spreadsheetId = '1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0';
+    const sheetName = '診断結果';
+    
+    const sheets = getSheets();
+    
+    // A列からT列まで全データ取得（ヘッダー行の次から）
+    const range = `${sheetName}!A2:T`;
+    
+    console.log(`📊 VQ診断データ取得（学籍番号: ${studentId}）`);
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range
+    });
+    
+    const rows = response.data.values || [];
+    console.log(`📊 全行数: ${rows.length}`);
+    
+    const results = [];
+    
+    rows.forEach((row, index) => {
+      const actualRow = index + 2; // ヘッダーの次から（2行目開始）
+      
+      // C列（学籍番号）で照合
+      const rowStudentId = String(row[2] || '').trim();
+      
+      if (rowStudentId !== studentId) {
+        return; // 一致しない行はスキップ
+      }
+      
+      // P列（診断タイプ）が空の場合はスキップ
+      const diagnosisType = String(row[15] || '').trim();
+      if (!diagnosisType) {
+        console.log(`⚠️ 行 ${actualRow}: 診断タイプが空のためスキップ (${rowStudentId})`);
+        return;
+      }
+      
+      // A列からタイムスタンプ取得（日付のみ抽出）
+      const timestamp = String(row[0] || '').trim();
+      let diagnosisDate = null;
+      if (timestamp) {
+        // "2025/05/28 15:08:59" → "2025/05/28"
+        const datePart = timestamp.split(' ')[0];
+        diagnosisDate = datePart;
+      }
+      
+      // スコア取得（数値に変換）
+      const typeAScore = parseFloat(row[6]) || 0;  // G列
+      const typeQScore = parseFloat(row[8]) || 0;  // I列
+      const typeVQScore = parseFloat(row[10]) || 0; // K列
+      const totalScore = typeAScore + typeQScore + typeVQScore;
+      
+      // 概要と詳細
+      const overview = String(row[18] || '').trim();  // S列
+      const details = String(row[19] || '').trim();   // T列
+      
+      // R列（メール送信済み）
+      const emailSent = String(row[17] || '').trim();
+      
+      results.push({
+        rowNumber: actualRow,
+        studentId: rowStudentId,
+        diagnosisDate,
+        totalScore,
+        typeAScore,
+        typeQScore,
+        typeVQScore,
+        diagnosisType,
+        overview,
+        details,
+        emailSent
+      });
+    });
+    
+    console.log(`📊 該当レコード: ${results.length}件 (学籍番号: ${studentId})`);
+    
+    return results;
+    
+  } catch (error) {
+    console.error(`❌ VQ診断データ取得エラー (学籍番号: ${studentId}):`, error);
+    throw error;
+  }
+}
