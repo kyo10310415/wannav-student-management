@@ -1966,6 +1966,7 @@ function renderStudentRowsSimple() {
               ${student.youtube_channel_id ? `<a href="https://www.youtube.com/channel/${student.youtube_channel_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
               ${student.x_account_id ? `<a href="https://x.com/${student.x_account_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
               ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+              ${student.student_id ? `<button onclick="showStudentVQHistory('${student.student_id}')" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-lg"></i></span>'}
             </div>
           </div>
         </div>
