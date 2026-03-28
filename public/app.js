@@ -9722,12 +9722,18 @@ function escapeHtml(text) {
  */
 async function showStudentVQHistory(studentId) {
   try {
+    console.log('VQ診断履歴取得開始:', studentId);
+    
     const response = await axios.get(
       `${API_BASE}/api/vq-diagnosis/student/${studentId}`,
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     
+    console.log('VQ診断API レスポンス:', response.data);
+    
     const history = response.data.history || [];
+    
+    console.log('取得した履歴件数:', history.length);
     
     if (history.length === 0) {
       showNotification('この生徒の診断履歴はありません', 'info');
