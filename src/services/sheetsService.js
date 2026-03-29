@@ -808,10 +808,15 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
       }
       
       // スコア取得（数値に変換）
-      const typeAScore = parseFloat(row[6]) || 0;  // G列
-      const typeQScore = parseFloat(row[8]) || 0;  // I列
-      const typeVQScore = parseFloat(row[10]) || 0; // K列
+      const typeAScore = parseFloat(row[6]) || 0;  // G列（SNSスコア）
+      const typeQScore = parseFloat(row[8]) || 0;  // I列（配信スコア）
+      const typeVQScore = parseFloat(row[10]) || 0; // K列（収益スコア）
       const totalScore = typeAScore + typeQScore + typeVQScore;
+      
+      // 正解率取得（%、数値に変換）
+      const snsAccuracy = parseFloat(row[7]) || 0;     // H列（SNS正解率）
+      const streamingAccuracy = parseFloat(row[9]) || 0; // J列（配信正解率）
+      const revenueAccuracy = parseFloat(row[11]) || 0;  // L列（収益正解率）
       
       // 概要と詳細
       const overview = String(row[18] || '').trim();  // S列
@@ -825,6 +830,9 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
         typeAScore,
         typeQScore,
         typeVQScore,
+        snsAccuracy,
+        streamingAccuracy,
+        revenueAccuracy,
         diagnosisType,
         overview,
         details,
@@ -963,10 +971,15 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
       }
       
       // スコア取得（数値に変換）
-      const typeAScore = parseFloat(row[6]) || 0;  // G列
-      const typeQScore = parseFloat(row[8]) || 0;  // I列
-      const typeVQScore = parseFloat(row[10]) || 0; // K列
+      const typeAScore = parseFloat(row[6]) || 0;  // G列（SNSスコア）
+      const typeQScore = parseFloat(row[8]) || 0;  // I列（配信スコア）
+      const typeVQScore = parseFloat(row[10]) || 0; // K列（収益スコア）
       const totalScore = typeAScore + typeQScore + typeVQScore;
+      
+      // 正解率取得（%、数値に変換）
+      const snsAccuracy = parseFloat(row[7]) || 0;     // H列（SNS正解率）
+      const streamingAccuracy = parseFloat(row[9]) || 0; // J列（配信正解率）
+      const revenueAccuracy = parseFloat(row[11]) || 0;  // L列（収益正解率）
       
       // 概要と詳細
       const overview = String(row[18] || '').trim();  // S列
@@ -983,6 +996,9 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
         typeAScore,
         typeQScore,
         typeVQScore,
+        snsAccuracy,
+        streamingAccuracy,
+        revenueAccuracy,
         diagnosisType,
         overview,
         details,

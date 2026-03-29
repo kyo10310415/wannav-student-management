@@ -9866,7 +9866,7 @@ async function showStudentVQHistory(studentId) {
               <div class="bg-purple-50 rounded-lg p-4">
                 <h4 class="text-md font-semibold text-gray-800 mb-3 text-center">
                   <i class="fas fa-chart-radar mr-2"></i>
-                  最新の診断結果（${history[0].diagnosis_date || '日付不明'}）
+                  最新の正解率（${history[0].diagnosis_date || '日付不明'}）
                 </h4>
                 <canvas id="vq-radar-chart" style="max-height: 300px;"></canvas>
               </div>
@@ -9921,6 +9921,25 @@ async function showStudentVQHistory(studentId) {
                   <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
                     ${escapeHtml(record.diagnosis_type)}
                   </span>
+                </div>
+                
+                <!-- 正解率 -->
+                <div class="mb-3 bg-white rounded-lg p-3 border border-gray-200">
+                  <p class="text-xs text-gray-600 mb-2 font-semibold">正解率</p>
+                  <div class="grid grid-cols-3 gap-3">
+                    <div class="text-center">
+                      <p class="text-xs text-gray-500">SNS</p>
+                      <p class="text-lg font-bold text-blue-600">${record.sns_accuracy || 0}%</p>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-xs text-gray-500">配信</p>
+                      <p class="text-lg font-bold text-green-600">${record.streaming_accuracy || 0}%</p>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-xs text-gray-500">収益</p>
+                      <p class="text-lg font-bold text-amber-600">${record.revenue_accuracy || 0}%</p>
+                    </div>
+                  </div>
                 </div>
                 
                 ${record.overview ? `
@@ -9983,7 +10002,7 @@ function renderVQDiagnosisCharts(history) {
   // 最新の診断結果（一番最初の要素）
   const latest = history[0];
   
-  // レーダーチャート（最新結果）
+  // レーダーチャート（最新結果 - 正解率%表示）
   const radarCanvas = document.getElementById('vq-radar-chart');
   if (radarCanvas) {
     new Chart(radarCanvas, {
@@ -9991,11 +10010,11 @@ function renderVQDiagnosisCharts(history) {
       data: {
         labels: ['SNS', '配信', '収益'],
         datasets: [{
-          label: '最新スコア',
+          label: '正解率',
           data: [
-            latest.sns_score || 0,
-            latest.streaming_score || 0,
-            latest.revenue_score || 0
+            latest.sns_accuracy || 0,
+            latest.streaming_accuracy || 0,
+            latest.revenue_accuracy || 0
           ],
           backgroundColor: 'rgba(147, 51, 234, 0.2)',
           borderColor: 'rgba(147, 51, 234, 1)',
@@ -10015,7 +10034,10 @@ function renderVQDiagnosisCharts(history) {
             min: 0,
             max: 100,
             ticks: {
-              stepSize: 20
+              stepSize: 20,
+              callback: function(value) {
+                return value + '%';
+              }
             }
           }
         },
@@ -10026,7 +10048,7 @@ function renderVQDiagnosisCharts(history) {
           tooltip: {
             callbacks: {
               label: function(context) {
-                return context.label + ': ' + context.parsed.r + '点';
+                return context.label + ': ' + context.parsed.r + '%';
               }
             }
           }

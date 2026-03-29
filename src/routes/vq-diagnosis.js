@@ -163,9 +163,12 @@ app.get('/student/:studentId', async (c) => {
       student_name: studentName,
       diagnosis_date: result.diagnosisDate,
       total_score: result.totalScore,
-      sns_score: result.typeAScore,      // G列（SNS）
-      streaming_score: result.typeQScore, // I列（配信）
-      revenue_score: result.typeVQScore,  // K列（収益）
+      sns_score: result.typeAScore,           // G列（SNSスコア）
+      streaming_score: result.typeQScore,     // I列（配信スコア）
+      revenue_score: result.typeVQScore,      // K列（収益スコア）
+      sns_accuracy: result.snsAccuracy,       // H列（SNS正解率%）
+      streaming_accuracy: result.streamingAccuracy, // J列（配信正解率%）
+      revenue_accuracy: result.revenueAccuracy,     // L列（収益正解率%）
       diagnosis_type: result.diagnosisType,
       overview: result.overview,
       details: result.details,
