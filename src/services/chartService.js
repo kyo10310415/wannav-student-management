@@ -63,9 +63,9 @@ export async function generateVQRadarChart(data) {
   const configuration = {
     type: 'radar',
     data: {
-      labels: ['SNS', '配信', '収益'],
+      labels: ['SNS', 'Streaming', 'Revenue'],
       datasets: [{
-        label: '正解率',
+        label: 'Accuracy',
         data: [
           data.snsAccuracy || 0,
           data.streamingAccuracy || 0,
@@ -122,7 +122,7 @@ export async function generateVQRadarChart(data) {
         },
         title: {
           display: true,
-          text: 'VQ診断 正解率',
+          text: 'VQ Diagnosis - Accuracy',
           font: {
             size: 20,
             weight: 'bold'
@@ -187,7 +187,7 @@ export async function generateVQTrendChart(historyData) {
     const configuration = {
       type: 'line',
       data: {
-        labels: sortedData.map((h, i) => `${i + 1}回目\n${h.diagnosisDate || ''}`),
+        labels: sortedData.map((h, i) => `#${i + 1}\n${h.diagnosisDate || ''}`),
         datasets: [
           {
             label: 'SNS',
@@ -200,7 +200,7 @@ export async function generateVQTrendChart(historyData) {
             pointHoverRadius: 7
           },
           {
-            label: '配信',
+            label: 'Streaming',
             data: sortedData.map(h => h.streamingAccuracy || 0),
             borderColor: 'rgb(16, 185, 129)',
             backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -210,7 +210,7 @@ export async function generateVQTrendChart(historyData) {
             pointHoverRadius: 7
           },
           {
-            label: '収益',
+            label: 'Revenue',
             data: sortedData.map(h => h.revenueAccuracy || 0),
             borderColor: 'rgb(245, 158, 11)',
             backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -239,7 +239,7 @@ export async function generateVQTrendChart(historyData) {
             },
             title: {
               display: true,
-              text: '正解率 (%)',
+              text: 'Accuracy (%)',
               font: {
                 size: 14,
                 weight: 'bold'
@@ -249,7 +249,7 @@ export async function generateVQTrendChart(historyData) {
           x: {
             title: {
               display: true,
-              text: '診断回数',
+              text: 'Diagnosis Count',
               font: {
                 size: 14,
                 weight: 'bold'
@@ -277,7 +277,7 @@ export async function generateVQTrendChart(historyData) {
           },
           title: {
             display: true,
-            text: `正解率の推移（全${sortedData.length}回）`,
+            text: `Accuracy Trend (Total: ${sortedData.length} times)`,
             font: {
               size: 18,
               weight: 'bold'

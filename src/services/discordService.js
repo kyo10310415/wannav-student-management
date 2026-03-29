@@ -18,6 +18,27 @@ client.login(process.env.DISCORD_BOT_TOKEN).catch(err => {
 });
 
 /**
+ * Google DriveのURLを画像表示可能なURLに変換
+ * @param {string} url - Google DriveのURL
+ * @returns {string} - 変換後のURL
+ */
+function convertGoogleDriveUrl(url) {
+  if (!url) return null;
+  
+  // https://drive.google.com/file/d/{fileId}/view?usp=drive_link
+  // → https://drive.google.com/uc?export=view&id={fileId}
+  const match = url.match(/\/file\/d\/([^\/]+)/);
+  if (match && match[1]) {
+    const convertedUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    console.log(`Google Drive URL変換: ${url.substring(0, 50)}... → ${convertedUrl}`);
+    return convertedUrl;
+  }
+  
+  // すでに正しい形式の場合、またはGoogle Drive URLでない場合はそのまま返す
+  return url;
+}
+
+/**
  * Fetch student Discord info from Google Sheets
  * This is a placeholder - you'll need to implement actual Google Sheets API
  */
@@ -564,10 +585,13 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
     
     // 診断タイプ別画像embed
     if (typeImage) {
+      // Google DriveのURLを変換
+      const convertedImageUrl = convertGoogleDriveUrl(typeImage);
+      
       const typeEmbed = new EmbedBuilder()
         .setTitle('🎯 診断タイプ詳細')
         .setColor(0x9333EA)
-        .setImage(typeImage);
+        .setImage(convertedImageUrl);
       
       embeds.push(typeEmbed);
     }

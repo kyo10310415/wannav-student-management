@@ -752,8 +752,8 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
     
     const sheets = getSheets();
     
-    // A列からS列まで取得（タイムスタンプ～詳細＋メール送信済み）
-    const range = `${sheetName}!A${startRow}:S`;
+    // A列からU列まで取得（タイムスタンプ～詳細＋メール送信済み）
+    const range = `${sheetName}!A${startRow}:U`;
     
     console.log(`📊 VQ診断データ取得開始: 行 ${startRow} から`);
     
@@ -818,9 +818,15 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
       const streamingAccuracy = parseFloat(row[9]) || 0; // J列（配信正解率）
       const revenueAccuracy = parseFloat(row[11]) || 0;  // L列（収益正解率）
       
-      // 概要と詳細
-      const overview = String(row[18] || '').trim();  // S列
-      const details = String(row[19] || '').trim();   // T列
+      // 概要と詳細（実際の列位置を確認）
+      // P=診断タイプ, Q=サブタイプ?, R=送信フラグ, S=概要, T=詳細
+      const overview = String(row[18] || '').trim();  // S列 (index 18)
+      const details = String(row[19] || '').trim();   // T列 (index 19)
+      
+      // デバッグ用: 最初の1件のみログ出力
+      if (results.length === 0) {
+        console.log(`デバッグ 行${actualRow}: P(診断タイプ)=${diagnosisType}, R(送信)=${emailSent}, S(概要)=${overview.substring(0, 30)}..., T(詳細)=${details.substring(0, 30)}...`);
+      }
       
       results.push({
         rowNumber: actualRow,
@@ -947,8 +953,8 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
     rows.forEach((row, index) => {
       const actualRow = index + 2; // ヘッダーの次から（2行目開始）
       
-      // C列（学籍番号）で照合
-      const rowStudentId = String(row[2] || '').trim();
+      // B列（学籍番号 or メールアドレス）で照合
+      const rowStudentId = String(row[1] || '').trim();
       
       if (rowStudentId !== studentId) {
         return; // 一致しない行はスキップ
@@ -982,8 +988,13 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
       const revenueAccuracy = parseFloat(row[11]) || 0;  // L列（収益正解率）
       
       // 概要と詳細
-      const overview = String(row[18] || '').trim();  // S列
-      const details = String(row[19] || '').trim();   // T列
+      const overview = String(row[18] || '').trim();  // S列 (index 18)
+      const details = String(row[19] || '').trim();   // T列 (index 19)
+      
+      // デバッグ用: 最初の1件のみログ出力
+      if (results.length === 0) {
+        console.log(`デバッグ (fetchVQDiagnosisByStudentId) 行${actualRow}: P(診断タイプ)=${diagnosisType}, S(概要)=${overview.substring(0, 30)}..., T(詳細)=${details.substring(0, 30)}...`);
+      }
       
       // R列（メール送信済み）
       const emailSent = String(row[17] || '').trim();
