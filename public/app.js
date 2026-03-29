@@ -9847,7 +9847,7 @@ async function showStudentVQHistory(studentId) {
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
     modal.innerHTML = `
-      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div class="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
           <h3 class="text-xl font-bold text-gray-800">
             <i class="fas fa-history mr-2 text-purple-600"></i>
@@ -9859,6 +9859,31 @@ async function showStudentVQHistory(studentId) {
         </div>
         
         <div class="p-6">
+          <!-- Charts Section -->
+          ${history.length > 0 ? `
+            <div class="grid grid-cols-1 ${history.length > 1 ? 'md:grid-cols-2' : ''} gap-6 mb-6">
+              <!-- Radar Chart (Latest) -->
+              <div class="bg-purple-50 rounded-lg p-4">
+                <h4 class="text-md font-semibold text-gray-800 mb-3 text-center">
+                  <i class="fas fa-chart-radar mr-2"></i>
+                  最新の診断結果（${history[0].diagnosis_date || '日付不明'}）
+                </h4>
+                <canvas id="vq-radar-chart" style="max-height: 300px;"></canvas>
+              </div>
+              
+              <!-- Line Chart (Trend) - Only if multiple records -->
+              ${history.length > 1 ? `
+                <div class="bg-blue-50 rounded-lg p-4">
+                  <h4 class="text-md font-semibold text-gray-800 mb-3 text-center">
+                    <i class="fas fa-chart-line mr-2"></i>
+                    スコア推移（全${history.length}回）
+                  </h4>
+                  <canvas id="vq-trend-chart" style="max-height: 300px;"></canvas>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+          
           <div class="space-y-4">
             ${history.map((record, index) => `
               <div class="border border-gray-200 rounded-lg p-4 ${record.status === 'sent' ? 'bg-green-50' : 'bg-red-50'}">
@@ -9872,14 +9897,22 @@ async function showStudentVQHistory(studentId) {
                   </span>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-4 mb-3">
-                  <div>
-                    <p class="text-xs text-gray-600">状態</p>
-                    <p class="text-sm font-medium">${record.status === 'sent' ? '送信済み' : '未送信'}</p>
-                  </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
                   <div>
                     <p class="text-xs text-gray-600">合計点</p>
                     <p class="text-lg font-bold text-purple-600">${record.total_score}点</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-600">SNS</p>
+                    <p class="text-sm font-semibold text-blue-600">${record.sns_score || 0}点</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-600">配信</p>
+                    <p class="text-sm font-semibold text-green-600">${record.streaming_score || 0}点</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-600">収益</p>
+                    <p class="text-sm font-semibold text-amber-600">${record.revenue_score || 0}点</p>
                   </div>
                 </div>
                 
@@ -9930,9 +9963,155 @@ async function showStudentVQHistory(studentId) {
     
     document.body.appendChild(modal);
     
+    // チャートを描画（モーダルがDOMに追加された後）
+    setTimeout(() => {
+      renderVQDiagnosisCharts(history);
+    }, 100);
+    
   } catch (error) {
     console.error('生徒別履歴取得エラー:', error);
     showNotification('履歴の取得に失敗しました', 'error');
+  }
+}
+
+/**
+ * VQ診断のチャートを描画
+ */
+function renderVQDiagnosisCharts(history) {
+  if (history.length === 0) return;
+  
+  // 最新の診断結果（一番最初の要素）
+  const latest = history[0];
+  
+  // レーダーチャート（最新結果）
+  const radarCanvas = document.getElementById('vq-radar-chart');
+  if (radarCanvas) {
+    new Chart(radarCanvas, {
+      type: 'radar',
+      data: {
+        labels: ['SNS', '配信', '収益'],
+        datasets: [{
+          label: '最新スコア',
+          data: [
+            latest.sns_score || 0,
+            latest.streaming_score || 0,
+            latest.revenue_score || 0
+          ],
+          backgroundColor: 'rgba(147, 51, 234, 0.2)',
+          borderColor: 'rgba(147, 51, 234, 1)',
+          borderWidth: 2,
+          pointBackgroundColor: 'rgba(147, 51, 234, 1)',
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: 'rgba(147, 51, 234, 1)'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {
+          r: {
+            beginAtZero: true,
+            min: 0,
+            max: 100,
+            ticks: {
+              stepSize: 20
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.label + ': ' + context.parsed.r + '点';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+  
+  // 推移グラフ（複数の診断結果がある場合のみ）
+  if (history.length > 1) {
+    const trendCanvas = document.getElementById('vq-trend-chart');
+    if (trendCanvas) {
+      // 古い順に並び替え（日付順）
+      const sortedHistory = [...history].reverse();
+      
+      new Chart(trendCanvas, {
+        type: 'line',
+        data: {
+          labels: sortedHistory.map((h, i) => `${i + 1}回目\n${h.diagnosis_date || ''}`),
+          datasets: [
+            {
+              label: 'SNS',
+              data: sortedHistory.map(h => h.sns_score || 0),
+              borderColor: 'rgb(59, 130, 246)',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderWidth: 2,
+              tension: 0.3
+            },
+            {
+              label: '配信',
+              data: sortedHistory.map(h => h.streaming_score || 0),
+              borderColor: 'rgb(16, 185, 129)',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2,
+              tension: 0.3
+            },
+            {
+              label: '収益',
+              data: sortedHistory.map(h => h.revenue_score || 0),
+              borderColor: 'rgb(245, 158, 11)',
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              borderWidth: 2,
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              min: 0,
+              max: 100,
+              ticks: {
+                stepSize: 20
+              },
+              title: {
+                display: true,
+                text: 'スコア'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: '診断回数'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.parsed.y + '点';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
   }
 }
 

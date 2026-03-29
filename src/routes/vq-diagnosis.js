@@ -163,6 +163,9 @@ app.get('/student/:studentId', async (c) => {
       student_name: studentName,
       diagnosis_date: result.diagnosisDate,
       total_score: result.totalScore,
+      sns_score: result.typeAScore,      // G列（SNS）
+      streaming_score: result.typeQScore, // I列（配信）
+      revenue_score: result.typeVQScore,  // K列（収益）
       diagnosis_type: result.diagnosisType,
       overview: result.overview,
       details: result.details,
