@@ -495,7 +495,7 @@ export async function sendTestWebhook(webhookUrl, discordUserId = null, message 
  * @param {Object} messageData - Message data with content and embeds
  * @returns {Promise<Object>} Result object with message ID
  */
-export async function sendDiscordVQDiagnosis(webhookUrl, messageData) {
+export async function sendDiscordVQDiagnosis(webhookUrl, messageData, chartImageBuffer = null) {
   if (!webhookUrl) {
     console.log('No webhook URL provided for VQ diagnosis');
     return { success: false, reason: 'No webhook URL' };
@@ -503,16 +503,53 @@ export async function sendDiscordVQDiagnosis(webhookUrl, messageData) {
 
   try {
     const axios = (await import('axios')).default;
+    const FormData = (await import('form-data')).default;
     
-    // Send webhook with wait=true to get response with message ID
-    const response = await axios.post(`${webhookUrl}?wait=true`, messageData);
+    // チャート画像がある場合はFormDataで送信
+    if (chartImageBuffer) {
+      const form = new FormData();
+      
+      // チャート画像を添付
+      form.append('files[0]', chartImageBuffer, {
+        filename: 'vq-diagnosis-chart.png',
+        contentType: 'image/png'
+      });
+      
+      // embedに画像を参照させる
+      const updatedMessageData = {
+        ...messageData,
+        embeds: messageData.embeds.map(embed => ({
+          ...embed,
+          image: {
+            url: 'attachment://vq-diagnosis-chart.png'
+          }
+        }))
+      };
+      
+      form.append('payload_json', JSON.stringify(updatedMessageData));
+      
+      // FormDataで送信
+      const response = await axios.post(`${webhookUrl}?wait=true`, form, {
+        headers: form.getHeaders()
+      });
+      
+      console.log(`VQ diagnosis sent with chart to ${webhookUrl.substring(0, 50)}...`);
+      return { 
+        success: true, 
+        id: response.data.id, 
+        channelId: response.data.channel_id 
+      };
+    } else {
+      // チャート画像がない場合は通常送信
+      const response = await axios.post(`${webhookUrl}?wait=true`, messageData);
 
-    console.log(`VQ diagnosis sent successfully to ${webhookUrl.substring(0, 50)}...`);
-    return { 
-      success: true, 
-      id: response.data.id, 
-      channelId: response.data.channel_id 
-    };
+      console.log(`VQ diagnosis sent successfully to ${webhookUrl.substring(0, 50)}...`);
+      return { 
+        success: true, 
+        id: response.data.id, 
+        channelId: response.data.channel_id 
+      };
+    }
     
   } catch (error) {
     console.error('Error sending VQ diagnosis to Discord:', error.message);

@@ -4,6 +4,7 @@ import {
   batchUpdateVQDiagnosisEmailStatus 
 } from '../services/sheetsService.js';
 import { sendDiscordVQDiagnosis } from '../services/discordService.js';
+import { generateVQRadarChart } from '../services/chartService.js';
 
 /**
  * VQ診断結果を定期的にチェックして送信
@@ -147,6 +148,19 @@ export async function checkAndSendVQDiagnosis() {
           console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
         }
         
+        // レーダーチャート画像を生成
+        let chartBuffer = null;
+        try {
+          chartBuffer = await generateVQRadarChart({
+            snsAccuracy: result.snsAccuracy,
+            streamingAccuracy: result.streamingAccuracy,
+            revenueAccuracy: result.revenueAccuracy
+          });
+          console.log(`📊 レーダーチャート生成成功: ${student.name}`);
+        } catch (chartError) {
+          console.warn(`⚠️ チャート生成エラー: ${chartError.message}`);
+        }
+        
         // Discordに送信
         const message = formatVQDiagnosisMessage({
           studentName: student.name,
@@ -158,7 +172,11 @@ export async function checkAndSendVQDiagnosis() {
           imageUrl
         });
         
-        const discordResponse = await sendDiscordVQDiagnosis(student.discord_url, message);
+        const discordResponse = await sendDiscordVQDiagnosis(
+          student.discord_url, 
+          message, 
+          chartBuffer  // チャート画像バッファを渡す
+        );
         
         // データベースに記録
         await dbQuery(
