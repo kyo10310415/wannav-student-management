@@ -103,6 +103,13 @@ function renderHeader() {
     </button>
   ` : '';
   
+  // Build VQ diagnosis button (leader or above)
+  const vqDiagnosisButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+    <button id="nav-vq-diagnosis" onclick="changePage('vq-diagnosis')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'vq-diagnosis' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+      <i class="fas fa-clipboard-check mr-2"></i>VQ診断
+    </button>
+  ` : '';
+  
   console.log('renderHeader - userManagementButton:', userManagementButton ? 'yes' : 'no');
   console.log('renderHeader - databaseManagementButton:', databaseManagementButton ? 'yes' : 'no');
   
@@ -182,9 +189,6 @@ function renderHeader() {
               <button id="nav-broadcast" onclick="changePage('broadcast')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'broadcast' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-bullhorn mr-2"></i>一斉送信
               </button>
-              <button id="nav-vq-diagnosis" onclick="changePage('vq-diagnosis')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'vq-diagnosis' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
-                <i class="fas fa-clipboard-check mr-2"></i>VQ診断
-              </button>
             </div>
             
             <!-- Divider -->
@@ -200,12 +204,13 @@ function renderHeader() {
               </button>
             </div>
             
-            ${userManagementButton || databaseManagementButton ? `
+            ${userManagementButton || databaseManagementButton || vqDiagnosisButton ? `
               <!-- Divider -->
               <div class="w-px bg-white/30"></div>
               
               <!-- Admin Section (Orange) -->
               <div class="flex gap-2">
+                ${vqDiagnosisButton}
                 ${userManagementButton}
                 ${databaseManagementButton}
               </div>
@@ -9334,6 +9339,27 @@ async function renderVQDiagnosisPage() {
   document.getElementById('content').classList.remove('hidden');
   
   const content = document.getElementById('content');
+  
+  // 権限チェック：リーダー以上のみアクセス可能
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+    content.innerHTML = `
+      <div class="max-w-2xl mx-auto">
+        <div class="bg-red-50 border-l-4 border-red-500 rounded-lg p-6">
+          <div class="flex items-center mb-4">
+            <i class="fas fa-exclamation-triangle text-3xl text-red-600 mr-4"></i>
+            <h3 class="text-xl font-bold text-red-800">アクセス権限がありません</h3>
+          </div>
+          <p class="text-red-700 mb-4">
+            このページはリーダー以上の権限を持つユーザーのみアクセスできます。
+          </p>
+          <button onclick="changePage('today')" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+            <i class="fas fa-home mr-2"></i>ホームに戻る
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
   
   // ロード中表示
   content.innerHTML = `
