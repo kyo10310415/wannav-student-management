@@ -380,6 +380,29 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS vq_diagnosis_notifications CASCADE;
     `
+  },
+  {
+    version: 16,
+    name: 'create_vq_diagnosis_images_table',
+    up: `
+      -- VQ診断タイプ別画像設定テーブル
+      CREATE TABLE IF NOT EXISTS vq_diagnosis_images (
+        id SERIAL PRIMARY KEY,
+        diagnosis_type VARCHAR(100) UNIQUE NOT NULL,
+        image_url TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      CREATE INDEX idx_vq_diagnosis_images_type ON vq_diagnosis_images(diagnosis_type);
+      
+      COMMENT ON TABLE vq_diagnosis_images IS 'VQ診断タイプ別のディスコード送信画像設定';
+      COMMENT ON COLUMN vq_diagnosis_images.diagnosis_type IS '診断タイプ（例: Vタイプ・型A）';
+      COMMENT ON COLUMN vq_diagnosis_images.image_url IS 'ディスコードで送信する画像のURL';
+    `,
+    down: `
+      DROP TABLE IF EXISTS vq_diagnosis_images CASCADE;
+    `
   }
 ];
 

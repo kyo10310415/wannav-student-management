@@ -298,4 +298,109 @@ function formatVQDiagnosisMessage(result) {
   };
 }
 
+/**
+ * GET /api/vq-diagnosis/images
+ * 診断タイプ別の画像設定一覧を取得
+ */
+app.get('/images', async (c) => {
+  try {
+    const result = await dbQuery(
+      `SELECT id, diagnosis_type, image_url, created_at, updated_at 
+       FROM vq_diagnosis_images 
+       ORDER BY diagnosis_type ASC`
+    );
+    
+    return c.json({
+      success: true,
+      images: result.rows
+    });
+    
+  } catch (error) {
+    console.error('❌ 画像設定取得エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/vq-diagnosis/images
+ * 診断タイプの画像設定を追加または更新
+ */
+app.post('/images', async (c) => {
+  try {
+    const { diagnosis_type, image_url } = await c.req.json();
+    
+    if (!diagnosis_type || !image_url) {
+      return c.json({
+        success: false,
+        error: '診断タイプと画像URLは必須です'
+      }, 400);
+    }
+    
+    // UPSERT（存在すれば更新、なければ挿入）
+    const result = await dbQuery(
+      `INSERT INTO vq_diagnosis_images (diagnosis_type, image_url, updated_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (diagnosis_type) 
+       DO UPDATE SET 
+         image_url = EXCLUDED.image_url,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING id, diagnosis_type, image_url`,
+      [diagnosis_type, image_url]
+    );
+    
+    console.log(`✅ 画像設定保存: ${diagnosis_type} -> ${image_url}`);
+    
+    return c.json({
+      success: true,
+      image: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('❌ 画像設定保存エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * DELETE /api/vq-diagnosis/images/:id
+ * 画像設定を削除
+ */
+app.delete('/images/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    const result = await dbQuery(
+      `DELETE FROM vq_diagnosis_images WHERE id = $1 RETURNING diagnosis_type`,
+      [id]
+    );
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: '画像設定が見つかりません'
+      }, 404);
+    }
+    
+    console.log(`✅ 画像設定削除: ${result.rows[0].diagnosis_type}`);
+    
+    return c.json({
+      success: true,
+      message: '画像設定を削除しました'
+    });
+    
+  } catch (error) {
+    console.error('❌ 画像設定削除エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

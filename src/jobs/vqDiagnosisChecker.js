@@ -132,6 +132,21 @@ export async function checkAndSendVQDiagnosis() {
           continue;
         }
         
+        // 診断タイプに対応する画像URLを取得
+        let imageUrl = null;
+        try {
+          const imageResult = await dbQuery(
+            `SELECT image_url FROM vq_diagnosis_images WHERE diagnosis_type = $1`,
+            [result.diagnosisType]
+          );
+          if (imageResult.rows.length > 0) {
+            imageUrl = imageResult.rows[0].image_url;
+            console.log(`📷 診断タイプ「${result.diagnosisType}」の画像を取得: ${imageUrl}`);
+          }
+        } catch (imageError) {
+          console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
+        }
+        
         // Discordに送信
         const message = formatVQDiagnosisMessage({
           studentName: student.name,
@@ -139,7 +154,8 @@ export async function checkAndSendVQDiagnosis() {
           diagnosisType: result.diagnosisType,
           overview: result.overview,
           details: result.details,
-          diagnosisDate: result.diagnosisDate
+          diagnosisDate: result.diagnosisDate,
+          imageUrl
         });
         
         const discordResponse = await sendDiscordVQDiagnosis(student.discord_url, message);
@@ -263,42 +279,51 @@ async function updateLastCheckedRow(rowNumber) {
  * VQ診断結果をDiscordメッセージ形式にフォーマット
  */
 function formatVQDiagnosisMessage(result) {
+  const embed = {
+    title: '🎯 VQ診断結果',
+    color: 0x9333EA, // 紫色
+    fields: [
+      {
+        name: '📅 診断日',
+        value: result.diagnosisDate || '（日付不明）',
+        inline: true
+      },
+      {
+        name: '📊 合計点',
+        value: `**${result.totalScore}点**`,
+        inline: true
+      },
+      {
+        name: '🏷️ あなたのタイプ',
+        value: `**${result.diagnosisType}**`,
+        inline: false
+      },
+      {
+        name: '📝 概要',
+        value: result.overview || '（概要なし）',
+        inline: false
+      },
+      {
+        name: '📖 詳細',
+        value: result.details || '（詳細なし）',
+        inline: false
+      }
+    ],
+    footer: {
+      text: `送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
+    }
+  };
+  
+  // 画像URLがあればembedに追加
+  if (result.imageUrl) {
+    embed.image = {
+      url: result.imageUrl
+    };
+  }
+  
   return {
     content: `お疲れ様です！\n\n**VQ診断の結果が出ました！**`,
-    embeds: [{
-      title: '🎯 VQ診断結果',
-      color: 0x9333EA, // 紫色
-      fields: [
-        {
-          name: '📅 診断日',
-          value: result.diagnosisDate || '（日付不明）',
-          inline: true
-        },
-        {
-          name: '📊 合計点',
-          value: `**${result.totalScore}点**`,
-          inline: true
-        },
-        {
-          name: '🏷️ あなたのタイプ',
-          value: `**${result.diagnosisType}**`,
-          inline: false
-        },
-        {
-          name: '📝 概要',
-          value: result.overview || '（概要なし）',
-          inline: false
-        },
-        {
-          name: '📖 詳細',
-          value: result.details || '（詳細なし）',
-          inline: false
-        }
-      ],
-      footer: {
-        text: `送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
-      }
-    }]
+    embeds: [embed]
   };
 }
 

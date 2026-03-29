@@ -9330,6 +9330,7 @@ function updateSurveyToggleUI() {
 
 let vqDiagnosisEnabled = false;
 let vqDiagnosisHistory = [];
+let vqDiagnosisImages = [];
 
 /**
  * VQ診断管理ページをレンダリング
@@ -9457,6 +9458,76 @@ async function renderVQDiagnosisPage() {
         </div>
       </div>
       
+      <!-- Image Settings Section -->
+      <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="mb-4">
+          <h3 class="text-lg font-bold text-gray-800 mb-2">
+            <i class="fas fa-image mr-2"></i>
+            診断タイプ別画像設定
+          </h3>
+          <p class="text-sm text-gray-600">
+            各診断タイプに対して、Discordで送信する画像URLを設定できます
+          </p>
+        </div>
+        
+        <!-- Add New Image Form -->
+        <div class="bg-purple-50 rounded-lg p-4 mb-4">
+          <h4 class="text-md font-semibold text-gray-800 mb-3">新規追加</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <input 
+              type="text" 
+              id="new-diagnosis-type"
+              placeholder="診断タイプ（例: Vタイプ・型A）"
+              class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+            />
+            <input 
+              type="text" 
+              id="new-image-url"
+              placeholder="画像URL（https://...）"
+              class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+            />
+            <button 
+              onclick="saveVQDiagnosisImage()"
+              class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold"
+            >
+              <i class="fas fa-plus mr-2"></i>追加
+            </button>
+          </div>
+        </div>
+        
+        <!-- Image List -->
+        <div class="space-y-2">
+          ${vqDiagnosisImages.length === 0 ? `
+            <div class="text-center py-6 text-gray-500">
+              <i class="fas fa-info-circle mr-2"></i>
+              画像設定はまだありません
+            </div>
+          ` : vqDiagnosisImages.map(img => `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+              <div class="flex-1">
+                <div class="font-semibold text-gray-800">${img.diagnosis_type}</div>
+                <div class="text-sm text-gray-600 truncate">${img.image_url}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <a 
+                  href="${img.image_url}" 
+                  target="_blank" 
+                  class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition text-sm"
+                >
+                  <i class="fas fa-external-link-alt"></i>
+                </a>
+                <button 
+                  onclick="deleteVQDiagnosisImage(${img.id})"
+                  class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition text-sm"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      
       <!-- Manual Check Button -->
       <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <div class="flex items-center justify-between">
@@ -9528,6 +9599,12 @@ async function loadVQDiagnosisData() {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
     vqDiagnosisHistory = historyResponse.data.history || [];
+    
+    // 画像設定を取得
+    const imagesResponse = await axios.get(`${API_BASE}/api/vq-diagnosis/images`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    vqDiagnosisImages = imagesResponse.data.images || [];
     
   } catch (error) {
     console.error('VQ診断データの読み込みエラー:', error);
@@ -9894,6 +9971,85 @@ async function manualCheckVQDiagnosis() {
     console.error('手動チェックエラー:', error);
     showNotification(
       error.response?.data?.error || 'チェックに失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * VQ診断タイプの画像設定を保存
+ */
+async function saveVQDiagnosisImage() {
+  try {
+    const diagnosisType = document.getElementById('new-diagnosis-type').value.trim();
+    const imageUrl = document.getElementById('new-image-url').value.trim();
+    
+    if (!diagnosisType) {
+      showNotification('診断タイプを入力してください', 'error');
+      return;
+    }
+    
+    if (!imageUrl) {
+      showNotification('画像URLを入力してください', 'error');
+      return;
+    }
+    
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      showNotification('有効なURLを入力してください（http:// または https:// で始まる）', 'error');
+      return;
+    }
+    
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/images`,
+      { diagnosis_type: diagnosisType, image_url: imageUrl },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      showNotification('画像設定を保存しました', 'success');
+      
+      // フォームをクリア
+      document.getElementById('new-diagnosis-type').value = '';
+      document.getElementById('new-image-url').value = '';
+      
+      // ページを再読み込み
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('画像設定保存エラー:', error);
+    showNotification(
+      error.response?.data?.error || '画像設定の保存に失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * VQ診断タイプの画像設定を削除
+ */
+async function deleteVQDiagnosisImage(imageId) {
+  try {
+    if (!confirm('この画像設定を削除しますか？')) {
+      return;
+    }
+    
+    const response = await axios.delete(
+      `${API_BASE}/api/vq-diagnosis/images/${imageId}`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      showNotification('画像設定を削除しました', 'success');
+      
+      // ページを再読み込み
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('画像設定削除エラー:', error);
+    showNotification(
+      error.response?.data?.error || '画像設定の削除に失敗しました',
       'error'
     );
   }
