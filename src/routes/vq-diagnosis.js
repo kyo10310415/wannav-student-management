@@ -415,17 +415,17 @@ app.delete('/images/:id', async (c) => {
  */
 app.post('/test', async (c) => {
   try {
-    const { webhookUrl, userId } = await c.req.json();
+    const { channelUrl, userId } = await c.req.json();
     
-    if (!webhookUrl) {
+    if (!channelUrl) {
       return c.json({
         success: false,
-        error: 'Webhook URLが必要です'
+        error: 'チャンネルURLが必要です'
       }, 400);
     }
     
     console.log('🧪 テスト送信開始...');
-    console.log(`📍 送信先: ${webhookUrl.substring(0, 50)}...`);
+    console.log(`📍 送信先: ${channelUrl.substring(0, 50)}...`);
     console.log(`👤 ユーザーID: ${userId || 'なし'}`);
     
     // スプレッドシートから全レコードを取得
@@ -543,7 +543,7 @@ app.post('/test', async (c) => {
     
     // Discordに送信
     const discordResponse = await sendDiscordVQDiagnosis(
-      webhookUrl,
+      channelUrl,
       message,
       {
         radarChart: radarChartBuffer,

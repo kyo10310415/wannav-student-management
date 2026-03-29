@@ -495,91 +495,96 @@ export async function sendTestWebhook(webhookUrl, discordUserId = null, message 
  * @param {Object} messageData - Message data with content and embeds
  * @returns {Promise<Object>} Result object with message ID
  */
-export async function sendDiscordVQDiagnosis(webhookUrl, messageData, attachments = {}) {
-  if (!webhookUrl) {
-    console.log('No webhook URL provided for VQ diagnosis');
-    return { success: false, reason: 'No webhook URL' };
+export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachments = {}) {
+  if (!isClientReady) {
+    throw new Error('Discord client is not ready');
+  }
+
+  if (!channelUrl) {
+    console.log('No channel URL provided for VQ diagnosis');
+    return { success: false, reason: 'No channel URL' };
   }
 
   try {
-    const axios = (await import('axios')).default;
-    const FormData = (await import('form-data')).default;
-    
-    const { radarChart, trendChart, typeImage } = attachments;
-    const hasAttachments = radarChart || trendChart || typeImage;
-    
-    // 画像がある場合はFormDataで送信
-    if (hasAttachments) {
-      const form = new FormData();
-      let fileIndex = 0;
-      const embeds = [];
-      
-      // メインembed（基本情報 + レーダーチャート）
-      const mainEmbed = { ...messageData.embeds[0] };
-      
-      if (radarChart) {
-        form.append(`files[${fileIndex}]`, radarChart, {
-          filename: 'radar-chart.png',
-          contentType: 'image/png'
-        });
-        mainEmbed.image = { url: 'attachment://radar-chart.png' };
-        fileIndex++;
-      }
-      
-      embeds.push(mainEmbed);
-      
-      // 推移グラフ用のembed
-      if (trendChart) {
-        form.append(`files[${fileIndex}]`, trendChart, {
-          filename: 'trend-chart.png',
-          contentType: 'image/png'
-        });
-        embeds.push({
-          title: '📈 正解率の推移',
-          color: 0x3B82F6, // 青色
-          image: { url: 'attachment://trend-chart.png' }
-        });
-        fileIndex++;
-      }
-      
-      // 診断タイプ別画像用のembed
-      if (typeImage) {
-        embeds.push({
-          title: '🎯 診断タイプ詳細',
-          color: 0x9333EA, // 紫色
-          image: { url: typeImage }
-        });
-      }
-      
-      const updatedMessageData = {
-        content: messageData.content,
-        embeds
-      };
-      
-      form.append('payload_json', JSON.stringify(updatedMessageData));
-      
-      // FormDataで送信
-      const response = await axios.post(`${webhookUrl}?wait=true`, form, {
-        headers: form.getHeaders()
-      });
-      
-      console.log(`VQ diagnosis sent with ${fileIndex} attachment(s) to ${webhookUrl.substring(0, 50)}...`);
-      return { 
-        success: true, 
-        id: response.data.id, 
-        channelId: response.data.channel_id 
-      };
-    } else {
-      // 画像がない場合は通常送信
-      const response = await axios.post(`${webhookUrl}?wait=true`, messageData);
-
-      console.log(`VQ diagnosis sent successfully to ${webhookUrl.substring(0, 50)}...`);
-      return { 
-        success: true, 
-        id: response.data.id, 
-        channelId: response.data.channel_id 
-      };
+    // Extract channel ID from Discord URL
+    // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
+    const channelIdMatch = channelUrl.match(/channels\/\d+\/(\d+)/);
+    if (!channelIdMatch) {
+      console.warn(`Invalid Discord URL: ${channelUrl}`);
+      return { success: false, error: 'Invalid Discord URL format' };
     }
+
+    const channelId = channelIdMatch[1];
+    const channel = await client.channels.fetch(channelId);
+
+    if (!channel || !channel.isTextBased()) {
+      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      return { success: false, error: 'Channel not found or invalid' };
+    }
+
+    const { radarChart, trendChart, typeImage } = attachments;
+    const { AttachmentBuilder, EmbedBuilder } = await import('discord.js');
+    
+    // メッセージコンテンツ
+    const content = messageData.content;
+    
+    // Embedsを作成
+    const embeds = [];
+    const files = [];
+    
+    // メインembed（基本情報）
+    const mainEmbedData = messageData.embeds[0];
+    const mainEmbed = new EmbedBuilder()
+      .setTitle(mainEmbedData.title)
+      .setColor(mainEmbedData.color)
+      .setFields(mainEmbedData.fields)
+      .setFooter({ text: mainEmbedData.footer.text });
+    
+    // レーダーチャート画像
+    if (radarChart) {
+      const radarAttachment = new AttachmentBuilder(radarChart, { name: 'radar-chart.png' });
+      files.push(radarAttachment);
+      mainEmbed.setImage('attachment://radar-chart.png');
+    }
+    
+    embeds.push(mainEmbed);
+    
+    // 推移グラフembed
+    if (trendChart) {
+      const trendAttachment = new AttachmentBuilder(trendChart, { name: 'trend-chart.png' });
+      files.push(trendAttachment);
+      
+      const trendEmbed = new EmbedBuilder()
+        .setTitle('📈 正解率の推移')
+        .setColor(0x3B82F6)
+        .setImage('attachment://trend-chart.png');
+      
+      embeds.push(trendEmbed);
+    }
+    
+    // 診断タイプ別画像embed
+    if (typeImage) {
+      const typeEmbed = new EmbedBuilder()
+        .setTitle('🎯 診断タイプ詳細')
+        .setColor(0x9333EA)
+        .setImage(typeImage);
+      
+      embeds.push(typeEmbed);
+    }
+    
+    // メッセージを送信
+    const sentMessage = await channel.send({
+      content,
+      embeds,
+      files
+    });
+    
+    console.log(`VQ diagnosis sent to channel ${channelId} (message ID: ${sentMessage.id})`);
+    return { 
+      success: true, 
+      id: sentMessage.id, 
+      channelId: channelId 
+    };
     
   } catch (error) {
     console.error('Error sending VQ diagnosis to Discord:', error.message);

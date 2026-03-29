@@ -9564,14 +9564,14 @@ async function renderVQDiagnosisPage() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-2">
-              Discord Webhook URL <span class="text-red-500">*</span>
+              Discordチャンネル URL <span class="text-red-500">*</span>
             </label>
             <input 
               type="text" 
-              id="test-webhook-url"
-              placeholder="https://discord.com/api/webhooks/..."
+              id="test-channel-url"
+              placeholder="https://discord.com/channels/1176426605309083678/1293539258069417994"
               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-              value=""
+              value="https://discord.com/channels/1176426605309083678/1293539258069417994"
             />
           </div>
           <div>
@@ -10308,17 +10308,16 @@ async function deleteVQDiagnosisImage(imageId) {
  */
 async function testSendVQDiagnosis() {
   try {
-    const webhookUrl = document.getElementById('test-webhook-url').value.trim();
+    const channelUrl = document.getElementById('test-channel-url').value.trim();
     const userId = document.getElementById('test-user-id').value.trim();
     
-    if (!webhookUrl) {
-      showNotification('Webhook URLを入力してください', 'error');
+    if (!channelUrl) {
+      showNotification('チャンネルURLを入力してください', 'error');
       return;
     }
     
-    if (!webhookUrl.startsWith('https://discord.com/api/webhooks/') && 
-        !webhookUrl.startsWith('https://discordapp.com/api/webhooks/')) {
-      showNotification('正しいDiscord Webhook URLを入力してください', 'error');
+    if (!channelUrl.startsWith('https://discord.com/channels/')) {
+      showNotification('正しいDiscordチャンネルURLを入力してください\n形式: https://discord.com/channels/SERVER_ID/CHANNEL_ID', 'error');
       return;
     }
     
@@ -10326,7 +10325,7 @@ async function testSendVQDiagnosis() {
     
     const response = await axios.post(
       `${API_BASE}/api/vq-diagnosis/test`,
-      { webhookUrl, userId },
+      { channelUrl, userId },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     
