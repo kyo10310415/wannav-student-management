@@ -589,7 +589,7 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
       const convertedImageUrl = convertGoogleDriveUrl(typeImage);
       
       const typeEmbed = new EmbedBuilder()
-        .setTitle('🎯 診断タイプ詳細')
+        .setTitle('🎯 タイプイメージ')
         .setColor(0x9333EA)
         .setImage(convertedImageUrl);
       
