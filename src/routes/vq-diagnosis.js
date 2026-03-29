@@ -409,4 +409,176 @@ app.delete('/images/:id', async (c) => {
   }
 });
 
+/**
+ * POST /api/vq-diagnosis/test
+ * テスト送信（ランダムなレコードを選択して送信）
+ */
+app.post('/test', async (c) => {
+  try {
+    const { webhookUrl, userId } = await c.req.json();
+    
+    if (!webhookUrl) {
+      return c.json({
+        success: false,
+        error: 'Webhook URLが必要です'
+      }, 400);
+    }
+    
+    console.log('🧪 テスト送信開始...');
+    console.log(`📍 送信先: ${webhookUrl.substring(0, 50)}...`);
+    console.log(`👤 ユーザーID: ${userId || 'なし'}`);
+    
+    // スプレッドシートから全レコードを取得
+    const { fetchVQDiagnosisResults } = await import('../services/sheetsService.js');
+    const { results } = await fetchVQDiagnosisResults(2); // 2行目から全取得
+    
+    if (results.length === 0) {
+      return c.json({
+        success: false,
+        error: 'スプレッドシートにデータがありません'
+      }, 404);
+    }
+    
+    // ランダムに1件選択
+    const randomIndex = Math.floor(Math.random() * results.length);
+    const selectedRecord = results[randomIndex];
+    
+    console.log(`🎲 ランダム選択: 行 ${selectedRecord.rowNumber} (${selectedRecord.studentId})`);
+    console.log(`📊 スコア: SNS=${selectedRecord.snsAccuracy}%, 配信=${selectedRecord.streamingAccuracy}%, 収益=${selectedRecord.revenueAccuracy}%`);
+    
+    // 過去の診断履歴を取得（推移グラフ用）
+    const { fetchVQDiagnosisByStudentId } = await import('../services/sheetsService.js');
+    let historyData = [];
+    try {
+      historyData = await fetchVQDiagnosisByStudentId(selectedRecord.studentId);
+      console.log(`📊 過去の診断履歴: ${historyData.length}件`);
+    } catch (historyError) {
+      console.warn(`⚠️ 履歴取得エラー: ${historyError.message}`);
+    }
+    
+    // 診断タイプに対応する画像URLを取得
+    let typeImageUrl = null;
+    try {
+      const imageResult = await dbQuery(
+        `SELECT image_url FROM vq_diagnosis_images WHERE diagnosis_type = $1`,
+        [selectedRecord.diagnosisType]
+      );
+      if (imageResult.rows.length > 0) {
+        typeImageUrl = imageResult.rows[0].image_url;
+        console.log(`📷 診断タイプ画像: ${typeImageUrl}`);
+      }
+    } catch (imageError) {
+      console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
+    }
+    
+    // レーダーチャートを生成
+    const { generateVQRadarChart, generateVQTrendChart } = await import('../services/chartService.js');
+    let radarChartBuffer = null;
+    try {
+      radarChartBuffer = await generateVQRadarChart({
+        snsAccuracy: selectedRecord.snsAccuracy,
+        streamingAccuracy: selectedRecord.streamingAccuracy,
+        revenueAccuracy: selectedRecord.revenueAccuracy
+      });
+      console.log(`📊 レーダーチャート生成成功`);
+    } catch (chartError) {
+      console.warn(`⚠️ レーダーチャート生成エラー: ${chartError.message}`);
+    }
+    
+    // 推移グラフを生成（2件以上の場合）
+    let trendChartBuffer = null;
+    if (historyData.length >= 2) {
+      try {
+        trendChartBuffer = await generateVQTrendChart(historyData);
+        console.log(`📈 推移グラフ生成成功: ${historyData.length}件`);
+      } catch (trendError) {
+        console.warn(`⚠️ 推移グラフ生成エラー: ${trendError.message}`);
+      }
+    }
+    
+    // メッセージを作成
+    let messageContent = '🧪 **テスト送信**\n\n';
+    if (userId) {
+      messageContent += `<@${userId}>\n\n`;
+    }
+    messageContent += `**VQ診断の結果が出ました！**`;
+    
+    const message = {
+      content: messageContent,
+      embeds: [{
+        title: '🎯 VQ診断結果',
+        color: 0x9333EA,
+        fields: [
+          {
+            name: '📅 診断日',
+            value: selectedRecord.diagnosisDate || '（日付不明）',
+            inline: true
+          },
+          {
+            name: '📊 合計点',
+            value: `**${selectedRecord.totalScore}点**`,
+            inline: true
+          },
+          {
+            name: '🏷️ あなたのタイプ',
+            value: `**${selectedRecord.diagnosisType}**`,
+            inline: false
+          },
+          {
+            name: '📝 概要',
+            value: selectedRecord.overview || '（概要なし）',
+            inline: false
+          },
+          {
+            name: '📖 詳細',
+            value: selectedRecord.details || '（詳細なし）',
+            inline: false
+          }
+        ],
+        footer: {
+          text: `テスト送信 | 行番号: ${selectedRecord.rowNumber} | ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
+        }
+      }]
+    };
+    
+    // Discordに送信
+    const discordResponse = await sendDiscordVQDiagnosis(
+      webhookUrl,
+      message,
+      {
+        radarChart: radarChartBuffer,
+        trendChart: trendChartBuffer,
+        typeImage: typeImageUrl
+      }
+    );
+    
+    if (discordResponse.success) {
+      console.log('✅ テスト送信成功');
+      return c.json({
+        success: true,
+        message: 'テスト送信が完了しました',
+        data: {
+          rowNumber: selectedRecord.rowNumber,
+          studentId: selectedRecord.studentId,
+          diagnosisType: selectedRecord.diagnosisType,
+          totalScore: selectedRecord.totalScore,
+          historyCount: historyData.length,
+          hasRadarChart: !!radarChartBuffer,
+          hasTrendChart: !!trendChartBuffer,
+          hasTypeImage: !!typeImageUrl
+        }
+      });
+    } else {
+      throw new Error(discordResponse.error || 'Discord送信失敗');
+    }
+    
+  } catch (error) {
+    console.error('❌ テスト送信エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

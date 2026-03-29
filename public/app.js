@@ -9549,6 +9549,53 @@ async function renderVQDiagnosisPage() {
         </div>
       </div>
       
+      <!-- Test Send Button -->
+      <div class="bg-white rounded-lg shadow-md p-6 mb-6 border-2 border-orange-200">
+        <div class="mb-4">
+          <h3 class="text-lg font-bold text-gray-800 mb-2">
+            <i class="fas fa-flask mr-2 text-orange-600"></i>
+            テスト送信
+          </h3>
+          <p class="text-sm text-gray-600 mb-3">
+            スプレッドシートからランダムにレコードを選択してDiscordに送信します（R列の状態は無視）
+          </p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              Discord Webhook URL <span class="text-red-500">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="test-webhook-url"
+              placeholder="https://discord.com/api/webhooks/..."
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              value=""
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              メンション先ユーザーID（オプション）
+            </label>
+            <input 
+              type="text" 
+              id="test-user-id"
+              placeholder="766666980086120470"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              value="766666980086120470"
+            />
+          </div>
+        </div>
+        
+        <button 
+          onclick="testSendVQDiagnosis()"
+          class="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-semibold"
+        >
+          <i class="fas fa-paper-plane mr-2"></i>テスト送信
+        </button>
+      </div>
+      
       <!-- History Table -->
       <div class="bg-white rounded-lg shadow-md overflow-hidden">
         <div class="p-6 border-b border-gray-200">
@@ -10251,6 +10298,58 @@ async function deleteVQDiagnosisImage(imageId) {
     console.error('画像設定削除エラー:', error);
     showNotification(
       error.response?.data?.error || '画像設定の削除に失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * VQ診断のテスト送信
+ */
+async function testSendVQDiagnosis() {
+  try {
+    const webhookUrl = document.getElementById('test-webhook-url').value.trim();
+    const userId = document.getElementById('test-user-id').value.trim();
+    
+    if (!webhookUrl) {
+      showNotification('Webhook URLを入力してください', 'error');
+      return;
+    }
+    
+    if (!webhookUrl.startsWith('https://discord.com/api/webhooks/') && 
+        !webhookUrl.startsWith('https://discordapp.com/api/webhooks/')) {
+      showNotification('正しいDiscord Webhook URLを入力してください', 'error');
+      return;
+    }
+    
+    showNotification('テスト送信中...', 'info');
+    
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/test`,
+      { webhookUrl, userId },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      const data = response.data.data;
+      showNotification(
+        `テスト送信成功！\n` +
+        `行番号: ${data.rowNumber}\n` +
+        `学籍番号: ${data.studentId}\n` +
+        `診断タイプ: ${data.diagnosisType}\n` +
+        `合計点: ${data.totalScore}点\n` +
+        `履歴: ${data.historyCount}件\n` +
+        `レーダー: ${data.hasRadarChart ? 'あり' : 'なし'}\n` +
+        `推移: ${data.hasTrendChart ? 'あり' : 'なし'}\n` +
+        `タイプ画像: ${data.hasTypeImage ? 'あり' : 'なし'}`,
+        'success'
+      );
+    }
+    
+  } catch (error) {
+    console.error('テスト送信エラー:', error);
+    showNotification(
+      error.response?.data?.error || 'テスト送信に失敗しました',
       'error'
     );
   }
