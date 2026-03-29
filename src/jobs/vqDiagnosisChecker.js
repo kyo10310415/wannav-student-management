@@ -1,10 +1,11 @@
 import { query as dbQuery } from '../db/connection.js';
 import { 
   fetchVQDiagnosisResults, 
-  batchUpdateVQDiagnosisEmailStatus 
+  batchUpdateVQDiagnosisEmailStatus,
+  fetchVQDiagnosisByStudentId
 } from '../services/sheetsService.js';
 import { sendDiscordVQDiagnosis } from '../services/discordService.js';
-import { generateVQRadarChart } from '../services/chartService.js';
+import { generateVQRadarChart, generateVQTrendChart } from '../services/chartService.js';
 
 /**
  * VQ診断結果を定期的にチェックして送信
@@ -134,31 +135,51 @@ export async function checkAndSendVQDiagnosis() {
         }
         
         // 診断タイプに対応する画像URLを取得
-        let imageUrl = null;
+        let typeImageUrl = null;
         try {
           const imageResult = await dbQuery(
             `SELECT image_url FROM vq_diagnosis_images WHERE diagnosis_type = $1`,
             [result.diagnosisType]
           );
           if (imageResult.rows.length > 0) {
-            imageUrl = imageResult.rows[0].image_url;
-            console.log(`📷 診断タイプ「${result.diagnosisType}」の画像を取得: ${imageUrl}`);
+            typeImageUrl = imageResult.rows[0].image_url;
+            console.log(`📷 診断タイプ「${result.diagnosisType}」の画像を取得: ${typeImageUrl}`);
           }
         } catch (imageError) {
           console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
         }
         
-        // レーダーチャート画像を生成
-        let chartBuffer = null;
+        // 過去の診断履歴を取得（推移グラフ用）
+        let historyData = [];
         try {
-          chartBuffer = await generateVQRadarChart({
+          historyData = await fetchVQDiagnosisByStudentId(result.studentId);
+          console.log(`📊 過去の診断履歴: ${historyData.length}件 (${student.name})`);
+        } catch (historyError) {
+          console.warn(`⚠️ 履歴取得エラー: ${historyError.message}`);
+        }
+        
+        // レーダーチャート画像を生成
+        let radarChartBuffer = null;
+        try {
+          radarChartBuffer = await generateVQRadarChart({
             snsAccuracy: result.snsAccuracy,
             streamingAccuracy: result.streamingAccuracy,
             revenueAccuracy: result.revenueAccuracy
           });
           console.log(`📊 レーダーチャート生成成功: ${student.name}`);
         } catch (chartError) {
-          console.warn(`⚠️ チャート生成エラー: ${chartError.message}`);
+          console.warn(`⚠️ レーダーチャート生成エラー: ${chartError.message}`);
+        }
+        
+        // 推移グラフ画像を生成（2件以上の場合）
+        let trendChartBuffer = null;
+        if (historyData.length >= 2) {
+          try {
+            trendChartBuffer = await generateVQTrendChart(historyData);
+            console.log(`📈 推移グラフ生成成功: ${student.name} (${historyData.length}件)`);
+          } catch (trendError) {
+            console.warn(`⚠️ 推移グラフ生成エラー: ${trendError.message}`);
+          }
         }
         
         // Discordに送信
@@ -168,14 +189,17 @@ export async function checkAndSendVQDiagnosis() {
           diagnosisType: result.diagnosisType,
           overview: result.overview,
           details: result.details,
-          diagnosisDate: result.diagnosisDate,
-          imageUrl
+          diagnosisDate: result.diagnosisDate
         });
         
         const discordResponse = await sendDiscordVQDiagnosis(
           student.discord_url, 
-          message, 
-          chartBuffer  // チャート画像バッファを渡す
+          message,
+          {
+            radarChart: radarChartBuffer,
+            trendChart: trendChartBuffer,
+            typeImage: typeImageUrl
+          }
         );
         
         // データベースに記録
@@ -331,13 +355,6 @@ function formatVQDiagnosisMessage(result) {
       text: `送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
     }
   };
-  
-  // 画像URLがあればembedに追加
-  if (result.imageUrl) {
-    embed.image = {
-      url: result.imageUrl
-    };
-  }
   
   return {
     content: `お疲れ様です！\n\n**VQ診断の結果が出ました！**`,
