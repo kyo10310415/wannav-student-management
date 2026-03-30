@@ -473,7 +473,14 @@ async function loadTodayLessonDates() {
 // Load lesson report status for a specific date
 async function loadLessonReportStatus(date) {
   try {
-    const response = await axios.get(`${API_BASE}/api/lesson-reports/by-date/${date}`);
+    console.log(`📋 Loading lesson reports for date: ${date}`);
+    const url = `${API_BASE}/api/lesson-reports/by-date/${date}`;
+    console.log(`📋 Request URL: ${url}`);
+    
+    const response = await axios.get(url);
+    
+    console.log(`📋 Response status: ${response.status}`);
+    console.log(`📋 Response data:`, response.data);
     
     if (response.data.success) {
       // Store reports by student_id-date key
@@ -483,9 +490,13 @@ async function loadLessonReportStatus(date) {
         lessonReportStatus[key] = report;
       });
       console.log(`✅ Loaded ${response.data.count} lesson reports for ${date}`);
+      console.log(`✅ Report keys:`, Object.keys(lessonReportStatus));
     }
   } catch (error) {
-    console.error('Error loading lesson report status:', error);
+    console.error('❌ Error loading lesson report status:');
+    console.error('Error message:', error.message);
+    console.error('Error response:', error.response);
+    console.error('Request config:', error.config);
     lessonReportStatus = {};
   }
 }
