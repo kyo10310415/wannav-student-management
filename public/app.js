@@ -473,6 +473,27 @@ async function loadTodayLessonDates() {
   }
 }
 
+// Count how many lessons this student has in current month
+function countLessonsThisMonth(studentId, currentDate) {
+  const student = students.find(s => s.student_id === studentId);
+  if (!student || !student.lesson_dates) return 0;
+  
+  const currentYear = new Date(currentDate).getFullYear();
+  const currentMonth = new Date(currentDate).getMonth();
+  
+  let count = 0;
+  student.lesson_dates.forEach(dateStr => {
+    const lessonDate = new Date(dateStr);
+    if (lessonDate.getFullYear() === currentYear && 
+        lessonDate.getMonth() === currentMonth &&
+        lessonDate <= new Date(currentDate)) {
+      count++;
+    }
+  });
+  
+  return count;
+}
+
 // Load lesson report status for a specific date
 async function loadLessonReportStatus(date) {
   try {
@@ -3077,6 +3098,23 @@ async function renderTodayLessonsPage() {
   const dateLabel = isToday ? '今日のレッスン' : 'レッスン一覧';
 
   content.innerHTML = `
+    <!-- Custom Styles -->
+    <style>
+      @keyframes pulse-glow {
+        0%, 100% {
+          opacity: 1;
+          box-shadow: 0 4px 6px -1px rgba(251, 191, 36, 0.5), 0 2px 4px -1px rgba(251, 191, 36, 0.3);
+        }
+        50% {
+          opacity: 0.8;
+          box-shadow: 0 10px 15px -3px rgba(251, 191, 36, 0.7), 0 4px 6px -2px rgba(251, 191, 36, 0.5);
+        }
+      }
+      .animate-pulse-glow {
+        animation: pulse-glow 2s ease-in-out infinite;
+      }
+    </style>
+    
     <!-- Header with Date Navigation -->
     <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 mb-6 text-white">
       <div class="flex items-center justify-between">
@@ -3209,6 +3247,34 @@ function getLessonReportButton(studentId, lessonDate, studentName, tutorName) {
   }
 }
 
+// Check if this is the first lesson of the current month for the student
+function isFirstLessonOfMonth(studentId, currentDate) {
+  const studentLessonDates = lessonDates[studentId] || [];
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
+  const currentDay = currentDate.getDate();
+  
+  // Count lessons in current month up to and including current date
+  let lessonCountThisMonth = 0;
+  
+  for (const lessonInfo of studentLessonDates) {
+    const lessonDate = lessonInfo.date;
+    const lessonMonth = lessonDate.getMonth() + 1;
+    const lessonYear = lessonDate.getFullYear();
+    const lessonDay = lessonDate.getDate();
+    
+    // Same year and month
+    if (lessonYear === currentYear && lessonMonth === currentMonth) {
+      // Count lessons up to and including current date
+      if (lessonDay <= currentDay) {
+        lessonCountThisMonth++;
+      }
+    }
+  }
+  
+  return lessonCountThisMonth === 1;
+}
+
 function renderTodayStudentRows(dayStudents, displayDate) {
   if (dayStudents.length === 0) {
     return `
@@ -3253,10 +3319,22 @@ function renderTodayStudentRows(dayStudents, displayDate) {
     // Format date for API (YYYY-MM-DD)
     const lessonDateStr = `${displayDate.getFullYear()}-${String(displayMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
     
+    // Check if this is the first lesson of the month
+    const isFirstLesson = isFirstLessonOfMonth(student.student_id, displayDate);
+    
     return `
-      <tr class="hover:bg-gray-50">
+      <tr class="hover:bg-gray-50 ${isFirstLesson ? 'bg-yellow-50' : ''}">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${student.name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+          <div class="flex items-center gap-2">
+            <span>${student.name || '-'}</span>
+            ${isFirstLesson ? `
+              <span class="inline-flex items-center px-2 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg animate-pulse">
+                <i class="fas fa-star mr-1"></i>本日リザルトお伝え
+              </span>
+            ` : ''}
+          </div>
+        </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${lessonTime || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
