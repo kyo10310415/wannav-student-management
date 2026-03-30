@@ -18,10 +18,19 @@ export async function calculateStudentLessonStats() {
             ELSE 0
           END
         ) as max_lesson_number,
-        -- 欠席回数（無断キャンセル + リスケ）
+        -- PROプランの有無チェック
+        MAX(
+          CASE 
+            WHEN lesson_result = '実施済み' 
+              AND lesson_number = 'PROプラン'
+            THEN 1
+            ELSE 0
+          END
+        ) as has_pro_plan,
+        -- 欠席回数（無断キャンセルのみ）
         SUM(
           CASE 
-            WHEN lesson_result IN ('無断キャンセル', '生徒様都合でリスケ', 'Tutor都合でリスケ')
+            WHEN lesson_result = '無断キャンセル'
             THEN 1
             ELSE 0
           END
@@ -43,8 +52,19 @@ export async function calculateStudentLessonStats() {
     // student_idをキーとしたマップに変換
     const statsMap = {};
     result.rows.forEach(row => {
+      const hasPro = parseInt(row.has_pro_plan) > 0;
+      const maxLesson = parseInt(row.max_lesson_number) || 0;
+      
+      // Proプランの場合は「Proプラン」、それ以外は最大レッスン番号
+      let lessonProgress = null;
+      if (hasPro) {
+        lessonProgress = 'Proプラン';
+      } else if (maxLesson > 0) {
+        lessonProgress = String(maxLesson);
+      }
+      
       statsMap[row.student_id] = {
-        lesson_progress: row.max_lesson_number > 0 ? String(row.max_lesson_number) : null,
+        lesson_progress: lessonProgress,
         absence_count: parseInt(row.absence_count) || 0,
         completed_count: parseInt(row.completed_count) || 0,
         total_reports: parseInt(row.total_reports) || 0
@@ -76,9 +96,17 @@ export async function getStudentLessonStats(studentId) {
             ELSE 0
           END
         ) as max_lesson_number,
+        MAX(
+          CASE 
+            WHEN lesson_result = '実施済み' 
+              AND lesson_number = 'PROプラン'
+            THEN 1
+            ELSE 0
+          END
+        ) as has_pro_plan,
         SUM(
           CASE 
-            WHEN lesson_result IN ('無断キャンセル', '生徒様都合でリスケ', 'Tutor都合でリスケ')
+            WHEN lesson_result = '無断キャンセル'
             THEN 1
             ELSE 0
           END
@@ -106,8 +134,19 @@ export async function getStudentLessonStats(studentId) {
     }
 
     const row = result.rows[0];
+    const hasPro = parseInt(row.has_pro_plan) > 0;
+    const maxLesson = parseInt(row.max_lesson_number) || 0;
+    
+    // PROプランの場合は「PROプラン」、それ以外は最大レッスン番号
+    let lessonProgress = null;
+    if (hasPro) {
+      lessonProgress = 'PROプラン';
+    } else if (maxLesson > 0) {
+      lessonProgress = String(maxLesson);
+    }
+    
     return {
-      lesson_progress: row.max_lesson_number > 0 ? String(row.max_lesson_number) : null,
+      lesson_progress: lessonProgress,
       absence_count: parseInt(row.absence_count) || 0,
       completed_count: parseInt(row.completed_count) || 0,
       total_reports: parseInt(row.total_reports) || 0

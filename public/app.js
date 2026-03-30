@@ -842,7 +842,7 @@ function renderStudentRows() {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${paymentStatus}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">
           <span class="px-2 py-1 rounded-full text-xs ${getLessonCountBadgeColor(lessonCount)}">
@@ -1104,6 +1104,20 @@ function getLessonCountBadgeColor(count) {
   if (count === 1) return 'bg-yellow-200 text-yellow-800';
   if (count >= 3) return 'bg-cyan-200 text-cyan-800'; // Changed from yellow to cyan
   return 'bg-gray-200 text-gray-800';
+}
+
+// Get lesson progress display text
+function getLessonProgressDisplay(progress) {
+  if (!progress) return '-';
+  if (progress === 'Proプラン') return 'Proプラン';
+  return `レッスン${progress}`;
+}
+
+// Get lesson progress CSS class (no color for Pro plan)
+function getLessonProgressClass(progress) {
+  if (!progress) return 'text-gray-400';
+  if (progress === 'Proプラン') return 'text-gray-700';
+  return 'text-blue-600';
 }
 
 // Get previous month in YYYY-MM format for result system
@@ -1995,8 +2009,8 @@ function renderStudentRowsSimple() {
           <!-- Lesson Progress -->
           <div class="${rowBgColor} rounded p-2">
             <div class="text-xs text-gray-600 mb-1">レッスン進捗</div>
-            <div class="text-sm font-semibold ${student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">
-              ${student.lesson_progress ? `L${student.lesson_progress}` : '-'}
+            <div class="text-sm font-semibold ${getLessonProgressClass(student.lesson_progress)}">
+              ${student.lesson_progress === 'Proプラン' ? 'Pro' : (student.lesson_progress ? `L${student.lesson_progress}` : '-')}
             </div>
           </div>
           
@@ -3149,7 +3163,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${lessonTime || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${ student.lesson_progress ? 'text-blue-600' : 'text-gray-400'}">${student.lesson_progress ? `レッスン${student.lesson_progress}` : '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
@@ -3614,7 +3628,7 @@ function displayLessonsList(lessons) {
             <div class="font-semibold text-gray-800">${student.name}</div>
             <div class="text-sm text-gray-600">学籍番号: ${student.student_id}</div>
             <div class="text-sm text-gray-600">担任Tutor: ${getTutorDisplayName(student.homeroom_tutor)}</div>
-            <div class="text-sm text-gray-600">レッスン進捗: ${student.lesson_progress || 0}回</div>
+            <div class="text-sm text-gray-600">レッスン進捗: ${student.lesson_progress === 'Proプラン' ? 'Proプラン' : (student.lesson_progress ? `${student.lesson_progress}回` : '0回')}</div>
           </div>
           <div class="flex gap-2">
             <a href="${notionUrl}" target="_blank" onclick="event.stopPropagation()" 
@@ -3689,7 +3703,7 @@ function showHelperRequestForm() {
             <p><span class="font-medium">生徒名:</span> ${student.name}</p>
             <p><span class="font-medium">学籍番号:</span> ${student.student_id}</p>
             <p><span class="font-medium">担任Tutor:</span> ${getTutorDisplayName(student.homeroom_tutor)}</p>
-            <p><span class="font-medium">レッスン進捗:</span> ${student.lesson_progress || 0}回</p>
+            <p><span class="font-medium">レッスン進捗:</span> ${student.lesson_progress === 'Proプラン' ? 'Proプラン' : (student.lesson_progress ? `${student.lesson_progress}回` : '0回')}</p>
           </div>
         </div>
         
@@ -3834,7 +3848,7 @@ function showHelperRequestConfirmation() {
             </div>
             <div>
               <p class="text-sm text-gray-600">レッスン進捗</p>
-              <p class="font-semibold">${student.lesson_progress || 0}回</p>
+              <p class="font-semibold">${student.lesson_progress === 'Proプラン' ? 'Proプラン' : (student.lesson_progress ? `${student.lesson_progress}回` : '0回')}</p>
             </div>
           </div>
           
