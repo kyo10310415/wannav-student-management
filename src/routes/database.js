@@ -157,6 +157,33 @@ app.get('/connection-info', async (c) => {
 });
 
 /**
+ * POST /api/database/migrate
+ * Run database migrations manually
+ */
+app.post('/migrate', async (c) => {
+  try {
+    console.log('🔄 Manual migration triggered');
+    
+    // Import and run migrations
+    const { runMigrations } = await import('../db/migrate.js');
+    await runMigrations();
+    
+    console.log('✅ Migrations completed successfully');
+    
+    return c.json({
+      success: true,
+      message: 'Database migrations completed successfully'
+    });
+  } catch (error) {
+    console.error('❌ Migration error:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * Helper function to format bytes to human-readable format
  */
 function formatBytes(bytes) {

@@ -495,9 +495,17 @@ async function loadLessonReportStatus(date) {
   } catch (error) {
     console.error('❌ Error loading lesson report status:');
     console.error('Error message:', error.message);
-    console.error('Error response:', error.response);
-    console.error('Request config:', error.config);
+    console.error('Error response status:', error.response?.status);
+    console.error('Error response data:', error.response?.data);
+    
+    // 404 or other errors - initialize empty status (all buttons will show as "未提出")
     lessonReportStatus = {};
+    
+    // If it's a 404, the table probably doesn't exist yet
+    if (error.response?.status === 404) {
+      console.warn('⚠️ レッスン報告テーブルがまだ作成されていない可能性があります');
+      console.warn('⚠️ マイグレーションを実行してください: npm run db:migrate');
+    }
   }
 }
 
@@ -7106,10 +7114,18 @@ async function renderDatabasePage() {
       <div class="space-y-6">
         <!-- Page Title -->
         <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg shadow-lg p-6">
-          <h2 class="text-3xl font-bold">
-            <i class="fas fa-database mr-3"></i>データベース管理
-          </h2>
-          <p class="mt-2 text-indigo-100">データベースの使用状況とパフォーマンスを確認します</p>
+          <div class="flex justify-between items-start">
+            <div>
+              <h2 class="text-3xl font-bold">
+                <i class="fas fa-database mr-3"></i>データベース管理
+              </h2>
+              <p class="mt-2 text-indigo-100">データベースの使用状況とパフォーマンスを確認します</p>
+            </div>
+            <button onclick="runDatabaseMigration()" 
+                    class="px-4 py-2 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-indigo-50 transition">
+              <i class="fas fa-sync-alt mr-2"></i>マイグレーション実行
+            </button>
+          </div>
         </div>
 
         <!-- Main Database Stats -->
@@ -7386,6 +7402,40 @@ function showNotification(message, type = 'info') {
       setTimeout(() => notification.remove(), 300);
     }
   }, 3000);
+}
+
+// Run database migration
+async function runDatabaseMigration() {
+  if (!confirm('データベースマイグレーションを実行しますか？\n\nこの操作により、不足しているテーブルやカラムが作成されます。')) {
+    return;
+  }
+  
+  try {
+    showNotification('マイグレーションを実行中...', 'info');
+    
+    const response = await axios.post(`${API_BASE}/api/database/migrate`, {}, {
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`
+      }
+    });
+    
+    if (response.data.success) {
+      showNotification('✅ マイグレーションが完了しました', 'success');
+      
+      // Reload the database page
+      setTimeout(() => {
+        renderDatabasePage();
+      }, 1000);
+    } else {
+      throw new Error(response.data.error);
+    }
+  } catch (error) {
+    console.error('Migration error:', error);
+    showNotification(
+      '❌ マイグレーション実行エラー: ' + (error.response?.data?.error || error.message),
+      'error'
+    );
+  }
 }
 
 // ===========================================
