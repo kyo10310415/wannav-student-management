@@ -1,8 +1,13 @@
 import { Hono } from 'hono';
 import { getPool } from '../db/connection.js';
 import crypto from 'crypto';
+import axios from 'axios';
 
 const app = new Hono();
+
+// Discord Webhook URL for roulette win notifications
+const ROULETTE_WIN_WEBHOOK = 'https://discord.com/api/webhooks/1454123104698761260/V4dCIKzhu3OCc5FWLro0ttzj3dCsin5B4-kuWu1yxLUn_cIN68fiV4Iqjqmiox6jPR1d';
+const ROLE_MENTION_ID = '1294923221107478571';
 
 /**
  * POST /api/roulette/generate
@@ -206,7 +211,9 @@ app.post('/spin', async (c) => {
         sa.created_at,
         s.name as student_name,
         s.result_score_prev_month as result_score,
-        s.discord_url
+        s.discord_url,
+        s.notion_url,
+        s.notion_page_id
       FROM stamp_rally_achievements sa
       JOIN students s ON sa.student_id = s.student_id
       WHERE sa.roulette_url = $1
@@ -263,6 +270,69 @@ app.post('/spin', async (c) => {
     `, [achievement.student_id, result, probability, rouletteUrl]);
 
     const rouletteResult = insertResult.rows[0];
+
+    // 当たりの場合、Discord通知を送信
+    if (result === '当たり') {
+      try {
+        // Generate Notion URL
+        let notionUrl = achievement.notion_url;
+        if (!notionUrl && achievement.notion_page_id) {
+          notionUrl = `https://www.notion.so/${achievement.notion_page_id.replace(/-/g, '')}`;
+        }
+
+        // Send Discord notification with role mention
+        const embed = {
+          title: '🎊 ルーレット当選通知 🎊',
+          description: `<@&${ROLE_MENTION_ID}>\n\n**アンケートスタンプラリーのルーレットで当たりが出ました！**`,
+          color: 0xFF0000, // 赤色
+          fields: [
+            {
+              name: '🎓 生徒情報',
+              value: `**生徒名**: ${achievement.student_name}\n**学籍番号**: ${achievement.student_id}`,
+              inline: false
+            },
+            {
+              name: '📝 Notionリンク',
+              value: notionUrl ? `[Notionページを開く](${notionUrl})` : 'Notionリンクなし',
+              inline: false
+            },
+            {
+              name: '🎁 特典内容',
+              value: '**弊社事務所マネージャーによる**1時間コンサル権',
+              inline: false
+            },
+            {
+              name: '📅 抽選日時',
+              value: new Date(rouletteResult.created_at).toLocaleString('ja-JP', {
+                timeZone: 'Asia/Tokyo',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              inline: true
+            }
+          ],
+          footer: {
+            text: 'ご対応をよろしくお願いいたします'
+          },
+          timestamp: new Date().toISOString()
+        };
+
+        await axios.post(ROULETTE_WIN_WEBHOOK, {
+          content: `<@&${ROLE_MENTION_ID}>`,
+          username: 'WannaV Roulette',
+          avatar_url: 'https://cdn-icons-png.flaticon.com/512/3588/3588592.png',
+          embeds: [embed]
+        });
+
+        console.log(`[Roulette] Win notification sent to Discord for ${achievement.student_id}`);
+      } catch (notificationError) {
+        console.error(`[Roulette] Failed to send Discord notification:`, notificationError.message);
+        // Continue even if notification fails
+      }
+    }
 
     // 通知日時を更新
     await pool.query(`
@@ -485,6 +555,99 @@ app.post('/reset-test-results', async (c) => {
     });
   } catch (error) {
     console.error('[Roulette] Error resetting test results:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/roulette/winners
+ * 当たりを引いた生徒の一覧を取得
+ */
+app.get('/winners', async (c) => {
+  try {
+    const pool = getPool();
+
+    let result;
+    try {
+      result = await pool.query(`
+        SELECT 
+          r.id,
+          r.student_id,
+          r.result,
+          r.probability,
+          r.created_at,
+          s.name as student_name,
+          s.notion_url,
+          s.notion_page_id,
+          s.homeroom_tutor,
+          sa.achievement_type,
+          sa.achievement_date
+        FROM roulette_results r
+        JOIN students s ON r.student_id = s.student_id
+        LEFT JOIN stamp_rally_achievements sa ON r.student_id = sa.student_id 
+          AND r.roulette_url = sa.roulette_url
+        WHERE r.result = '当たり' 
+          AND (r.is_test = FALSE OR r.is_test IS NULL)
+        ORDER BY r.created_at DESC
+      `);
+    } catch (error) {
+      console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
+      // Fallback without is_test column
+      result = await pool.query(`
+        SELECT 
+          r.id,
+          r.student_id,
+          r.result,
+          r.probability,
+          r.created_at,
+          s.name as student_name,
+          s.notion_url,
+          s.notion_page_id,
+          s.homeroom_tutor,
+          sa.achievement_type,
+          sa.achievement_date
+        FROM roulette_results r
+        JOIN students s ON r.student_id = s.student_id
+        LEFT JOIN stamp_rally_achievements sa ON r.student_id = sa.student_id 
+          AND r.roulette_url = sa.roulette_url
+        WHERE r.result = '当たり' 
+          AND r.roulette_url NOT LIKE 'test-draw-%'
+        ORDER BY r.created_at DESC
+      `);
+    }
+
+    // Build Notion URLs
+    const winners = result.rows.map(row => {
+      let notionUrl = row.notion_url;
+      if (!notionUrl && row.notion_page_id) {
+        notionUrl = `https://www.notion.so/${row.notion_page_id.replace(/-/g, '')}`;
+      }
+
+      return {
+        id: row.id,
+        studentId: row.student_id,
+        studentName: row.student_name,
+        homeroom_tutor: row.homeroom_tutor,
+        notionUrl,
+        probability: row.probability,
+        achievementType: row.achievement_type,
+        achievementDate: row.achievement_date,
+        drawnAt: row.created_at
+      };
+    });
+
+    console.log(`[Roulette] Found ${winners.length} winners`);
+
+    return c.json({
+      success: true,
+      data: winners,
+      count: winners.length
+    });
+  } catch (error) {
+    console.error('Error fetching winners:', error);
     return c.json({
       success: false,
       error: error.message

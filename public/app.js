@@ -121,6 +121,13 @@ function renderHeader() {
     </button>
   ` : '';
   
+  // Build roulette winners button (leader or above)
+  const rouletteWinnersButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+    <button id="nav-roulette-winners" onclick="changePage('roulette-winners')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'roulette-winners' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+      <i class="fas fa-trophy mr-2"></i>当たり生徒
+    </button>
+  ` : '';
+  
   console.log('renderHeader - userManagementButton:', userManagementButton ? 'yes' : 'no');
   console.log('renderHeader - databaseManagementButton:', databaseManagementButton ? 'yes' : 'no');
   
@@ -215,7 +222,7 @@ function renderHeader() {
               </button>
             </div>
             
-            ${userManagementButton || databaseManagementButton || vqDiagnosisButton || lessonReportsButton ? `
+            ${userManagementButton || databaseManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton ? `
               <!-- Divider -->
               <div class="w-px bg-white/30"></div>
               
@@ -223,6 +230,7 @@ function renderHeader() {
               <div class="flex gap-2">
                 ${vqDiagnosisButton}
                 ${lessonReportsButton}
+                ${rouletteWinnersButton}
                 ${userManagementButton}
                 ${databaseManagementButton}
               </div>
@@ -577,6 +585,8 @@ async function renderApp() {
     await renderVQDiagnosisPage();
   } else if (currentPage === 'lesson-reports') {
     await renderLessonReportsPage();
+  } else if (currentPage === 'roulette-winners') {
+    await renderRouletteWinnersPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -11189,4 +11199,184 @@ function formatDateToYYYYMMDD(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// ===== Roulette Winners Page =====
+
+async function renderRouletteWinnersPage() {
+  // Permission check
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+    content.innerHTML = `
+      <div class="bg-white rounded-lg shadow-md p-8 text-center">
+        <i class="fas fa-lock text-6xl text-red-500 mb-4"></i>
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">アクセス権限がありません</h2>
+        <p class="text-gray-600">このページはリーダー以上の権限が必要です。</p>
+      </div>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="space-y-6">
+      <!-- Page Header -->
+      <div class="bg-gradient-to-r from-yellow-500 to-orange-600 rounded-lg shadow-lg p-6 text-white">
+        <h1 class="text-3xl font-bold flex items-center gap-3">
+          <i class="fas fa-trophy"></i>
+          ルーレット当選者一覧
+        </h1>
+        <p class="mt-2 text-yellow-100">
+          アンケートスタンプラリーのルーレットで当たりを引いた生徒様の一覧です
+        </p>
+      </div>
+
+      <!-- Loading State -->
+      <div id="winners-loading" class="bg-white rounded-lg shadow-md p-12 text-center">
+        <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+        <p class="text-gray-600">当選者データを読み込み中...</p>
+      </div>
+
+      <!-- Winners List -->
+      <div id="winners-list" class="hidden bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold text-gray-800">
+            <i class="fas fa-list mr-2"></i>
+            当選者一覧
+          </h2>
+          <div class="text-sm text-gray-600">
+            総当選者数: <span id="winners-count" class="font-bold text-blue-600">0</span>名
+          </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">抽選日時</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">達成条件</th>
+                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">確率</th>
+                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Notion</th>
+              </tr>
+            </thead>
+            <tbody id="winners-table-body" class="bg-white divide-y divide-gray-200">
+              <!-- Winners will be inserted here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load winners data
+  await loadRouletteWinners();
+}
+
+async function loadRouletteWinners() {
+  try {
+    const response = await axios.get(`${API_BASE}/api/roulette/winners`);
+    
+    if (!response.data.success) {
+      showNotification('当選者データの読み込みに失敗しました', 'error');
+      return;
+    }
+
+    const winners = response.data.data;
+    console.log(`✅ Loaded ${winners.length} winners`);
+
+    // Hide loading, show list
+    document.getElementById('winners-loading').classList.add('hidden');
+    document.getElementById('winners-list').classList.remove('hidden');
+    document.getElementById('winners-count').textContent = winners.length;
+
+    // Render winners table
+    const tableBody = document.getElementById('winners-table-body');
+    
+    if (winners.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+            <i class="fas fa-inbox text-4xl mb-2"></i>
+            <p>まだ当選者はいません</p>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tableBody.innerHTML = winners.map(winner => {
+      const drawnAt = new Date(winner.drawnAt);
+      const drawnAtStr = drawnAt.toLocaleString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Achievement type label
+      const achievementTypeLabel = {
+        'initial_80': '条件①(80%)',
+        'continuous_6': '条件②(6連続)',
+        'catch_up_100': '条件③(100%)',
+        'reset_6': 'リセット後'
+      }[winner.achievementType] || winner.achievementType;
+
+      return `
+        <tr class="hover:bg-yellow-50">
+          <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+            ${drawnAtStr}
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+            ${winner.studentId}
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+            ${winner.studentName}
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+            ${getTutorDisplayName(winner.homeroom_tutor) || '-'}
+          </td>
+          <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
+            <span class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+              ${achievementTypeLabel}
+            </span>
+          </td>
+          <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-600">
+            ${winner.probability}%
+          </td>
+          <td class="px-3 py-3 whitespace-nowrap text-center">
+            ${winner.notionUrl ? `
+              <a href="${winner.notionUrl}" target="_blank" rel="noopener noreferrer" 
+                 class="inline-flex items-center px-3 py-1 bg-gray-800 text-white text-xs font-semibold rounded hover:bg-gray-900 transition">
+                <i class="fas fa-file-alt mr-1"></i>Notion
+              </a>
+            ` : '<span class="text-gray-400 text-xs">-</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('❌ Error loading winners:', error);
+    console.error('Error message:', error.message);
+    if (error.response) {
+      console.error('Error response:', error.response);
+    }
+    
+    showNotification('当選者データの読み込みに失敗しました', 'error');
+    
+    // Hide loading
+    const loadingEl = document.getElementById('winners-loading');
+    if (loadingEl) {
+      loadingEl.innerHTML = `
+        <div class="text-center text-red-600">
+          <i class="fas fa-exclamation-circle text-4xl mb-4"></i>
+          <p class="font-semibold">データの読み込みに失敗しました</p>
+          <p class="text-sm mt-2">${error.message}</p>
+        </div>
+      `;
+    }
+  }
 }
