@@ -2955,64 +2955,74 @@ function getResultOverallColor(result) {
 // ========== Today's Lessons Page ==========
 
 // Render Today's Lessons Page
+// 現在表示中のレッスン日付（デフォルトは今日）
+let currentLessonDate = new Date();
+
 async function renderTodayLessonsPage() {
   const content = document.getElementById('content');
   
   // Load today's lesson dates (always loads current month)
   await loadTodayLessonDates();
   
-  // Get today's date
-  const today = new Date();
-  const todayDay = today.getDate();
-  const todayMonth = today.getMonth() + 1;
+  // Get display date (can be today, yesterday, or tomorrow)
+  const displayDate = new Date(currentLessonDate);
+  const displayDay = displayDate.getDate();
+  const displayMonth = displayDate.getMonth() + 1;
   
-  console.log(`Today: ${todayMonth}/${todayDay}`);
+  console.log(`Display date: ${displayMonth}/${displayDay}`);
   console.log('Total students:', students.length);
   console.log('Lesson dates sample:', Object.keys(lessonDates).slice(0, 5).map(id => ({
     id,
     dates: lessonDates[id].map(d => d.formatted)
   })));
   
-  // Filter students who have lessons today
-  let todayStudents = students.filter(student => {
+  // Filter students who have lessons on the display date
+  let dayStudents = students.filter(student => {
     const dates = lessonDates[student.student_id] || [];
-    const hasLessonToday = dates.some(d => {
+    const hasLessonOnDate = dates.some(d => {
       // Compare formatted date strings (M/D format)
-      const todayFormatted = `${todayMonth}/${todayDay}`;
-      return d.formatted === todayFormatted;
+      const dateFormatted = `${displayMonth}/${displayDay}`;
+      return d.formatted === dateFormatted;
     });
-    return hasLessonToday;
+    return hasLessonOnDate;
   });
   
-  console.log('Today students count (before filter):', todayStudents.length);
+  console.log('Day students count (before filter):', dayStudents.length);
   console.log('Selected tutor:', selectedTutor);
   
   // Apply tutor filter
   if (selectedTutor !== 'all') {
     console.log('Filtering by tutor:', selectedTutor);
-    todayStudents = todayStudents.filter(s => s.homeroom_tutor === selectedTutor);
-    console.log('Today students count (after filter):', todayStudents.length);
+    dayStudents = dayStudents.filter(s => s.homeroom_tutor === selectedTutor);
+    console.log('Day students count (after filter):', dayStudents.length);
   }
   
+  const today = new Date();
+  const isToday = displayDate.toDateString() === today.toDateString();
+  const dateLabel = isToday ? '今日のレッスン' : 'レッスン一覧';
+
   content.innerHTML = `
-    <!-- Header with Lesson Report Link -->
+    <!-- Header with Date Navigation -->
     <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 mb-6 text-white">
       <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-2xl font-bold mb-2">
-            <i class="fas fa-calendar-day mr-2"></i>
-            今日のレッスン (${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日)
+        <div class="flex-1">
+          <h2 class="text-2xl font-bold mb-2 flex items-center gap-3">
+            <button onclick="changeLessonDate(-1)" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <span>
+              <i class="fas fa-calendar-day mr-2"></i>
+              ${dateLabel} (${displayDate.getFullYear()}年${displayMonth}月${displayDay}日)
+              ${isToday ? '<span class="text-xs bg-yellow-400 text-blue-900 px-2 py-1 rounded ml-2">TODAY</span>' : ''}
+            </span>
+            <button onclick="changeLessonDate(1)" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+            ${!isToday ? `<button onclick="resetToToday()" class="px-3 py-2 text-sm bg-yellow-400 text-blue-900 hover:bg-yellow-300 rounded transition">
+              <i class="fas fa-calendar-day mr-1"></i>今日に戻る
+            </button>` : ''}
           </h2>
-          <p class="text-blue-100">今日レッスンがある生徒様: ${todayStudents.length}名</p>
-        </div>
-        <div>
-          <a href="https://docs.google.com/forms/d/e/1FAIpQLSfT2_mAhf3_ZwZAaOUrIADgGXD4BxWpVeh9DIZ-tJkIfD3ZSg/viewform" 
-             target="_blank" 
-             rel="noopener noreferrer"
-             class="inline-flex items-center px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition shadow-lg">
-            <i class="fas fa-file-alt mr-2"></i>
-            レッスン報告フォーム
-          </a>
+          <p class="text-blue-100">レッスンがある生徒様: ${dayStudents.length}名</p>
         </div>
       </div>
     </div>
@@ -3062,10 +3072,11 @@ async function renderTodayLessonsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Meet</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン報告</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            ${renderTodayStudentRows(todayStudents)}
+            ${renderTodayStudentRows(dayStudents, displayDate)}
           </tbody>
         </table>
       </div>
@@ -3087,19 +3098,19 @@ async function renderTodayLessonsPage() {
 }
 
 // Render today's student rows
-function renderTodayStudentRows(todayStudents) {
-  if (todayStudents.length === 0) {
+function renderTodayStudentRows(dayStudents, displayDate) {
+  if (dayStudents.length === 0) {
     return `
       <tr>
-        <td colspan="13" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="12" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-calendar-times text-4xl mb-2"></i>
-          <p>今日レッスンの生徒様はいません</p>
+          <p>この日のレッスンはありません</p>
         </td>
       </tr>
     `;
   }
 
-  return todayStudents.map(student => {
+  return dayStudents.map(student => {
     // Use pre-fetched Notion URL from cache
     const notionUrl = student.notion_url || 
       (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
@@ -3119,13 +3130,17 @@ function renderTodayStudentRows(todayStudents) {
     const suspensionMonths = student.suspension_months || 0;
     const continuedMonths = student.lesson_start_date ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths) : 0;
     
-    // Get Meet link and time for today's lesson
+    // Get Meet link and time for display date's lesson
     const studentLessonDates = lessonDates[student.student_id] || [];
-    const today = new Date();
-    const todayFormatted = `${today.getMonth() + 1}/${today.getDate()}`;
-    const todayLesson = studentLessonDates.find(d => d.formatted === todayFormatted);
-    const meetLink = todayLesson?.meet_link || null;
-    const lessonTime = todayLesson?.time || null;
+    const displayDay = displayDate.getDate();
+    const displayMonth = displayDate.getMonth() + 1;
+    const dateFormatted = `${displayMonth}/${displayDay}`;
+    const dayLesson = studentLessonDates.find(d => d.formatted === dateFormatted);
+    const meetLink = dayLesson?.meet_link || null;
+    const lessonTime = dayLesson?.time || null;
+    
+    // Format date for API (YYYY-MM-DD)
+    const lessonDateStr = `${displayDate.getFullYear()}-${String(displayMonth).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
     
     return `
       <tr class="hover:bg-gray-50">
@@ -3149,6 +3164,12 @@ function renderTodayStudentRows(todayStudents) {
             ${student.x_account_id ? `<a href="https://x.com/${student.x_account_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
           </div>
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          <button onclick="showLessonReportModal('${student.student_id}', '${lessonDateStr}', '${(student.name || '').replace(/'/g, "\\'")}', '${(student.homeroom_tutor || '').replace(/'/g, "\\'")}')" 
+                  class="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition">
+            <i class="fas fa-clipboard-check mr-1"></i>報告
+          </button>
         </td>
       </tr>
     `;
@@ -10363,6 +10384,200 @@ async function testSendVQDiagnosis() {
     console.error('テスト送信エラー:', error);
     showNotification(
       error.response?.data?.error || 'テスト送信に失敗しました',
+      'error'
+    );
+  }
+}
+
+// ===== Today's Lessons Date Navigation =====
+function changeLessonDate(days) {
+  currentLessonDate.setDate(currentLessonDate.getDate() + days);
+  renderTodayLessonsPage();
+}
+
+function resetToToday() {
+  currentLessonDate = new Date();
+  renderTodayLessonsPage();
+}
+
+// ===== Lesson Report Modal =====
+function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
+  const modal = document.createElement('div');
+  modal.id = 'lessonReportModal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-clipboard-check mr-2 text-green-600"></i>
+            レッスン報告
+          </h2>
+          <button onclick="closeLessonReportModal()" class="text-gray-400 hover:text-gray-600 transition">
+            <i class="fas fa-times text-2xl"></i>
+          </button>
+        </div>
+        
+        <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+          <p class="text-sm text-gray-600">学籍番号: <span class="font-semibold">${studentId}</span></p>
+          <p class="text-sm text-gray-600">生徒名: <span class="font-semibold">${studentName}</span></p>
+          <p class="text-sm text-gray-600">担任Tutor: <span class="font-semibold">${tutorName}</span></p>
+          <p class="text-sm text-gray-600">レッスン日: <span class="font-semibold">${lessonDate}</span></p>
+        </div>
+        
+        <form id="lessonReportForm" class="space-y-6">
+          <!-- レッスン結果 -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              レッスン結果 <span class="text-red-600">*</span>
+            </label>
+            <select id="lessonResult" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+              <option value="">選択してください</option>
+              <option value="実施済み">実施済み</option>
+              <option value="生徒様都合でリスケ">生徒様都合でリスケ</option>
+              <option value="Tutor都合でリスケ">Tutor都合でリスケ</option>
+              <option value="無断キャンセル">無断キャンセル</option>
+            </select>
+          </div>
+          
+          <!-- レッスン番号 -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              レッスン番号 <span class="text-red-600">*</span>
+            </label>
+            <select id="lessonNumber" required onchange="toggleProFields()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+              <option value="">選択してください</option>
+              ${Array.from({length: 28}, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
+              <option value="PROプラン">PROプラン</option>
+            </select>
+          </div>
+          
+          <!-- PROプラン専用フィールド -->
+          <div id="proFields" class="hidden space-y-6">
+            <!-- カリキュラム -->
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">
+                カリキュラム <span class="text-red-600">*</span>
+              </label>
+              <select id="proCurriculum" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                <option value="">選択してください</option>
+                <option value="【収益の最大化】YouTubeマネタイズ戦略">【収益の最大化】YouTubeマネタイズ戦略</option>
+                <option value="【V体質化】 収益を生むグッズ販売戦略">【V体質化】 収益を生むグッズ販売戦略</option>
+                <option value="【プロの登竜門】安定的な企業案件獲得術">【プロの登竜門】安定的な企業案件獲得術</option>
+                <option value="【急成長】YouTubeバズコンテンツ量産術">【急成長】YouTubeバズコンテンツ量産術</option>
+                <option value="【特化スキル】動画編集コース（標準編）">【特化スキル】動画編集コース（標準編）</option>
+                <option value="【特化スキル】動画編集コース（アドバンス編）">【特化スキル】動画編集コース（アドバンス編）</option>
+                <option value="【好きなことを極める】YouTube活動「伸び」の再設計図">【好きなことを極める】YouTube活動「伸び」の再設計図</option>
+              </select>
+            </div>
+            
+            <!-- テキスト番号 -->
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">
+                テキスト番号 <span class="text-red-600">*</span>
+              </label>
+              <select id="proTextNumber" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                <option value="">選択してください</option>
+                ${Array.from({length: 12}, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          
+          <!-- ボタン -->
+          <div class="flex gap-3 pt-4">
+            <button type="button" onclick="closeLessonReportModal()" class="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition">
+              キャンセル
+            </button>
+            <button type="submit" class="flex-1 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
+              <i class="fas fa-save mr-2"></i>保存
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // フォーム送信処理
+  document.getElementById('lessonReportForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitLessonReport(studentId, lessonDate);
+  });
+}
+
+function toggleProFields() {
+  const lessonNumber = document.getElementById('lessonNumber').value;
+  const proFields = document.getElementById('proFields');
+  const proCurriculum = document.getElementById('proCurriculum');
+  const proTextNumber = document.getElementById('proTextNumber');
+  
+  if (lessonNumber === 'PROプラン') {
+    proFields.classList.remove('hidden');
+    proCurriculum.required = true;
+    proTextNumber.required = true;
+  } else {
+    proFields.classList.add('hidden');
+    proCurriculum.required = false;
+    proTextNumber.required = false;
+    proCurriculum.value = '';
+    proTextNumber.value = '';
+  }
+}
+
+function closeLessonReportModal() {
+  const modal = document.getElementById('lessonReportModal');
+  if (modal) {
+    modal.remove();
+  }
+}
+
+async function submitLessonReport(studentId, lessonDate) {
+  try {
+    const lessonResult = document.getElementById('lessonResult').value;
+    const lessonNumber = document.getElementById('lessonNumber').value;
+    const proCurriculum = document.getElementById('proCurriculum').value;
+    const proTextNumber = document.getElementById('proTextNumber').value;
+    
+    // バリデーション
+    if (!lessonResult || !lessonNumber) {
+      showNotification('必須項目を入力してください', 'error');
+      return;
+    }
+    
+    if (lessonNumber === 'PROプラン' && (!proCurriculum || !proTextNumber)) {
+      showNotification('PROプランの場合、カリキュラムとテキスト番号を選択してください', 'error');
+      return;
+    }
+    
+    // API送信
+    const response = await axios.post(`${API_BASE}/api/lesson-reports`, {
+      student_id: studentId,
+      lesson_date: lessonDate,
+      lesson_result: lessonResult,
+      lesson_number: lessonNumber,
+      pro_curriculum: proCurriculum || null,
+      pro_text_number: proTextNumber || null,
+      reported_by: currentUser?.email || 'unknown'
+    }, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      }
+    });
+    
+    if (response.data.success) {
+      showNotification('レッスン報告を保存しました', 'success');
+      closeLessonReportModal();
+      
+      // 必要に応じてページを再読み込み
+      // await renderTodayLessonsPage();
+    } else {
+      showNotification('保存に失敗しました: ' + response.data.error, 'error');
+    }
+  } catch (error) {
+    console.error('レッスン報告送信エラー:', error);
+    showNotification(
+      error.response?.data?.error || 'レッスン報告の保存に失敗しました',
       'error'
     );
   }
