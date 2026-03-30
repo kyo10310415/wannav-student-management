@@ -7411,6 +7411,7 @@ async function runDatabaseMigration() {
   }
   
   try {
+    console.log('🔄 Starting migration...');
     showNotification('マイグレーションを実行中...', 'info');
     
     const response = await axios.post(`${API_BASE}/api/database/migrate`, {}, {
@@ -7419,8 +7420,20 @@ async function runDatabaseMigration() {
       }
     });
     
+    console.log('Migration response:', response.data);
+    
     if (response.data.success) {
-      showNotification('✅ マイグレーションが完了しました', 'success');
+      const lessonReportsExists = response.data.lessonReportsTableExists;
+      console.log(`lesson_reports table exists: ${lessonReportsExists}`);
+      
+      showNotification(
+        `✅ マイグレーションが完了しました\nlesson_reportsテーブル: ${lessonReportsExists ? '作成済み' : '未作成'}`,
+        'success'
+      );
+      
+      // Check all tables
+      const tablesResponse = await axios.get(`${API_BASE}/api/database/tables`);
+      console.log('All tables:', tablesResponse.data.tables);
       
       // Reload the database page
       setTimeout(() => {
@@ -7431,6 +7444,7 @@ async function runDatabaseMigration() {
     }
   } catch (error) {
     console.error('Migration error:', error);
+    console.error('Error response:', error.response?.data);
     showNotification(
       '❌ マイグレーション実行エラー: ' + (error.response?.data?.error || error.message),
       'error'

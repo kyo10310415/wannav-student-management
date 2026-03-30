@@ -157,6 +157,33 @@ app.get('/connection-info', async (c) => {
 });
 
 /**
+ * GET /api/database/tables
+ * List all tables in the database
+ */
+app.get('/tables', async (c) => {
+  try {
+    const pool = getPool();
+    const result = await pool.query(`
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE schemaname = 'public' 
+      ORDER BY tablename;
+    `);
+    
+    return c.json({
+      success: true,
+      tables: result.rows.map(row => row.tablename)
+    });
+  } catch (error) {
+    console.error('❌ Error listing tables:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * POST /api/database/migrate
  * Run database migrations manually
  */
@@ -170,15 +197,30 @@ app.post('/migrate', async (c) => {
     
     console.log('✅ Migrations completed successfully');
     
+    // Check if lesson_reports table now exists
+    const pool = getPool();
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'lesson_reports'
+      );
+    `);
+    
+    const tableExists = tableCheck.rows[0].exists;
+    console.log(`lesson_reports table exists: ${tableExists}`);
+    
     return c.json({
       success: true,
-      message: 'Database migrations completed successfully'
+      message: 'Database migrations completed successfully',
+      lessonReportsTableExists: tableExists
     });
   } catch (error) {
     console.error('❌ Migration error:', error);
     return c.json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     }, 500);
   }
 });
