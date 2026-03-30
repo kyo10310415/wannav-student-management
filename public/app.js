@@ -489,7 +489,9 @@ async function loadLessonReportStatus(date) {
       // Store reports by student_id-date key
       lessonReportStatus = {};
       response.data.data.forEach(report => {
-        const key = `${report.student_id}-${report.lesson_date}`;
+        // Extract date part only (YYYY-MM-DD) from ISO timestamp
+        const dateOnly = report.lesson_date.split('T')[0];
+        const key = `${report.student_id}-${dateOnly}`;
         lessonReportStatus[key] = report;
         console.log(`📝 Stored report: key="${key}", result="${report.lesson_result}"`);
       });
