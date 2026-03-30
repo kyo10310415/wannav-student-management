@@ -46,6 +46,9 @@ let columnFilters = {}; // { columnName: selectedValue }
 let sortColumn = null; // Current sort column name
 let sortDirection = 'asc'; // 'asc' or 'desc'
 
+// Debug flag for lesson reports (can be toggled in console)
+window.debugLessonReport = false;
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
   // Verify session
@@ -488,9 +491,11 @@ async function loadLessonReportStatus(date) {
       response.data.data.forEach(report => {
         const key = `${report.student_id}-${report.lesson_date}`;
         lessonReportStatus[key] = report;
+        console.log(`📝 Stored report: key="${key}", result="${report.lesson_result}"`);
       });
       console.log(`✅ Loaded ${response.data.count} lesson reports for ${date}`);
       console.log(`✅ Report keys:`, Object.keys(lessonReportStatus));
+      console.log(`✅ Full lessonReportStatus:`, lessonReportStatus);
     }
   } catch (error) {
     console.error('❌ Error loading lesson report status:');
@@ -3170,6 +3175,14 @@ async function renderTodayLessonsPage() {
 function getLessonReportButton(studentId, lessonDate, studentName, tutorName) {
   const reportKey = `${studentId}-${lessonDate}`;
   const hasReport = lessonReportStatus[reportKey];
+  
+  // Debug logging
+  if (window.debugLessonReport) {
+    console.log(`🔍 Button check - studentId: ${studentId}, lessonDate: ${lessonDate}`);
+    console.log(`🔍 Report key: ${reportKey}`);
+    console.log(`🔍 Has report:`, hasReport);
+    console.log(`🔍 All report keys:`, Object.keys(lessonReportStatus));
+  }
   
   const escapedName = (studentName || '').replace(/'/g, "\\'");
   const escapedTutor = (tutorName || '').replace(/'/g, "\\'");
