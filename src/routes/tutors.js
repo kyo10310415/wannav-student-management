@@ -77,6 +77,10 @@ app.get('/sync', async (c) => {
 
     console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid, ${skippedTutors.length} skipped`);
     
+    // Get list of employee_ids from cache
+    const cacheEmployeeIds = validTutors.map(t => t.employee_id);
+    console.log(`Cache has ${cacheEmployeeIds.length} valid employee IDs`);
+    
     // Upsert tutors into database
     let successCount = 0;
     let errorCount = 0;
@@ -119,12 +123,43 @@ app.get('/sync', async (c) => {
       }
     }
     
+    // Find and delete tutors that are in DB but not in cache
+    let deletedCount = 0;
+    try {
+      // Get all tutors from database
+      const dbTutorsResult = await query('SELECT employee_id FROM tutors');
+      const dbEmployeeIds = dbTutorsResult.rows.map(row => row.employee_id);
+      
+      // Find employee_ids that are in DB but not in cache
+      const toDelete = dbEmployeeIds.filter(id => !cacheEmployeeIds.includes(id));
+      
+      if (toDelete.length > 0) {
+        console.log(`Found ${toDelete.length} tutors to delete: ${toDelete.join(', ')}`);
+        
+        // Delete these tutors
+        for (const employeeId of toDelete) {
+          try {
+            await query('DELETE FROM tutors WHERE employee_id = $1', [employeeId]);
+            deletedCount++;
+            console.log(`✅ Deleted tutor: ${employeeId}`);
+          } catch (deleteError) {
+            console.error(`❌ Error deleting tutor ${employeeId}:`, deleteError.message);
+          }
+        }
+      } else {
+        console.log('No tutors to delete');
+      }
+    } catch (deleteCheckError) {
+      console.error('Error checking for tutors to delete:', deleteCheckError.message);
+    }
+    
     return c.json({
       success: true,
-      message: `Synced ${successCount} tutors from cache (${errorCount} errors, ${skippedTutors.length} skipped)`,
+      message: `Synced ${successCount} tutors from cache (${errorCount} errors, ${skippedTutors.length} skipped, ${deletedCount} deleted)`,
       count: successCount,
       errors: errorCount,
       skipped: skippedTutors.length,
+      deleted: deletedCount,
       lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {

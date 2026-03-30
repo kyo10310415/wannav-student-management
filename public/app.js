@@ -261,7 +261,11 @@ async function loadInitialData() {
       throw syncError;
     }
     
-    await axios.get(`${API_BASE}/api/tutors/sync`);
+    const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+    console.log('Tutor sync result:', tutorSyncRes.data);
+    if (tutorSyncRes.data.deleted > 0) {
+      console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+    }
     
     // Sync lessons from Google Sheets (populated by GAS)
     console.log('Syncing lessons from Google Sheets...');
@@ -1249,9 +1253,19 @@ async function refreshData() {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>更新中...';
   
   try {
+    // Tutor同期を個別に実行して結果を取得
+    const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+    
+    // その他のデータ同期
     await loadInitialData();
     await renderApp();
-    alert('データを更新しました');
+    
+    // 同期結果を通知
+    let message = 'データを更新しました';
+    if (tutorSyncRes.data.deleted > 0) {
+      message += `\n\n⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたため、DBからも削除されました`;
+    }
+    alert(message);
   } catch (error) {
     console.error('Error refreshing data:', error);
     alert('データの更新に失敗しました');
