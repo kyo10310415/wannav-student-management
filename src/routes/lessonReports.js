@@ -91,6 +91,34 @@ app.post('/', async (c) => {
 });
 
 /**
+ * GET /api/lesson-reports/by-date/:date
+ * 特定の日付のすべてのレッスン報告を取得
+ * ⚠️ このルートは /:studentId/:date よりも前に定義する必要があります
+ */
+app.get('/by-date/:date', async (c) => {
+  try {
+    const date = c.req.param('date');
+
+    const result = await query(
+      'SELECT * FROM lesson_reports WHERE lesson_date = $1 ORDER BY student_id ASC',
+      [date]
+    );
+
+    return c.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('❌ レッスン報告取得エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * GET /api/lesson-reports/:studentId/:date
  * 特定の学籍番号・日付のレッスン報告を取得
  */
@@ -114,33 +142,6 @@ app.get('/:studentId/:date', async (c) => {
     return c.json({
       success: true,
       data: result.rows[0]
-    });
-  } catch (error) {
-    console.error('❌ レッスン報告取得エラー:', error);
-    return c.json({
-      success: false,
-      error: error.message
-    }, 500);
-  }
-});
-
-/**
- * GET /api/lesson-reports/by-date/:date
- * 特定の日付のすべてのレッスン報告を取得
- */
-app.get('/by-date/:date', async (c) => {
-  try {
-    const date = c.req.param('date');
-
-    const result = await query(
-      'SELECT * FROM lesson_reports WHERE lesson_date = $1 ORDER BY student_id ASC',
-      [date]
-    );
-
-    return c.json({
-      success: true,
-      data: result.rows,
-      count: result.rows.length
     });
   } catch (error) {
     console.error('❌ レッスン報告取得エラー:', error);
