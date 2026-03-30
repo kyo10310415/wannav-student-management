@@ -11065,20 +11065,20 @@ function setQuickFilter(type) {
   
   switch (type) {
     case 'today':
-      reportFilters.start_date = formatDate(today);
-      reportFilters.end_date = formatDate(today);
+      reportFilters.start_date = formatDateToYYYYMMDD(today);
+      reportFilters.end_date = formatDateToYYYYMMDD(today);
       break;
     case 'week':
       const dayOfWeek = today.getDay();
       const monday = new Date(today);
       monday.setDate(today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
-      reportFilters.start_date = formatDate(monday);
-      reportFilters.end_date = formatDate(today);
+      reportFilters.start_date = formatDateToYYYYMMDD(monday);
+      reportFilters.end_date = formatDateToYYYYMMDD(today);
       break;
     case 'month':
       startDate.setDate(1);
-      reportFilters.start_date = formatDate(startDate);
-      reportFilters.end_date = formatDate(today);
+      reportFilters.start_date = formatDateToYYYYMMDD(startDate);
+      reportFilters.end_date = formatDateToYYYYMMDD(today);
       break;
   }
   
@@ -11106,7 +11106,7 @@ function clearReportFilters() {
   searchLessonReports();
 }
 
-function formatDate(date) {
+function formatDateToYYYYMMDD(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
