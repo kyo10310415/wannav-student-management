@@ -11,6 +11,7 @@ let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
+let lessonReportStatus = {}; // { student_id-lesson_date: report_data }
 let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
 let selectedTutor = 'all';
@@ -466,6 +467,26 @@ async function loadTodayLessonDates() {
     console.log(`Loaded ${Object.keys(lessonDates).length} students' lesson dates for today's page`);
   } catch (error) {
     console.error('Error loading today lesson dates:', error);
+  }
+}
+
+// Load lesson report status for a specific date
+async function loadLessonReportStatus(date) {
+  try {
+    const response = await axios.get(`${API_BASE}/api/lesson-reports/by-date/${date}`);
+    
+    if (response.data.success) {
+      // Store reports by student_id-date key
+      lessonReportStatus = {};
+      response.data.data.forEach(report => {
+        const key = `${report.student_id}-${report.lesson_date}`;
+        lessonReportStatus[key] = report;
+      });
+      console.log(`✅ Loaded ${response.data.count} lesson reports for ${date}`);
+    }
+  } catch (error) {
+    console.error('Error loading lesson report status:', error);
+    lessonReportStatus = {};
   }
 }
 
@@ -2990,6 +3011,10 @@ async function renderTodayLessonsPage() {
   
   // Get display date (can be today, yesterday, or tomorrow)
   const displayDate = new Date(currentLessonDate);
+  
+  // Load lesson report status for display date
+  const displayDateStr = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')}`;
+  await loadLessonReportStatus(displayDateStr);
   const displayDay = displayDate.getDate();
   const displayMonth = displayDate.getMonth() + 1;
   
@@ -3122,6 +3147,34 @@ async function renderTodayLessonsPage() {
 }
 
 // Render today's student rows
+// Get lesson report button based on submission status
+function getLessonReportButton(studentId, lessonDate, studentName, tutorName) {
+  const reportKey = `${studentId}-${lessonDate}`;
+  const hasReport = lessonReportStatus[reportKey];
+  
+  const escapedName = (studentName || '').replace(/'/g, "\\'");
+  const escapedTutor = (tutorName || '').replace(/'/g, "\\'");
+  
+  if (hasReport) {
+    // 提出済み - 青色で表示
+    return `
+      <button onclick="showLessonReportModal('${studentId}', '${lessonDate}', '${escapedName}', '${escapedTutor}')" 
+              class="px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition"
+              title="提出済み（クリックで編集可能）">
+        <i class="fas fa-check-circle mr-1"></i>提出済み
+      </button>
+    `;
+  } else {
+    // 未提出 - 緑色で表示
+    return `
+      <button onclick="showLessonReportModal('${studentId}', '${lessonDate}', '${escapedName}', '${escapedTutor}')" 
+              class="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition">
+        <i class="fas fa-clipboard-check mr-1"></i>報告
+      </button>
+    `;
+  }
+}
+
 function renderTodayStudentRows(dayStudents, displayDate) {
   if (dayStudents.length === 0) {
     return `
@@ -3190,10 +3243,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
           </div>
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
-          <button onclick="showLessonReportModal('${student.student_id}', '${lessonDateStr}', '${(student.name || '').replace(/'/g, "\\'")}', '${(student.homeroom_tutor || '').replace(/'/g, "\\'")}')" 
-                  class="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition">
-            <i class="fas fa-clipboard-check mr-1"></i>報告
-          </button>
+          ${getLessonReportButton(student.student_id, lessonDateStr, student.name, student.homeroom_tutor)}
         </td>
       </tr>
     `;
@@ -10426,6 +10476,10 @@ function resetToToday() {
 
 // ===== Lesson Report Modal =====
 function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
+  // Check if report already exists
+  const reportKey = `${studentId}-${lessonDate}`;
+  const existingReport = lessonReportStatus[reportKey];
+  
   const modal = document.createElement('div');
   modal.id = 'lessonReportModal';
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
@@ -10523,6 +10577,18 @@ function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
   
   document.body.appendChild(modal);
   
+  // Load existing data if available
+  if (existingReport) {
+    document.getElementById('lessonResult').value = existingReport.lesson_result || '';
+    document.getElementById('lessonNumber').value = existingReport.lesson_number || '';
+    
+    if (existingReport.lesson_number === 'PROプラン') {
+      document.getElementById('proCurriculum').value = existingReport.pro_curriculum || '';
+      document.getElementById('proTextNumber').value = existingReport.pro_text_number || '';
+      toggleProFields();
+    }
+  }
+  
   // フォーム送信処理
   document.getElementById('lessonReportForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -10592,10 +10658,15 @@ async function submitLessonReport(studentId, lessonDate, tutorName) {
     
     if (response.data.success) {
       showNotification('レッスン報告を保存しました', 'success');
+      
+      // Update lesson report status cache
+      const reportKey = `${studentId}-${lessonDate}`;
+      lessonReportStatus[reportKey] = response.data.data;
+      
       closeLessonReportModal();
       
-      // 必要に応じてページを再読み込み
-      // await renderTodayLessonsPage();
+      // Reload the page to update button status
+      await renderTodayLessonsPage();
     } else {
       showNotification('保存に失敗しました: ' + response.data.error, 'error');
     }
