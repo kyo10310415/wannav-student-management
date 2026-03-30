@@ -10502,7 +10502,7 @@ function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
   // フォーム送信処理
   document.getElementById('lessonReportForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    await submitLessonReport(studentId, lessonDate);
+    await submitLessonReport(studentId, lessonDate, tutorName);
   });
 }
 
@@ -10532,7 +10532,7 @@ function closeLessonReportModal() {
   }
 }
 
-async function submitLessonReport(studentId, lessonDate) {
+async function submitLessonReport(studentId, lessonDate, tutorName) {
   try {
     const lessonResult = document.getElementById('lessonResult').value;
     const lessonNumber = document.getElementById('lessonNumber').value;
@@ -10558,7 +10558,8 @@ async function submitLessonReport(studentId, lessonDate) {
       lesson_number: lessonNumber,
       pro_curriculum: proCurriculum || null,
       pro_text_number: proTextNumber || null,
-      reported_by: currentUser?.email || 'unknown'
+      reported_by: currentUser?.email || 'unknown',
+      tutor_name: tutorName || null
     }, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`

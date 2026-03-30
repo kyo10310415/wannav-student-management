@@ -17,7 +17,8 @@ app.post('/', async (c) => {
       lesson_number,
       pro_curriculum,
       pro_text_number,
-      reported_by
+      reported_by,
+      tutor_name
     } = body;
 
     // バリデーション
@@ -50,8 +51,8 @@ app.post('/', async (c) => {
     // UPSERT（存在すれば更新、なければ挿入）
     const result = await query(
       `INSERT INTO lesson_reports 
-        (student_id, lesson_date, lesson_result, lesson_number, pro_curriculum, pro_text_number, reported_by, reported_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        (student_id, lesson_date, lesson_result, lesson_number, pro_curriculum, pro_text_number, reported_by, tutor_name, reported_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT (student_id, lesson_date) 
       DO UPDATE SET
         lesson_result = EXCLUDED.lesson_result,
@@ -59,6 +60,7 @@ app.post('/', async (c) => {
         pro_curriculum = EXCLUDED.pro_curriculum,
         pro_text_number = EXCLUDED.pro_text_number,
         reported_by = EXCLUDED.reported_by,
+        tutor_name = EXCLUDED.tutor_name,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *`,
       [
@@ -68,7 +70,8 @@ app.post('/', async (c) => {
         lesson_number,
         pro_curriculum || null,
         pro_text_number || null,
-        reported_by || 'unknown'
+        reported_by || 'unknown',
+        tutor_name || null
       ]
     );
 
