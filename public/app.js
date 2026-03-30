@@ -18,7 +18,7 @@ let reservationCountFilter = 'all'; // 'all', 'above2', 'below2'
 let selectedTeam = 'all'; // チームフィルター用
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports'
 let schedules = []; // Tutor schedules data
 let pendingRequests = []; // Pending absence requests
 
@@ -107,6 +107,13 @@ function renderHeader() {
   const vqDiagnosisButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <button id="nav-vq-diagnosis" onclick="changePage('vq-diagnosis')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'vq-diagnosis' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-clipboard-check mr-2"></i>VQ診断
+    </button>
+  ` : '';
+  
+  // Build lesson reports button (leader or above)
+  const lessonReportsButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+    <button id="nav-lesson-reports" onclick="changePage('lesson-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-reports' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+      <i class="fas fa-clipboard-list mr-2"></i>レッスン報告
     </button>
   ` : '';
   
@@ -204,13 +211,14 @@ function renderHeader() {
               </button>
             </div>
             
-            ${userManagementButton || databaseManagementButton || vqDiagnosisButton ? `
+            ${userManagementButton || databaseManagementButton || vqDiagnosisButton || lessonReportsButton ? `
               <!-- Divider -->
               <div class="w-px bg-white/30"></div>
               
               <!-- Admin Section (Orange) -->
               <div class="flex gap-2">
                 ${vqDiagnosisButton}
+                ${lessonReportsButton}
                 ${userManagementButton}
                 ${databaseManagementButton}
               </div>
@@ -499,6 +507,8 @@ async function renderApp() {
     await renderDatabasePage();
   } else if (currentPage === 'vq-diagnosis') {
     await renderVQDiagnosisPage();
+  } else if (currentPage === 'lesson-reports') {
+    await renderLessonReportsPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -10596,4 +10606,348 @@ async function submitLessonReport(studentId, lessonDate, tutorName) {
       'error'
     );
   }
+}
+
+// ==========================================
+// レッスン報告閲覧ページ
+// ==========================================
+
+// レッスン報告の検索フィルター状態
+let reportFilters = {
+  start_date: '',
+  end_date: '',
+  student_id: '',
+  tutor_name: '',
+  lesson_result: ''
+};
+let reportCurrentPage = 0;
+const reportPageSize = 50;
+
+async function renderLessonReportsPage() {
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  
+  const content = document.getElementById('content');
+  
+  // 権限チェック
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+    content.innerHTML = `
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <strong class="font-bold">アクセス権限がありません</strong>
+        <span class="block sm:inline">このページはリーダー以上の権限が必要です。</span>
+      </div>
+    `;
+    return;
+  }
+  
+  content.innerHTML = `
+    <div class="space-y-6">
+      <!-- Header -->
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">
+          <i class="fas fa-clipboard-list mr-2"></i>レッスン報告閲覧
+        </h2>
+        
+        <!-- Search Filters -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <!-- 日付範囲 -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">開始日</label>
+            <input type="date" id="filter-start-date" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value="${reportFilters.start_date}">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">終了日</label>
+            <input type="date" id="filter-end-date" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value="${reportFilters.end_date}">
+          </div>
+          
+          <!-- 学籍番号 -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">学籍番号</label>
+            <input type="text" id="filter-student-id" 
+              placeholder="部分一致検索"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value="${reportFilters.student_id}">
+          </div>
+          
+          <!-- Tutor名 -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">担当Tutor</label>
+            <input type="text" id="filter-tutor-name" 
+              placeholder="部分一致検索"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value="${reportFilters.tutor_name}">
+          </div>
+          
+          <!-- レッスン結果 -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">レッスン結果</label>
+            <select id="filter-lesson-result" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+              <option value="">すべて</option>
+              <option value="実施済み" ${reportFilters.lesson_result === '実施済み' ? 'selected' : ''}>実施済み</option>
+              <option value="生徒様都合でリスケ" ${reportFilters.lesson_result === '生徒様都合でリスケ' ? 'selected' : ''}>生徒様都合でリスケ</option>
+              <option value="Tutor都合でリスケ" ${reportFilters.lesson_result === 'Tutor都合でリスケ' ? 'selected' : ''}>Tutor都合でリスケ</option>
+              <option value="無断キャンセル" ${reportFilters.lesson_result === '無断キャンセル' ? 'selected' : ''}>無断キャンセル</option>
+            </select>
+          </div>
+          
+          <!-- 検索ボタン -->
+          <div class="flex items-end">
+            <button onclick="searchLessonReports()" 
+              class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              <i class="fas fa-search mr-2"></i>検索
+            </button>
+          </div>
+        </div>
+        
+        <!-- クイックフィルター -->
+        <div class="flex gap-2 flex-wrap">
+          <button onclick="setQuickFilter('today')" 
+            class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
+            今日
+          </button>
+          <button onclick="setQuickFilter('week')" 
+            class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
+            今週
+          </button>
+          <button onclick="setQuickFilter('month')" 
+            class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
+            今月
+          </button>
+          <button onclick="clearReportFilters()" 
+            class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded transition">
+            <i class="fas fa-times mr-1"></i>フィルタークリア
+          </button>
+        </div>
+      </div>
+      
+      <!-- Results -->
+      <div id="lesson-reports-results" class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-center items-center py-8">
+          <i class="fas fa-spinner fa-spin text-gray-400 text-3xl"></i>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // イベントリスナー設定
+  document.getElementById('filter-start-date').addEventListener('change', (e) => {
+    reportFilters.start_date = e.target.value;
+  });
+  document.getElementById('filter-end-date').addEventListener('change', (e) => {
+    reportFilters.end_date = e.target.value;
+  });
+  document.getElementById('filter-student-id').addEventListener('input', (e) => {
+    reportFilters.student_id = e.target.value;
+  });
+  document.getElementById('filter-tutor-name').addEventListener('input', (e) => {
+    reportFilters.tutor_name = e.target.value;
+  });
+  document.getElementById('filter-lesson-result').addEventListener('change', (e) => {
+    reportFilters.lesson_result = e.target.value;
+  });
+  
+  // 初回検索実行
+  await searchLessonReports();
+}
+
+async function searchLessonReports(page = 0) {
+  reportCurrentPage = page;
+  const resultsContainer = document.getElementById('lesson-reports-results');
+  
+  resultsContainer.innerHTML = `
+    <div class="flex justify-center items-center py-8">
+      <i class="fas fa-spinner fa-spin text-gray-400 text-3xl"></i>
+    </div>
+  `;
+  
+  try {
+    const params = new URLSearchParams({
+      limit: reportPageSize,
+      offset: page * reportPageSize
+    });
+    
+    if (reportFilters.start_date) params.append('start_date', reportFilters.start_date);
+    if (reportFilters.end_date) params.append('end_date', reportFilters.end_date);
+    if (reportFilters.student_id) params.append('student_id', reportFilters.student_id);
+    if (reportFilters.tutor_name) params.append('tutor_name', reportFilters.tutor_name);
+    if (reportFilters.lesson_result) params.append('lesson_result', reportFilters.lesson_result);
+    
+    const response = await axios.get(`${API_BASE}/api/lesson-reports?${params.toString()}`);
+    
+    if (response.data.success) {
+      renderLessonReportsTable(response.data);
+    } else {
+      throw new Error(response.data.error);
+    }
+  } catch (error) {
+    console.error('レッスン報告取得エラー:', error);
+    resultsContainer.innerHTML = `
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <p class="font-bold">エラーが発生しました</p>
+        <p class="text-sm">${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+function renderLessonReportsTable(data) {
+  const resultsContainer = document.getElementById('lesson-reports-results');
+  const { data: reports, count, total, limit, offset } = data;
+  
+  if (reports.length === 0) {
+    resultsContainer.innerHTML = `
+      <div class="text-center py-8 text-gray-500">
+        <i class="fas fa-inbox text-4xl mb-2"></i>
+        <p>該当するレッスン報告がありません</p>
+      </div>
+    `;
+    return;
+  }
+  
+  const totalPages = Math.ceil(total / limit);
+  const currentPage = Math.floor(offset / limit);
+  
+  resultsContainer.innerHTML = `
+    <!-- Summary -->
+    <div class="mb-4 text-sm text-gray-600">
+      検索結果: ${total}件中 ${offset + 1}～${Math.min(offset + count, total)}件を表示
+    </div>
+    
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン日</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担当Tutor</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン結果</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン番号</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PROプラン</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">報告者</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">報告日時</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          ${reports.map(report => renderLessonReportRow(report)).join('')}
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Pagination -->
+    ${totalPages > 1 ? `
+      <div class="mt-4 flex justify-center items-center gap-2">
+        <button 
+          onclick="searchLessonReports(${currentPage - 1})"
+          ${currentPage === 0 ? 'disabled' : ''}
+          class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        
+        <span class="px-4 py-1 text-sm text-gray-700">
+          ${currentPage + 1} / ${totalPages}
+        </span>
+        
+        <button 
+          onclick="searchLessonReports(${currentPage + 1})"
+          ${currentPage >= totalPages - 1 ? 'disabled' : ''}
+          class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+    ` : ''}
+  `;
+}
+
+function renderLessonReportRow(report) {
+  const lessonResultClass = {
+    '実施済み': 'bg-green-100 text-green-800',
+    '生徒様都合でリスケ': 'bg-yellow-100 text-yellow-800',
+    'Tutor都合でリスケ': 'bg-orange-100 text-orange-800',
+    '無断キャンセル': 'bg-red-100 text-red-800'
+  }[report.lesson_result] || 'bg-gray-100 text-gray-800';
+  
+  const proInfo = report.lesson_number === 'PROプラン' 
+    ? `${report.pro_curriculum || '-'}<br><span class="text-xs">テキスト${report.pro_text_number || '-'}</span>`
+    : '-';
+  
+  return `
+    <tr class="hover:bg-gray-50">
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.lesson_date}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${report.student_id}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.student_name || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${report.tutor_name || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm">
+        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${lessonResultClass}">
+          ${report.lesson_result}
+        </span>
+      </td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.lesson_number}</td>
+      <td class="px-4 py-3 text-sm text-gray-600">${proInfo}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${report.reported_by || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+        ${new Date(report.reported_at).toLocaleString('ja-JP')}
+      </td>
+    </tr>
+  `;
+}
+
+function setQuickFilter(type) {
+  const today = new Date();
+  const startDate = new Date();
+  
+  switch (type) {
+    case 'today':
+      reportFilters.start_date = formatDate(today);
+      reportFilters.end_date = formatDate(today);
+      break;
+    case 'week':
+      const dayOfWeek = today.getDay();
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+      reportFilters.start_date = formatDate(monday);
+      reportFilters.end_date = formatDate(today);
+      break;
+    case 'month':
+      startDate.setDate(1);
+      reportFilters.start_date = formatDate(startDate);
+      reportFilters.end_date = formatDate(today);
+      break;
+  }
+  
+  document.getElementById('filter-start-date').value = reportFilters.start_date;
+  document.getElementById('filter-end-date').value = reportFilters.end_date;
+  
+  searchLessonReports();
+}
+
+function clearReportFilters() {
+  reportFilters = {
+    start_date: '',
+    end_date: '',
+    student_id: '',
+    tutor_name: '',
+    lesson_result: ''
+  };
+  
+  document.getElementById('filter-start-date').value = '';
+  document.getElementById('filter-end-date').value = '';
+  document.getElementById('filter-student-id').value = '';
+  document.getElementById('filter-tutor-name').value = '';
+  document.getElementById('filter-lesson-result').value = '';
+  
+  searchLessonReports();
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

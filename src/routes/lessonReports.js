@@ -152,6 +152,130 @@ app.get('/by-date/:date', async (c) => {
 });
 
 /**
+ * GET /api/lesson-reports
+ * レッスン報告を検索・一覧取得
+ * クエリパラメータ:
+ *   - start_date: 開始日 (YYYY-MM-DD)
+ *   - end_date: 終了日 (YYYY-MM-DD)
+ *   - student_id: 学籍番号（部分一致）
+ *   - tutor_name: Tutor名（部分一致）
+ *   - lesson_result: レッスン結果（完全一致）
+ *   - limit: 取得件数（デフォルト100）
+ *   - offset: オフセット（デフォルト0）
+ */
+app.get('/', async (c) => {
+  try {
+    const { start_date, end_date, student_id, tutor_name, lesson_result, limit = 100, offset = 0 } = c.req.query();
+
+    let sql = `
+      SELECT 
+        lr.*,
+        s.name as student_name,
+        s.homeroom_tutor
+      FROM lesson_reports lr
+      LEFT JOIN students s ON lr.student_id = s.student_id
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramIndex = 1;
+
+    // 日付範囲フィルター
+    if (start_date) {
+      sql += ` AND lr.lesson_date >= $${paramIndex}`;
+      params.push(start_date);
+      paramIndex++;
+    }
+    if (end_date) {
+      sql += ` AND lr.lesson_date <= $${paramIndex}`;
+      params.push(end_date);
+      paramIndex++;
+    }
+
+    // 学籍番号フィルター（部分一致）
+    if (student_id) {
+      sql += ` AND lr.student_id ILIKE $${paramIndex}`;
+      params.push(`%${student_id}%`);
+      paramIndex++;
+    }
+
+    // Tutor名フィルター（部分一致）
+    if (tutor_name) {
+      sql += ` AND lr.tutor_name ILIKE $${paramIndex}`;
+      params.push(`%${tutor_name}%`);
+      paramIndex++;
+    }
+
+    // レッスン結果フィルター（完全一致）
+    if (lesson_result) {
+      sql += ` AND lr.lesson_result = $${paramIndex}`;
+      params.push(lesson_result);
+      paramIndex++;
+    }
+
+    sql += ` ORDER BY lr.lesson_date DESC, lr.student_id ASC`;
+    sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const result = await query(sql, params);
+
+    // 総件数を取得
+    let countSql = `
+      SELECT COUNT(*) as total
+      FROM lesson_reports lr
+      WHERE 1=1
+    `;
+    const countParams = [];
+    let countParamIndex = 1;
+
+    if (start_date) {
+      countSql += ` AND lr.lesson_date >= $${countParamIndex}`;
+      countParams.push(start_date);
+      countParamIndex++;
+    }
+    if (end_date) {
+      countSql += ` AND lr.lesson_date <= $${countParamIndex}`;
+      countParams.push(end_date);
+      countParamIndex++;
+    }
+    if (student_id) {
+      countSql += ` AND lr.student_id ILIKE $${countParamIndex}`;
+      countParams.push(`%${student_id}%`);
+      countParamIndex++;
+    }
+    if (tutor_name) {
+      countSql += ` AND lr.tutor_name ILIKE $${countParamIndex}`;
+      countParams.push(`%${tutor_name}%`);
+      countParamIndex++;
+    }
+    if (lesson_result) {
+      countSql += ` AND lr.lesson_result = $${countParamIndex}`;
+      countParams.push(lesson_result);
+      countParamIndex++;
+    }
+
+    const countResult = await query(countSql, countParams);
+    const total = parseInt(countResult.rows[0].total);
+
+    console.log(`📋 レッスン報告検索: ${result.rows.length}件 / 合計${total}件`);
+
+    return c.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length,
+      total: total,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  } catch (error) {
+    console.error('❌ レッスン報告検索エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * DELETE /api/lesson-reports/:id
  * レッスン報告を削除
  */
