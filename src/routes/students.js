@@ -4,6 +4,7 @@ import { fetchStudents } from '../services/notionService.js';
 import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
 import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts, fetchSuspensionMonthsMap } from '../services/sheetsService.js';
 import { fetchLessonStartDates, calculateContinuedMonths } from '../services/externalDbService.js';
+import { calculateStudentLessonStats } from '../services/lessonReportService.js';
 
 const app = new Hono();
 
@@ -38,16 +39,31 @@ app.get('/', async (c) => {
       'SELECT * FROM students ORDER BY name ASC'
     );
     
-    // Calculate PRO plan continued months for each student
-    const studentsWithProMonths = result.rows.map(student => ({
-      ...student,
-      pro_plan_continued_months: calculateProPlanMonths(student.pro_plan_start_date)
-    }));
+    // Get lesson statistics from lesson reports
+    const lessonStats = await calculateStudentLessonStats();
+    
+    // Calculate PRO plan continued months and merge lesson stats for each student
+    const studentsWithStats = result.rows.map(student => {
+      const stats = lessonStats[student.student_id] || {
+        lesson_progress: null,
+        absence_count: 0,
+        completed_count: 0,
+        total_reports: 0
+      };
+      
+      return {
+        ...student,
+        pro_plan_continued_months: calculateProPlanMonths(student.pro_plan_start_date),
+        // レッスン報告から取得したデータで上書き
+        lesson_progress: stats.lesson_progress || student.lesson_progress,
+        absence_count: stats.absence_count
+      };
+    });
     
     return c.json({
       success: true,
-      data: studentsWithProMonths,
-      count: studentsWithProMonths.length
+      data: studentsWithStats,
+      count: studentsWithStats.length
     });
   } catch (error) {
     console.error('Error fetching students:', error);
@@ -101,6 +117,10 @@ app.get('/sync', async (c) => {
     const suspensionMonthsMap = await fetchSuspensionMonthsMap();
     console.log(`Loaded suspension data for ${Object.keys(suspensionMonthsMap).length} students`);
     
+    // Get lesson statistics from lesson reports (優先使用)
+    const lessonStats = await calculateStudentLessonStats();
+    console.log(`Calculated lesson stats for ${Object.keys(lessonStats).length} students from lesson reports`);
+    
     // Filter out students without student_id
     const skippedStudents = [];
     const validStudents = students.filter(student => {
@@ -123,7 +143,10 @@ app.get('/sync', async (c) => {
 
     for (const student of validStudents) {
       try {
-        const lessonProgress = progressMap[student.student_id] || null;
+        // レッスン報告から取得した統計を優先、なければスプレッドシートのデータを使用
+        const stats = lessonStats[student.student_id];
+        const lessonProgress = stats?.lesson_progress || progressMap[student.student_id] || null;
+        const absenceCount = stats?.absence_count !== undefined ? stats.absence_count : (student.absence_count || 0);
         
         // Calculate continued_months from lesson_start_date
         const lessonStartDate = student.lesson_start_date || lessonStartDates[student.student_id];
@@ -197,10 +220,10 @@ app.get('/sync', async (c) => {
             student.result_active_listening,
             student.result_understanding,
             student.result_overall,
-            student.absence_count,
+            absenceCount,  // レッスン報告から取得した欠席回数を使用
             lessonStartDate,
             continuedMonths,
-            student.suspension_months,
+            suspensionMonths,
             student.youtube_channel_id || null,
             student.x_account_id || null
           ]
