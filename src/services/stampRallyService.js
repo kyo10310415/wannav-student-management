@@ -108,7 +108,7 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
 
     // 生徒のDiscord Webhook URLを取得
     const studentResult = await pool.query(`
-      SELECT discord_url, result_score_prev_month as result_score
+      SELECT discord_url
       FROM students
       WHERE student_id = $1
     `, [studentId]);
@@ -126,11 +126,6 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
       return false;
     }
 
-    // S評価の場合の追加メッセージ
-    const sRankMessage = student.result_score === 'S' 
-      ? '\n\n**あなたは S評価 を獲得されているため、必ず当たり のルーレットとなります！🎊**'
-      : '';
-
     // Discord Embed形式のメッセージ
     const embed = {
       title: '🎉 おめでとうございます！ 🎉',
@@ -144,7 +139,7 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
         },
         {
           name: 'メッセージ',
-          value: `日頃からアンケートにご協力いただき、誠にありがとうございます。\nこの度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！${sRankMessage}`,
+          value: '日頃からアンケートにご協力いただき、誠にありがとうございます。\nこの度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！',
           inline: false
         },
         {
@@ -154,24 +149,19 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
         },
         {
           name: '🎁 特典内容',
-          value: '**1時間コンサル権**\n※ 当選された方には、別途ご連絡させていただきます。',
+          value: '**弊社事務所マネージャーによる**1時間コンサル権\n※ 当選された方には、別途ご連絡させていただきます。',
           inline: false
-        },
-        {
-          name: '当選確率',
-          value: probability === 100 ? '**100% (必ず当たり)** ✨' : '**50%** 🎲',
-          inline: true
         }
       ],
       footer: {
-        text: '今後ともOLTSをよろしくお願いいたします 🙏'
+        text: '今後ともWannaVをよろしくお願いいたします 🙏'
       },
       timestamp: new Date().toISOString()
     };
 
     // Discord Webhook送信
     await axios.post(webhookUrl, {
-      username: 'OLTS Bot',
+      username: 'WannaV Bot',
       avatar_url: 'https://cdn-icons-png.flaticon.com/512/2593/2593635.png',
       embeds: [embed]
     });
