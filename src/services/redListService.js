@@ -118,17 +118,20 @@ export async function calculateRedListScore(studentId, yearMonth) {
   // 5. 予約不足チェック (1点) - 毎月10日時点で2回以上予約が入っているかチェック
   try {
     const [year, month] = yearMonth.split('-').map(Number);
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1; // 0-indexed
-    const currentDay = today.getDate();
+    
+    // Use JST timezone for date calculation
+    const now = new Date();
+    const jstOffset = 9 * 60; // JST is UTC+9
+    const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
+    const currentYear = jstTime.getFullYear();
+    const currentMonth = jstTime.getMonth() + 1; // 0-indexed
+    const currentDay = jstTime.getDate();
     
     console.log(`[Red List] Reservation check for ${studentId}:`, {
       targetMonth: yearMonth,
-      today: `${currentYear}-${currentMonth}-${currentDay}`,
-      currentYear,
-      currentMonth,
-      currentDay
+      serverTime: now.toISOString(),
+      jstTime: jstTime.toISOString(),
+      todayJST: `${currentYear}-${currentMonth}-${currentDay}`
     });
     
     // Only check reservation count if:
@@ -142,8 +145,9 @@ export async function calculateRedListScore(studentId, yearMonth) {
     if (isPastMonth || isCurrentMonthAfter10th) {
       const checkDate = `${year}-${String(month).padStart(2, '0')}-10`;
       
+      // Count distinct lesson dates up to the 10th
       const reservationResult = await query(
-        `SELECT COUNT(*) as reservation_count
+        `SELECT COUNT(DISTINCT lesson_date) as reservation_count
          FROM lessons
          WHERE student_id = $1
            AND TO_CHAR(lesson_date, 'YYYY-MM') = $2
@@ -151,8 +155,21 @@ export async function calculateRedListScore(studentId, yearMonth) {
         [studentId, yearMonth, checkDate]
       );
       
+      // Also get the actual dates for debugging
+      const datesResult = await query(
+        `SELECT DISTINCT lesson_date
+         FROM lessons
+         WHERE student_id = $1
+           AND TO_CHAR(lesson_date, 'YYYY-MM') = $2
+           AND lesson_date <= $3
+         ORDER BY lesson_date`,
+        [studentId, yearMonth, checkDate]
+      );
+      
       const reservationCount = parseInt(reservationResult.rows[0].reservation_count);
-      console.log(`[Red List] ${studentId} - Reservations by ${checkDate}: ${reservationCount}`);
+      const lessonDates = datesResult.rows.map(r => r.lesson_date);
+      
+      console.log(`[Red List] ${studentId} - Reservations by ${checkDate}: ${reservationCount}`, lessonDates);
       
       if (reservationCount < 2) {
         scores.reservation = 1;
