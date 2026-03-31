@@ -11512,10 +11512,46 @@ function updateRedListDisplay(studentId, redList) {
     rankText = 'LOW';
   }
   
+  // Build breakdown tooltip
+  const breakdown = [
+    { label: '満足度', score: redList.satisfaction_score, max: 4, icon: '😊' },
+    { label: '欠席', score: redList.absence_score, max: 3, icon: '❌' },
+    { label: 'アンケート', score: redList.survey_score, max: 1, icon: '📝' },
+    { label: 'リスケ', score: redList.reschedule_score, max: 1, icon: '📅' },
+    { label: '予約不足', score: redList.reservation_score, max: 1, icon: '📌' }
+  ];
+  
+  const tooltipContent = breakdown
+    .map(item => {
+      const hasScore = item.score > 0;
+      const scoreColor = hasScore ? 'text-red-600' : 'text-gray-400';
+      return `<div class="flex justify-between items-center py-0.5">
+        <span class="text-xs">${item.icon} ${item.label}</span>
+        <span class="text-xs font-bold ${scoreColor}">${item.score}/${item.max}点</span>
+      </div>`;
+    })
+    .join('');
+  
   cell.innerHTML = `
-    <div class="inline-flex flex-col items-center">
+    <div class="relative inline-flex flex-col items-center cursor-pointer red-list-item group">
       <span class="text-xs font-bold ${textColor}">${redList.total_score}点</span>
       <span class="text-xs px-1 rounded ${bgColor} ${textColor} font-semibold">${rankText}</span>
+      
+      <!-- Tooltip -->
+      <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block z-50 w-48">
+        <div class="bg-gray-900 text-white rounded-lg shadow-lg p-3">
+          <div class="text-xs font-bold mb-2 border-b border-gray-700 pb-1">
+            📊 レッドリスト内訳
+          </div>
+          ${tooltipContent}
+          <div class="border-t border-gray-700 mt-2 pt-2 flex justify-between items-center">
+            <span class="text-xs font-bold">合計</span>
+            <span class="text-xs font-bold text-yellow-400">${redList.total_score}/10点</span>
+          </div>
+        </div>
+        <!-- Arrow -->
+        <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+      </div>
     </div>
   `;
 }
