@@ -1907,6 +1907,9 @@ function renderStudentsPage() {
   
   // Load survey stats asynchronously (batch load for all students)
   loadSurveyStats();
+  
+  // Load red list data asynchronously
+  loadRedListData();
 }
 
 // Load Wanami usage data for all visible students (batch mode with cache)
@@ -2140,7 +2143,7 @@ function renderStudentRowsSimple() {
         </div>
         
         <!-- Row 2: Stats & Data (Compact) -->
-        <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-center">
+        <div class="grid grid-cols-5 md:grid-cols-11 gap-1 text-center">
           <!-- Lesson Progress -->
           <div class="${rowBgColor} rounded p-1">
             <div class="text-xs text-gray-600">進捗</div>
@@ -2159,6 +2162,16 @@ function renderStudentRowsSimple() {
           <div class="bg-blue-50 rounded p-1">
             <div class="text-xs text-gray-600">継続</div>
             <div class="text-xs font-semibold text-blue-600">${continuedMonths}月</div>
+          </div>
+          
+          <!-- Red List -->
+          <div class="bg-gray-50 rounded p-1">
+            <div class="text-xs text-gray-600">
+              <i class="fas fa-exclamation-triangle text-red-600 text-xs"></i>
+            </div>
+            <div class="red-list-loading text-gray-400 text-xs" data-student-id="${student.student_id}">
+              <i class="fas fa-spinner fa-spin"></i>
+            </div>
           </div>
           
           <!-- PRO Plan Start -->
@@ -11405,3 +11418,91 @@ async function loadRouletteWinners() {
     }
   }
 }
+
+// ========== Red List ==========
+
+/**
+ * Load red list data for all students
+ */
+async function loadRedListData() {
+  try {
+    console.log('[Red List] Loading red list data...');
+    const response = await axios.get(`${API_BASE}/api/red-list`);
+    
+    if (response.data.success) {
+      const redLists = response.data.data;
+      console.log(`[Red List] Loaded ${redLists.length} red list records`);
+      
+      // Update display for each student
+      redLists.forEach(redList => {
+        updateRedListDisplay(redList.student_id, redList);
+      });
+    }
+  } catch (error) {
+    console.error('[Red List] Error loading red list data:', error);
+  }
+}
+
+/**
+ * Update red list display for a student
+ */
+function updateRedListDisplay(studentId, redList) {
+  const cell = document.querySelector(`.red-list-loading[data-student-id="${studentId}"]`);
+  
+  if (!cell) return;
+  
+  if (!redList || redList.total_score === 0) {
+    cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
+    return;
+  }
+  
+  // Determine color based on rank
+  let bgColor = 'bg-gray-100';
+  let textColor = 'text-gray-600';
+  let rankText = '-';
+  
+  if (redList.rank === 'high') {
+    bgColor = 'bg-red-100';
+    textColor = 'text-red-700';
+    rankText = 'HIGH';
+  } else if (redList.rank === 'middle') {
+    bgColor = 'bg-orange-100';
+    textColor = 'text-orange-700';
+    rankText = 'MID';
+  } else if (redList.rank === 'low') {
+    bgColor = 'bg-yellow-100';
+    textColor = 'text-yellow-700';
+    rankText = 'LOW';
+  }
+  
+  cell.innerHTML = `
+    <div class="inline-flex flex-col items-center">
+      <span class="text-xs font-bold ${textColor}">${redList.total_score}点</span>
+      <span class="text-xs px-1 rounded ${bgColor} ${textColor} font-semibold">${rankText}</span>
+    </div>
+  `;
+}
+
+/**
+ * Update red list for all students (admin action)
+ */
+async function updateAllRedLists() {
+  if (!confirm('全生徒のレッドリストを更新しますか？')) {
+    return;
+  }
+  
+  try {
+    showNotification('レッドリスト更新中...', 'info');
+    
+    const response = await axios.post(`${API_BASE}/api/red-list/update`, {});
+    
+    if (response.data.success) {
+      showNotification(`レッドリスト更新完了: ${response.data.data.updated}件`, 'success');
+      await loadRedListData();
+    }
+  } catch (error) {
+    console.error('[Red List] Error updating red lists:', error);
+    showNotification('レッドリスト更新に失敗しました', 'error');
+  }
+}
+

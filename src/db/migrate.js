@@ -444,6 +444,47 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS lesson_reports CASCADE;
     `
+  },
+  {
+    version: 18,
+    name: 'create_red_list_table',
+    up: `
+      -- レッドリストテーブル作成
+      CREATE TABLE IF NOT EXISTS red_list (
+        id SERIAL PRIMARY KEY,
+        student_id TEXT NOT NULL,
+        year_month TEXT NOT NULL,
+        satisfaction_score INTEGER DEFAULT 0,
+        absence_score INTEGER DEFAULT 0,
+        survey_score INTEGER DEFAULT 0,
+        reschedule_score INTEGER DEFAULT 0,
+        reservation_score INTEGER DEFAULT 0,
+        total_score INTEGER DEFAULT 0,
+        rank TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(student_id, year_month)
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_red_list_student_id ON red_list(student_id);
+      CREATE INDEX IF NOT EXISTS idx_red_list_year_month ON red_list(year_month);
+      CREATE INDEX IF NOT EXISTS idx_red_list_rank ON red_list(rank);
+      CREATE INDEX IF NOT EXISTS idx_red_list_total_score ON red_list(total_score);
+      
+      COMMENT ON TABLE red_list IS 'レッドリスト（生徒の注意レベル管理）';
+      COMMENT ON COLUMN red_list.student_id IS '学籍番号';
+      COMMENT ON COLUMN red_list.year_month IS '対象年月（YYYY-MM形式）';
+      COMMENT ON COLUMN red_list.satisfaction_score IS 'レッスン満足度スコア（0-4点）';
+      COMMENT ON COLUMN red_list.absence_score IS '欠席スコア（0-3点）';
+      COMMENT ON COLUMN red_list.survey_score IS 'アンケート未回答スコア（0-1点）';
+      COMMENT ON COLUMN red_list.reschedule_score IS 'リスケスコア（0-1点）';
+      COMMENT ON COLUMN red_list.reservation_score IS '予約不足スコア（0-1点）';
+      COMMENT ON COLUMN red_list.total_score IS '合計スコア（0-10点）';
+      COMMENT ON COLUMN red_list.rank IS 'ランク（high: 7+, middle: 4-6, low: 3, none: 0-2）';
+    `,
+    down: `
+      DROP TABLE IF EXISTS red_list CASCADE;
+    `
   }
 ];
 
