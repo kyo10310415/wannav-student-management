@@ -2095,124 +2095,124 @@ function renderStudentRowsSimple() {
     const rowBgColor = progressStatus.color;
     
     return `
-      <!-- Student Card (2-row layout, no horizontal scroll) -->
-      <div class="bg-white border border-gray-200 rounded-lg p-4 mb-3 hover:shadow-md transition">
+      <!-- Student Card (Compact layout) -->
+      <div class="bg-white border border-gray-200 rounded-lg p-2 mb-2 hover:shadow-md transition">
         <!-- Row 1: Basic Info -->
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-3 pb-3 border-b border-gray-100">
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-2 pb-2 border-b border-gray-100">
           <!-- Student ID & Name -->
           <div class="col-span-2 md:col-span-2">
-            <div class="text-xs text-gray-500 mb-1">学籍番号 / 生徒名</div>
-            <div class="font-semibold text-gray-900">${student.student_id || '-'}</div>
-            <div class="text-sm text-gray-700">${student.name || '-'}</div>
+            <div class="text-xs text-gray-500">学籍番号 / 生徒名</div>
+            <div class="font-semibold text-sm text-gray-900">${student.student_id || '-'}</div>
+            <div class="text-xs text-gray-700">${student.name || '-'}</div>
           </div>
           
           <!-- Status & Contract Plan -->
           <div>
-            <div class="text-xs text-gray-500 mb-1">ステータス</div>
-            <div class="text-sm text-gray-700">${student.status || '-'}</div>
+            <div class="text-xs text-gray-500">ステータス</div>
+            <div class="text-xs text-gray-700">${student.status || '-'}</div>
             <div class="text-xs text-gray-600">${student.contract_plan || '-'}</div>
           </div>
           
           <!-- Character Name -->
           <div>
-            <div class="text-xs text-gray-500 mb-1">キャラ名</div>
-            <div class="text-sm text-gray-700 truncate" title="${student.character_name || '-'}">${student.character_name || '-'}</div>
+            <div class="text-xs text-gray-500">キャラ名</div>
+            <div class="text-xs text-gray-700 truncate" title="${student.character_name || '-'}">${student.character_name || '-'}</div>
           </div>
           
           <!-- Tutor -->
           <div>
-            <div class="text-xs text-gray-500 mb-1">担任Tutor</div>
-            <div class="text-sm font-medium text-gray-700">${getTutorDisplayName(student.homeroom_tutor)}</div>
+            <div class="text-xs text-gray-500">担任Tutor</div>
+            <div class="text-xs font-medium text-gray-700">${getTutorDisplayName(student.homeroom_tutor)}</div>
           </div>
           
           <!-- Links -->
           <div>
-            <div class="text-xs text-gray-500 mb-1">リンク</div>
-            <div class="flex gap-2">
-              ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notion"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
-              ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discord"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-              ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-              ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
-              ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
-              ${student.student_id ? `<button onclick="showStudentVQHistory('${student.student_id}')" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-lg"></i></span>'}
+            <div class="text-xs text-gray-500">リンク</div>
+            <div class="flex gap-1">
+              ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notion"><i class="fas fa-file-alt text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-sm"></i></span>'}
+              ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discord"><i class="fab fa-discord text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-sm"></i></span>'}
+              ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-sm"></i></span>'}
+              ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-sm"></i></span>'}
+              ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-sm"></i></span>'}
+              ${student.student_id ? `<button onclick="showStudentVQHistory('${student.student_id}')" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-sm"></i></span>'}
             </div>
           </div>
         </div>
         
-        <!-- Row 2: Stats & Data -->
-        <div class="grid grid-cols-3 md:grid-cols-9 gap-2 text-center">
+        <!-- Row 2: Stats & Data (Compact) -->
+        <div class="grid grid-cols-5 md:grid-cols-10 gap-1 text-center">
           <!-- Lesson Progress -->
-          <div class="${rowBgColor} rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">レッスン進捗</div>
-            <div class="text-sm font-semibold ${getLessonProgressClass(student.lesson_progress)}">
+          <div class="${rowBgColor} rounded p-1">
+            <div class="text-xs text-gray-600">進捗</div>
+            <div class="text-xs font-semibold ${getLessonProgressClass(student.lesson_progress)}">
               ${student.lesson_progress === 'Proプラン' ? 'Pro' : (student.lesson_progress ? `L${student.lesson_progress}` : '-')}
             </div>
           </div>
           
           <!-- Start Date -->
-          <div class="bg-gray-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">開始日</div>
+          <div class="bg-gray-50 rounded p-1">
+            <div class="text-xs text-gray-600">開始</div>
             <div class="text-xs text-gray-700">${lessonStartDate}</div>
           </div>
           
           <!-- Continued Months -->
-          <div class="bg-blue-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">継続月数</div>
-            <div class="text-sm font-semibold text-blue-600">${continuedMonths}ヶ月</div>
+          <div class="bg-blue-50 rounded p-1">
+            <div class="text-xs text-gray-600">継続</div>
+            <div class="text-xs font-semibold text-blue-600">${continuedMonths}月</div>
           </div>
           
           <!-- PRO Plan Start -->
-          <div class="bg-purple-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">PRO開始</div>
+          <div class="bg-purple-50 rounded p-1">
+            <div class="text-xs text-gray-600">PRO</div>
             <input type="month" 
                    value="${student.pro_plan_start_date ? formatDateForMonthInput(student.pro_plan_start_date) : ''}"
                    onchange="updateProPlanStartDate('${student.student_id}', this.value)"
-                   class="w-full px-1 py-1 border border-purple-300 rounded text-xs text-purple-700 font-semibold focus:ring-2 focus:ring-purple-500"
-                   placeholder="未設定">
+                   class="w-full px-1 py-0.5 border border-purple-300 rounded text-xs text-purple-700 font-semibold focus:ring-1 focus:ring-purple-500"
+                   placeholder="-">
           </div>
           
           <!-- PRO Plan Months -->
-          <div class="bg-purple-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">PRO継続</div>
-            <div class="text-sm font-semibold text-purple-700">${student.pro_plan_continued_months ? student.pro_plan_continued_months + 'ヶ月' : '-'}</div>
+          <div class="bg-purple-50 rounded p-1">
+            <div class="text-xs text-gray-600">PRO月</div>
+            <div class="text-xs font-semibold text-purple-700">${student.pro_plan_continued_months ? student.pro_plan_continued_months + '月' : '-'}</div>
           </div>
           
           <!-- Result Overall -->
-          <div class="bg-gray-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">リザルト</div>
-            <div class="text-sm font-semibold ${resultOverallColor}">${resultOverall}</div>
+          <div class="bg-gray-50 rounded p-1">
+            <div class="text-xs text-gray-600">評価</div>
+            <div class="text-xs font-semibold ${resultOverallColor}">${resultOverall}</div>
           </div>
           
           <!-- Wanami Usage -->
-          <div class="bg-gray-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">わなみ</div>
-            <div class="text-sm">
+          <div class="bg-gray-50 rounded p-1">
+            <div class="text-xs text-gray-600">わなみ</div>
+            <div class="text-xs">
               <span class="wanami-usage-loading text-gray-400" data-student-id="${student.student_id}">...</span>
             </div>
           </div>
           
           <!-- Absence Count -->
-          <div class="bg-gray-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">欠席</div>
-            <div class="text-sm font-semibold ${absenceColorClass}">${absenceCount}回</div>
+          <div class="bg-gray-50 rounded p-1">
+            <div class="text-xs text-gray-600">欠席</div>
+            <div class="text-xs font-semibold ${absenceColorClass}">${absenceCount}</div>
           </div>
           
           <!-- Survey Status -->
-          <div class="bg-gray-50 rounded p-2">
-            <div class="text-xs text-gray-600 mb-1">
-              <i class="fas fa-clipboard-check text-blue-600"></i>
+          <div class="bg-gray-50 rounded p-1">
+            <div class="text-xs text-gray-600">
+              <i class="fas fa-clipboard-check text-blue-600 text-xs"></i>
             </div>
-            <div class="survey-stats-loading text-gray-400" data-student-id="${student.student_id}">
+            <div class="survey-stats-loading text-gray-400 text-xs" data-student-id="${student.student_id}">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
           </div>
           
-          <!-- Roulette Result (spans 2 columns on mobile) -->
-          <div class="bg-gray-50 rounded p-2 col-span-3 md:col-span-1">
-            <div class="text-xs text-gray-600 mb-1">
-              <i class="fas fa-dice text-purple-600"></i>
+          <!-- Roulette Result -->
+          <div class="bg-gray-50 rounded p-1 col-span-5 md:col-span-1">
+            <div class="text-xs text-gray-600">
+              <i class="fas fa-dice text-purple-600 text-xs"></i>
             </div>
-            <div class="roulette-result-loading text-gray-400" data-student-id="${student.student_id}">
+            <div class="roulette-result-loading text-gray-400 text-xs" data-student-id="${student.student_id}">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
           </div>
