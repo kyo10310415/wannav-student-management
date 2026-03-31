@@ -9445,32 +9445,23 @@ function updateSurveyStatsDisplay(studentId, stats) {
     return;
   }
   
-  // Survey stats display
+  // Survey stats display (simplified)
   const responseCount = stats.responseCount || 0;
   const responseRate = stats.responseRate || 0;
-  const continuedMonths = stats.continuedMonths || 0;
   const respondedThisMonth = stats.respondedThisMonth || false;
   
   let surveyHtml = `
     <div class="text-xs">
-      <div class="flex items-center gap-1">
-        <div class="font-semibold text-blue-600">${responseCount}/${continuedMonths}回</div>
-        ${!respondedThisMonth ? '<span class="px-1.5 py-0.5 text-xs font-bold bg-red-500 text-white rounded animate-pulse" title="今月未回答">!</span>' : '<span class="text-green-500 text-sm" title="今月回答済み">✓</span>'}
-      </div>
-      <div class="mt-1">
-        <div class="w-full bg-gray-200 rounded-full h-2">
-          <div class="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full" style="width: ${Math.min(responseRate, 100)}%"></div>
-        </div>
-        <div class="text-xs font-semibold mt-0.5 ${responseRate >= 80 ? 'text-green-600' : responseRate >= 50 ? 'text-orange-600' : 'text-gray-600'}">${responseRate}%</div>
-      </div>
+      ${!respondedThisMonth ? '<span class="px-1 py-0.5 text-xs font-bold bg-red-500 text-white rounded">!</span>' : '<span class="text-green-500">✓</span>'}
+      <div class="font-semibold text-blue-600">${responseRate}%</div>
     </div>
   `;
   
   // Add eligible badge if student is eligible
   if (stats.isEligible && stats.isEligible.isEligible) {
     surveyHtml += `
-      <div class="mt-1 px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-full animate-pulse">
-        <i class="fas fa-gift mr-1"></i>特典対象
+      <div class="mt-0.5 px-1 py-0.5 text-xs font-bold bg-yellow-400 text-white rounded">
+        <i class="fas fa-gift"></i>
       </div>
     `;
   }
@@ -9496,38 +9487,25 @@ function updateSurveyStatsDisplay(studentId, stats) {
   
   if (rouletteResult) {
     const isWin = rouletteResult.result === '当たり';
-    const probability = rouletteResult.probability;
     
     rouletteCell.innerHTML = `
-      <div class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-        isWin 
-          ? 'bg-gradient-to-r from-red-400 to-pink-500 text-white' 
-          : 'bg-gray-300 text-gray-700'
-      }">
-        <i class="fas ${isWin ? 'fa-trophy' : 'fa-times-circle'} mr-1"></i>
-        ${rouletteResult.result}
+      <div class="text-xs font-semibold ${isWin ? 'text-red-500' : 'text-gray-500'}">
+        <i class="fas ${isWin ? 'fa-trophy' : 'fa-times-circle'}"></i>
       </div>
-      <div class="text-xs text-gray-500 mt-0.5">${probability}%</div>
     `;
   } else if (stats.isEligible && stats.isEligible.isEligible) {
     // Eligible but not yet drawn
-    const probability = stats.resultScore === 'S' ? 100 : 50;
     rouletteCell.innerHTML = `
-      <div class="text-xs text-purple-600 font-semibold mb-1">
-        <i class="fas fa-dice mr-1"></i>
-        抽選可能<br>
-        <span class="text-xs text-gray-500">(${probability}%)</span>
-      </div>
       <button 
         onclick="testDrawRoulette('${stats.studentId}')"
-        class="px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded transition-colors"
-        title="テスト抽選（Discord通知なし）"
+        class="px-1 py-0.5 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded"
+        title="テスト抽選"
       >
-        <i class="fas fa-vial mr-1"></i>テスト抽選
+        <i class="fas fa-dice"></i>
       </button>
     `;
   } else {
-    rouletteCell.innerHTML = '<span class="text-gray-400 text-xs">未達成</span>';
+    rouletteCell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
   }
 }
 
