@@ -527,10 +527,8 @@ app.post('/test', async (c) => {
     }
     
     const messageContent = testPrefix + `# VQ診断結果
-
-## あなたのタイプ
-
-**${selectedRecord.diagnosisType}**
+### あなたのタイプ
+## ${selectedRecord.diagnosisType}
 
 ## 概要
 

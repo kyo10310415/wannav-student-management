@@ -347,9 +347,9 @@ function formatVQDiagnosisMessage(result) {
   // マークダウンで見やすくフォーマット
   const messageContent = `# VQ診断結果
 
-## あなたのタイプ
+### あなたのタイプ
 
-**${result.diagnosisType}**
+## ${result.diagnosisType}
 
 ## 概要
 
