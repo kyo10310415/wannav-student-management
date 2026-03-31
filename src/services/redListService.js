@@ -1,4 +1,5 @@
 import { query } from '../db/connection.js';
+import { fetchSatisfactionFromCache } from './cacheService.js';
 
 /**
  * Calculate red list score for a student for a given month
@@ -17,13 +18,44 @@ export async function calculateRedListScore(studentId, yearMonth) {
     rank: 'none'
   };
 
-  // 1. レッスン満足度チェック (4点) - TODO: 満足度スプレッドシートの実装後に有効化
-  // try {
-  //   // 満足度データの取得ロジックを後で実装
-  //   // const satisfactionResult = await query(...);
-  // } catch (error) {
-  //   console.error(`[Red List] Error checking satisfaction for ${studentId}:`, error);
-  // }
+  // 1. レッスン満足度チェック (4点)
+  try {
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    if (cacheSpreadsheetId) {
+      const satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
+      
+      // Filter by studentId and yearMonth (convert YYYY-MM to YYYY/M format for comparison)
+      const [year, month] = yearMonth.split('-').map(Number);
+      const targetYearMonth1 = `${year}/${month}`;
+      const targetYearMonth2 = `${year}/${String(month).padStart(2, '0')}`;
+      
+      const studentSatisfactionRecords = satisfactionData.filter(record => {
+        const normalizedId = (record.student_id || '').toString().trim().toUpperCase();
+        const normalizedTargetId = (studentId || '').toString().trim().toUpperCase();
+        const matchesStudent = normalizedId === normalizedTargetId;
+        const matchesMonth = record.year_month === targetYearMonth1 || record.year_month === targetYearMonth2;
+        return matchesStudent && matchesMonth;
+      });
+      
+      if (studentSatisfactionRecords.length > 0) {
+        // Calculate average satisfaction score
+        const scores_arr = studentSatisfactionRecords
+          .map(r => parseFloat(r.satisfaction_score))
+          .filter(s => !isNaN(s));
+        
+        if (scores_arr.length > 0) {
+          const avgScore = scores_arr.reduce((a, b) => a + b, 0) / scores_arr.length;
+          
+          // If average satisfaction is 7 or below (out of 10), add 4 points
+          if (avgScore <= 7) {
+            scores.satisfaction = 4;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[Red List] Error checking satisfaction for ${studentId}:`, error);
+  }
 
   // 2. レッスン欠席チェック (3点)
   try {
