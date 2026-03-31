@@ -49,6 +49,53 @@ let sortDirection = 'asc'; // 'asc' or 'desc'
 // Debug flag for lesson reports (can be toggled in console)
 window.debugLessonReport = false;
 
+// Helper function to format YouTube URL
+function formatYouTubeUrl(youtubeId) {
+  if (!youtubeId) return null;
+  
+  // Remove whitespace
+  youtubeId = youtubeId.trim();
+  
+  // If already a full URL, return as-is
+  if (youtubeId.startsWith('http://') || youtubeId.startsWith('https://')) {
+    return youtubeId;
+  }
+  
+  // If starts with @, use handle format
+  if (youtubeId.startsWith('@')) {
+    return `https://www.youtube.com/${youtubeId}`;
+  }
+  
+  // If starts with UC (channel ID), use channel format
+  if (youtubeId.startsWith('UC')) {
+    return `https://www.youtube.com/channel/${youtubeId}`;
+  }
+  
+  // Otherwise, assume it's a handle without @
+  return `https://www.youtube.com/@${youtubeId}`;
+}
+
+// Helper function to format X (Twitter) URL
+function formatXUrl(xId) {
+  if (!xId) return null;
+  
+  // Remove whitespace
+  xId = xId.trim();
+  
+  // If already a full URL, return as-is
+  if (xId.startsWith('http://') || xId.startsWith('https://')) {
+    return xId;
+  }
+  
+  // Remove @ if present
+  if (xId.startsWith('@')) {
+    xId = xId.substring(1);
+  }
+  
+  // Return formatted URL
+  return `https://x.com/${xId}`;
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
   // Verify session
@@ -949,8 +996,8 @@ function renderStudentRows() {
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-            ${student.youtube_channel_id ? `<a href="https://www.youtube.com/channel/${student.youtube_channel_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-            ${student.x_account_id ? `<a href="https://x.com/${student.x_account_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+            ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+            ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
           </div>
         </td>
@@ -2084,8 +2131,8 @@ function renderStudentRowsSimple() {
             <div class="flex gap-2">
               ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notion"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
               ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discord"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-              ${student.youtube_channel_id ? `<a href="https://www.youtube.com/channel/${student.youtube_channel_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-              ${student.x_account_id ? `<a href="https://x.com/${student.x_account_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+              ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+              ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
               ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
               ${student.student_id ? `<button onclick="showStudentVQHistory('${student.student_id}')" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-lg"></i></span>'}
             </div>
@@ -3359,8 +3406,8 @@ function renderTodayStudentRows(dayStudents, displayDate) {
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-            ${student.youtube_channel_id ? `<a href="https://www.youtube.com/channel/${student.youtube_channel_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-            ${student.x_account_id ? `<a href="https://x.com/${student.x_account_id}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+            ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+            ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
           </div>
         </td>
