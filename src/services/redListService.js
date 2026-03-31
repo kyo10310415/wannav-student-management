@@ -1,5 +1,4 @@
 import { query } from '../db/connection.js';
-import { fetchSatisfactionData } from './sheetsService.js';
 
 /**
  * Calculate red list score for a student for a given month
@@ -18,20 +17,13 @@ export async function calculateRedListScore(studentId, yearMonth) {
     rank: 'none'
   };
 
-  // 1. レッスン満足度チェック (4点)
-  try {
-    const satisfactionData = await fetchSatisfactionData();
-    const studentSatisfaction = satisfactionData[studentId];
-    
-    if (studentSatisfaction && studentSatisfaction[yearMonth]) {
-      const avgScore = studentSatisfaction[yearMonth].average;
-      if (avgScore <= 7) {
-        scores.satisfaction = 4;
-      }
-    }
-  } catch (error) {
-    console.error(`[Red List] Error checking satisfaction for ${studentId}:`, error);
-  }
+  // 1. レッスン満足度チェック (4点) - TODO: 満足度スプレッドシートの実装後に有効化
+  // try {
+  //   // 満足度データの取得ロジックを後で実装
+  //   // const satisfactionResult = await query(...);
+  // } catch (error) {
+  //   console.error(`[Red List] Error checking satisfaction for ${studentId}:`, error);
+  // }
 
   // 2. レッスン欠席チェック (3点)
   try {
