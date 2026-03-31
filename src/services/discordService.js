@@ -513,7 +513,8 @@ export async function sendTestWebhook(webhookUrl, discordUserId = null, message 
 /**
  * Send VQ diagnosis result to student's Discord webhook
  * @param {string} webhookUrl - Student's Discord webhook URL
- * @param {Object} messageData - Message data with content and embeds
+ * @param {Object} messageData - Message data with content
+ * @param {Object} attachments - Optional attachments (radarChart, trendChart, typeImage)
  * @returns {Promise<Object>} Result object with message ID
  */
 export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachments = {}) {
@@ -546,29 +547,24 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
     const { radarChart, trendChart, typeImage } = attachments;
     const { AttachmentBuilder, EmbedBuilder } = await import('discord.js');
     
-    // メッセージコンテンツ
+    // メインメッセージコンテンツ（マークダウン形式）
     const content = messageData.content;
     
-    // Embedsを作成
+    // 添付ファイルとEmbedsを準備
     const embeds = [];
     const files = [];
-    
-    // メインembed（基本情報）
-    const mainEmbedData = messageData.embeds[0];
-    const mainEmbed = new EmbedBuilder()
-      .setTitle(mainEmbedData.title)
-      .setColor(mainEmbedData.color)
-      .setFields(mainEmbedData.fields)
-      .setFooter({ text: mainEmbedData.footer.text });
     
     // レーダーチャート画像
     if (radarChart) {
       const radarAttachment = new AttachmentBuilder(radarChart, { name: 'radar-chart.png' });
       files.push(radarAttachment);
-      mainEmbed.setImage('attachment://radar-chart.png');
+      
+      const radarEmbed = new EmbedBuilder()
+        .setColor(0x9333EA)
+        .setImage('attachment://radar-chart.png');
+      
+      embeds.push(radarEmbed);
     }
-    
-    embeds.push(mainEmbed);
     
     // 推移グラフembed
     if (trendChart) {

@@ -321,44 +321,27 @@ async function updateLastCheckedRow(rowNumber) {
  * VQ診断結果をDiscordメッセージ形式にフォーマット
  */
 function formatVQDiagnosisMessage(result) {
-  const embed = {
-    title: '🎯 VQ診断結果',
-    color: 0x9333EA, // 紫色
-    fields: [
-      {
-        name: '📅 診断日',
-        value: result.diagnosisDate || '（日付不明）',
-        inline: true
-      },
-      {
-        name: '📊 合計点',
-        value: `**${result.totalScore}点**`,
-        inline: true
-      },
-      {
-        name: '🏷️ あなたのタイプ',
-        value: `**${result.diagnosisType}**`,
-        inline: false
-      },
-      {
-        name: '📝 概要',
-        value: result.overview || '（概要なし）',
-        inline: false
-      },
-      {
-        name: '📖 詳細',
-        value: result.details || '（詳細なし）',
-        inline: false
-      }
-    ],
-    footer: {
-      text: `送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
-    }
-  };
-  
+  // マークダウンで見やすくフォーマット
+  const messageContent = `# VQ診断結果
+
+## あなたのタイプ
+
+**${result.diagnosisType}**
+
+## 概要
+
+${result.overview || '（概要なし）'}
+
+## 詳細
+
+${result.details || '（詳細なし）'}
+
+---
+📅 診断日: ${result.diagnosisDate || '（日付不明）'}
+📊 合計点: **${result.totalScore}点**`;
+
   return {
-    content: `お疲れ様です！\n\n**VQ診断の結果が出ました！**`,
-    embeds: [embed]
+    content: messageContent
   };
 }
 
