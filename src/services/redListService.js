@@ -86,12 +86,15 @@ export async function calculateRedListScore(studentId, yearMonth) {
       `SELECT COUNT(*) as response_count
        FROM survey_responses
        WHERE student_id = $1
-         AND year_month = $2`,
+         AND response_month = $2`,
       [studentId, prevYearMonth]
     );
     
     if (surveyResult.rows[0].response_count === 0) {
       scores.survey = 1;
+      console.log(`[Red List] ${studentId} - Survey not responded in ${prevYearMonth}, adding 1 point`);
+    } else {
+      console.log(`[Red List] ${studentId} - Survey responded in ${prevYearMonth}, no penalty`);
     }
   } catch (error) {
     console.error(`[Red List] Error checking survey for ${studentId}:`, error);
