@@ -140,29 +140,48 @@ async function sendLessonReportReminder() {
     for (const lesson of lessons) {
       const normalizedId = normalizeStudentId(lesson.student_id);
       
-      // Check if lesson report exists (any day within +2 days range)
+      // PRIORITY 1: Check if lesson report exists in DATABASE
       let hasReport = false;
       
-      for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
-        const checkDate = new Date(yesterdayStr);
-        checkDate.setDate(checkDate.getDate() + dayOffset);
+      try {
+        const dbReportResult = await query(
+          `SELECT id FROM lesson_reports 
+           WHERE student_id = $1 AND lesson_date = $2 
+           LIMIT 1`,
+          [lesson.student_id, yesterdayStr]
+        );
         
-        const checkYear = checkDate.getFullYear();
-        const checkMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
-        const checkDay = String(checkDate.getDate()).padStart(2, '0');
-        const checkDateStr = `${checkYear}-${checkMonth}-${checkDay}`;
-        
-        const key = `${normalizedId}_${checkDateStr}`;
-        const completionData = lessonCompletionMap.get(key);
-        
-        if (completionData) {
+        if (dbReportResult.rows.length > 0) {
           hasReport = true;
-          console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: Report found on ${checkDateStr}`);
-          break;
+          console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: Report found in DATABASE`);
+        }
+      } catch (dbError) {
+        console.error(`[Lesson Report Reminder] Database check error:`, dbError);
+      }
+      
+      // PRIORITY 2: If not in database, check SPREADSHEET (fallback)
+      if (!hasReport) {
+        for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
+          const checkDate = new Date(yesterdayStr);
+          checkDate.setDate(checkDate.getDate() + dayOffset);
+          
+          const checkYear = checkDate.getFullYear();
+          const checkMonth = String(checkDate.getMonth() + 1).padStart(2, '0');
+          const checkDay = String(checkDate.getDate()).padStart(2, '0');
+          const checkDateStr = `${checkYear}-${checkMonth}-${checkDay}`;
+          
+          const key = `${normalizedId}_${checkDateStr}`;
+          const completionData = lessonCompletionMap.get(key);
+          
+          if (completionData) {
+            hasReport = true;
+            console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: Report found in SPREADSHEET on ${checkDateStr}`);
+            break;
+          }
         }
       }
       
-      // If NO report exists, send reminder
+      // If NO report exists in EITHER source, send reminder
       if (!hasReport) {
         console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: NO REPORT - Sending reminder`);
         
