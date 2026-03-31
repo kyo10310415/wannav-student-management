@@ -823,9 +823,15 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
       const overview = String(row[18] || '').trim();  // S列 (index 18)
       const details = String(row[19] || '').trim();   // T列 (index 19)
       
-      // デバッグ用: 最初の1件のみログ出力
-      if (results.length === 0) {
-        console.log(`デバッグ 行${actualRow}: P(診断タイプ)=${diagnosisType}, R(送信)=${emailSent}, S(概要)=${overview.substring(0, 30)}..., T(詳細)=${details.substring(0, 30)}...`);
+      // デバッグ用: 最初の5件の詳細ログ出力
+      if (results.length < 5) {
+        console.log(`\n📋 デバッグ 行${actualRow}:`);
+        console.log(`  学籍番号: ${studentId}`);
+        console.log(`  診断タイプ (P列/index 15): ${diagnosisType}`);
+        console.log(`  送信フラグ (R列/index 17): ${emailSent}`);
+        console.log(`  概要 (S列/index 18): ${overview.substring(0, 50)}${overview.length > 50 ? '...' : ''} (${overview.length}文字)`);
+        console.log(`  詳細 (T列/index 19): ${details.substring(0, 50)}${details.length > 50 ? '...' : ''} (${details.length}文字)`);
+        console.log(`  全列数: ${row.length}`);
       }
       
       results.push({

@@ -496,49 +496,39 @@ app.post('/test', async (c) => {
       }
     }
     
-    // メッセージを作成
-    let messageContent = '🧪 **テスト送信**\n\n';
+    // メッセージを作成（Markdown形式）
+    let testPrefix = '🧪 **テスト送信**\n\n';
     if (userId) {
-      messageContent += `<@${userId}>\n\n`;
+      testPrefix += `<@${userId}>\n\n`;
     }
-    messageContent += `**VQ診断の結果が出ました！**`;
     
+    // デバッグ: 取得データを確認
+    console.log(`📝 取得したデータ:`);
+    console.log(`  診断タイプ: ${selectedRecord.diagnosisType}`);
+    console.log(`  概要: ${selectedRecord.overview ? selectedRecord.overview.substring(0, 50) + '...' : '（なし）'} (${selectedRecord.overview ? selectedRecord.overview.length : 0}文字)`);
+    console.log(`  詳細: ${selectedRecord.details ? selectedRecord.details.substring(0, 50) + '...' : '（なし）'} (${selectedRecord.details ? selectedRecord.details.length : 0}文字)`);
+    
+    const messageContent = testPrefix + `# VQ診断結果
+
+## あなたのタイプ
+
+**${selectedRecord.diagnosisType}**
+
+## 概要
+
+${selectedRecord.overview || '（概要なし）'}
+
+## 詳細
+
+${selectedRecord.details || '（詳細なし）'}
+
+---
+📅 診断日: ${selectedRecord.diagnosisDate || '（日付不明）'}
+📊 合計点: **${selectedRecord.totalScore}点**
+🧪 テスト送信 | 行番号: ${selectedRecord.rowNumber}`;
+
     const message = {
-      content: messageContent,
-      embeds: [{
-        title: '🎯 VQ診断結果',
-        color: 0x9333EA,
-        fields: [
-          {
-            name: '📅 診断日',
-            value: selectedRecord.diagnosisDate || '（日付不明）',
-            inline: true
-          },
-          {
-            name: '📊 合計点',
-            value: `**${selectedRecord.totalScore}点**`,
-            inline: true
-          },
-          {
-            name: '🏷️ あなたのタイプ',
-            value: `**${selectedRecord.diagnosisType}**`,
-            inline: false
-          },
-          {
-            name: '📝 概要',
-            value: selectedRecord.overview || '（概要なし）',
-            inline: false
-          },
-          {
-            name: '📖 詳細',
-            value: selectedRecord.details || '（詳細なし）',
-            inline: false
-          }
-        ],
-        footer: {
-          text: `テスト送信 | 行番号: ${selectedRecord.rowNumber} | ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
-        }
-      }]
+      content: messageContent
     };
     
     // Discordに送信

@@ -192,6 +192,13 @@ export async function checkAndSendVQDiagnosis() {
           diagnosisDate: result.diagnosisDate
         });
         
+        // デバッグ: メッセージ内容をログ出力
+        console.log(`📝 メッセージ内容 (${student.name}):`);
+        console.log(`  診断タイプ: ${result.diagnosisType}`);
+        console.log(`  概要の長さ: ${result.overview ? result.overview.length : 0}文字`);
+        console.log(`  詳細の長さ: ${result.details ? result.details.length : 0}文字`);
+        console.log(`  メッセージ長: ${message.content ? message.content.length : 0}文字`);
+        
         const discordResponse = await sendDiscordVQDiagnosis(
           student.discord_url, 
           message,
