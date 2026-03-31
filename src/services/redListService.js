@@ -115,23 +115,37 @@ export async function calculateRedListScore(studentId, yearMonth) {
     console.error(`[Red List] Error checking reschedule for ${studentId}:`, error);
   }
 
-  // 5. 予約不足チェック (1点) - 毎月10日までに2回以上予約が入っているか
+  // 5. 予約不足チェック (1点) - 毎月10日時点で2回以上予約が入っているかチェック
   try {
     const [year, month] = yearMonth.split('-').map(Number);
-    const checkDate = `${year}-${String(month).padStart(2, '0')}-10`;
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1; // 0-indexed
+    const currentDay = today.getDate();
     
-    const reservationResult = await query(
-      `SELECT COUNT(*) as reservation_count
-       FROM lessons
-       WHERE student_id = $1
-         AND TO_CHAR(lesson_date, 'YYYY-MM') = $2
-         AND lesson_date <= $3`,
-      [studentId, yearMonth, checkDate]
-    );
+    // Only check reservation count if:
+    // 1. We're checking for a past month, OR
+    // 2. We're checking current month AND today is 10th or later
+    const isPastMonth = year < currentYear || (year === currentYear && month < currentMonth);
+    const isCurrentMonthAfter10th = year === currentYear && month === currentMonth && currentDay >= 10;
     
-    if (reservationResult.rows[0].reservation_count < 2) {
-      scores.reservation = 1;
+    if (isPastMonth || isCurrentMonthAfter10th) {
+      const checkDate = `${year}-${String(month).padStart(2, '0')}-10`;
+      
+      const reservationResult = await query(
+        `SELECT COUNT(*) as reservation_count
+         FROM lessons
+         WHERE student_id = $1
+           AND TO_CHAR(lesson_date, 'YYYY-MM') = $2
+           AND lesson_date <= $3`,
+        [studentId, yearMonth, checkDate]
+      );
+      
+      if (reservationResult.rows[0].reservation_count < 2) {
+        scores.reservation = 1;
+      }
     }
+    // If today is before 10th of the current month, don't check (reservation = 0)
   } catch (error) {
     console.error(`[Red List] Error checking reservations for ${studentId}:`, error);
   }
