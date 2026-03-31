@@ -118,7 +118,7 @@ export async function calculateRedListScore(studentId, yearMonth) {
     console.error(`[Red List] Error checking reschedule for ${studentId}:`, error);
   }
 
-  // 5. 予約不足チェック (1点) - 毎月10日時点で2回以上予約が入っているかチェック
+  // 5. 予約不足チェック (1点) - 毎月10日時点でその月の予約が2回以上入っているかチェック
   try {
     const [year, month] = yearMonth.split('-').map(Number);
     
@@ -132,30 +132,29 @@ export async function calculateRedListScore(studentId, yearMonth) {
     
     console.log(`[Red List] Reservation check for ${studentId}:`, {
       targetMonth: yearMonth,
-      serverTime: now.toISOString(),
-      jstTime: jstTime.toISOString(),
       todayJST: `${currentYear}-${currentMonth}-${currentDay}`
     });
     
-    // Only check reservation count if:
-    // 1. We're checking for a past month, OR
-    // 2. We're checking current month AND today is 10th or later
-    const isPastMonth = year < currentYear || (year === currentYear && month < currentMonth);
-    const isCurrentMonthAfter10th = year === currentYear && month === currentMonth && currentDay >= 10;
+    // Only check if we're looking at current month AND today is 10th or later
+    // OR if we're looking at a past month (after 10th)
+    const isCheckingCurrentMonth = year === currentYear && month === currentMonth;
+    const isCheckingPastMonth = year < currentYear || (year === currentYear && month < currentMonth);
     
-    console.log(`[Red List] ${studentId} - isPastMonth: ${isPastMonth}, isCurrentMonthAfter10th: ${isCurrentMonthAfter10th}`);
+    // For current month: only check if today >= 10th
+    // For past months: only check if they had passed the 10th (always true for past months)
+    const shouldCheck = (isCheckingCurrentMonth && currentDay >= 10) || 
+                        (isCheckingPastMonth && true); // Past months after 10th are always checked
     
-    if (isPastMonth || isCurrentMonthAfter10th) {
-      const checkDate = `${year}-${String(month).padStart(2, '0')}-10`;
-      
-      // Count distinct lesson dates up to the 10th
+    console.log(`[Red List] ${studentId} - isCurrentMonth: ${isCheckingCurrentMonth}, isPastMonth: ${isCheckingPastMonth}, shouldCheck: ${shouldCheck}`);
+    
+    if (shouldCheck) {
+      // Count ALL reservations in the target month (not just up to 10th!)
       const reservationResult = await query(
         `SELECT COUNT(DISTINCT lesson_date) as reservation_count
          FROM lessons
          WHERE student_id = $1
-           AND TO_CHAR(lesson_date, 'YYYY-MM') = $2
-           AND lesson_date <= $3`,
-        [studentId, yearMonth, checkDate]
+           AND TO_CHAR(lesson_date, 'YYYY-MM') = $2`,
+        [studentId, yearMonth]
       );
       
       // Also get the actual dates for debugging
@@ -164,15 +163,14 @@ export async function calculateRedListScore(studentId, yearMonth) {
          FROM lessons
          WHERE student_id = $1
            AND TO_CHAR(lesson_date, 'YYYY-MM') = $2
-           AND lesson_date <= $3
          ORDER BY lesson_date`,
-        [studentId, yearMonth, checkDate]
+        [studentId, yearMonth]
       );
       
       const reservationCount = parseInt(reservationResult.rows[0].reservation_count);
       const lessonDates = datesResult.rows.map(r => r.lesson_date);
       
-      console.log(`[Red List] ${studentId} - Reservations by ${checkDate}: ${reservationCount}`, lessonDates);
+      console.log(`[Red List] ${studentId} - Total reservations in ${yearMonth}: ${reservationCount}`, lessonDates);
       
       if (reservationCount < 2) {
         scores.reservation = 1;
@@ -181,9 +179,8 @@ export async function calculateRedListScore(studentId, yearMonth) {
         console.log(`[Red List] ${studentId} - Reservation sufficient (${reservationCount} >= 2), no penalty`);
       }
     } else {
-      console.log(`[Red List] ${studentId} - Skipping reservation check (before 10th of current month)`);
+      console.log(`[Red List] ${studentId} - Skipping reservation check (not yet 10th of target month)`);
     }
-    // If today is before 10th of the current month, don't check (reservation = 0)
   } catch (error) {
     console.error(`[Red List] Error checking reservations for ${studentId}:`, error);
   }
