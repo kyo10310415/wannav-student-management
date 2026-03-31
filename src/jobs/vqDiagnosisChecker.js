@@ -328,6 +328,22 @@ async function updateLastCheckedRow(rowNumber) {
  * VQ診断結果をDiscordメッセージ形式にフォーマット
  */
 function formatVQDiagnosisMessage(result) {
+  // 概要と詳細を適切な長さに制限
+  const maxOverviewLength = 500;
+  const maxDetailsLength = 800;
+  
+  let overview = result.overview || '（概要なし）';
+  let details = result.details || '（詳細なし）';
+  
+  // 長すぎる場合は切り詰める
+  if (overview.length > maxOverviewLength) {
+    overview = overview.substring(0, maxOverviewLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
+  }
+  
+  if (details.length > maxDetailsLength) {
+    details = details.substring(0, maxDetailsLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
+  }
+  
   // マークダウンで見やすくフォーマット
   const messageContent = `# VQ診断結果
 
@@ -337,15 +353,22 @@ function formatVQDiagnosisMessage(result) {
 
 ## 概要
 
-${result.overview || '（概要なし）'}
+${overview}
 
 ## 詳細
 
-${result.details || '（詳細なし）'}
+${details}
 
 ---
 📅 診断日: ${result.diagnosisDate || '（日付不明）'}
 📊 合計点: **${result.totalScore}点**`;
+
+  // メッセージ長を確認
+  if (messageContent.length > 1900) {
+    console.warn(`⚠️ メッセージが長すぎます: ${messageContent.length}文字（推奨: 1900文字以内）`);
+  } else {
+    console.log(`✅ メッセージ長: ${messageContent.length}文字`);
+  }
 
   return {
     content: messageContent

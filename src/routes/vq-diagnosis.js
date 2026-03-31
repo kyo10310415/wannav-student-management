@@ -502,11 +502,29 @@ app.post('/test', async (c) => {
       testPrefix += `<@${userId}>\n\n`;
     }
     
+    // 概要と詳細を適切な長さに制限
+    const maxOverviewLength = 500;
+    const maxDetailsLength = 800;
+    
+    let overview = selectedRecord.overview || '（概要なし）';
+    let details = selectedRecord.details || '（詳細なし）';
+    
     // デバッグ: 取得データを確認
     console.log(`📝 取得したデータ:`);
     console.log(`  診断タイプ: ${selectedRecord.diagnosisType}`);
-    console.log(`  概要: ${selectedRecord.overview ? selectedRecord.overview.substring(0, 50) + '...' : '（なし）'} (${selectedRecord.overview ? selectedRecord.overview.length : 0}文字)`);
-    console.log(`  詳細: ${selectedRecord.details ? selectedRecord.details.substring(0, 50) + '...' : '（なし）'} (${selectedRecord.details ? selectedRecord.details.length : 0}文字)`);
+    console.log(`  概要（元）: ${selectedRecord.overview ? selectedRecord.overview.length : 0}文字`);
+    console.log(`  詳細（元）: ${selectedRecord.details ? selectedRecord.details.length : 0}文字`);
+    
+    // 長すぎる場合は切り詰める
+    if (overview.length > maxOverviewLength) {
+      overview = overview.substring(0, maxOverviewLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
+      console.log(`  ⚠️ 概要を切り詰めました: ${maxOverviewLength}文字`);
+    }
+    
+    if (details.length > maxDetailsLength) {
+      details = details.substring(0, maxDetailsLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
+      console.log(`  ⚠️ 詳細を切り詰めました: ${maxDetailsLength}文字`);
+    }
     
     const messageContent = testPrefix + `# VQ診断結果
 
@@ -516,16 +534,18 @@ app.post('/test', async (c) => {
 
 ## 概要
 
-${selectedRecord.overview || '（概要なし）'}
+${overview}
 
 ## 詳細
 
-${selectedRecord.details || '（詳細なし）'}
+${details}
 
 ---
 📅 診断日: ${selectedRecord.diagnosisDate || '（日付不明）'}
 📊 合計点: **${selectedRecord.totalScore}点**
 🧪 テスト送信 | 行番号: ${selectedRecord.rowNumber}`;
+
+    console.log(`📏 メッセージ長: ${messageContent.length}文字${messageContent.length > 1900 ? ' ⚠️ 長すぎ' : ' ✅'}`);
 
     const message = {
       content: messageContent
