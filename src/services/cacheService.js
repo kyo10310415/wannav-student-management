@@ -36,6 +36,16 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     }
     
     console.log(`Fetched ${rows.length} students from cache spreadsheet`);
+    
+    // Debug: Log first row to check column structure
+    if (rows.length > 0 && rows[0]) {
+      console.log('📋 Column count:', rows[0].length);
+      console.log('📋 Sample row (first student):');
+      console.log('  - Student ID (col 1):', rows[0][1]);
+      console.log('  - Name (col 2):', rows[0][2]);
+      console.log('  - YouTube ID (col 23):', rows[0][23]);
+      console.log('  - X ID (col 24):', rows[0][24]);
+    }
 
     return rows.map(row => {
       let yearMonthInfo = {};
@@ -69,8 +79,8 @@ export async function fetchStudentsFromCache(spreadsheetId) {
         absence_count: row[19] || 0,
         lesson_start_date: row[20] || '',
         suspension_months: row[21] || 0,
-        youtube_channel_id: row[22] || '',
-        x_account_id: row[23] || '',
+        youtube_channel_id: row[23] || '', // X列 (24列目、インデックス23)
+        x_account_id: row[24] || '',       // Y列 (25列目、インデックス24)
       };
     });
   } catch (error) {
