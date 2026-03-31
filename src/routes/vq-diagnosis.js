@@ -526,16 +526,31 @@ app.post('/test', async (c) => {
       console.log(`  ⚠️ 詳細を切り詰めました: ${maxDetailsLength}文字`);
     }
     
-    const messageContent = testPrefix + `**【VQ診断結果】**
+    // 概要と詳細の1行目にアンダーラインを追加
+    const overviewWithUnderline = overview.split('\n').map((line, index) => {
+      if (index === 0 && line.trim()) {
+        return `__${line}__`;
+      }
+      return line;
+    }).join('\n');
+    
+    const detailsWithUnderline = details.split('\n').map((line, index) => {
+      if (index === 0 && line.trim()) {
+        return `__${line}__`;
+      }
+      return line;
+    }).join('\n');
+    
+    const messageContent = testPrefix + `# 【VQ診断結果】
 
-・**あなたのタイプ**
+## ・あなたのタイプ
 ${selectedRecord.diagnosisType}
 
-・**概要**
-${overview}
+## ・概要
+${overviewWithUnderline}
 
-・**詳細**
-${details}
+## ・詳細
+${detailsWithUnderline}
 
 ---
 📅 診断日: ${selectedRecord.diagnosisDate || '（日付不明）'}

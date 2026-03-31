@@ -345,17 +345,33 @@ function formatVQDiagnosisMessage(result) {
   }
   
   // マークダウンで見やすくフォーマット
-  // Discordのマークダウンは行頭の**が認識されにくいため、確実に太字表示されるよう調整
-  const messageContent = `**【VQ診断結果】**
+  // Discordマークダウン: # = h1, ## = h2, __text__ = アンダーライン
+  
+  // 概要と詳細の1行目にアンダーラインを追加
+  const overviewWithUnderline = overview.split('\n').map((line, index) => {
+    if (index === 0 && line.trim()) {
+      return `__${line}__`;
+    }
+    return line;
+  }).join('\n');
+  
+  const detailsWithUnderline = details.split('\n').map((line, index) => {
+    if (index === 0 && line.trim()) {
+      return `__${line}__`;
+    }
+    return line;
+  }).join('\n');
+  
+  const messageContent = `# 【VQ診断結果】
 
-・**あなたのタイプ**
+## ・あなたのタイプ
 ${result.diagnosisType}
 
-・**概要**
-${overview}
+## ・概要
+${overviewWithUnderline}
 
-・**詳細**
-${details}
+## ・詳細
+${detailsWithUnderline}
 
 ---
 📅 診断日: ${result.diagnosisDate || '（日付不明）'}
