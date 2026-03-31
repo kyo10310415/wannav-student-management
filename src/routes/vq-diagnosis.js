@@ -526,21 +526,20 @@ app.post('/test', async (c) => {
       console.log(`  ⚠️ 詳細を切り詰めました: ${maxDetailsLength}文字`);
     }
     
-    const messageContent = testPrefix + `# VQ診断結果
-### あなたのタイプ
-## ${selectedRecord.diagnosisType}
+    const messageContent = testPrefix + `**【VQ診断結果】**
 
-## 概要
+・**あなたのタイプ**
+${selectedRecord.diagnosisType}
 
+・**概要**
 ${overview}
 
-## 詳細
-
+・**詳細**
 ${details}
 
 ---
 📅 診断日: ${selectedRecord.diagnosisDate || '（日付不明）'}
-📊 合計点: **${selectedRecord.totalScore}点**
+📊 合計点: ${selectedRecord.totalScore}点
 🧪 テスト送信 | 行番号: ${selectedRecord.rowNumber}`;
 
     console.log(`📏 メッセージ長: ${messageContent.length}文字${messageContent.length > 1900 ? ' ⚠️ 長すぎ' : ' ✅'}`);
