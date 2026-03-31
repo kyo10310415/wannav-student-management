@@ -345,18 +345,16 @@ function formatVQDiagnosisMessage(result) {
   }
   
   // マークダウンで見やすくフォーマット
+  // Discordのマークダウンは行頭の**が認識されにくいため、確実に太字表示されるよう調整
   const messageContent = `**【VQ診断結果】**
 
-**・あなたのタイプ**
-
+・**あなたのタイプ**
 ${result.diagnosisType}
 
-**・概要**
-
+・**概要**
 ${overview}
 
-**・詳細**
-
+・**詳細**
 ${details}
 
 ---
