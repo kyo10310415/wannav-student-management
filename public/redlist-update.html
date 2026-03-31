@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レッドリスト更新</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold mb-4">🔄 レッドリスト再計算</h1>
+        
+        <div class="mb-4">
+            <p class="text-gray-700 mb-2">全生徒のレッドリストを最新のロジックで再計算します。</p>
+            <p class="text-sm text-gray-500">※ 生徒数に応じて時間がかかる場合があります</p>
+        </div>
+        
+        <button id="updateBtn" onclick="updateRedList()" 
+                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full">
+            再計算を実行
+        </button>
+        
+        <div id="status" class="mt-4 hidden">
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4">
+                <p class="text-blue-700 font-bold">処理中...</p>
+                <p class="text-blue-600 text-sm">しばらくお待ちください</p>
+            </div>
+        </div>
+        
+        <div id="result" class="mt-4 hidden"></div>
+        
+        <div class="mt-6 bg-gray-50 rounded p-4">
+            <h2 class="font-bold mb-2">📝 変更内容</h2>
+            <ul class="text-sm text-gray-700 space-y-1">
+                <li>✅ 満足度チェック（7点以下で4点）</li>
+                <li>✅ 欠席チェック（無断キャンセルで3点）</li>
+                <li>✅ アンケート未回答（前月未回答で1点）</li>
+                <li>✅ リスケチェック（生徒都合で1点）</li>
+                <li>🆕 <strong>予約不足チェック（10日以降のみ判定）</strong></li>
+            </ul>
+        </div>
+
+        <div class="mt-6 border-t pt-4">
+            <a href="/" class="text-blue-600 hover:underline">← 生徒管理ページに戻る</a>
+        </div>
+    </div>
+
+    <script>
+        async function updateRedList() {
+            const btn = document.getElementById('updateBtn');
+            const status = document.getElementById('status');
+            const result = document.getElementById('result');
+            
+            btn.disabled = true;
+            btn.textContent = '処理中...';
+            status.classList.remove('hidden');
+            result.classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/red-list/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                status.classList.add('hidden');
+                result.classList.remove('hidden');
+                
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="bg-green-50 border-l-4 border-green-500 p-4">
+                            <p class="text-green-700 font-bold">✅ 更新完了！</p>
+                            <p class="text-green-600 text-sm mt-2">
+                                ${data.data.updated} 名の生徒を更新しました<br>
+                                ${data.data.errors > 0 ? `エラー: ${data.data.errors} 件` : ''}
+                            </p>
+                            <p class="text-sm text-green-600 mt-3">
+                                生徒管理ページをリロードして確認してください。
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="bg-red-50 border-l-4 border-red-500 p-4">
+                            <p class="text-red-700 font-bold">❌ エラー</p>
+                            <p class="text-red-600 text-sm">${data.error || '不明なエラー'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                status.classList.add('hidden');
+                result.classList.remove('hidden');
+                result.innerHTML = `
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4">
+                        <p class="text-red-700 font-bold">❌ エラー</p>
+                        <p class="text-red-600 text-sm">${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '再計算を実行';
+            }
+        }
+    </script>
+</body>
+</html>
