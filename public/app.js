@@ -11433,13 +11433,50 @@ async function loadRedListData() {
       const redLists = response.data.data;
       console.log(`[Red List] Loaded ${redLists.length} red list records`);
       
+      // If no data exists, trigger automatic calculation
+      if (redLists.length === 0) {
+        console.log('[Red List] No data found, triggering automatic update...');
+        try {
+          await axios.post(`${API_BASE}/api/red-list/update`, {});
+          // Reload data after update
+          const retryResponse = await axios.get(`${API_BASE}/api/red-list`);
+          if (retryResponse.data.success) {
+            const newRedLists = retryResponse.data.data;
+            console.log(`[Red List] Loaded ${newRedLists.length} red list records after update`);
+            newRedLists.forEach(redList => {
+              updateRedListDisplay(redList.student_id, redList);
+            });
+          }
+        } catch (updateError) {
+          console.error('[Red List] Error during automatic update:', updateError);
+          // Show all cells as empty if update fails
+          document.querySelectorAll('.red-list-loading').forEach(cell => {
+            cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
+          });
+        }
+        return;
+      }
+      
       // Update display for each student
       redLists.forEach(redList => {
         updateRedListDisplay(redList.student_id, redList);
       });
+      
+      // For students not in the list, show empty
+      document.querySelectorAll('.red-list-loading').forEach(cell => {
+        const studentId = cell.dataset.studentId;
+        const hasData = redLists.find(r => r.student_id === studentId);
+        if (!hasData) {
+          cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
+        }
+      });
     }
   } catch (error) {
     console.error('[Red List] Error loading red list data:', error);
+    // Show all cells as empty on error
+    document.querySelectorAll('.red-list-loading').forEach(cell => {
+      cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
+    });
   }
 }
 

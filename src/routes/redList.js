@@ -68,7 +68,16 @@ app.get('/:studentId', async (c) => {
  */
 app.post('/update', async (c) => {
   try {
-    const { yearMonth } = await c.req.json();
+    let yearMonth = null;
+    
+    // Try to parse JSON body, but don't fail if it's empty
+    try {
+      const body = await c.req.json();
+      yearMonth = body.yearMonth;
+    } catch (e) {
+      // Body is empty or invalid, use default (current month)
+    }
+    
     const result = await updateAllRedLists(yearMonth);
     
     return c.json({
@@ -92,7 +101,15 @@ app.post('/update', async (c) => {
 app.post('/update/:studentId', async (c) => {
   try {
     const studentId = c.req.param('studentId');
-    const { yearMonth } = await c.req.json();
+    let yearMonth = null;
+    
+    // Try to parse JSON body, but don't fail if it's empty
+    try {
+      const body = await c.req.json();
+      yearMonth = body.yearMonth;
+    } catch (e) {
+      // Body is empty or invalid, use default (current month)
+    }
     
     const scores = await updateRedList(studentId, yearMonth);
     
