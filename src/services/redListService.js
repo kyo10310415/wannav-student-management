@@ -123,11 +123,21 @@ export async function calculateRedListScore(studentId, yearMonth) {
     const currentMonth = today.getMonth() + 1; // 0-indexed
     const currentDay = today.getDate();
     
+    console.log(`[Red List] Reservation check for ${studentId}:`, {
+      targetMonth: yearMonth,
+      today: `${currentYear}-${currentMonth}-${currentDay}`,
+      currentYear,
+      currentMonth,
+      currentDay
+    });
+    
     // Only check reservation count if:
     // 1. We're checking for a past month, OR
     // 2. We're checking current month AND today is 10th or later
     const isPastMonth = year < currentYear || (year === currentYear && month < currentMonth);
     const isCurrentMonthAfter10th = year === currentYear && month === currentMonth && currentDay >= 10;
+    
+    console.log(`[Red List] ${studentId} - isPastMonth: ${isPastMonth}, isCurrentMonthAfter10th: ${isCurrentMonthAfter10th}`);
     
     if (isPastMonth || isCurrentMonthAfter10th) {
       const checkDate = `${year}-${String(month).padStart(2, '0')}-10`;
@@ -141,9 +151,17 @@ export async function calculateRedListScore(studentId, yearMonth) {
         [studentId, yearMonth, checkDate]
       );
       
-      if (reservationResult.rows[0].reservation_count < 2) {
+      const reservationCount = parseInt(reservationResult.rows[0].reservation_count);
+      console.log(`[Red List] ${studentId} - Reservations by ${checkDate}: ${reservationCount}`);
+      
+      if (reservationCount < 2) {
         scores.reservation = 1;
+        console.log(`[Red List] ${studentId} - Reservation insufficient (${reservationCount} < 2), adding 1 point`);
+      } else {
+        console.log(`[Red List] ${studentId} - Reservation sufficient (${reservationCount} >= 2), no penalty`);
       }
+    } else {
+      console.log(`[Red List] ${studentId} - Skipping reservation check (before 10th of current month)`);
     }
     // If today is before 10th of the current month, don't check (reservation = 0)
   } catch (error) {
