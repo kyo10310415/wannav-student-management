@@ -345,23 +345,23 @@ function formatVQDiagnosisMessage(result) {
   }
   
   // マークダウンで見やすくフォーマット
-  const messageContent = `# VQ診断結果
+  const messageContent = `**【VQ診断結果】**
 
-### あなたのタイプ
+**・あなたのタイプ**
 
-## ${result.diagnosisType}
+${result.diagnosisType}
 
-## 概要
+**・概要**
 
 ${overview}
 
-## 詳細
+**・詳細**
 
 ${details}
 
 ---
 📅 診断日: ${result.diagnosisDate || '（日付不明）'}
-📊 合計点: **${result.totalScore}点**`;
+📊 合計点: ${result.totalScore}点`;
 
   // メッセージ長を確認
   if (messageContent.length > 1900) {
