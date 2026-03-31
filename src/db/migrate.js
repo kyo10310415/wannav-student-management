@@ -485,6 +485,45 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS red_list CASCADE;
     `
+  },
+  {
+    version: 19,
+    name: 'add_red_list_enhancements',
+    up: `
+      -- レッドリスト履歴テーブル作成
+      CREATE TABLE IF NOT EXISTS red_list_history (
+        id SERIAL PRIMARY KEY,
+        student_id TEXT NOT NULL,
+        year_month TEXT NOT NULL,
+        final_score INTEGER,
+        final_rank TEXT,
+        satisfaction_score INTEGER DEFAULT 0,
+        absence_score INTEGER DEFAULT 0,
+        survey_score INTEGER DEFAULT 0,
+        reschedule_score INTEGER DEFAULT 0,
+        reservation_score INTEGER DEFAULT 0,
+        archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_red_list_history_student_id ON red_list_history(student_id);
+      CREATE INDEX IF NOT EXISTS idx_red_list_history_year_month ON red_list_history(year_month);
+      
+      COMMENT ON TABLE red_list_history IS 'レッドリスト履歴（月末の最終スコアを保存）';
+      COMMENT ON COLUMN red_list_history.student_id IS '学籍番号';
+      COMMENT ON COLUMN red_list_history.year_month IS '対象年月（YYYY-MM形式）';
+      COMMENT ON COLUMN red_list_history.final_score IS '月末の最終合計スコア';
+      COMMENT ON COLUMN red_list_history.final_rank IS '月末の最終ランク';
+      
+      -- red_list テーブルに予約ロックフラグを追加
+      ALTER TABLE red_list ADD COLUMN IF NOT EXISTS reservation_locked BOOLEAN DEFAULT FALSE;
+      
+      COMMENT ON COLUMN red_list.reservation_locked IS '予約不足が10日時点で確定したかどうか';
+    `,
+    down: `
+      DROP TABLE IF EXISTS red_list_history CASCADE;
+      ALTER TABLE red_list DROP COLUMN IF EXISTS reservation_locked;
+    `
   }
 ];
 

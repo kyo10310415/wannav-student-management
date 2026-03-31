@@ -209,15 +209,58 @@ export async function calculateRedListScore(studentId, yearMonth) {
 export async function updateRedList(studentId, yearMonth = null) {
   if (!yearMonth) {
     const now = new Date();
-    yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const jstOffset = 9 * 60;
+    const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
+    yearMonth = `${jstTime.getFullYear()}-${String(jstTime.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  // Check if reservation is already locked
+  const existingResult = await query(
+    `SELECT reservation_locked, reservation_score FROM red_list 
+     WHERE student_id = $1 AND year_month = $2`,
+    [studentId, yearMonth]
+  );
+  
+  const isReservationLocked = existingResult.rows.length > 0 && existingResult.rows[0].reservation_locked;
+  const lockedReservationScore = isReservationLocked ? existingResult.rows[0].reservation_score : null;
+
   const scores = await calculateRedListScore(studentId, yearMonth);
+  
+  // If reservation was already locked, use the locked score instead of recalculating
+  if (isReservationLocked && lockedReservationScore !== null) {
+    scores.reservation = lockedReservationScore;
+    scores.total = scores.satisfaction + scores.absence + scores.survey + scores.reschedule + scores.reservation;
+    
+    // Recalculate rank
+    if (scores.total >= 7) {
+      scores.rank = 'high';
+    } else if (scores.total >= 4) {
+      scores.rank = 'middle';
+    } else if (scores.total >= 3) {
+      scores.rank = 'low';
+    } else {
+      scores.rank = 'none';
+    }
+    
+    console.log(`[Red List] ${studentId} - Reservation score locked at ${lockedReservationScore} point(s)`);
+  }
+
+  // Determine if we should lock the reservation score now
+  const [year, month] = yearMonth.split('-').map(Number);
+  const now = new Date();
+  const jstOffset = 9 * 60;
+  const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
+  const currentYear = jstTime.getFullYear();
+  const currentMonth = jstTime.getMonth() + 1;
+  const currentDay = jstTime.getDate();
+  
+  const isCurrentMonth = year === currentYear && month === currentMonth;
+  const shouldLockNow = isCurrentMonth && currentDay >= 10 && !isReservationLocked;
 
   await query(
     `INSERT INTO red_list 
-     (student_id, year_month, satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score, total_score, rank, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+     (student_id, year_month, satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score, total_score, rank, reservation_locked, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
      ON CONFLICT (student_id, year_month)
      DO UPDATE SET
        satisfaction_score = $3,
@@ -227,6 +270,10 @@ export async function updateRedList(studentId, yearMonth = null) {
        reservation_score = $7,
        total_score = $8,
        rank = $9,
+       reservation_locked = CASE 
+         WHEN red_list.reservation_locked = TRUE THEN TRUE
+         ELSE $10
+       END,
        updated_at = CURRENT_TIMESTAMP`,
     [
       studentId,
@@ -237,7 +284,8 @@ export async function updateRedList(studentId, yearMonth = null) {
       scores.reschedule,
       scores.reservation,
       scores.total,
-      scores.rank
+      scores.rank,
+      shouldLockNow
     ]
   );
 

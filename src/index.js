@@ -44,6 +44,8 @@ import { checkStampRallyAchievements } from './services/stampRallyService.js';
 // Jobs
 import sendLessonReportReminder from './jobs/lessonReportReminder.js';
 import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotification.js';
+import { dailyRedListUpdate } from './jobs/redListDaily.js';
+import { monthlyRedListReset } from './jobs/redListMonthly.js';
 
 const app = new Hono();
 
@@ -233,6 +235,36 @@ cron.schedule('*/5 * * * *', async () => {
     console.log('VQ diagnosis check completed');
   } catch (error) {
     console.error('Error in VQ diagnosis check:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule red list daily update (runs every day at 0:00 JST)
+// Recalculates all students' red list scores to reflect latest data
+console.log('Red list daily update: ENABLED (0:00 JST daily)');
+cron.schedule('0 0 * * *', async () => {
+  console.log('Running daily red list update at 0:00 JST...');
+  try {
+    await dailyRedListUpdate();
+    console.log('Daily red list update completed');
+  } catch (error) {
+    console.error('Error in daily red list update:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule red list monthly reset (runs on 1st of each month at 0:05 JST)
+// Archives previous month's final scores and resets for new month
+console.log('Red list monthly reset: ENABLED (1st of month at 0:05 JST)');
+cron.schedule('5 0 1 * *', async () => {
+  console.log('Running monthly red list reset at 0:05 JST...');
+  try {
+    await monthlyRedListReset();
+    console.log('Monthly red list reset completed');
+  } catch (error) {
+    console.error('Error in monthly red list reset:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
