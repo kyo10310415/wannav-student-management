@@ -196,6 +196,50 @@ app.get('/student/:studentId', async (c) => {
 });
 
 /**
+ * POST /api/vq-diagnosis/resend-from-row
+ * 指定した行番号から再送信
+ */
+app.post('/resend-from-row', async (c) => {
+  try {
+    const { startRow } = await c.req.json();
+    
+    if (!startRow || startRow < 2) {
+      return c.json({
+        success: false,
+        error: '有効な開始行番号を指定してください（2以上）'
+      }, 400);
+    }
+    
+    console.log(`🔄 行 ${startRow} から再送信開始...`);
+    
+    // last_checked_rowを指定行の1つ前に設定
+    await dbQuery(
+      `UPDATE system_settings 
+       SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE setting_key = 'vq_diagnosis_last_checked_row'`,
+      [String(startRow - 1)]
+    );
+    
+    // チェックジョブを実行
+    const checkAndSendVQDiagnosis = (await import('../jobs/vqDiagnosisChecker.js')).default;
+    const result = await checkAndSendVQDiagnosis();
+    
+    return c.json({
+      success: true,
+      message: `行 ${startRow} からの再送信を開始しました`,
+      result
+    });
+    
+  } catch (error) {
+    console.error('❌ 再送信エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * POST /api/vq-diagnosis/resend/:id
  * 特定の診断結果を再送信
  */
@@ -596,6 +640,35 @@ ${detailsWithUnderline}
     
   } catch (error) {
     console.error('❌ テスト送信エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/vq-diagnosis/resend-from-row
+ * 指定行から再送信（エラー分の再処理用）
+ */
+app.post('/resend-from-row', async (c) => {
+  try {
+    const body = await c.req.json();
+    const startRow = body.startRow || 595;
+    
+    console.log(`🔄 VQ診断再送信開始: 行 ${startRow} から`);
+    
+    const checkAndSendVQDiagnosis = (await import('../jobs/vqDiagnosisChecker.js')).default;
+    const result = await checkAndSendVQDiagnosis(startRow);
+    
+    return c.json({
+      success: true,
+      message: `行 ${startRow} からの再送信が完了しました`,
+      data: result
+    });
+    
+  } catch (error) {
+    console.error('❌ VQ診断再送信エラー:', error);
     return c.json({
       success: false,
       error: error.message

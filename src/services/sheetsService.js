@@ -777,10 +777,10 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
     rows.forEach((row, index) => {
       const actualRow = startRow + index;
       
-      // B列（学籍番号）が空の場合はスキップ
-      const studentId = String(row[1] || '').trim();
+      // C列（学籍番号）が空の場合はスキップ
+      const studentId = String(row[2] || '').trim();
       if (!studentId) {
-        console.log(`⚠️ 行 ${actualRow}: 学籍番号が空のためスキップ`);
+        console.log(`⚠️ 行 ${actualRow}: 学籍番号(C列)が空のためスキップ`);
         return;
       }
       
@@ -826,7 +826,7 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
       // デバッグ用: 最初の5件の詳細ログ出力
       if (results.length < 5) {
         console.log(`\n📋 デバッグ 行${actualRow}:`);
-        console.log(`  学籍番号: ${studentId}`);
+        console.log(`  学籍番号 (C列/index 2): ${studentId}`);
         console.log(`  診断タイプ (P列/index 15): ${diagnosisType}`);
         console.log(`  送信フラグ (R列/index 17): ${emailSent}`);
         console.log(`  概要 (S列/index 18): ${overview.substring(0, 50)}${overview.length > 50 ? '...' : ''} (${overview.length}文字)`);

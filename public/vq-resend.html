@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VQ診断 再送信</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-8">
+  <div class="max-w-2xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">
+      <i class="fas fa-sync-alt mr-2"></i>
+      VQ診断 再送信
+    </h1>
+
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">スプレッドシート指定行から再送信</h2>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 font-medium mb-2">
+          開始行番号（2以上）
+        </label>
+        <input 
+          type="number" 
+          id="startRow" 
+          value="595" 
+          min="2"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          placeholder="例: 595"
+        >
+        <p class="text-sm text-gray-500 mt-1">
+          この行番号から未送信のVQ診断結果を順次送信します
+        </p>
+      </div>
+
+      <button 
+        onclick="resendFromRow()" 
+        class="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors"
+      >
+        <i class="fas fa-paper-plane mr-2"></i>
+        再送信を実行
+      </button>
+    </div>
+
+    <div id="status" class="mb-4"></div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function resendFromRow() {
+      const startRow = parseInt(document.getElementById('startRow').value);
+      
+      if (!startRow || startRow < 2) {
+        showError('2以上の行番号を入力してください');
+        return;
+      }
+      
+      const statusDiv = document.getElementById('status');
+      const resultDiv = document.getElementById('result');
+      
+      // ステータス表示
+      statusDiv.innerHTML = `
+        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          行 ${startRow} から再送信中...
+        </div>
+      `;
+      resultDiv.innerHTML = '';
+      
+      try {
+        const response = await fetch('/api/vq-diagnosis/resend-from-row', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ startRow })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          statusDiv.innerHTML = `
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+              <i class="fas fa-check-circle mr-2"></i>
+              ${data.message}
+            </div>
+          `;
+          
+          resultDiv.innerHTML = `
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h3 class="text-lg font-semibold mb-3">実行結果</h3>
+              <div class="space-y-2">
+                <p><strong>処理件数:</strong> ${data.result.processed}件</p>
+                <p><strong>エラー件数:</strong> ${data.result.errors}件</p>
+                <p><strong>最終行:</strong> ${data.result.lastRow}</p>
+              </div>
+              
+              <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+                <p class="text-sm text-yellow-800">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  送信成功した行はスプレッドシートのR列に「完了」が記録されます
+                </p>
+              </div>
+            </div>
+          `;
+        } else {
+          showError(data.error || '再送信に失敗しました');
+        }
+        
+      } catch (error) {
+        console.error('再送信エラー:', error);
+        showError('再送信中にエラーが発生しました: ' + error.message);
+      }
+    }
+    
+    function showError(message) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-exclamation-triangle mr-2"></i>
+          ${message}
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
