@@ -1496,6 +1496,9 @@ function renderStudentsPage() {
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
+        <button onclick="window.open('/redlist.html', '_blank')" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+          <i class="fas fa-exclamation-triangle mr-2"></i>レッドリスト管理
+        </button>
         <button onclick="clearAllFilters()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" id="clear-filters-btn">
           <i class="fas fa-times-circle mr-2"></i>フィルター・ソートをクリア
         </button>

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists } from '../services/redListService.js';
+import { query } from '../db/connection.js';
 
 const app = new Hono();
 
@@ -120,6 +121,47 @@ app.post('/update/:studentId', async (c) => {
     });
   } catch (error) {
     console.error('Error updating red list:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/red-list/history
+ * Get red list history for a specific month
+ */
+app.get('/history', async (c) => {
+  try {
+    const { yearMonth } = c.req.query();
+    
+    if (!yearMonth) {
+      return c.json({
+        success: false,
+        error: 'yearMonth is required'
+      }, 400);
+    }
+    
+    const result = await query(
+      `SELECT 
+        rlh.*,
+        s.name as student_name,
+        s.homeroom_tutor
+       FROM red_list_history rlh
+       LEFT JOIN students s ON rlh.student_id = s.student_id
+       WHERE rlh.year_month = $1
+       ORDER BY rlh.final_score DESC, rlh.student_id`,
+      [yearMonth]
+    );
+    
+    return c.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error fetching red list history:', error);
     return c.json({
       success: false,
       error: error.message

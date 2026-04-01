@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レッドリスト管理 - WANNAV生徒管理システム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <a href="/" class="text-blue-600 hover:text-blue-700">
+                            <i class="fas fa-arrow-left"></i> 戻る
+                        </a>
+                        <h1 class="text-2xl font-bold text-gray-900">
+                            <i class="fas fa-exclamation-triangle text-red-600"></i>
+                            レッドリスト管理
+                        </h1>
+                    </div>
+                    <button onclick="refreshData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                        <i class="fas fa-sync-alt"></i> 更新
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 py-6">
+            <!-- Tabs -->
+            <div class="bg-white rounded-lg shadow-sm mb-6">
+                <div class="border-b border-gray-200">
+                    <nav class="flex -mb-px">
+                        <button onclick="switchTab('current')" id="tab-current" 
+                                class="tab-btn py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+                            <i class="fas fa-calendar-day"></i> 今月のレッドリスト
+                        </button>
+                        <button onclick="switchTab('history')" id="tab-history"
+                                class="tab-btn py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            <i class="fas fa-history"></i> 過去のレッドリスト
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Stats Summary -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-fire text-red-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">HIGH</p>
+                            <p class="text-2xl font-bold text-red-600" id="count-high">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-exclamation-circle text-orange-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">MIDDLE</p>
+                            <p class="text-2xl font-bold text-orange-600" id="count-middle">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">LOW</p>
+                            <p class="text-2xl font-bold text-yellow-600" id="count-low">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">対応済み</p>
+                            <p class="text-2xl font-bold text-green-600" id="count-resolved">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Month List -->
+            <div id="current-list" class="bg-white rounded-lg shadow-sm">
+                <div class="p-6">
+                    <div id="current-loading" class="text-center py-8">
+                        <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+                        <p class="text-gray-500 mt-2">読み込み中...</p>
+                    </div>
+                    <div id="current-content" class="hidden"></div>
+                </div>
+            </div>
+
+            <!-- History List -->
+            <div id="history-list" class="bg-white rounded-lg shadow-sm hidden">
+                <div class="p-6">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">対象月</label>
+                        <select id="history-month" onchange="loadHistoryData()" 
+                                class="border border-gray-300 rounded-lg px-4 py-2 w-64">
+                            <option value="">月を選択...</option>
+                        </select>
+                    </div>
+                    <div id="history-loading" class="text-center py-8 hidden">
+                        <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+                        <p class="text-gray-500 mt-2">読み込み中...</p>
+                    </div>
+                    <div id="history-content"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let currentTab = 'current';
+        let currentData = [];
+        let historyData = [];
+        let cachedNotionUrls = {};
+        let studentsCache = [];
+
+        // Initialize
+        async function init() {
+            await loadStudents();
+            await loadCurrentData();
+            populateHistoryMonths();
+        }
+
+        // Load students cache
+        async function loadStudents() {
+            try {
+                const response = await axios.get(`${API_BASE}/api/students/cache`);
+                if (response.data.success) {
+                    studentsCache = response.data.data;
+                    cachedNotionUrls = response.data.notionUrls || {};
+                }
+            } catch (error) {
+                console.error('Error loading students:', error);
+            }
+        }
+
+        // Switch tab
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons
+            document.getElementById('tab-current').className = 
+                tab === 'current' 
+                ? 'tab-btn py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600'
+                : 'tab-btn py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+            
+            document.getElementById('tab-history').className = 
+                tab === 'history'
+                ? 'tab-btn py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600'
+                : 'tab-btn py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+            
+            // Show/hide content
+            document.getElementById('current-list').classList.toggle('hidden', tab !== 'current');
+            document.getElementById('history-list').classList.toggle('hidden', tab !== 'history');
+        }
+
+        // Load current month data
+        async function loadCurrentData() {
+            try {
+                document.getElementById('current-loading').classList.remove('hidden');
+                document.getElementById('current-content').classList.add('hidden');
+                
+                const response = await axios.get(`${API_BASE}/api/red-list`);
+                
+                if (response.data.success) {
+                    currentData = response.data.data.filter(item => 
+                        item.rank === 'high' || item.rank === 'middle' || item.rank === 'low'
+                    );
+                    
+                    renderCurrentList();
+                    updateStats();
+                }
+            } catch (error) {
+                console.error('Error loading current data:', error);
+                document.getElementById('current-content').innerHTML = 
+                    '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
+            } finally {
+                document.getElementById('current-loading').classList.add('hidden');
+                document.getElementById('current-content').classList.remove('hidden');
+            }
+        }
+
+        // Render current list
+        function renderCurrentList() {
+            const container = document.getElementById('current-content');
+            
+            if (currentData.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-check-circle text-6xl text-green-400 mb-4"></i>
+                        <p class="text-xl font-medium text-gray-600">該当する生徒はいません</p>
+                        <p class="text-sm text-gray-500 mt-2">ランクがLOW以上の生徒がいません</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by total_score desc
+            currentData.sort((a, b) => b.total_score - a.total_score);
+            
+            container.innerHTML = currentData.map(item => renderStudentCard(item, false)).join('');
+        }
+
+        // Render student card
+        function renderStudentCard(item, isHistory) {
+            const student = studentsCache.find(s => s.student_id === item.student_id);
+            const studentName = student ? student.name : item.student_name || '不明';
+            
+            const notionUrl = cachedNotionUrls[item.student_id] || student?.notion_url || '#';
+            const discordUrl = student?.discord_url || '#';
+            const youtubeId = student?.youtube_channel_id || '';
+            const xId = student?.x_account_id || '';
+            
+            let rankColor = 'bg-gray-100 text-gray-700';
+            let rankText = '-';
+            
+            if (item.rank === 'high' || item.final_rank === 'high') {
+                rankColor = 'bg-red-100 text-red-700';
+                rankText = 'HIGH';
+            } else if (item.rank === 'middle' || item.final_rank === 'middle') {
+                rankColor = 'bg-orange-100 text-orange-700';
+                rankText = 'MID';
+            } else if (item.rank === 'low' || item.final_rank === 'low') {
+                rankColor = 'bg-yellow-100 text-yellow-700';
+                rankText = 'LOW';
+            }
+            
+            const score = item.total_score || item.final_score || 0;
+            const yearMonth = item.year_month;
+            
+            // Calculate consecutive months (placeholder - will implement later)
+            const consecutiveMonths = 1; // TODO: Calculate from history
+            
+            return `
+                <div class="border-b border-gray-200 py-4 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-4">
+                                <div class="flex-shrink-0">
+                                    <span class="inline-flex items-center justify-center px-3 py-1 rounded-lg ${rankColor} font-bold text-sm">
+                                        ${rankText}
+                                    </span>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm font-mono text-gray-600">${item.student_id}</span>
+                                        <span class="text-lg font-bold text-gray-900">${studentName}</span>
+                                        <span class="text-sm font-bold text-gray-700">${score}点</span>
+                                    </div>
+                                    <div class="flex items-center space-x-3 mt-1">
+                                        ${notionUrl !== '#' ? `<a href="${notionUrl}" target="_blank" class="text-gray-600 hover:text-blue-600"><i class="fas fa-file-alt"></i></a>` : '<i class="fas fa-file-alt text-gray-300"></i>'}
+                                        ${discordUrl !== '#' ? `<a href="${discordUrl}" target="_blank" class="text-gray-600 hover:text-purple-600"><i class="fab fa-discord"></i></a>` : '<i class="fab fa-discord text-gray-300"></i>'}
+                                        ${youtubeId ? `<a href="${formatYouTubeUrl(youtubeId)}" target="_blank" class="text-gray-600 hover:text-red-600"><i class="fab fa-youtube"></i></a>` : '<i class="fab fa-youtube text-gray-300"></i>'}
+                                        ${xId ? `<a href="${formatXUrl(xId)}" target="_blank" class="text-gray-600 hover:text-blue-400"><i class="fab fa-x-twitter"></i></a>` : '<i class="fab fa-x-twitter text-gray-300"></i>'}
+                                        <span class="text-xs text-gray-500">
+                                            <i class="fas fa-calendar-alt"></i> ${yearMonth}
+                                        </span>
+                                        <span class="text-xs text-gray-500">
+                                            <i class="fas fa-redo-alt"></i> 連続 ${consecutiveMonths}ヶ月
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ${!isHistory ? `
+                        <div class="flex items-center space-x-3">
+                            <select onchange="updateStatus('${item.student_id}', '${yearMonth}', this.value)" 
+                                    data-student-id="${item.student_id}"
+                                    data-year-month="${yearMonth}"
+                                    class="status-dropdown border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                                <option value="pending" selected>未対応</option>
+                                <option value="resolved">対応済み</option>
+                            </select>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Format YouTube URL
+        function formatYouTubeUrl(youtubeId) {
+            if (!youtubeId) return '#';
+            if (youtubeId.startsWith('http')) return youtubeId;
+            if (youtubeId.startsWith('@')) return `https://www.youtube.com/${youtubeId}`;
+            if (youtubeId.startsWith('UC')) return `https://www.youtube.com/channel/${youtubeId}`;
+            return `https://www.youtube.com/@${youtubeId}`;
+        }
+
+        // Format X URL
+        function formatXUrl(xId) {
+            if (!xId) return '#';
+            if (xId.startsWith('http')) return xId;
+            const username = xId.replace('@', '');
+            return `https://x.com/${username}`;
+        }
+
+        // Update stats
+        function updateStats() {
+            const high = currentData.filter(item => item.rank === 'high').length;
+            const middle = currentData.filter(item => item.rank === 'middle').length;
+            const low = currentData.filter(item => item.rank === 'low').length;
+            const resolved = 0; // TODO: Count resolved status
+            
+            document.getElementById('count-high').textContent = high;
+            document.getElementById('count-middle').textContent = middle;
+            document.getElementById('count-low').textContent = low;
+            document.getElementById('count-resolved').textContent = resolved;
+        }
+
+        // Update status
+        async function updateStatus(studentId, yearMonth, status) {
+            try {
+                // TODO: Implement API endpoint for status update
+                console.log(`Update status: ${studentId} ${yearMonth} -> ${status}`);
+                
+                // Update stats
+                updateStats();
+                
+                // Show notification
+                showNotification(status === 'resolved' ? '対応済みに変更しました' : '未対応に変更しました', 'success');
+            } catch (error) {
+                console.error('Error updating status:', error);
+                showNotification('ステータスの更新に失敗しました', 'error');
+            }
+        }
+
+        // Populate history months
+        function populateHistoryMonths() {
+            const select = document.getElementById('history-month');
+            const today = new Date();
+            
+            // Generate last 12 months
+            for (let i = 1; i <= 12; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const displayText = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+                
+                const option = document.createElement('option');
+                option.value = yearMonth;
+                option.textContent = displayText;
+                select.appendChild(option);
+            }
+        }
+
+        // Load history data
+        async function loadHistoryData() {
+            const yearMonth = document.getElementById('history-month').value;
+            
+            if (!yearMonth) {
+                document.getElementById('history-content').innerHTML = '';
+                return;
+            }
+            
+            try {
+                document.getElementById('history-loading').classList.remove('hidden');
+                document.getElementById('history-content').innerHTML = '';
+                
+                const response = await axios.get(`${API_BASE}/api/red-list/history?yearMonth=${yearMonth}`);
+                
+                if (response.data.success) {
+                    historyData = response.data.data.filter(item => 
+                        item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low'
+                    );
+                    
+                    renderHistoryList();
+                }
+            } catch (error) {
+                console.error('Error loading history data:', error);
+                document.getElementById('history-content').innerHTML = 
+                    '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
+            } finally {
+                document.getElementById('history-loading').classList.add('hidden');
+            }
+        }
+
+        // Render history list
+        function renderHistoryList() {
+            const container = document.getElementById('history-content');
+            
+            if (historyData.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-check-circle text-6xl text-green-400 mb-4"></i>
+                        <p class="text-xl font-medium text-gray-600">該当する生徒はいません</p>
+                        <p class="text-sm text-gray-500 mt-2">この月のレッドリストデータがありません</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by final_score desc
+            historyData.sort((a, b) => b.final_score - a.final_score);
+            
+            container.innerHTML = historyData.map(item => renderStudentCard(item, true)).join('');
+        }
+
+        // Refresh data
+        async function refreshData() {
+            if (currentTab === 'current') {
+                await loadCurrentData();
+            } else {
+                await loadHistoryData();
+            }
+        }
+
+        // Show notification
+        function showNotification(message, type = 'success') {
+            const bg = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            const notification = document.createElement('div');
+            notification.className = `fixed bottom-4 right-4 ${bg} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
