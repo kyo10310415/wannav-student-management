@@ -857,27 +857,48 @@ app.post('/test-send', async (c) => {
 
     const pool = getPool();
 
-    // テスト用のダミーデータまたは実際の生徒データを取得
+    // 生徒データを取得（テスト送信では実際の生徒IDが必要）
     let studentName = 'テストユーザー';
     let probability = 50;
+    let actualStudentId = studentId;
     
-    if (studentId) {
-      const studentResult = await pool.query(`
-        SELECT name, result_score_prev_month as result_score
-        FROM students
-        WHERE student_id = $1
-      `, [studentId]);
-      
-      if (studentResult.rows.length > 0) {
-        studentName = studentResult.rows[0].name;
-        probability = studentResult.rows[0].result_score === 'S' ? 100 : 50;
-      }
+    if (!studentId) {
+      return c.json({
+        success: false,
+        error: 'studentId is required for test send. Please provide a valid student ID.'
+      }, 400);
     }
+
+    const studentResult = await pool.query(`
+      SELECT name, result_score_prev_month as result_score
+      FROM students
+      WHERE student_id = $1
+    `, [studentId]);
+    
+    if (studentResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: `Student ${studentId} not found in database`
+      }, 404);
+    }
+
+    studentName = studentResult.rows[0].name;
+    probability = studentResult.rows[0].result_score === 'S' ? 100 : 50;
 
     // テスト用のルーレットURLを生成
     const token = crypto.randomBytes(32).toString('hex');
     const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
     const rouletteUrl = `${baseUrl}/roulette.html?token=${token}`;
+
+    // データベースに達成記録を保存（ルーレット検証に必要）
+    // テスト送信の場合は常に新規レコードを作成
+    await pool.query(`
+      INSERT INTO stamp_rally_achievements 
+        (student_id, achievement_type, achievement_date, roulette_url, notified_at)
+      VALUES ($1, $2, CURRENT_DATE, $3, CURRENT_TIMESTAMP)
+    `, [studentId, 'test_send', rouletteUrl]);
+
+    console.log(`[Roulette Test] Achievement record created for ${studentId}`);
 
     // Discord通知を送信（sendStampRallyNotificationと同じロジックだが、テスト用）
     const { sendDiscordMessage } = await import('../services/discordService.js');
