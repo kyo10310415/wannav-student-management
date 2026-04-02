@@ -27,16 +27,31 @@ export async function checkStampRallyAchievements() {
     
     console.log('[StampRally] Notifications are ENABLED. Proceeding with achievement check...');
 
-    // 特典対象の生徒を取得
-    const response = await axios.get('http://localhost:3000/api/survey/eligible-students');
+    // 全生徒のアンケート統計を取得（特典対象判定を含む）
+    const response = await axios.get('http://localhost:3000/api/survey/stats-all');
     
     if (!response.data.success) {
-      console.error('[StampRally] Failed to fetch eligible students');
-      return;
+      console.error('[StampRally] Failed to fetch survey stats');
+      return { success: false, sent: 0, errors: 1 };
     }
 
-    const eligibleStudents = response.data.data;
-    console.log(`[StampRally] Found ${eligibleStudents.length} eligible students`);
+    const allStats = response.data.data;
+
+    // 特典対象の生徒のみをフィルタ
+    const eligibleStudents = Object.entries(allStats)
+      .filter(([studentId, stats]) => stats.isEligible && stats.isEligible.isEligible)
+      .map(([studentId, stats]) => ({
+        studentId: studentId,
+        name: stats.name,
+        continuedMonths: stats.continuedMonths,
+        responseCount: stats.responseCount,
+        responseRate: stats.responseRate,
+        achievementType: stats.isEligible.achievementType,
+        probability: stats.resultScore === 'S' ? 100 : 50,
+        resultScore: stats.resultScore
+      }));
+
+    console.log(`[StampRally] Found ${eligibleStudents.length} eligible students (from ${Object.keys(allStats).length} total students)`);
 
     let notificationsSent = 0;
     let errors = 0;

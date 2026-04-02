@@ -142,22 +142,35 @@
       resultDiv.innerHTML = '';
       
       try {
-        // まず対象者リストを取得
-        const eligibleResponse = await fetch('/api/survey/eligible-students');
-        const eligibleData = await eligibleResponse.json();
+        // まず全生徒のアンケート統計を取得
+        const statsResponse = await fetch('/api/survey/stats-all');
+        const statsData = await statsResponse.json();
         
-        if (!eligibleData.success) {
-          showError('対象者の取得に失敗しました: ' + eligibleData.error);
+        if (!statsData.success) {
+          showError('統計データの取得に失敗しました: ' + statsData.error);
           return;
         }
         
-        const eligibleStudents = eligibleData.data || [];
+        // 特典対象の生徒のみをフィルタ
+        const allStats = statsData.data || {};
+        const eligibleStudents = Object.entries(allStats)
+          .filter(([studentId, stats]) => stats.isEligible && stats.isEligible.isEligible)
+          .map(([studentId, stats]) => ({
+            studentId: studentId,
+            name: stats.name,
+            continuedMonths: stats.continuedMonths,
+            responseCount: stats.responseCount,
+            responseRate: stats.responseRate,
+            achievementType: stats.isEligible.achievementType,
+            probability: stats.resultScore === 'S' ? 100 : 50,
+            resultScore: stats.resultScore
+          }));
         
         if (eligibleStudents.length === 0) {
           statusDiv.innerHTML = `
             <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg">
               <i class="fas fa-info-circle mr-2"></i>
-              現在、特典対象の生徒はいません
+              現在、特典対象の生徒はいません（全${Object.keys(allStats).length}名中0名）
             </div>
           `;
           return;
