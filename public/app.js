@@ -11307,6 +11307,83 @@ async function renderRouletteWinnersPage() {
           <p class="text-gray-600">データを読み込み中...</p>
         </div>
 
+        <!-- Filter and Sort Controls -->
+        <div id="roulette-filters" class="hidden p-4 bg-gray-50 border-b border-gray-200">
+          <div class="flex flex-wrap gap-4 items-end">
+            <!-- Filter Section -->
+            <div class="flex-1 min-w-[200px]">
+              <label class="block text-xs font-medium text-gray-700 mb-1">
+                <i class="fas fa-filter mr-1"></i>フィルター
+              </label>
+              <div class="flex gap-2">
+                <!-- Status Filter (Winners only) -->
+                <select id="filter-status" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent" onchange="applyRouletteFilters()">
+                  <option value="">すべての対応状況</option>
+                  <option value="未連絡">未連絡</option>
+                  <option value="連絡済み">連絡済み</option>
+                  <option value="予約あり">予約あり</option>
+                </select>
+                
+                <!-- Staff Filter (Winners only) -->
+                <select id="filter-staff" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent" onchange="applyRouletteFilters()">
+                  <option value="">すべての担当者</option>
+                  <option value="未割当">未割当</option>
+                </select>
+                
+                <!-- Tutor Filter -->
+                <select id="filter-tutor" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent" onchange="applyRouletteFilters()">
+                  <option value="">すべてのTutor</option>
+                </select>
+              </div>
+            </div>
+            
+            <!-- Sort Section -->
+            <div class="flex-1 min-w-[200px]">
+              <label class="block text-xs font-medium text-gray-700 mb-1">
+                <i class="fas fa-sort mr-1"></i>ソート
+              </label>
+              <div class="flex gap-2">
+                <select id="sort-field" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent" onchange="applyRouletteFilters()">
+                  <option value="drawnAt">日時</option>
+                  <option value="studentName">生徒名</option>
+                  <option value="continuedMonths">継続月数</option>
+                  <option value="probability">確率</option>
+                  <option value="status">対応状況</option>
+                </select>
+                
+                <select id="sort-order" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent" onchange="applyRouletteFilters()">
+                  <option value="desc">降順</option>
+                  <option value="asc">昇順</option>
+                </select>
+              </div>
+            </div>
+            
+            <!-- Search Section -->
+            <div class="flex-1 min-w-[200px]">
+              <label class="block text-xs font-medium text-gray-700 mb-1">
+                <i class="fas fa-search mr-1"></i>検索
+              </label>
+              <input 
+                type="text" 
+                id="search-student" 
+                placeholder="生徒名または学籍番号"
+                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                onkeyup="applyRouletteFilters()"
+              >
+            </div>
+            
+            <!-- Reset Button -->
+            <div>
+              <button 
+                onclick="resetRouletteFilters()"
+                class="px-4 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+              >
+                <i class="fas fa-redo mr-1"></i>リセット
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Content Area -->
         <div id="roulette-content" class="hidden p-6">
           <div class="flex justify-between items-center mb-4">
@@ -11315,7 +11392,8 @@ async function renderRouletteWinnersPage() {
               <span id="roulette-list-title">当たり生徒一覧</span>
             </h2>
             <div class="text-sm text-gray-600">
-              件数: <span id="roulette-count" class="font-bold text-blue-600">0</span>名
+              表示: <span id="roulette-filtered-count" class="font-bold text-blue-600">0</span>名 / 
+              全体: <span id="roulette-count" class="font-bold text-gray-600">0</span>名
             </div>
           </div>
           
@@ -11412,14 +11490,20 @@ function switchRouletteTab(tab) {
   
   window.currentRouletteTab = tab;
   
+  // Reset filters when switching tabs
+  const searchInput = document.getElementById('search-student');
+  if (searchInput) searchInput.value = '';
+  
   // Show template content directly without loading data
   if (tab === 'template') {
     const loadingEl = document.getElementById('roulette-loading');
     const contentEl = document.getElementById('roulette-content');
     const templateEl = document.getElementById('template-content');
+    const filtersEl = document.getElementById('roulette-filters');
     
     if (loadingEl) loadingEl.classList.add('hidden');
     if (contentEl) contentEl.classList.add('hidden');
+    if (filtersEl) filtersEl.classList.add('hidden');
     if (templateEl) templateEl.classList.remove('hidden');
   } else {
     const templateEl = document.getElementById('template-content');
@@ -11476,12 +11560,52 @@ async function loadRouletteData(tab) {
 
     const data = response.data.data;
     console.log(`✅ Loaded ${data.length} records for ${tab}`);
+    
+    // Store data globally for filtering
+    window.currentRouletteData = data;
+    window.currentRouletteRawData = data;
 
     loadingEl.classList.add('hidden');
     contentEl.classList.remove('hidden');
     
+    // Show/hide filters based on tab
+    const filtersEl = document.getElementById('roulette-filters');
+    if (filtersEl) {
+      if (tab === 'winners' || tab === 'losers' || tab === 'unopened') {
+        filtersEl.classList.remove('hidden');
+        
+        // Populate tutor filter
+        const tutorFilter = document.getElementById('filter-tutor');
+        if (tutorFilter) {
+          const uniqueTutors = [...new Set(data.map(row => row.homeroom_tutor).filter(t => t))].sort();
+          tutorFilter.innerHTML = '<option value="">すべてのTutor</option>' +
+            uniqueTutors.map(tutor => `<option value="${tutor}">${getTutorDisplayName(tutor)}</option>`).join('');
+        }
+        
+        // Populate staff filter for winners
+        if (tab === 'winners') {
+          const staffFilter = document.getElementById('filter-staff');
+          if (staffFilter && window.consultationStaffList) {
+            staffFilter.innerHTML = '<option value="">すべての担当者</option><option value="未割当">未割当</option>' +
+              window.consultationStaffList.map(staff => `<option value="${staff}">${staff}</option>`).join('');
+          }
+          
+          // Show status and staff filters
+          document.getElementById('filter-status')?.parentElement?.classList.remove('hidden');
+          document.getElementById('filter-staff')?.parentElement?.classList.remove('hidden');
+        } else {
+          // Hide status and staff filters for non-winners
+          document.getElementById('filter-status')?.parentElement?.classList.add('hidden');
+          document.getElementById('filter-staff')?.parentElement?.classList.add('hidden');
+        }
+      } else {
+        filtersEl.classList.add('hidden');
+      }
+    }
+    
     document.getElementById('roulette-list-title').textContent = title;
     document.getElementById('roulette-count').textContent = data.length;
+    document.getElementById('roulette-filtered-count').textContent = data.length;
 
     renderRouletteTable(tab, data);
 
@@ -11715,6 +11839,130 @@ URL：○○
     
     document.body.removeChild(textarea);
   }
+}
+
+/**
+ * Apply filters and sort to roulette data
+ */
+function applyRouletteFilters() {
+  if (!window.currentRouletteRawData || !window.currentRouletteTab) return;
+  
+  const tab = window.currentRouletteTab;
+  let data = [...window.currentRouletteRawData];
+  
+  // Get filter values
+  const statusFilter = document.getElementById('filter-status')?.value || '';
+  const staffFilter = document.getElementById('filter-staff')?.value || '';
+  const tutorFilter = document.getElementById('filter-tutor')?.value || '';
+  const searchText = document.getElementById('search-student')?.value.toLowerCase().trim() || '';
+  
+  // Get sort values
+  const sortField = document.getElementById('sort-field')?.value || 'drawnAt';
+  const sortOrder = document.getElementById('sort-order')?.value || 'desc';
+  
+  // Apply filters
+  data = data.filter(row => {
+    // Status filter (winners only)
+    if (tab === 'winners' && statusFilter) {
+      if (row.status !== statusFilter) return false;
+    }
+    
+    // Staff filter (winners only)
+    if (tab === 'winners' && staffFilter) {
+      if (staffFilter === '未割当') {
+        if (row.consultationStaff) return false;
+      } else {
+        if (row.consultationStaff !== staffFilter) return false;
+      }
+    }
+    
+    // Tutor filter
+    if (tutorFilter && row.homeroom_tutor !== tutorFilter) {
+      return false;
+    }
+    
+    // Search filter
+    if (searchText) {
+      const studentName = (row.studentName || '').toLowerCase();
+      const studentId = (row.studentId || '').toLowerCase();
+      if (!studentName.includes(searchText) && !studentId.includes(searchText)) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+  
+  // Apply sort
+  data.sort((a, b) => {
+    let aVal, bVal;
+    
+    switch (sortField) {
+      case 'drawnAt':
+        aVal = new Date(tab === 'unopened' ? a.notifiedAt : a.drawnAt);
+        bVal = new Date(tab === 'unopened' ? b.notifiedAt : b.drawnAt);
+        break;
+      case 'studentName':
+        aVal = a.studentName || '';
+        bVal = b.studentName || '';
+        break;
+      case 'continuedMonths':
+        aVal = a.continuedMonths || 0;
+        bVal = b.continuedMonths || 0;
+        break;
+      case 'probability':
+        aVal = a.probability || 0;
+        bVal = b.probability || 0;
+        break;
+      case 'status':
+        aVal = a.status || '';
+        bVal = b.status || '';
+        break;
+      default:
+        aVal = a[sortField];
+        bVal = b[sortField];
+    }
+    
+    if (sortOrder === 'asc') {
+      return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    } else {
+      return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+    }
+  });
+  
+  // Update filtered count
+  document.getElementById('roulette-filtered-count').textContent = data.length;
+  
+  // Re-render table
+  window.currentRouletteData = data;
+  renderRouletteTable(tab, data);
+  
+  console.log(`[Roulette] Filtered: ${data.length} / ${window.currentRouletteRawData.length} records`);
+}
+
+/**
+ * Reset all filters
+ */
+function resetRouletteFilters() {
+  // Reset filter inputs
+  const statusFilter = document.getElementById('filter-status');
+  const staffFilter = document.getElementById('filter-staff');
+  const tutorFilter = document.getElementById('filter-tutor');
+  const searchInput = document.getElementById('search-student');
+  const sortField = document.getElementById('sort-field');
+  const sortOrder = document.getElementById('sort-order');
+  
+  if (statusFilter) statusFilter.value = '';
+  if (staffFilter) staffFilter.value = '';
+  if (tutorFilter) tutorFilter.value = '';
+  if (searchInput) searchInput.value = '';
+  if (sortField) sortField.value = 'drawnAt';
+  if (sortOrder) sortOrder.value = 'desc';
+  
+  // Re-apply (which will show all data)
+  applyRouletteFilters();
+  
+  showNotification('フィルターをリセットしました', 'info');
 }
 
 // ========== Red List ==========
