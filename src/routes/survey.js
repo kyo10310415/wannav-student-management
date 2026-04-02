@@ -697,6 +697,7 @@ app.get('/stats-all', async (c) => {
       
       let isEligible = false;
       let eligibilityReason = '';
+      let achievementType = null;
       
       if (!isActive) {
         eligibilityReason = 'Status is not active';
@@ -715,6 +716,7 @@ app.get('/stats-all', async (c) => {
           // リセット後: 全員共通で6カ月連続条件
           if (hasConsecutive6Months(studentResponseMonths)) {
             isEligible = true;
+            achievementType = 'reset_6';
             eligibilityReason = 'Eligible: 6 consecutive months (after reset)';
           } else {
             eligibilityReason = 'Need 6 consecutive months of responses (after previous achievement)';
@@ -723,6 +725,7 @@ app.get('/stats-all', async (c) => {
           // No lesson start date: use default 80% rule
           if (responseRate >= 80) {
             isEligible = true;
+            achievementType = 'initial_80';
             eligibilityReason = 'Eligible: Response rate >= 80% (no start date)';
           } else {
             eligibilityReason = 'Response rate < 80%';
@@ -731,6 +734,7 @@ app.get('/stats-all', async (c) => {
           // ② Started after 2026/4: need 6 consecutive months
           if (hasConsecutive6Months(studentResponseMonths)) {
             isEligible = true;
+            achievementType = 'continuous_6';
             eligibilityReason = 'Eligible: 6 consecutive months (started after 2026/4)';
           } else {
             eligibilityReason = 'Need 6 consecutive months of responses (started after 2026/4)';
@@ -739,6 +743,7 @@ app.get('/stats-all', async (c) => {
           // ③ Started before 2026/4 but less than 6 months: need 100% from 2026/4
           if (has100PercentFrom202604(studentResponseMonths, continuedMonths, lessonStartDate)) {
             isEligible = true;
+            achievementType = 'catch_up_100';
             eligibilityReason = 'Eligible: 100% response from 2026/4 (less than 6 months)';
           } else {
             eligibilityReason = 'Need 100% response rate from 2026/4 until 6 months';
@@ -747,6 +752,7 @@ app.get('/stats-all', async (c) => {
           // ① Started before 2026/4 with 6+ months: use 80% rule
           if (responseRate >= 80) {
             isEligible = true;
+            achievementType = 'initial_80';
             eligibilityReason = 'Eligible: Response rate >= 80% (started before 2026/4, 6+ months)';
           } else {
             eligibilityReason = 'Response rate < 80%';
@@ -765,6 +771,7 @@ app.get('/stats-all', async (c) => {
         latestRouletteResult: rouletteMap[studentId] || null,
         isEligible: {
           isEligible,
+          achievementType,  // 達成タイプを追加
           reason: eligibilityReason
         },
         extensionResult: extensionResult || null,

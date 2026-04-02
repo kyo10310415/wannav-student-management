@@ -39,7 +39,17 @@ export async function checkStampRallyAchievements() {
 
     // 特典対象の生徒のみをフィルタ
     const eligibleStudents = Object.entries(allStats)
-      .filter(([studentId, stats]) => stats.isEligible && stats.isEligible.isEligible)
+      .filter(([studentId, stats]) => {
+        if (!stats.isEligible || !stats.isEligible.isEligible) {
+          return false;
+        }
+        // achievementTypeが空の生徒をログ出力
+        if (!stats.isEligible.achievementType) {
+          console.warn(`[StampRally] Warning: ${studentId} has no achievementType. isEligible:`, JSON.stringify(stats.isEligible));
+          return false; // achievementTypeがない場合は除外
+        }
+        return true;
+      })
       .map(([studentId, stats]) => ({
         studentId: studentId,
         name: stats.name,
