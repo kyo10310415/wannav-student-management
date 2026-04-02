@@ -126,9 +126,9 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
   try {
     const pool = getPool();
 
-    // 生徒のDiscord Webhook URLを取得
+    // 生徒のDiscord User IDを取得
     const studentResult = await pool.query(`
-      SELECT discord_url
+      SELECT discord_user_id
       FROM students
       WHERE student_id = $1
     `, [studentId]);
@@ -139,57 +139,52 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
     }
 
     const student = studentResult.rows[0];
-    const webhookUrl = student.discord_url;
+    const discordUserId = student.discord_user_id;
 
-    if (!webhookUrl) {
-      console.error(`[StampRally] No Discord webhook URL for ${studentId}`);
+    if (!discordUserId) {
+      console.error(`[StampRally] No Discord user ID for ${studentId}`);
       return false;
     }
 
-    // Discord Embed形式のメッセージ
-    const embed = {
-      title: '🎉 おめでとうございます！ 🎉',
-      description: '**見事アンケートスタンプラリーを達成しました！！**',
-      color: 0xFFD700, // 金色
-      fields: [
-        {
-          name: '対象者',
-          value: `${studentName} 様`,
-          inline: false
-        },
-        {
-          name: 'メッセージ',
-          value: '日頃からアンケートにご協力いただき、誠にありがとうございます。\nこの度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！',
-          inline: false
-        },
-        {
-          name: '🎰 ルーレットに挑戦！',
-          value: `下記のURLをクリックしてルーレットを回してください\n\n${rouletteUrl}`,
-          inline: false
-        },
-        {
-          name: '🎁 特典内容',
-          value: '**弊社事務所マネージャーによる**1時間コンサル権\n※ 当選された方には、別途ご連絡させていただきます。',
-          inline: false
-        }
-      ],
-      footer: {
-        text: '今後ともWannaVをよろしくお願いいたします 🙏'
-      },
-      timestamp: new Date().toISOString()
-    };
+    // 共通のDiscord Webhook URLを使用
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    if (!webhookUrl) {
+      console.error(`[StampRally] DISCORD_WEBHOOK_URL not configured`);
+      return false;
+    }
 
-    // Discord Webhook送信
+    // メッセージ作成（メンション付き）
+    const message = `<@${discordUserId}>
+お疲れ様です！
+
+🎉 **おめでとうございます！** 🎉
+
+**見事アンケートスタンプラリーを達成しました！！**
+
+**📊 対象者:** ${studentName} 様
+
+日頃からアンケートにご協力いただき、誠にありがとうございます。
+この度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！
+
+**🎰 ルーレットに挑戦！**
+下記のURLをクリックしてルーレットを回してください
+
+${rouletteUrl}
+
+**🎁 特典内容**
+**弊社事務所マネージャーによる**1時間コンサル権
+※ 当選された方には、別途ご連絡させていただきます。
+
+今後ともWannaVをよろしくお願いいたします 🙏`;
+
     console.log(`[StampRally] 📤 Sending Discord notification to ${studentId} (${studentName})`);
-    console.log(`[StampRally] Webhook URL: ${webhookUrl.substring(0, 50)}...`);
     
     const discordResponse = await axios.post(webhookUrl, {
-      username: 'WannaV Bot',
-      avatar_url: 'https://cdn-icons-png.flaticon.com/512/2593/2593635.png',
-      embeds: [embed]
+      content: message,
+      username: 'WannaV Bot'
     });
 
-    console.log(`[StampRally] Discord API response: status=${discordResponse.status}, data=${JSON.stringify(discordResponse.data)}`);
+    console.log(`[StampRally] Discord API response: status=${discordResponse.status}`);
 
     // Discord送信が成功した場合のみ、通知日時を更新
     if (discordResponse.status === 200 || discordResponse.status === 204) {
