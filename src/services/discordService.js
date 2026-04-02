@@ -511,13 +511,78 @@ export async function sendTestWebhook(webhookUrl, discordUserId = null, message 
 }
 
 /**
- * Send VQ diagnosis result to student's Discord webhook
- * @param {string} webhookUrl - Student's Discord webhook URL
- * @param {Object} messageData - Message data with content
- * @param {Object} attachments - Optional attachments (radarChart, trendChart, typeImage)
+ * Send stamp rally achievement notification to student's Discord channel
+ * @param {string} channelUrl - Student's Discord channel URL
+ * @param {string} studentName - Student name
+ * @param {string} rouletteUrl - Roulette URL
  * @returns {Promise<Object>} Result object with message ID
  */
-export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachments = {}) {
+export async function sendStampRallyNotification(channelUrl, studentName, rouletteUrl) {
+  if (!isClientReady) {
+    throw new Error('Discord client is not ready');
+  }
+
+  if (!channelUrl) {
+    console.log('No channel URL provided for stamp rally notification');
+    return { success: false, reason: 'No channel URL' };
+  }
+
+  try {
+    // Extract channel ID from Discord URL
+    // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
+    const channelIdMatch = channelUrl.match(/channels\/\d+\/(\d+)/);
+    if (!channelIdMatch) {
+      console.warn(`Invalid Discord URL: ${channelUrl}`);
+      return { success: false, error: 'Invalid Discord URL format' };
+    }
+
+    const channelId = channelIdMatch[1];
+    const channel = await client.channels.fetch(channelId);
+
+    if (!channel || !channel.isTextBased()) {
+      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      return { success: false, error: 'Channel not found or invalid' };
+    }
+
+    // メッセージ作成
+    const message = `お疲れ様です！
+
+🎉 **おめでとうございます！** 🎉
+
+**見事アンケートスタンプラリーを達成しました！！**
+
+**📊 対象者:** ${studentName} 様
+
+日頃からアンケートにご協力いただき、誠にありがとうございます。
+この度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！
+
+**🎰 ルーレットに挑戦！**
+下記のURLをクリックしてルーレットを回してください
+
+${rouletteUrl}
+
+**🎁 特典内容**
+**弊社事務所マネージャーによる**1時間コンサル権
+※ 当選された方には、別途ご連絡させていただきます。
+
+今後ともWannaVをよろしくお願いいたします 🙏`;
+
+    // メッセージを送信
+    const sentMessage = await channel.send(message);
+    
+    console.log(`Stamp rally notification sent to channel ${channelId} (message ID: ${sentMessage.id})`);
+    return { 
+      success: true, 
+      id: sentMessage.id, 
+      channelId: channelId 
+    };
+    
+  } catch (error) {
+    console.error('Error sending stamp rally notification to Discord:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
   if (!isClientReady) {
     throw new Error('Discord client is not ready');
   }

@@ -126,9 +126,9 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
   try {
     const pool = getPool();
 
-    // 生徒のDiscord User IDを取得
+    // 生徒のDiscord Channel URLを取得
     const studentResult = await pool.query(`
-      SELECT discord_user_id
+      SELECT discord_url
       FROM students
       WHERE student_id = $1
     `, [studentId]);
@@ -139,55 +139,24 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
     }
 
     const student = studentResult.rows[0];
-    const discordUserId = student.discord_user_id;
+    const channelUrl = student.discord_url;
 
-    if (!discordUserId) {
-      console.error(`[StampRally] No Discord user ID for ${studentId}`);
+    if (!channelUrl) {
+      console.error(`[StampRally] No Discord channel URL for ${studentId}`);
       return false;
     }
-
-    // 共通のDiscord Webhook URLを使用
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-    if (!webhookUrl) {
-      console.error(`[StampRally] DISCORD_WEBHOOK_URL not configured`);
-      return false;
-    }
-
-    // メッセージ作成（メンション付き）
-    const message = `<@${discordUserId}>
-お疲れ様です！
-
-🎉 **おめでとうございます！** 🎉
-
-**見事アンケートスタンプラリーを達成しました！！**
-
-**📊 対象者:** ${studentName} 様
-
-日頃からアンケートにご協力いただき、誠にありがとうございます。
-この度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！
-
-**🎰 ルーレットに挑戦！**
-下記のURLをクリックしてルーレットを回してください
-
-${rouletteUrl}
-
-**🎁 特典内容**
-**弊社事務所マネージャーによる**1時間コンサル権
-※ 当選された方には、別途ご連絡させていただきます。
-
-今後ともWannaVをよろしくお願いいたします 🙏`;
 
     console.log(`[StampRally] 📤 Sending Discord notification to ${studentId} (${studentName})`);
+    console.log(`[StampRally] Channel URL: ${channelUrl.substring(0, 50)}...`);
     
-    const discordResponse = await axios.post(webhookUrl, {
-      content: message,
-      username: 'WannaV Bot'
-    });
+    // Discord Botを使ってチャンネルに送信
+    const { sendStampRallyNotification: sendDiscordMessage } = await import('./discordService.js');
+    const result = await sendDiscordMessage(channelUrl, studentName, rouletteUrl);
 
-    console.log(`[StampRally] Discord API response: status=${discordResponse.status}`);
+    console.log(`[StampRally] Discord send result:`, result);
 
     // Discord送信が成功した場合のみ、通知日時を更新
-    if (discordResponse.status === 200 || discordResponse.status === 204) {
+    if (result.success) {
       await pool.query(`
         UPDATE stamp_rally_achievements
         SET notified_at = NOW()
@@ -198,15 +167,12 @@ ${rouletteUrl}
       console.log(`[StampRally] ✅ Discord notification sent to ${studentId} (${studentName})`);
       return true;
     } else {
-      console.error(`[StampRally] ❌ Discord webhook returned status ${discordResponse.status} for ${studentId}`);
+      console.error(`[StampRally] ❌ Discord send failed for ${studentId}: ${result.error || result.reason}`);
       return false;
     }
 
   } catch (error) {
     console.error(`[StampRally] ❌ Error sending Discord notification to ${studentId}:`, error.message);
-    if (error.response) {
-      console.error(`[StampRally] Discord API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-    }
     return false;
   }
 }
