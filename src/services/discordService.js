@@ -684,3 +684,52 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Send a simple text message to Discord channel
+ * @param {string} channelUrl - Discord channel URL
+ * @param {string} message - Message text
+ * @returns {Promise<Object>} Result object with message ID
+ */
+export async function sendDiscordMessage(channelUrl, message) {
+  if (!isClientReady) {
+    throw new Error('Discord client is not ready');
+  }
+
+  if (!channelUrl) {
+    console.log('No channel URL provided');
+    return { success: false, reason: 'No channel URL' };
+  }
+
+  try {
+    // Extract channel ID from Discord URL
+    // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
+    const channelIdMatch = channelUrl.match(/channels\/\d+\/(\d+)/);
+    if (!channelIdMatch) {
+      console.warn(`Invalid Discord URL: ${channelUrl}`);
+      return { success: false, error: 'Invalid Discord URL format' };
+    }
+
+    const channelId = channelIdMatch[1];
+    const channel = await client.channels.fetch(channelId);
+
+    if (!channel || !channel.isTextBased()) {
+      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      return { success: false, error: 'Channel not found or invalid' };
+    }
+
+    // メッセージを送信
+    const sentMessage = await channel.send(message);
+    
+    console.log(`Message sent to channel ${channelId} (message ID: ${sentMessage.id})`);
+    return { 
+      success: true, 
+      id: sentMessage.id, 
+      channelId: channelId 
+    };
+    
+  } catch (error) {
+    console.error('Error sending message to Discord:', error.message);
+    return { success: false, error: error.message };
+  }
+}

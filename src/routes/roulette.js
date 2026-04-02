@@ -839,4 +839,103 @@ app.get('/unopened', async (c) => {
   }
 });
 
+/**
+ * POST /api/roulette/test-send
+ * テスト送信：指定したDiscordチャンネルにメンション付きでルーレット通知を送信
+ * Body: { channelUrl, discordUserId, studentId (optional) }
+ */
+app.post('/test-send', async (c) => {
+  try {
+    const { channelUrl, discordUserId, studentId } = await c.req.json();
+
+    if (!channelUrl || !discordUserId) {
+      return c.json({
+        success: false,
+        error: 'channelUrl and discordUserId are required'
+      }, 400);
+    }
+
+    const pool = getPool();
+
+    // テスト用のダミーデータまたは実際の生徒データを取得
+    let studentName = 'テストユーザー';
+    let probability = 50;
+    
+    if (studentId) {
+      const studentResult = await pool.query(`
+        SELECT name, result_score_prev_month as result_score
+        FROM students
+        WHERE student_id = $1
+      `, [studentId]);
+      
+      if (studentResult.rows.length > 0) {
+        studentName = studentResult.rows[0].name;
+        probability = studentResult.rows[0].result_score === 'S' ? 100 : 50;
+      }
+    }
+
+    // テスト用のルーレットURLを生成
+    const token = crypto.randomBytes(32).toString('hex');
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+    const rouletteUrl = `${baseUrl}/roulette.html?token=${token}`;
+
+    // Discord通知を送信（sendStampRallyNotificationと同じロジックだが、テスト用）
+    const { sendDiscordMessage } = await import('../services/discordService.js');
+    
+    const message = `<@${discordUserId}>
+お疲れ様です！
+
+🎉 **おめでとうございます！** 🎉
+
+**見事アンケートスタンプラリーを達成しました！！**
+
+**📊 対象者:** ${studentName} 様
+
+日頃からアンケートにご協力いただき、誠にありがとうございます。
+この度、**アンケートスタンプラリーの条件を達成**されましたので、特典をご用意いたしました！
+
+**🎰 ルーレットに挑戦！**
+下記のURLをクリックしてルーレットを回してください
+
+${rouletteUrl}
+
+**🎁 特典内容**
+**弊社事務所マネージャーによる**1時間コンサル権
+※ 当選された方には、別途ご連絡させていただきます。
+
+今後ともWannaVをよろしくお願いいたします 🙏`;
+
+    const result = await sendDiscordMessage(channelUrl, message);
+
+    if (result.success) {
+      console.log(`[Roulette Test] Test notification sent to channel ${channelUrl} mentioning user ${discordUserId}`);
+      
+      return c.json({
+        success: true,
+        message: 'Test notification sent successfully',
+        data: {
+          channelUrl,
+          discordUserId,
+          studentName,
+          probability,
+          rouletteUrl,
+          messageId: result.id
+        }
+      });
+    } else {
+      return c.json({
+        success: false,
+        error: result.error || 'Failed to send Discord message'
+      }, 500);
+    }
+
+  } catch (error) {
+    console.error('Error sending test notification:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;
