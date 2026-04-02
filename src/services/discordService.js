@@ -583,6 +583,14 @@ ${rouletteUrl}
   }
 }
 
+/**
+ * Send VQ diagnosis notification to student's Discord channel
+ * @param {string} channelUrl - Student's Discord channel URL
+ * @param {Object} messageData - Message data with content
+ * @param {Object} attachments - Chart and image attachments
+ * @returns {Promise<Object>} Result object with message ID
+ */
+export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachments) {
   if (!isClientReady) {
     throw new Error('Discord client is not ready');
   }
