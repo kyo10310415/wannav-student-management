@@ -216,6 +216,8 @@
         const response = await axios.post(`${API_BASE}/api/roulette/spin`, { token });
         const data = response.data;
         
+        console.log('[Roulette] Spin API response:', data);
+        
         if (!data.success) {
           if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> ' + (data.error || 'エラーが発生しました');
           if (openButton) openButton.disabled = false;
@@ -238,7 +240,7 @@
         if (giftBox) giftBox.classList.add('hidden');
         
         // Show result
-        showPrizeResult(data);
+        showPrizeResult(data.data);
         
       } catch (error) {
         console.error('Prize opening failed:', error);
@@ -248,14 +250,18 @@
     }
     
     // Show prize result
-    async function showPrizeResult(data) {
+    async function showPrizeResult(resultData) {
+      console.log('[Roulette] Showing result:', resultData);
+      
       const resultContainer = document.getElementById('prize-result');
       const resultContent = document.getElementById('result-content');
       const resultMessage = document.getElementById('result-message');
       const mainCard = document.querySelector('#ready-state > div');
       
       if (resultContainer && resultContent && resultMessage && mainCard) {
-        const isWin = data.result === '当たり';
+        const isWin = resultData.result === '当たり';
+        
+        console.log('[Roulette] Result:', resultData.result, 'isWin:', isWin);
         
         if (isWin) {
           // Celebration theme for winner
