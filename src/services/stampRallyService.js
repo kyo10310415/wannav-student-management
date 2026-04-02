@@ -82,20 +82,40 @@ export async function checkStampRallyAchievements() {
 
         if (notified) {
           notificationsSent++;
-          console.log(`[StampRally] Notification sent to ${student.studentId}`);
+          console.log(`[StampRally] Notification sent to ${student.studentId} (${notificationsSent}/${eligibleStudents.length})`);
         } else {
           errors++;
         }
 
+        // Rate limiting: Wait 2 seconds between each notification to avoid Discord rate limits
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
       } catch (error) {
         console.error(`[StampRally] Error processing ${student.studentId}:`, error.message);
         errors++;
+        
+        // Wait even on error to avoid hammering the API
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
     console.log(`[StampRally] Daily check completed: ${notificationsSent} sent, ${errors} errors`);
+    
+    return {
+      success: true,
+      sent: notificationsSent,
+      errors: errors,
+      total: eligibleStudents.length
+    };
   } catch (error) {
     console.error('[StampRally] Error in daily achievement check:', error);
+    return {
+      success: false,
+      error: error.message,
+      sent: 0,
+      errors: 0,
+      total: 0
+    };
   }
 }
 

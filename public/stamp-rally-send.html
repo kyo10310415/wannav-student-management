@@ -31,6 +31,16 @@
         </ul>
       </div>
 
+      <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+        <h3 class="font-semibold text-yellow-800 mb-2">⚠️ 送信について</h3>
+        <ul class="text-sm text-yellow-700 space-y-1 ml-4">
+          <li>• Discord APIレート制限対策のため、<strong>2秒間隔</strong>で順次送信します</li>
+          <li>• 対象者が多い場合、完了まで時間がかかります（例: 60名 ≈ 2分）</li>
+          <li>• <strong>送信件数に制限はありません</strong>が、途中でエラーが発生する可能性があります</li>
+          <li>• エラーが発生した場合は、もう一度実行してください（送信済みはスキップされます）</li>
+        </ul>
+      </div>
+
       <button 
         onclick="sendStampRally()" 
         class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-semibold"
@@ -84,7 +94,7 @@
         statusDiv.innerHTML = `
           <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
             <i class="fas fa-spinner fa-spin mr-2"></i>
-            ${eligibleStudents.length}名に通知を送信中...
+            ${eligibleStudents.length}名に通知を送信中...（2秒間隔で送信、完了まで約${Math.ceil(eligibleStudents.length * 2 / 60)}分）
           </div>
         `;
         
@@ -119,6 +129,14 @@
                   <div class="text-2xl font-bold text-red-600">${checkData.errors || 0}</div>
                   <div class="text-sm text-red-700">送信失敗</div>
                 </div>
+              </div>
+              
+              <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                <p class="text-sm text-blue-800">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  <strong>処理時間:</strong> 約${Math.ceil((checkData.sent + checkData.errors) * 2 / 60)}分<br>
+                  <strong>対象者:</strong> ${checkData.total || eligibleStudents.length}名中 ${checkData.sent}名に送信完了
+                </p>
               </div>
               
               ${eligibleStudents.length > 0 ? `

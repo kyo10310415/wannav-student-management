@@ -1213,19 +1213,24 @@ app.post('/check-stamp-rally', async (c) => {
     
     // checkStampRallyAchievements をインポートして実行
     const { checkStampRallyAchievements } = await import('../services/stampRallyService.js');
-    await checkStampRallyAchievements();
+    const result = await checkStampRallyAchievements();
     
     return c.json({
-      success: true,
-      message: 'スタンプラリーチェックを実行しました',
-      sent: 0,  // stampRallyService.js のログから確認
-      errors: 0
+      success: result.success,
+      message: result.success 
+        ? `スタンプラリーチェックを実行しました: ${result.sent}件送信、${result.errors}件エラー` 
+        : 'スタンプラリーチェックに失敗しました',
+      sent: result.sent,
+      errors: result.errors,
+      total: result.total
     });
   } catch (error) {
     console.error('[Survey] Error in manual stamp rally check:', error);
     return c.json({
       success: false,
-      error: error.message
+      error: error.message,
+      sent: 0,
+      errors: 0
     }, 500);
   }
 });
