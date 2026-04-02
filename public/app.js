@@ -299,6 +299,12 @@ function renderHeader() {
       </main>
     </div>
   `;
+  
+  // Update toggle UI after header is rendered
+  // Wait for next tick to ensure DOM is ready
+  setTimeout(() => {
+    updateSurveyToggleUI();
+  }, 0);
 }
 
 /**
