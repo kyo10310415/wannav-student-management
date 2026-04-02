@@ -11507,6 +11507,7 @@ function renderRouletteTable(tab, data) {
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">達成条件</th>
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">確率</th>
   `;
@@ -11529,7 +11530,7 @@ function renderRouletteTable(tab, data) {
     const emptyMessage = tab === 'winners' ? 'まだ当たり生徒はいません' :
                         tab === 'losers' ? 'まだはずれ生徒はいません' :
                         'まだ未開封の生徒はいません';
-    const colspan = tab === 'winners' ? 9 : 7;
+    const colspan = tab === 'winners' ? 10 : 8;
     tableBody.innerHTML = `
       <tr>
         <td colspan="${colspan}" class="px-4 py-8 text-center text-gray-500">
@@ -11580,6 +11581,11 @@ function renderRouletteTable(tab, data) {
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
           ${getTutorDisplayName(row.homeroom_tutor) || '-'}
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
+          <span class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
+            ${row.continuedMonths || 0}ヶ月
+          </span>
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
           <span class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">

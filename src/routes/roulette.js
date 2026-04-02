@@ -614,6 +614,7 @@ app.get('/winners', async (c) => {
           s.notion_url,
           s.notion_page_id,
           s.homeroom_tutor,
+          s.continued_months,
           sa.achievement_type,
           sa.achievement_date
         FROM roulette_results r
@@ -640,6 +641,7 @@ app.get('/winners', async (c) => {
           s.notion_url,
           s.notion_page_id,
           s.homeroom_tutor,
+          s.continued_months,
           sa.achievement_type,
           sa.achievement_date
         FROM roulette_results r
@@ -670,7 +672,8 @@ app.get('/winners', async (c) => {
         achievementDate: row.achievement_date,
         drawnAt: row.created_at,
         consultationStaff: row.consultation_staff,
-        status: row.status || '未連絡'
+        status: row.status || '未連絡',
+        continuedMonths: row.continued_months || 0
       };
     });
 
