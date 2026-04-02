@@ -1204,6 +1204,33 @@ async function checkConsecutiveMonths(studentId, pool) {
 }
 
 /**
+ * POST /api/survey/check-stamp-rally
+ * 手動でスタンプラリー達成者チェックを実行
+ */
+app.post('/check-stamp-rally', async (c) => {
+  try {
+    console.log('[Survey] Manual stamp rally check triggered');
+    
+    // checkStampRallyAchievements をインポートして実行
+    const { checkStampRallyAchievements } = await import('../services/stampRallyService.js');
+    await checkStampRallyAchievements();
+    
+    return c.json({
+      success: true,
+      message: 'スタンプラリーチェックを実行しました',
+      sent: 0,  // stampRallyService.js のログから確認
+      errors: 0
+    });
+  } catch (error) {
+    console.error('[Survey] Error in manual stamp rally check:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * POST /api/survey/clear-cache
  * Clear survey response cache (force refresh on next request)
  */

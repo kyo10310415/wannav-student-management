@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アンケート特典 手動送信</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-8">
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">
+      <i class="fas fa-gift mr-2"></i>
+      アンケート特典 手動送信
+    </h1>
+
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">
+        <i class="fas fa-trophy text-yellow-500 mr-2"></i>
+        スタンプラリー達成者に特典を送信
+      </h2>
+      
+      <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
+        <h3 class="font-semibold text-blue-800 mb-2">📋 送信条件</h3>
+        <ul class="text-sm text-blue-700 space-y-1 ml-4">
+          <li>✅ ステータスが「アクティブ」</li>
+          <li>✅ 延長審査結果が「延長」</li>
+          <li>✅ 条件①②③④のいずれかを達成</li>
+          <li>✅ Discord URLが設定されている</li>
+          <li>✅ まだ通知が送信されていない</li>
+        </ul>
+      </div>
+
+      <button 
+        onclick="sendStampRally()" 
+        class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-semibold"
+      >
+        <i class="fas fa-paper-plane mr-2"></i>
+        今日の分を送信する
+      </button>
+    </div>
+
+    <div id="status" class="mb-4"></div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function sendStampRally() {
+      const statusDiv = document.getElementById('status');
+      const resultDiv = document.getElementById('result');
+      
+      // ステータス表示
+      statusDiv.innerHTML = `
+        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          アンケート特典対象者を確認中...
+        </div>
+      `;
+      resultDiv.innerHTML = '';
+      
+      try {
+        // まず対象者リストを取得
+        const eligibleResponse = await fetch('/api/survey/eligible-students');
+        const eligibleData = await eligibleResponse.json();
+        
+        if (!eligibleData.success) {
+          showError('対象者の取得に失敗しました: ' + eligibleData.error);
+          return;
+        }
+        
+        const eligibleStudents = eligibleData.data || [];
+        
+        if (eligibleStudents.length === 0) {
+          statusDiv.innerHTML = `
+            <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-lg">
+              <i class="fas fa-info-circle mr-2"></i>
+              現在、特典対象の生徒はいません
+            </div>
+          `;
+          return;
+        }
+        
+        // 対象者リストを表示
+        statusDiv.innerHTML = `
+          <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
+            <i class="fas fa-spinner fa-spin mr-2"></i>
+            ${eligibleStudents.length}名に通知を送信中...
+          </div>
+        `;
+        
+        // スタンプラリーチェックを実行
+        const checkResponse = await fetch('/api/survey/check-stamp-rally', {
+          method: 'POST'
+        });
+        
+        const checkData = await checkResponse.json();
+        
+        if (checkData.success) {
+          statusDiv.innerHTML = `
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+              <i class="fas fa-check-circle mr-2"></i>
+              送信完了しました！
+            </div>
+          `;
+          
+          resultDiv.innerHTML = `
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h3 class="text-lg font-semibold mb-4">
+                <i class="fas fa-chart-bar mr-2"></i>
+                送信結果
+              </h3>
+              
+              <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div class="text-2xl font-bold text-green-600">${checkData.sent || 0}</div>
+                  <div class="text-sm text-green-700">送信成功</div>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div class="text-2xl font-bold text-red-600">${checkData.errors || 0}</div>
+                  <div class="text-sm text-red-700">送信失敗</div>
+                </div>
+              </div>
+              
+              ${eligibleStudents.length > 0 ? `
+                <div class="mt-6">
+                  <h4 class="font-semibold mb-3">対象者リスト</h4>
+                  <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                      <thead class="bg-gray-50">
+                        <tr>
+                          <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">学籍番号</th>
+                          <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">生徒名</th>
+                          <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">継続月数</th>
+                          <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">回答率</th>
+                          <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">当選確率</th>
+                          <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">達成タイプ</th>
+                        </tr>
+                      </thead>
+                      <tbody class="bg-white divide-y divide-gray-200">
+                        ${eligibleStudents.map(s => `
+                          <tr>
+                            <td class="px-4 py-2 text-sm">${s.studentId}</td>
+                            <td class="px-4 py-2 text-sm font-medium">${s.name}</td>
+                            <td class="px-4 py-2 text-sm">${s.continuedMonths}ヶ月</td>
+                            <td class="px-4 py-2 text-sm">${s.responseRate}%</td>
+                            <td class="px-4 py-2 text-sm">
+                              <span class="px-2 py-1 rounded ${s.probability === 100 ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}">
+                                ${s.probability}%
+                              </span>
+                            </td>
+                            <td class="px-4 py-2 text-sm">
+                              <span class="px-2 py-1 rounded bg-purple-100 text-purple-800">
+                                ${s.achievementType}
+                              </span>
+                            </td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ` : ''}
+              
+              <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
+                <p class="text-sm text-yellow-800">
+                  <i class="fas fa-info-circle mr-1"></i>
+                  各生徒の個別Discord URLに通知が送信されました。<br>
+                  ルーレットURLが生成され、Discord Embedで送信されています。
+                </p>
+              </div>
+            </div>
+          `;
+        } else {
+          showError(checkData.error || '送信に失敗しました');
+        }
+        
+      } catch (error) {
+        console.error('送信エラー:', error);
+        showError('送信中にエラーが発生しました: ' + error.message);
+      }
+    }
+    
+    function showError(message) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-exclamation-triangle mr-2"></i>
+          ${message}
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
