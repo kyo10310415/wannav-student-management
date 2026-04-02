@@ -95,6 +95,36 @@ app.get('/', requireAdmin, async (c) => {
 });
 
 /**
+ * Get consultation staff (leader and above with tutor_name)
+ */
+app.get('/consultation-staff', async (c) => {
+  try {
+    const result = await query(`
+      SELECT 
+        t.tutor_name
+      FROM users u
+      INNER JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
+      WHERE u.role IN ('admin', 'leader')
+        AND t.tutor_name IS NOT NULL
+        AND t.tutor_name != ''
+      ORDER BY t.tutor_name ASC
+    `);
+    
+    return c.json({
+      success: true,
+      data: result.rows.map(row => row.tutor_name)
+    });
+    
+  } catch (error) {
+    console.error('Get consultation staff error:', error);
+    return c.json({
+      success: false,
+      error: `コンサル担当者一覧取得に失敗しました: ${error.message}`
+    }, 500);
+  }
+});
+
+/**
  * Create user (admin only)
  */
 app.post('/', requireAdmin, async (c) => {

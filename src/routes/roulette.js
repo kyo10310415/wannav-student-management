@@ -608,6 +608,8 @@ app.get('/winners', async (c) => {
           r.result,
           r.probability,
           r.created_at,
+          r.consultation_staff,
+          r.status,
           s.name as student_name,
           s.notion_url,
           s.notion_page_id,
@@ -632,6 +634,8 @@ app.get('/winners', async (c) => {
           r.result,
           r.probability,
           r.created_at,
+          r.consultation_staff,
+          r.status,
           s.name as student_name,
           s.notion_url,
           s.notion_page_id,
@@ -664,7 +668,9 @@ app.get('/winners', async (c) => {
         probability: row.probability,
         achievementType: row.achievement_type,
         achievementDate: row.achievement_date,
-        drawnAt: row.created_at
+        drawnAt: row.created_at,
+        consultationStaff: row.consultation_staff,
+        status: row.status || '未連絡'
       };
     });
 
@@ -677,6 +683,71 @@ app.get('/winners', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching winners:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * PATCH /api/roulette/winners/:id
+ * 当たり生徒のコンサル担当と対応状況を更新
+ */
+app.patch('/winners/:id', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const { consultationStaff, status } = await c.req.json();
+    
+    const pool = getPool();
+    
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+    
+    if (consultationStaff !== undefined) {
+      updates.push(`consultation_staff = $${paramIndex++}`);
+      values.push(consultationStaff);
+    }
+    
+    if (status !== undefined) {
+      updates.push(`status = $${paramIndex++}`);
+      values.push(status);
+    }
+    
+    if (updates.length === 0) {
+      return c.json({
+        success: false,
+        error: '更新する項目がありません'
+      }, 400);
+    }
+    
+    values.push(id);
+    const query = `
+      UPDATE roulette_results
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING id, consultation_staff, status
+    `;
+    
+    const result = await pool.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'ルーレット結果が見つかりません'
+      }, 404);
+    }
+    
+    console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
+    
+    return c.json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating winner:', error);
     return c.json({
       success: false,
       error: error.message

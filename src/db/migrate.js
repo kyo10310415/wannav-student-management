@@ -524,6 +524,26 @@ const migrations = [
       DROP TABLE IF EXISTS red_list_history CASCADE;
       ALTER TABLE red_list DROP COLUMN IF EXISTS reservation_locked;
     `
+  },
+  {
+    version: 21,
+    name: 'add_consultation_fields_to_roulette_results',
+    up: `
+      -- コンサル担当と対応状況をroulette_resultsテーブルに追加
+      ALTER TABLE roulette_results 
+        ADD COLUMN IF NOT EXISTS consultation_staff VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT '未連絡';
+      
+      -- 対応状況のインデックスを作成
+      CREATE INDEX IF NOT EXISTS idx_roulette_results_status ON roulette_results(status);
+    `,
+    down: `
+      ALTER TABLE roulette_results 
+        DROP COLUMN IF EXISTS consultation_staff,
+        DROP COLUMN IF EXISTS status;
+      
+      DROP INDEX IF EXISTS idx_roulette_results_status;
+    `
   }
 ];
 

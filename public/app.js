@@ -11358,6 +11358,20 @@ async function loadRouletteData(tab) {
     loadingEl.classList.remove('hidden');
     contentEl.classList.add('hidden');
     
+    // Load consultation staff list if viewing winners tab
+    if (tab === 'winners' && !window.consultationStaffList) {
+      try {
+        const staffResponse = await axios.get(`${API_BASE}/api/users/consultation-staff`);
+        if (staffResponse.data.success) {
+          window.consultationStaffList = staffResponse.data.data;
+          console.log('[Roulette] Loaded consultation staff:', window.consultationStaffList);
+        }
+      } catch (error) {
+        console.error('[Roulette] Error loading consultation staff:', error);
+        window.consultationStaffList = [];
+      }
+    }
+    
     let endpoint = '';
     let title = '';
     
@@ -11413,25 +11427,37 @@ function renderRouletteTable(tab, data) {
   const tableBody = document.getElementById('roulette-table-body');
   
   // Common headers
-  const commonHeaders = `
+  let headers = `
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日時</th>
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">達成条件</th>
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">確率</th>
+  `;
+  
+  // Add consultation fields only for winners tab
+  if (tab === 'winners') {
+    headers += `
+      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">コンサル担当</th>
+      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">対応状況</th>
+    `;
+  }
+  
+  headers += `
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Notion</th>
   `;
   
-  tableHeader.innerHTML = commonHeaders;
+  tableHeader.innerHTML = headers;
   
   if (data.length === 0) {
     const emptyMessage = tab === 'winners' ? 'まだ当たり生徒はいません' :
                         tab === 'losers' ? 'まだはずれ生徒はいません' :
                         'まだ未開封の生徒はいません';
+    const colspan = tab === 'winners' ? 9 : 7;
     tableBody.innerHTML = `
       <tr>
-        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="${colspan}" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>${emptyMessage}</p>
         </td>
@@ -11466,7 +11492,7 @@ function renderRouletteTable(tab, data) {
                      tab === 'losers' ? 'hover:bg-gray-50' :
                      'hover:bg-blue-50';
 
-    return `
+    let rowHtml = `
       <tr class="${rowClass}">
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
           ${dateStr}
@@ -11488,6 +11514,38 @@ function renderRouletteTable(tab, data) {
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-600">
           ${row.probability}%
         </td>
+    `;
+    
+    // Add consultation fields only for winners tab
+    if (tab === 'winners') {
+      rowHtml += `
+        <td class="px-4 py-3 whitespace-nowrap text-sm">
+          <select 
+            class="consultation-staff-select w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            data-id="${row.id}"
+            onchange="updateWinnerField(${row.id}, 'consultationStaff', this.value)"
+          >
+            <option value="">選択してください</option>
+            ${window.consultationStaffList ? window.consultationStaffList.map(staff => 
+              `<option value="${staff}" ${row.consultationStaff === staff ? 'selected' : ''}>${staff}</option>`
+            ).join('') : ''}
+          </select>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm">
+          <select 
+            class="status-select w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            data-id="${row.id}"
+            onchange="updateWinnerField(${row.id}, 'status', this.value)"
+          >
+            <option value="未連絡" ${row.status === '未連絡' ? 'selected' : ''}>未連絡</option>
+            <option value="連絡済み" ${row.status === '連絡済み' ? 'selected' : ''}>連絡済み</option>
+            <option value="予約あり" ${row.status === '予約あり' ? 'selected' : ''}>予約あり</option>
+          </select>
+        </td>
+      `;
+    }
+    
+    rowHtml += `
         <td class="px-3 py-3 whitespace-nowrap text-center">
           ${row.notionUrl ? `
             <a href="${row.notionUrl}" target="_blank" rel="noopener noreferrer" 
@@ -11498,7 +11556,35 @@ function renderRouletteTable(tab, data) {
         </td>
       </tr>
     `;
+    
+    return rowHtml;
   }).join('');
+}
+
+/**
+ * Update winner consultation staff or status
+ */
+async function updateWinnerField(id, field, value) {
+  try {
+    const payload = {};
+    payload[field] = value;
+    
+    const response = await axios.patch(`${API_BASE}/api/roulette/winners/${id}`, payload);
+    
+    if (response.data.success) {
+      showNotification('更新しました', 'success');
+      console.log(`[Roulette] Updated winner ${id} ${field}:`, value);
+    } else {
+      showNotification('更新に失敗しました', 'error');
+      // Reload to revert changes
+      loadRouletteData('winners');
+    }
+  } catch (error) {
+    console.error(`[Roulette] Error updating winner ${field}:`, error);
+    showNotification('更新に失敗しました', 'error');
+    // Reload to revert changes
+    loadRouletteData('winners');
+  }
 }
 
 // ========== Red List ==========
