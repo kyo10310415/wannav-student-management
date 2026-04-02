@@ -1000,6 +1000,15 @@ app.get('/eligible-students', async (c) => {
     // Get survey response counts from spreadsheet
     const surveyResponseCounts = await getSurveyResponseCounts();
 
+    // Get monthly response history from spreadsheet
+    const satisfactionSpreadsheetId = process.env.SATISFACTION_SPREADSHEET_ID || process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    let monthlyResponseHistory = new Map();
+    
+    if (satisfactionSpreadsheetId) {
+      monthlyResponseHistory = await fetchMonthlyResponseHistory(satisfactionSpreadsheetId);
+      console.log(`[Survey] Loaded monthly response history for ${monthlyResponseHistory.size} students`);
+    }
+
     // 延長審査データ取得
     let extensionMap = {};
     const extPool = getExtensionPool();
@@ -1040,13 +1049,14 @@ app.get('/eligible-students', async (c) => {
         ? (cycle === 1 ? ext.examination_result_1 : ext.examination_result_2)
         : null;
 
-      // 特典対象判定
-      const eligibility = await checkEligibility(student, responseCount, responseRate, extensionResult, pool);
+      // Get student's monthly response history
+      const studentResponseMonths = monthlyResponseHistory.get(normalizedStudentId) || new Set();
 
-      // デバッグ: 最初の50名分をログ出力
-      if (eligibleStudents.length < 50) {
-        console.log(`[Survey Debug] ${student.student_id} (${student.name}): eligible=${eligibility.isEligible}, reason=${eligibility.reason}, type=${eligibility.achievementType || 'N/A'}`);
-      }
+      // 特典対象判定
+      const eligibility = await checkEligibility(student, responseCount, responseRate, extensionResult, pool, studentResponseMonths);
+
+      // デバッグ: 全生徒のログ出力
+      console.log(`[Survey Debug] ${student.student_id} (${student.name}): eligible=${eligibility.isEligible}, reason=${eligibility.reason}, type=${eligibility.achievementType || 'N/A'}, months=${continuedMonths}, rate=${responseRate}%, responses=${responseCount}`);
 
       if (eligibility.isEligible) {
         eligibleStudents.push({
@@ -1080,7 +1090,7 @@ app.get('/eligible-students', async (c) => {
 /**
  * 特典対象判定ロジック
  */
-async function checkEligibility(student, responseCount, responseRate, extensionResult, pool) {
+async function checkEligibility(student, responseCount, responseRate, extensionResult, pool, studentResponseMonths) {
   const continuedMonths = student.continued_months || 0;
   const lessonStartDate = student.lesson_start_date ? new Date(student.lesson_start_date) : null;
   const cutoffDate = new Date('2026-04-01');
@@ -1117,8 +1127,8 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
 
   // リセット後の判定（条件2のみ）
   if (latestAchievement && latestAchievement.notified_at !== null) {
-    // 6ヶ月連続回答チェック（リセット後）
-    const consecutiveMonths = await checkConsecutiveMonths(student.student_id, pool);
+    // 6ヶ月連続回答チェック（リセット後） - スプレッドシートデータを使用
+    const consecutiveMonths = checkConsecutiveMonthsFromSpreadsheet(studentResponseMonths);
     if (consecutiveMonths >= 6) {
       return { 
         isEligible: true, 
@@ -1145,9 +1155,9 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
     };
   }
 
-  // 条件2: 2026/4以降開始、6ヶ月連続回答
+  // 条件2: 2026/4以降開始、6ヶ月連続回答 - スプレッドシートデータを使用
   if (!startedBefore2026_04) {
-    const consecutiveMonths = await checkConsecutiveMonths(student.student_id, pool);
+    const consecutiveMonths = checkConsecutiveMonthsFromSpreadsheet(studentResponseMonths);
     if (consecutiveMonths >= 6) {
       return { 
         isEligible: true, 
@@ -1159,15 +1169,9 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
 
   // 条件3: 2026/3以前開始、継続6ヶ月未満、2026/4から100%
   if (startedBefore2026_04 && continuedMonths < 6) {
-    // 2026/4以降の回答数をカウント
-    const postCutoffResult = await pool.query(`
-      SELECT COUNT(*) as count
-      FROM survey_responses
-      WHERE student_id = $1
-        AND response_month >= '2026-04'
-    `, [student.student_id]);
-
-    const postCutoffCount = parseInt(postCutoffResult.rows[0].count);
+    // 2026/4以降の回答数をカウント - スプレッドシートデータを使用
+    const postCutoffMonths = Array.from(studentResponseMonths).filter(month => month >= '2026-04');
+    const postCutoffCount = postCutoffMonths.length;
     const monthsSince202604 = Math.max(0, continuedMonths - (continuedMonths - postCutoffCount));
     const requiredMonths = 6 - continuedMonths;
 
@@ -1184,19 +1188,14 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
 }
 
 /**
- * 連続回答月数をチェック
+ * 連続回答月数をチェック（スプレッドシートデータから）
  */
-async function checkConsecutiveMonths(studentId, pool) {
-  const result = await pool.query(`
-    SELECT response_month
-    FROM survey_responses
-    WHERE student_id = $1
-    ORDER BY response_month DESC
-  `, [studentId]);
+function checkConsecutiveMonthsFromSpreadsheet(studentResponseMonths) {
+  if (!studentResponseMonths || studentResponseMonths.size === 0) return 0;
 
-  if (result.rows.length === 0) return 0;
-
-  const months = result.rows.map(r => r.response_month);
+  // 月をソート（降順）
+  const months = Array.from(studentResponseMonths).sort().reverse();
+  
   let consecutive = 1;
   
   for (let i = 0; i < months.length - 1; i++) {
