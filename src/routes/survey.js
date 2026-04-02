@@ -1092,7 +1092,7 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
 
   // 既に達成済みかチェック
   const achievementResult = await pool.query(`
-    SELECT id, achievement_type
+    SELECT id, achievement_type, notified_at
     FROM stamp_rally_achievements
     WHERE student_id = $1
     ORDER BY achievement_date DESC
@@ -1101,8 +1101,17 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
 
   const latestAchievement = achievementResult.rows[0];
 
+  // notified_at が NULL の場合は、通知失敗したので再送信対象
+  if (latestAchievement && latestAchievement.notified_at === null) {
+    return { 
+      isEligible: true, 
+      achievementType: latestAchievement.achievement_type,
+      reason: 'Previous notification failed, retry needed'
+    };
+  }
+
   // リセット後の判定（条件2のみ）
-  if (latestAchievement) {
+  if (latestAchievement && latestAchievement.notified_at !== null) {
     // 6ヶ月連続回答チェック（リセット後）
     const consecutiveMonths = await checkConsecutiveMonths(student.student_id, pool);
     if (consecutiveMonths >= 6) {
