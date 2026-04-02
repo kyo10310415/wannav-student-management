@@ -43,10 +43,18 @@
 
       <button 
         onclick="sendStampRally()" 
-        class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-semibold"
+        class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-semibold mb-3"
       >
         <i class="fas fa-paper-plane mr-2"></i>
         今日の分を送信する
+      </button>
+
+      <button 
+        onclick="resetFailedNotifications()" 
+        class="w-full bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors font-semibold"
+      >
+        <i class="fas fa-redo mr-2"></i>
+        送信失敗をリセット（未開封をやり直す）
       </button>
     </div>
 
@@ -55,6 +63,71 @@
   </div>
 
   <script>
+    async function resetFailedNotifications() {
+      if (!confirm('送信失敗した通知をリセットして、再送信できるようにしますか？\n\n※これにより「未開封」の生徒が再度送信対象になります。')) {
+        return;
+      }
+
+      const statusDiv = document.getElementById('status');
+      const resultDiv = document.getElementById('result');
+      
+      statusDiv.innerHTML = `
+        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          送信失敗をリセット中...
+        </div>
+      `;
+      resultDiv.innerHTML = '';
+      
+      try {
+        const response = await fetch('/api/survey/reset-failed-notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          statusDiv.innerHTML = `
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+              <i class="fas fa-check-circle mr-2"></i>
+              ${data.message}
+            </div>
+          `;
+          
+          resultDiv.innerHTML = `
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h3 class="text-lg font-semibold mb-3">
+                <i class="fas fa-info-circle mr-2"></i>
+                リセット完了
+              </h3>
+              <p class="text-gray-700 mb-4">
+                ${data.count}件の送信失敗をリセットしました。<br>
+                もう一度「今日の分を送信する」ボタンをクリックしてください。
+              </p>
+              
+              ${data.studentIds && data.studentIds.length > 0 ? `
+                <div class="mt-4 p-4 bg-gray-50 rounded">
+                  <h4 class="font-semibold mb-2">リセットされた学籍番号:</h4>
+                  <div class="text-sm text-gray-600 max-h-40 overflow-y-auto">
+                    ${data.studentIds.join(', ')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } else {
+          showError(data.error || 'リセットに失敗しました');
+        }
+        
+      } catch (error) {
+        console.error('リセットエラー:', error);
+        showError('リセット中にエラーが発生しました: ' + error.message);
+      }
+    }
+
     async function sendStampRally() {
       const statusDiv = document.getElementById('status');
       const resultDiv = document.getElementById('result');

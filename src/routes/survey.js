@@ -1236,6 +1236,49 @@ app.post('/check-stamp-rally', async (c) => {
 });
 
 /**
+ * POST /api/survey/reset-failed-notifications
+ * 送信失敗した通知をリセット（未開封のnotified_atをNULLに戻す）
+ */
+app.post('/reset-failed-notifications', async (c) => {
+  try {
+    const pool = getPool();
+    
+    console.log('[Survey] Resetting failed notifications...');
+    
+    // notified_at があるが roulette_results に記録がない = 送信失敗
+    const result = await pool.query(`
+      UPDATE stamp_rally_achievements sa
+      SET notified_at = NULL
+      FROM (
+        SELECT sa.id
+        FROM stamp_rally_achievements sa
+        LEFT JOIN roulette_results r ON sa.roulette_url = r.roulette_url
+        WHERE sa.notified_at IS NOT NULL
+          AND r.id IS NULL
+      ) AS failed
+      WHERE sa.id = failed.id
+      RETURNING sa.student_id
+    `);
+    
+    const resetCount = result.rows.length;
+    console.log(`[Survey] Reset ${resetCount} failed notifications`);
+    
+    return c.json({
+      success: true,
+      message: `${resetCount}件の送信失敗をリセットしました`,
+      count: resetCount,
+      studentIds: result.rows.map(r => r.student_id)
+    });
+  } catch (error) {
+    console.error('[Survey] Error resetting failed notifications:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
  * POST /api/survey/clear-cache
  * Clear survey response cache (force refresh on next request)
  */

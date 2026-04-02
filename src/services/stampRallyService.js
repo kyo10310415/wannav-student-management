@@ -180,25 +180,33 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
     };
 
     // Discord Webhook送信
-    await axios.post(webhookUrl, {
+    const discordResponse = await axios.post(webhookUrl, {
       username: 'WannaV Bot',
       avatar_url: 'https://cdn-icons-png.flaticon.com/512/2593/2593635.png',
       embeds: [embed]
     });
 
-    // 通知日時を更新
-    await pool.query(`
-      UPDATE stamp_rally_achievements
-      SET notified_at = NOW()
-      WHERE student_id = $1
-        AND notified_at IS NULL
-    `, [studentId]);
+    // Discord送信が成功した場合のみ、通知日時を更新
+    if (discordResponse.status === 200 || discordResponse.status === 204) {
+      await pool.query(`
+        UPDATE stamp_rally_achievements
+        SET notified_at = NOW()
+        WHERE student_id = $1
+          AND notified_at IS NULL
+      `, [studentId]);
 
-    console.log(`[StampRally] Discord notification sent to ${studentId}`);
-    return true;
+      console.log(`[StampRally] ✅ Discord notification sent to ${studentId} (${studentName})`);
+      return true;
+    } else {
+      console.error(`[StampRally] ❌ Discord webhook returned status ${discordResponse.status} for ${studentId}`);
+      return false;
+    }
 
   } catch (error) {
-    console.error(`[StampRally] Error sending Discord notification to ${studentId}:`, error.message);
+    console.error(`[StampRally] ❌ Error sending Discord notification to ${studentId}:`, error.message);
+    if (error.response) {
+      console.error(`[StampRally] Discord API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+    }
     return false;
   }
 }
