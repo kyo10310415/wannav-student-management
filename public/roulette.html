@@ -7,63 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <style>
-    @keyframes spin-slow {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
-    
-    @keyframes spin-fast {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(3600deg); }
+    .animate-fade-in {
+      animation: fade-in 0.5s ease-out;
     }
-    
-    .roulette-wheel {
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      position: relative;
-      background: conic-gradient(
-        from 0deg,
-        #ff6b6b 0deg 90deg,
-        #4ecdc4 90deg 180deg,
-        #ff6b6b 180deg 270deg,
-        #4ecdc4 270deg 360deg
-      );
-      box-shadow: 0 0 0 10px #333, 0 0 0 15px #ffd700, 0 10px 30px rgba(0,0,0,0.5);
-    }
-    
-    .roulette-wheel.spinning {
-      animation: spin-fast 5s cubic-bezier(0.17, 0.67, 0.12, 0.99);
-    }
-    
-    .roulette-center {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    }
-    
-    .roulette-pointer {
-      position: absolute;
-      top: -30px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 0;
-      height: 0;
-      border-left: 20px solid transparent;
-      border-right: 20px solid transparent;
-      border-top: 40px solid #ff4757;
-      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.3));
-    }
-    
     .confetti {
       position: fixed;
       width: 10px;
@@ -72,29 +22,15 @@
       position: absolute;
       animation: confetti-fall 3s linear;
     }
-    
     @keyframes confetti-fall {
       to {
         transform: translateY(100vh) rotate(360deg);
         opacity: 0;
       }
     }
-    
-    .pulse-glow {
-      animation: pulse-glow 2s infinite;
-    }
-    
-    @keyframes pulse-glow {
-      0%, 100% {
-        box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-      }
-      50% {
-        box-shadow: 0 0 40px rgba(255, 215, 0, 1);
-      }
-    }
   </style>
 </head>
-<body class="bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 min-h-screen flex items-center justify-center">
+<body class="bg-gradient-to-br from-purple-900 via-pink-900 to-orange-900 min-h-screen flex items-center justify-center">
   
   <!-- Loading State -->
   <div id="loading-state" class="text-center">
@@ -109,9 +45,6 @@
     </div>
     <h1 class="text-2xl font-bold text-gray-800 mb-4">エラー</h1>
     <p id="error-message" class="text-gray-600 mb-6"></p>
-    <a href="/" class="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-      管理画面に戻る
-    </a>
   </div>
   
   <!-- Already Used State -->
@@ -122,116 +55,58 @@
     <h1 class="text-2xl font-bold text-gray-800 mb-4">既に抽選済みです</h1>
     <p class="text-gray-600 mb-4">このルーレットは既に使用されています。</p>
     <div id="previous-result" class="mb-6"></div>
-    <a href="/" class="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-      管理画面に戻る
-    </a>
   </div>
   
-  <!-- Ready State -->
-  <div id="ready-state" class="hidden max-w-2xl mx-auto text-center">
-    <div class="bg-white rounded-2xl shadow-2xl p-8 mb-6">
-      <div class="mb-6">
-        <div class="inline-block px-6 py-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-full text-lg font-bold mb-4">
-          <i class="fas fa-trophy mr-2"></i>アンケート特典
-        </div>
-      </div>
+  <!-- Ready State (Gift Box UI) -->
+  <div id="ready-state" class="hidden">
+    <div class="bg-gradient-to-br from-white via-yellow-50 to-orange-50 rounded-3xl shadow-2xl p-12 max-w-xl w-full mx-4 relative overflow-hidden border-4 border-yellow-400">
+      <!-- Decorative sparkles -->
+      <div class="absolute top-4 left-4 text-yellow-400 text-2xl animate-pulse">✨</div>
+      <div class="absolute top-4 right-4 text-yellow-400 text-2xl animate-pulse" style="animation-delay: 0.3s">✨</div>
+      <div class="absolute bottom-4 left-4 text-yellow-400 text-2xl animate-pulse" style="animation-delay: 0.6s">✨</div>
+      <div class="absolute bottom-4 right-4 text-yellow-400 text-2xl animate-pulse" style="animation-delay: 0.9s">✨</div>
       
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">おめでとうございます！</h1>
-      <h2 class="text-xl text-gray-600 mb-6">見事アンケートスタンプラリーを達成しました！！</h2>
-      
-      <div class="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl p-6 mb-6">
-        <p class="text-lg text-gray-700 mb-2">
-          <i class="fas fa-gift text-purple-600 mr-2"></i>
-          特典内容
-        </p>
-        <p class="text-2xl font-bold text-purple-700">
-          1時間コンサルティング権
-        </p>
-      </div>
-      
-      <div class="mb-6 text-gray-600">
-        <p class="mb-2">あなたの当選確率:</p>
-        <p class="text-4xl font-bold text-blue-600" id="probability-display">--%</p>
-      </div>
-      
-      <button 
-        id="spin-button"
-        class="px-12 py-4 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xl font-bold rounded-full hover:from-pink-600 hover:to-purple-700 transition transform hover:scale-105 shadow-lg pulse-glow"
-      >
-        <i class="fas fa-dice mr-2"></i>ルーレットを回す
-      </button>
-      
-      <p class="text-xs text-gray-500 mt-4">
-        <i class="fas fa-info-circle mr-1"></i>
-        ボタンをクリックして抽選を開始してください
-      </p>
-    </div>
-  </div>
-  
-  <!-- Spinning State -->
-  <div id="spinning-state" class="hidden max-w-2xl mx-auto text-center">
-    <div class="bg-white rounded-2xl shadow-2xl p-8">
-      <h2 class="text-2xl font-bold text-gray-800 mb-8">抽選中...</h2>
-      
-      <div class="relative inline-block mb-8">
-        <div class="roulette-pointer"></div>
-        <div id="roulette-wheel" class="roulette-wheel spinning">
-          <div class="roulette-center">
-            <i class="fas fa-star text-white text-3xl"></i>
+      <div class="text-center relative z-10">
+        <h2 id="student-name" class="text-4xl font-bold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600"></h2>
+        <p class="text-2xl mb-8 text-gray-700 font-semibold">🎁 アンケート特典 🎁</p>
+        
+        <!-- Gift box illustration -->
+        <div id="gift-box" class="relative w-64 h-64 mx-auto mb-8">
+          <div class="absolute inset-0 flex items-center justify-center">
+            <div class="text-9xl transform hover:scale-110 transition-transform duration-300 cursor-pointer animate-bounce">
+              🎁
+            </div>
           </div>
         </div>
-      </div>
-      
-      <p class="text-gray-600 animate-pulse">
-        <i class="fas fa-spinner fa-spin mr-2"></i>
-        結果を判定しています...
-      </p>
-    </div>
-  </div>
-  
-  <!-- Result State -->
-  <div id="result-state" class="hidden max-w-2xl mx-auto text-center">
-    <div class="bg-white rounded-2xl shadow-2xl p-8">
-      <div id="result-win" class="hidden">
-        <div class="w-24 h-24 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
-          <i class="fas fa-trophy text-5xl text-white"></i>
+        
+        <div id="prize-status" class="text-xl mb-6 text-gray-700 font-semibold">
+          <i class="fas fa-hand-pointer animate-pulse mr-2"></i>
+          開封して特典を確認しましょう！
         </div>
-        <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-4">
-          🎉 当たり！ 🎉
-        </h1>
-        <p class="text-xl text-gray-700 mb-6">
-          おめでとうございます！<br>
-          1時間コンサルティング権を獲得しました！
-        </p>
-      </div>
-      
-      <div id="result-lose" class="hidden">
-        <div class="w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center mx-auto mb-6">
-          <i class="fas fa-times-circle text-5xl text-gray-600"></i>
+        
+        <div class="mb-6 text-gray-600">
+          <p class="mb-2">あなたの当選確率:</p>
+          <p class="text-4xl font-bold text-blue-600" id="probability-display">--%</p>
         </div>
-        <h1 class="text-4xl font-bold text-gray-700 mb-4">
-          残念... はずれ
-        </h1>
-        <p class="text-xl text-gray-600 mb-6">
-          また次回チャレンジしてください！<br>
-          引き続きアンケートへのご協力をお願いします。
+        
+        <button 
+          id="open-button" 
+          class="px-12 py-4 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-500 text-white rounded-2xl font-bold text-xl hover:from-yellow-500 hover:via-orange-500 hover:to-pink-600 transition-all transform hover:scale-110 shadow-2xl animate-pulse"
+        >
+          <i class="fas fa-gift mr-3"></i>開封する
+        </button>
+        
+        <p class="text-xs text-gray-500 mt-4">
+          <i class="fas fa-info-circle mr-1"></i>
+          ボタンをクリックして抽選を開始してください
         </p>
+        
+        <!-- Result container (hidden initially) -->
+        <div id="prize-result" class="hidden mt-8">
+          <div id="result-content" class="text-6xl font-bold mb-6"></div>
+          <div id="result-message" class="text-2xl mb-8 font-semibold"></div>
+        </div>
       </div>
-      
-      <div class="bg-gray-100 rounded-xl p-6 mb-6">
-        <p class="text-sm text-gray-600 mb-2">
-          <i class="fas fa-info-circle mr-2"></i>
-          次回の特典獲得条件
-        </p>
-        <p class="text-gray-700">
-          今後は<span class="font-bold text-blue-600">6ヶ月連続</span>でアンケートに回答することで<br>
-          再び特典抽選に参加できます。
-        </p>
-      </div>
-      
-      <a href="/" class="inline-block px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-        <i class="fas fa-home mr-2"></i>管理画面に戻る
-      </a>
     </div>
   </div>
   
@@ -241,7 +116,7 @@
     
     let token = '';
     let probability = 50;
-    let isUsed = false;
+    let studentName = '';
     
     // Get token from URL
     function getTokenFromUrl() {
@@ -255,8 +130,6 @@
       document.getElementById('error-state').classList.add('hidden');
       document.getElementById('already-used-state').classList.add('hidden');
       document.getElementById('ready-state').classList.add('hidden');
-      document.getElementById('spinning-state').classList.add('hidden');
-      document.getElementById('result-state').classList.add('hidden');
       
       if (stateName) {
         document.getElementById(stateName + '-state').classList.remove('hidden');
@@ -275,12 +148,18 @@
         const response = await axios.get(`${API_BASE}/api/roulette/verify/${token}`);
         const data = response.data;
         
-        probability = data.probability;
-        isUsed = data.isUsed;
+        if (!data.success) {
+          showError(data.error || 'トークンの確認に失敗しました');
+          return;
+        }
         
+        probability = data.probability;
+        studentName = data.studentName;
+        
+        document.getElementById('student-name').textContent = studentName;
         document.getElementById('probability-display').textContent = `${probability}%`;
         
-        if (isUsed) {
+        if (data.isUsed) {
           // Show already used state with previous result
           const resultHtml = data.result === '当たり' 
             ? `<div class="inline-flex items-center px-4 py-2 rounded-full text-lg font-semibold bg-gradient-to-r from-yellow-400 to-orange-500 text-white">
@@ -323,35 +202,100 @@
       }
     }
     
-    // Spin roulette
-    async function spinRoulette() {
-      showState('spinning');
+    // Open prize box
+    async function openPrizeBox() {
+      const openButton = document.getElementById('open-button');
+      const prizeStatus = document.getElementById('prize-status');
+      const giftBox = document.getElementById('gift-box');
+      
+      if (openButton) openButton.disabled = true;
+      if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>開封中...';
       
       try {
-        // Wait for animation
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
         // Call spin API
         const response = await axios.post(`${API_BASE}/api/roulette/spin`, { token });
         const data = response.data;
         
-        const isWin = data.result === '当たり';
-        
-        // Show result
-        showState('result');
-        
-        if (isWin) {
-          document.getElementById('result-win').classList.remove('hidden');
-          document.getElementById('result-lose').classList.add('hidden');
-          createConfetti();
-        } else {
-          document.getElementById('result-win').classList.add('hidden');
-          document.getElementById('result-lose').classList.remove('hidden');
+        if (!data.success) {
+          if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> ' + (data.error || 'エラーが発生しました');
+          if (openButton) openButton.disabled = false;
+          return;
         }
         
+        // Animate gift box opening
+        if (giftBox) {
+          giftBox.style.transform = 'scale(1.5)';
+          giftBox.style.opacity = '0';
+          giftBox.style.transition = 'all 0.8s ease-out';
+        }
+        
+        // Wait for animation
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Hide button and status
+        if (openButton) openButton.style.display = 'none';
+        if (prizeStatus) prizeStatus.classList.add('hidden');
+        if (giftBox) giftBox.classList.add('hidden');
+        
+        // Show result
+        showPrizeResult(data);
+        
       } catch (error) {
-        console.error('Spin failed:', error);
-        showError('抽選中にエラーが発生しました。もう一度お試しください。');
+        console.error('Prize opening failed:', error);
+        if (prizeStatus) prizeStatus.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> エラーが発生しました';
+        if (openButton) openButton.disabled = false;
+      }
+    }
+    
+    // Show prize result
+    async function showPrizeResult(data) {
+      const resultContainer = document.getElementById('prize-result');
+      const resultContent = document.getElementById('result-content');
+      const resultMessage = document.getElementById('result-message');
+      const mainCard = document.querySelector('#ready-state > div');
+      
+      if (resultContainer && resultContent && resultMessage && mainCard) {
+        const isWin = data.result === '当たり';
+        
+        if (isWin) {
+          // Celebration theme for winner
+          mainCard.className = 'bg-gradient-to-br from-yellow-100 via-orange-100 to-pink-100 rounded-3xl shadow-2xl p-12 max-w-xl w-full mx-4 relative overflow-hidden border-4 border-yellow-400';
+          
+          resultContent.innerHTML = `
+            <div class="animate-bounce">
+              <div class="text-8xl mb-4">🏆</div>
+              <div class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-orange-500 to-pink-500">当たり！</div>
+            </div>
+          `;
+          
+          resultMessage.innerHTML = `
+            <div class="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+              🎉 おめでとうございます！ 🎉<br>
+              <span class="text-xl">1時間コンサルティング権を獲得しました！</span>
+            </div>
+          `;
+          
+          // Add confetti effect
+          createConfetti();
+          
+        } else {
+          // Sympathy theme for loser
+          mainCard.className = 'bg-gradient-to-br from-gray-100 via-blue-50 to-purple-50 rounded-3xl shadow-2xl p-12 max-w-xl w-full mx-4 relative overflow-hidden border-4 border-gray-300';
+          
+          resultContent.innerHTML = `
+            <div class="text-8xl mb-4 opacity-60">😢</div>
+            <div class="text-gray-700">残念... はずれ</div>
+          `;
+          
+          resultMessage.innerHTML = `
+            <div class="text-gray-600">
+              また次回チャレンジしてください！<br>
+              <span class="text-lg">引き続きアンケートへのご協力をお願いします。</span>
+            </div>
+          `;
+        }
+        
+        resultContainer.classList.remove('hidden');
       }
     }
     
@@ -366,8 +310,8 @@
       
       await verifyToken();
       
-      // Add spin button event
-      document.getElementById('spin-button')?.addEventListener('click', spinRoulette);
+      // Add open button event
+      document.getElementById('open-button')?.addEventListener('click', openPrizeBox);
     });
   </script>
 </body>

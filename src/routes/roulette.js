@@ -174,11 +174,16 @@ app.get('/verify/:token', async (c) => {
     `, [achievement.student_id, rouletteUrl]);
 
     if (existingResult.rows.length > 0) {
+      const existingDraw = existingResult.rows[0];
       return c.json({
-        success: false,
-        error: 'Token already used',
-        result: existingResult.rows[0]
-      }, 409);
+        success: true,
+        isUsed: true,
+        studentId: achievement.student_id,
+        studentName: achievement.student_name,
+        probability: existingDraw.probability,
+        result: existingDraw.result,
+        drawnAt: existingDraw.created_at
+      });
     }
 
     // トークン有効
@@ -186,15 +191,14 @@ app.get('/verify/:token', async (c) => {
 
     return c.json({
       success: true,
-      data: {
-        studentId: achievement.student_id,
-        studentName: achievement.student_name,
-        achievementType: achievement.achievement_type,
-        achievementDate: achievement.achievement_date,
-        probability,
-        resultScore: achievement.result_score,
-        expiresAt
-      }
+      isUsed: false,
+      studentId: achievement.student_id,
+      studentName: achievement.student_name,
+      achievementType: achievement.achievement_type,
+      achievementDate: achievement.achievement_date,
+      probability,
+      resultScore: achievement.result_score,
+      expiresAt
     });
   } catch (error) {
     console.error('Error verifying roulette token:', error);
