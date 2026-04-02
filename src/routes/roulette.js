@@ -655,4 +655,162 @@ app.get('/winners', async (c) => {
   }
 });
 
+/**
+ * GET /api/roulette/losers
+ * はずれを引いた生徒の一覧を取得
+ */
+app.get('/losers', async (c) => {
+  try {
+    const pool = getPool();
+
+    let result;
+    try {
+      result = await pool.query(`
+        SELECT 
+          r.id,
+          r.student_id,
+          r.result,
+          r.probability,
+          r.created_at,
+          s.name as student_name,
+          s.notion_url,
+          s.notion_page_id,
+          s.homeroom_tutor,
+          sa.achievement_type,
+          sa.achievement_date
+        FROM roulette_results r
+        JOIN students s ON r.student_id = s.student_id
+        LEFT JOIN stamp_rally_achievements sa ON r.student_id = sa.student_id 
+          AND r.roulette_url = sa.roulette_url
+        WHERE r.result = 'はずれ' 
+          AND (r.is_test = FALSE OR r.is_test IS NULL)
+        ORDER BY r.created_at DESC
+      `);
+    } catch (error) {
+      console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
+      result = await pool.query(`
+        SELECT 
+          r.id,
+          r.student_id,
+          r.result,
+          r.probability,
+          r.created_at,
+          s.name as student_name,
+          s.notion_url,
+          s.notion_page_id,
+          s.homeroom_tutor,
+          sa.achievement_type,
+          sa.achievement_date
+        FROM roulette_results r
+        JOIN students s ON r.student_id = s.student_id
+        LEFT JOIN stamp_rally_achievements sa ON r.student_id = sa.student_id 
+          AND r.roulette_url = sa.roulette_url
+        WHERE r.result = 'はずれ' 
+          AND r.roulette_url NOT LIKE 'test-draw-%'
+        ORDER BY r.created_at DESC
+      `);
+    }
+
+    const losers = result.rows.map(row => {
+      let notionUrl = row.notion_url;
+      if (!notionUrl && row.notion_page_id) {
+        notionUrl = `https://www.notion.so/${row.notion_page_id.replace(/-/g, '')}`;
+      }
+
+      return {
+        id: row.id,
+        studentId: row.student_id,
+        studentName: row.student_name,
+        homeroom_tutor: row.homeroom_tutor,
+        notionUrl,
+        probability: row.probability,
+        achievementType: row.achievement_type,
+        achievementDate: row.achievement_date,
+        drawnAt: row.created_at
+      };
+    });
+
+    console.log(`[Roulette] Found ${losers.length} losers`);
+
+    return c.json({
+      success: true,
+      data: losers,
+      count: losers.length
+    });
+  } catch (error) {
+    console.error('Error fetching losers:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/roulette/unopened
+ * 未開封（特典送付済みだがまだルーレット未実行）の生徒一覧を取得
+ */
+app.get('/unopened', async (c) => {
+  try {
+    const pool = getPool();
+
+    // stamp_rally_achievements で notified_at があるが、roulette_results に記録がない生徒
+    const result = await pool.query(`
+      SELECT 
+        sa.student_id,
+        sa.achievement_type,
+        sa.achievement_date,
+        sa.notified_at,
+        sa.roulette_url,
+        s.name as student_name,
+        s.notion_url,
+        s.notion_page_id,
+        s.homeroom_tutor,
+        s.result_score_prev_month as result_score
+      FROM stamp_rally_achievements sa
+      JOIN students s ON sa.student_id = s.student_id
+      LEFT JOIN roulette_results r ON sa.roulette_url = r.roulette_url
+      WHERE sa.notified_at IS NOT NULL
+        AND r.id IS NULL
+      ORDER BY sa.notified_at DESC
+    `);
+
+    const unopened = result.rows.map(row => {
+      let notionUrl = row.notion_url;
+      if (!notionUrl && row.notion_page_id) {
+        notionUrl = `https://www.notion.so/${row.notion_page_id.replace(/-/g, '')}`;
+      }
+
+      // Calculate probability based on result_score
+      const probability = row.result_score === 'S' ? 100 : 50;
+
+      return {
+        studentId: row.student_id,
+        studentName: row.student_name,
+        homeroom_tutor: row.homeroom_tutor,
+        notionUrl,
+        probability,
+        achievementType: row.achievement_type,
+        achievementDate: row.achievement_date,
+        notifiedAt: row.notified_at,
+        rouletteUrl: row.roulette_url
+      };
+    });
+
+    console.log(`[Roulette] Found ${unopened.length} unopened`);
+
+    return c.json({
+      success: true,
+      data: unopened,
+      count: unopened.length
+    });
+  } catch (error) {
+    console.error('Error fetching unopened:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;

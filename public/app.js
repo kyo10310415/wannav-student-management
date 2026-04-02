@@ -171,7 +171,7 @@ function renderHeader() {
   // Build roulette winners button (leader or above)
   const rouletteWinnersButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <button id="nav-roulette-winners" onclick="changePage('roulette-winners')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'roulette-winners' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
-      <i class="fas fa-trophy mr-2"></i>当たり生徒
+      <i class="fas fa-trophy mr-2"></i>特典送付済み
     </button>
   ` : '';
   
@@ -11265,153 +11265,136 @@ async function renderRouletteWinnersPage() {
       <div class="bg-gradient-to-r from-yellow-500 to-orange-600 rounded-lg shadow-lg p-6 text-white">
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <i class="fas fa-trophy"></i>
-          ルーレット当選者一覧
+          ルーレット特典送付済み一覧
         </h1>
         <p class="mt-2 text-yellow-100">
-          アンケートスタンプラリーのルーレットで当たりを引いた生徒様の一覧です
+          アンケートスタンプラリーの特典を送付した生徒様の一覧です
         </p>
       </div>
 
-      <!-- Loading State -->
-      <div id="winners-loading" class="bg-white rounded-lg shadow-md p-12 text-center">
-        <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
-        <p class="text-gray-600">当選者データを読み込み中...</p>
-      </div>
-
-      <!-- Winners List -->
-      <div id="winners-list" class="hidden bg-white rounded-lg shadow-md p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-bold text-gray-800">
-            <i class="fas fa-list mr-2"></i>
-            当選者一覧
-          </h2>
-          <div class="text-sm text-gray-600">
-            総当選者数: <span id="winners-count" class="font-bold text-blue-600">0</span>名
-          </div>
+      <!-- Tabs -->
+      <div class="bg-white rounded-lg shadow-md">
+        <div class="border-b border-gray-200">
+          <nav class="flex -mb-px">
+            <button onclick="switchRouletteTab('winners')" id="tab-winners" class="roulette-tab px-6 py-3 text-sm font-medium border-b-2 border-yellow-500 text-yellow-600">
+              <i class="fas fa-trophy mr-2"></i>
+              当たり生徒
+            </button>
+            <button onclick="switchRouletteTab('losers')" id="tab-losers" class="roulette-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+              <i class="fas fa-times-circle mr-2"></i>
+              はずれ生徒
+            </button>
+            <button onclick="switchRouletteTab('unopened')" id="tab-unopened" class="roulette-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+              <i class="fas fa-envelope mr-2"></i>
+              未開封
+            </button>
+          </nav>
         </div>
-        
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">抽選日時</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
-                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">達成条件</th>
-                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">確率</th>
-                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Notion</th>
-              </tr>
-            </thead>
-            <tbody id="winners-table-body" class="bg-white divide-y divide-gray-200">
-              <!-- Winners will be inserted here -->
-            </tbody>
-          </table>
+
+        <!-- Loading State -->
+        <div id="roulette-loading" class="p-12 text-center">
+          <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+          <p class="text-gray-600">データを読み込み中...</p>
+        </div>
+
+        <!-- Content Area -->
+        <div id="roulette-content" class="hidden p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-800">
+              <i class="fas fa-list mr-2"></i>
+              <span id="roulette-list-title">当たり生徒一覧</span>
+            </h2>
+            <div class="text-sm text-gray-600">
+              件数: <span id="roulette-count" class="font-bold text-blue-600">0</span>名
+            </div>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr id="roulette-table-header">
+                  <!-- Headers will be inserted dynamically -->
+                </tr>
+              </thead>
+              <tbody id="roulette-table-body" class="bg-white divide-y divide-gray-200">
+                <!-- Rows will be inserted here -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   `;
 
-  // Load winners data
-  await loadRouletteWinners();
+  // Load winners data by default
+  window.currentRouletteTab = 'winners';
+  await loadRouletteData('winners');
 }
 
-async function loadRouletteWinners() {
+// Switch between roulette tabs
+function switchRouletteTab(tab) {
+  // Update tab styles
+  document.querySelectorAll('.roulette-tab').forEach(btn => {
+    btn.classList.remove('border-yellow-500', 'text-yellow-600');
+    btn.classList.add('border-transparent', 'text-gray-500');
+  });
+  
+  const activeTab = document.getElementById(`tab-${tab}`);
+  if (activeTab) {
+    activeTab.classList.remove('border-transparent', 'text-gray-500');
+    activeTab.classList.add('border-yellow-500', 'text-yellow-600');
+  }
+  
+  window.currentRouletteTab = tab;
+  loadRouletteData(tab);
+}
+
+// Load roulette data based on tab
+async function loadRouletteData(tab) {
   try {
-    const response = await axios.get(`${API_BASE}/api/roulette/winners`);
+    const loadingEl = document.getElementById('roulette-loading');
+    const contentEl = document.getElementById('roulette-content');
+    
+    loadingEl.classList.remove('hidden');
+    contentEl.classList.add('hidden');
+    
+    let endpoint = '';
+    let title = '';
+    
+    if (tab === 'winners') {
+      endpoint = '/api/roulette/winners';
+      title = '当たり生徒一覧';
+    } else if (tab === 'losers') {
+      endpoint = '/api/roulette/losers';
+      title = 'はずれ生徒一覧';
+    } else if (tab === 'unopened') {
+      endpoint = '/api/roulette/unopened';
+      title = '未開封一覧';
+    }
+    
+    const response = await axios.get(`${API_BASE}${endpoint}`);
     
     if (!response.data.success) {
-      showNotification('当選者データの読み込みに失敗しました', 'error');
+      showNotification('データの読み込みに失敗しました', 'error');
       return;
     }
 
-    const winners = response.data.data;
-    console.log(`✅ Loaded ${winners.length} winners`);
+    const data = response.data.data;
+    console.log(`✅ Loaded ${data.length} records for ${tab}`);
 
-    // Hide loading, show list
-    document.getElementById('winners-loading').classList.add('hidden');
-    document.getElementById('winners-list').classList.remove('hidden');
-    document.getElementById('winners-count').textContent = winners.length;
-
-    // Render winners table
-    const tableBody = document.getElementById('winners-table-body');
+    loadingEl.classList.add('hidden');
+    contentEl.classList.remove('hidden');
     
-    if (winners.length === 0) {
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="7" class="px-4 py-8 text-center text-gray-500">
-            <i class="fas fa-inbox text-4xl mb-2"></i>
-            <p>まだ当選者はいません</p>
-          </td>
-        </tr>
-      `;
-      return;
-    }
+    document.getElementById('roulette-list-title').textContent = title;
+    document.getElementById('roulette-count').textContent = data.length;
 
-    tableBody.innerHTML = winners.map(winner => {
-      const drawnAt = new Date(winner.drawnAt);
-      const drawnAtStr = drawnAt.toLocaleString('ja-JP', {
-        timeZone: 'Asia/Tokyo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-
-      // Achievement type label
-      const achievementTypeLabel = {
-        'initial_80': '条件①(80%)',
-        'continuous_6': '条件②(6連続)',
-        'catch_up_100': '条件③(100%)',
-        'reset_6': 'リセット後'
-      }[winner.achievementType] || winner.achievementType;
-
-      return `
-        <tr class="hover:bg-yellow-50">
-          <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-            ${drawnAtStr}
-          </td>
-          <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-            ${winner.studentId}
-          </td>
-          <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-            ${winner.studentName}
-          </td>
-          <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-            ${getTutorDisplayName(winner.homeroom_tutor) || '-'}
-          </td>
-          <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
-            <span class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-              ${achievementTypeLabel}
-            </span>
-          </td>
-          <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-600">
-            ${winner.probability}%
-          </td>
-          <td class="px-3 py-3 whitespace-nowrap text-center">
-            ${winner.notionUrl ? `
-              <a href="${winner.notionUrl}" target="_blank" rel="noopener noreferrer" 
-                 class="inline-flex items-center px-3 py-1 bg-gray-800 text-white text-xs font-semibold rounded hover:bg-gray-900 transition">
-                <i class="fas fa-file-alt mr-1"></i>Notion
-              </a>
-            ` : '<span class="text-gray-400 text-xs">-</span>'}
-          </td>
-        </tr>
-      `;
-    }).join('');
+    renderRouletteTable(tab, data);
 
   } catch (error) {
-    console.error('❌ Error loading winners:', error);
-    console.error('Error message:', error.message);
-    if (error.response) {
-      console.error('Error response:', error.response);
-    }
+    console.error('❌ Error loading roulette data:', error);
+    showNotification('データの読み込みに失敗しました', 'error');
     
-    showNotification('当選者データの読み込みに失敗しました', 'error');
-    
-    // Hide loading
-    const loadingEl = document.getElementById('winners-loading');
+    const loadingEl = document.getElementById('roulette-loading');
     if (loadingEl) {
       loadingEl.innerHTML = `
         <div class="text-center text-red-600">
@@ -11422,6 +11405,100 @@ async function loadRouletteWinners() {
       `;
     }
   }
+}
+
+// Render roulette table based on tab type
+function renderRouletteTable(tab, data) {
+  const tableHeader = document.getElementById('roulette-table-header');
+  const tableBody = document.getElementById('roulette-table-body');
+  
+  // Common headers
+  const commonHeaders = `
+    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日時</th>
+    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学籍番号</th>
+    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生徒名</th>
+    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
+    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">達成条件</th>
+    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">確率</th>
+    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Notion</th>
+  `;
+  
+  tableHeader.innerHTML = commonHeaders;
+  
+  if (data.length === 0) {
+    const emptyMessage = tab === 'winners' ? 'まだ当たり生徒はいません' :
+                        tab === 'losers' ? 'まだはずれ生徒はいません' :
+                        'まだ未開封の生徒はいません';
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+          <i class="fas fa-inbox text-4xl mb-2"></i>
+          <p>${emptyMessage}</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tableBody.innerHTML = data.map(row => {
+    const date = new Date(tab === 'unopened' ? row.notifiedAt : row.drawnAt);
+    const dateStr = date.toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Achievement type label
+    const achievementTypeLabel = {
+      'initial_1': '条件①(80%)',
+      'initial_2': '条件②(6連続)',
+      'initial_3': '条件③(100%)',
+      'reset_6': 'リセット後',
+      'initial_80': '条件①(80%)',
+      'continuous_6': '条件②(6連続)',
+      'catch_up_100': '条件③(100%)'
+    }[row.achievementType] || row.achievementType || '-';
+
+    const rowClass = tab === 'winners' ? 'hover:bg-yellow-50' :
+                     tab === 'losers' ? 'hover:bg-gray-50' :
+                     'hover:bg-blue-50';
+
+    return `
+      <tr class="${rowClass}">
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+          ${dateStr}
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+          ${row.studentId}
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+          ${row.studentName}
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+          ${getTutorDisplayName(row.homeroom_tutor) || '-'}
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center">
+          <span class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+            ${achievementTypeLabel}
+          </span>
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-purple-600">
+          ${row.probability}%
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          ${row.notionUrl ? `
+            <a href="${row.notionUrl}" target="_blank" rel="noopener noreferrer" 
+               class="inline-flex items-center px-3 py-1 bg-gray-800 text-white text-xs font-semibold rounded hover:bg-gray-900 transition">
+              <i class="fas fa-file-alt mr-1"></i>Notion
+            </a>
+          ` : '<span class="text-gray-400 text-xs">-</span>'}
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // ========== Red List ==========
