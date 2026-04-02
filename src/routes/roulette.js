@@ -58,14 +58,38 @@ app.post('/generate', async (c) => {
     // 今回は stamp_rally_achievements に roulette_url を保存
 
     // スタンプラリー達成記録に保存
-    const achievementResult = await pool.query(`
-      INSERT INTO stamp_rally_achievements 
-        (student_id, achievement_type, achievement_date, roulette_url)
-      VALUES ($1, $2, CURRENT_DATE, $3)
-      RETURNING id, achievement_date
-    `, [studentId, achievementType, rouletteUrl]);
+    // 同じ生徒・達成タイプの既存レコードを確認
+    const existingAchievement = await pool.query(`
+      SELECT id, roulette_url, notified_at
+      FROM stamp_rally_achievements
+      WHERE student_id = $1 AND achievement_type = $2
+      ORDER BY achievement_date DESC
+      LIMIT 1
+    `, [studentId, achievementType]);
 
-    const achievement = achievementResult.rows[0];
+    let achievement;
+
+    if (existingAchievement.rows.length > 0 && !existingAchievement.rows[0].notified_at) {
+      // 既存のレコードがあり、未通知の場合は更新
+      const updateResult = await pool.query(`
+        UPDATE stamp_rally_achievements
+        SET roulette_url = $1, achievement_date = CURRENT_DATE
+        WHERE id = $2
+        RETURNING id, achievement_date
+      `, [rouletteUrl, existingAchievement.rows[0].id]);
+      achievement = updateResult.rows[0];
+      console.log(`[Roulette] Updated existing achievement record ${achievement.id} for ${studentId}`);
+    } else {
+      // 新規作成
+      const insertResult = await pool.query(`
+        INSERT INTO stamp_rally_achievements 
+          (student_id, achievement_type, achievement_date, roulette_url)
+        VALUES ($1, $2, CURRENT_DATE, $3)
+        RETURNING id, achievement_date
+      `, [studentId, achievementType, rouletteUrl]);
+      achievement = insertResult.rows[0];
+      console.log(`[Roulette] Created new achievement record ${achievement.id} for ${studentId}`);
+    }
 
     console.log(`[Roulette] URL generated for ${studentId}: ${rouletteUrl}`);
 

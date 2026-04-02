@@ -80,7 +80,7 @@ export async function checkStampRallyAchievements() {
         });
 
         if (!generateResponse.data.success) {
-          console.error(`[StampRally] Failed to generate roulette URL for ${student.studentId}`);
+          console.error(`[StampRally] Failed to generate roulette URL for ${student.studentId}: ${generateResponse.data.error || 'Unknown error'}`);
           errors++;
           continue;
         }
@@ -106,7 +106,8 @@ export async function checkStampRallyAchievements() {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
       } catch (error) {
-        console.error(`[StampRally] Error processing ${student.studentId}:`, error.message);
+        const errorDetail = error.response?.data?.error || error.message;
+        console.error(`[StampRally] Error processing ${student.studentId}: ${errorDetail}`);
         errors++;
         
         // Wait even on error to avoid hammering the API
