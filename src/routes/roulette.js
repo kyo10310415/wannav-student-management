@@ -573,7 +573,7 @@ app.get('/winners', async (c) => {
     let result;
     try {
       result = await pool.query(`
-        SELECT 
+        SELECT DISTINCT ON (r.id)
           r.id,
           r.student_id,
           r.result,
@@ -591,13 +591,13 @@ app.get('/winners', async (c) => {
           AND r.roulette_url = sa.roulette_url
         WHERE r.result = '当たり' 
           AND (r.is_test = FALSE OR r.is_test IS NULL)
-        ORDER BY r.created_at DESC
+        ORDER BY r.id, sa.achievement_date DESC NULLS LAST, r.created_at DESC
       `);
     } catch (error) {
       console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
       // Fallback without is_test column
       result = await pool.query(`
-        SELECT 
+        SELECT DISTINCT ON (r.id)
           r.id,
           r.student_id,
           r.result,
@@ -615,7 +615,7 @@ app.get('/winners', async (c) => {
           AND r.roulette_url = sa.roulette_url
         WHERE r.result = '当たり' 
           AND r.roulette_url NOT LIKE 'test-draw-%'
-        ORDER BY r.created_at DESC
+        ORDER BY r.id, sa.achievement_date DESC NULLS LAST, r.created_at DESC
       `);
     }
 
@@ -666,7 +666,7 @@ app.get('/losers', async (c) => {
     let result;
     try {
       result = await pool.query(`
-        SELECT 
+        SELECT DISTINCT ON (r.id)
           r.id,
           r.student_id,
           r.result,
@@ -684,12 +684,12 @@ app.get('/losers', async (c) => {
           AND r.roulette_url = sa.roulette_url
         WHERE r.result = 'はずれ' 
           AND (r.is_test = FALSE OR r.is_test IS NULL)
-        ORDER BY r.created_at DESC
+        ORDER BY r.id, sa.achievement_date DESC NULLS LAST, r.created_at DESC
       `);
     } catch (error) {
       console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
       result = await pool.query(`
-        SELECT 
+        SELECT DISTINCT ON (r.id)
           r.id,
           r.student_id,
           r.result,
@@ -707,7 +707,7 @@ app.get('/losers', async (c) => {
           AND r.roulette_url = sa.roulette_url
         WHERE r.result = 'はずれ' 
           AND r.roulette_url NOT LIKE 'test-draw-%'
-        ORDER BY r.created_at DESC
+        ORDER BY r.id, sa.achievement_date DESC NULLS LAST, r.created_at DESC
       `);
     }
 
@@ -756,7 +756,7 @@ app.get('/unopened', async (c) => {
 
     // stamp_rally_achievements で notified_at があるが、roulette_results に記録がない生徒
     const result = await pool.query(`
-      SELECT 
+      SELECT DISTINCT ON (sa.student_id, sa.roulette_url)
         sa.student_id,
         sa.achievement_type,
         sa.achievement_date,
@@ -772,7 +772,7 @@ app.get('/unopened', async (c) => {
       LEFT JOIN roulette_results r ON sa.roulette_url = r.roulette_url
       WHERE sa.notified_at IS NOT NULL
         AND r.id IS NULL
-      ORDER BY sa.notified_at DESC
+      ORDER BY sa.student_id, sa.roulette_url, sa.notified_at DESC
     `);
 
     const unopened = result.rows.map(row => {
