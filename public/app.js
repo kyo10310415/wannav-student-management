@@ -11288,6 +11288,10 @@ async function renderRouletteWinnersPage() {
               <i class="fas fa-envelope mr-2"></i>
               未開封
             </button>
+            <button onclick="switchRouletteTab('template')" id="tab-template" class="roulette-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+              <i class="fas fa-file-alt mr-2"></i>
+              メールテンプレート
+            </button>
           </nav>
         </div>
 
@@ -11322,6 +11326,61 @@ async function renderRouletteWinnersPage() {
             </table>
           </div>
         </div>
+        
+        <!-- Email Template Content -->
+        <div id="template-content" class="hidden p-6">
+          <div class="max-w-3xl mx-auto">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-file-alt mr-2"></i>
+                当選者向けメールテンプレート
+              </h2>
+              <button 
+                onclick="copyEmailTemplate()"
+                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition shadow-md"
+              >
+                <i class="fas fa-copy mr-2"></i>
+                コピー
+              </button>
+            </div>
+            
+            <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 p-8 relative">
+              <div class="absolute top-4 right-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-600 text-white">
+                  <i class="fas fa-envelope mr-1"></i>
+                  テンプレート
+                </span>
+              </div>
+              
+              <div id="email-template-text" class="prose prose-sm max-w-none">
+                <div class="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed" style="font-size: 15px;">お世話になっております！
+スタンプラリー特典の当選おめでとうございます🎉 
+
+<strong>特典として「弊社事務所マネージャーによる1時間コンサル権」を贈呈します！</strong>
+
+つきましては下記URLよりコンサルのご予約をお取りください！
+URL：○○
+
+今月の予約が難しい場合は来月でも問題ございません！
+ただし、<strong>3か月が経過すると権利が消失</strong>してしまいますのでご注意ください！</div>
+              </div>
+              
+              <div class="mt-6 pt-6 border-t border-blue-200">
+                <div class="flex items-start gap-3 text-sm text-gray-600">
+                  <i class="fas fa-info-circle text-blue-500 mt-1"></i>
+                  <div>
+                    <p class="font-semibold text-gray-700 mb-1">使い方</p>
+                    <ul class="space-y-1 text-xs">
+                      <li>• 「コピー」ボタンでテンプレート全体をコピーできます</li>
+                      <li>• 「URL：○○」の部分を実際の予約URLに置き換えてください</li>
+                      <li>• 必要に応じて文面をカスタマイズしてください</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -11346,7 +11405,21 @@ function switchRouletteTab(tab) {
   }
   
   window.currentRouletteTab = tab;
-  loadRouletteData(tab);
+  
+  // Show template content directly without loading data
+  if (tab === 'template') {
+    const loadingEl = document.getElementById('roulette-loading');
+    const contentEl = document.getElementById('roulette-content');
+    const templateEl = document.getElementById('template-content');
+    
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (contentEl) contentEl.classList.add('hidden');
+    if (templateEl) templateEl.classList.remove('hidden');
+  } else {
+    const templateEl = document.getElementById('template-content');
+    if (templateEl) templateEl.classList.add('hidden');
+    loadRouletteData(tab);
+  }
 }
 
 // Load roulette data based on tab
@@ -11354,9 +11427,11 @@ async function loadRouletteData(tab) {
   try {
     const loadingEl = document.getElementById('roulette-loading');
     const contentEl = document.getElementById('roulette-content');
+    const templateEl = document.getElementById('template-content');
     
     loadingEl.classList.remove('hidden');
     contentEl.classList.add('hidden');
+    if (templateEl) templateEl.classList.add('hidden');
     
     // Load consultation staff list if viewing winners tab
     if (tab === 'winners' && !window.consultationStaffList) {
@@ -11584,6 +11659,49 @@ async function updateWinnerField(id, field, value) {
     showNotification('更新に失敗しました', 'error');
     // Reload to revert changes
     loadRouletteData('winners');
+  }
+}
+
+/**
+ * Copy email template to clipboard
+ */
+async function copyEmailTemplate() {
+  const templateText = `お世話になっております！
+スタンプラリー特典の当選おめでとうございます🎉 
+
+特典として「弊社事務所マネージャーによる1時間コンサル権」を贈呈します！
+
+つきましては下記URLよりコンサルのご予約をお取りください！
+URL：○○
+
+今月の予約が難しい場合は来月でも問題ございません！
+ただし、3か月が経過すると権利が消失してしまいますのでご注意ください！`;
+
+  try {
+    await navigator.clipboard.writeText(templateText);
+    showNotification('テンプレートをコピーしました', 'success');
+    console.log('[Template] Email template copied to clipboard');
+  } catch (error) {
+    console.error('[Template] Error copying to clipboard:', error);
+    
+    // Fallback: Create temporary textarea
+    const textarea = document.createElement('textarea');
+    textarea.value = templateText;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    
+    try {
+      document.execCommand('copy');
+      showNotification('テンプレートをコピーしました', 'success');
+      console.log('[Template] Email template copied using fallback method');
+    } catch (fallbackError) {
+      console.error('[Template] Fallback copy failed:', fallbackError);
+      showNotification('コピーに失敗しました', 'error');
+    }
+    
+    document.body.removeChild(textarea);
   }
 }
 
