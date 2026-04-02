@@ -524,22 +524,6 @@ const migrations = [
       DROP TABLE IF EXISTS red_list_history CASCADE;
       ALTER TABLE red_list DROP COLUMN IF EXISTS reservation_locked;
     `
-  },
-  {
-    version: 20,
-    name: 'add_discord_user_id_column',
-    up: `
-      -- students テーブルに discord_user_id カラムを追加
-      ALTER TABLE students ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(100);
-      
-      -- インデックスを作成
-      CREATE INDEX IF NOT EXISTS idx_students_discord_user_id ON students(discord_user_id);
-      
-      COMMENT ON COLUMN students.discord_user_id IS 'DiscordのユーザーID（メンション用）';
-    `,
-    down: `
-      ALTER TABLE students DROP COLUMN IF EXISTS discord_user_id;
-    `
   }
 ];
 
