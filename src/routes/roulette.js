@@ -615,6 +615,7 @@ app.get('/winners', async (c) => {
           s.notion_page_id,
           s.homeroom_tutor,
           s.continued_months,
+          s.discord_url,
           sa.achievement_type,
           sa.achievement_date
         FROM roulette_results r
@@ -642,6 +643,7 @@ app.get('/winners', async (c) => {
           s.notion_page_id,
           s.homeroom_tutor,
           s.continued_months,
+          s.discord_url,
           sa.achievement_type,
           sa.achievement_date
         FROM roulette_results r
@@ -667,6 +669,7 @@ app.get('/winners', async (c) => {
         studentName: row.student_name,
         homeroom_tutor: row.homeroom_tutor,
         notionUrl,
+        discordUrl: row.discord_url,
         probability: row.probability,
         achievementType: row.achievement_type,
         achievementDate: row.achievement_date,

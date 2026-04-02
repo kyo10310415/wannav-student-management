@@ -11651,6 +11651,7 @@ function renderRouletteTable(tab, data) {
   }
   
   headers += `
+    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Discord</th>
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Notion</th>
   `;
   
@@ -11660,7 +11661,7 @@ function renderRouletteTable(tab, data) {
     const emptyMessage = tab === 'winners' ? 'まだ当たり生徒はいません' :
                         tab === 'losers' ? 'まだはずれ生徒はいません' :
                         'まだ未開封の生徒はいません';
-    const colspan = tab === 'winners' ? 10 : 8;
+    const colspan = tab === 'winners' ? 12 : 10;
     tableBody.innerHTML = `
       <tr>
         <td colspan="${colspan}" class="px-4 py-8 text-center text-gray-500">
@@ -11757,6 +11758,14 @@ function renderRouletteTable(tab, data) {
     }
     
     rowHtml += `
+        <td class="px-3 py-3 whitespace-nowrap text-center">
+          ${row.discordUrl ? `
+            <a href="${row.discordUrl}" target="_blank" rel="noopener noreferrer" 
+               class="inline-flex items-center px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded hover:bg-indigo-700 transition">
+              <i class="fab fa-discord mr-1"></i>Discord
+            </a>
+          ` : '<span class="text-gray-400 text-xs">-</span>'}
+        </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           ${row.notionUrl ? `
             <a href="${row.notionUrl}" target="_blank" rel="noopener noreferrer" 
