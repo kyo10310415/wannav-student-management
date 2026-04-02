@@ -1043,6 +1043,11 @@ app.get('/eligible-students', async (c) => {
       // 特典対象判定
       const eligibility = await checkEligibility(student, responseCount, responseRate, extensionResult, pool);
 
+      // デバッグ: 最初の50名分をログ出力
+      if (eligibleStudents.length < 50) {
+        console.log(`[Survey Debug] ${student.student_id} (${student.name}): eligible=${eligibility.isEligible}, reason=${eligibility.reason}, type=${eligibility.achievementType || 'N/A'}`);
+      }
+
       if (eligibility.isEligible) {
         eligibleStudents.push({
           studentId: student.student_id,
@@ -1240,6 +1245,99 @@ app.post('/check-stamp-rally', async (c) => {
       error: error.message,
       sent: 0,
       errors: 0
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/survey/test-discord-webhook
+ * Discord Webhook送信テスト
+ */
+app.post('/test-discord-webhook', async (c) => {
+  try {
+    const { studentId } = await c.req.json();
+    
+    if (!studentId) {
+      return c.json({
+        success: false,
+        error: '学籍番号を指定してください'
+      }, 400);
+    }
+    
+    const pool = getPool();
+    
+    // 生徒のDiscord URLを取得
+    const studentResult = await pool.query(`
+      SELECT discord_url, name
+      FROM students
+      WHERE student_id = $1
+    `, [studentId]);
+    
+    if (studentResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: '生徒が見つかりません'
+      }, 404);
+    }
+    
+    const student = studentResult.rows[0];
+    const webhookUrl = student.discord_url;
+    
+    if (!webhookUrl) {
+      return c.json({
+        success: false,
+        error: 'Discord URLが設定されていません'
+      }, 400);
+    }
+    
+    // テストメッセージを送信
+    const testMessage = {
+      username: 'WannaV Bot - テスト',
+      avatar_url: 'https://cdn-icons-png.flaticon.com/512/2593/2593635.png',
+      embeds: [{
+        title: '🧪 Discord Webhook テスト',
+        description: 'これはテストメッセージです。このメッセージが表示されれば、Discord Webhookは正常に動作しています。',
+        color: 0x00FF00,
+        fields: [
+          {
+            name: '学籍番号',
+            value: studentId,
+            inline: true
+          },
+          {
+            name: '生徒名',
+            value: student.name,
+            inline: true
+          }
+        ],
+        timestamp: new Date().toISOString()
+      }]
+    };
+    
+    console.log(`[Survey] Testing Discord webhook for ${studentId}`);
+    console.log(`[Survey] Webhook URL: ${webhookUrl.substring(0, 50)}...`);
+    
+    const axios = (await import('axios')).default;
+    const response = await axios.post(webhookUrl, testMessage);
+    
+    console.log(`[Survey] Discord response: status=${response.status}, data=${JSON.stringify(response.data)}`);
+    
+    return c.json({
+      success: true,
+      message: 'テストメッセージを送信しました',
+      discordStatus: response.status,
+      discordData: response.data
+    });
+    
+  } catch (error) {
+    console.error('[Survey] Error testing Discord webhook:', error);
+    if (error.response) {
+      console.error(`[Survey] Discord API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+    }
+    return c.json({
+      success: false,
+      error: error.message,
+      discordError: error.response?.data
     }, 500);
   }
 });

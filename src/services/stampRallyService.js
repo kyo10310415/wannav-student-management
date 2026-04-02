@@ -180,11 +180,16 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
     };
 
     // Discord Webhook送信
+    console.log(`[StampRally] 📤 Sending Discord notification to ${studentId} (${studentName})`);
+    console.log(`[StampRally] Webhook URL: ${webhookUrl.substring(0, 50)}...`);
+    
     const discordResponse = await axios.post(webhookUrl, {
       username: 'WannaV Bot',
       avatar_url: 'https://cdn-icons-png.flaticon.com/512/2593/2593635.png',
       embeds: [embed]
     });
+
+    console.log(`[StampRally] Discord API response: status=${discordResponse.status}, data=${JSON.stringify(discordResponse.data)}`);
 
     // Discord送信が成功した場合のみ、通知日時を更新
     if (discordResponse.status === 200 || discordResponse.status === 204) {
