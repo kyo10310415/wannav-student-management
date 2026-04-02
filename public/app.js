@@ -9461,7 +9461,10 @@ function updateSurveyStatsDisplay(studentId, stats) {
   const surveyCell = document.querySelector(`.survey-stats-loading[data-student-id="${studentId}"]`);
   const rouletteCell = document.querySelector(`.roulette-result-loading[data-student-id="${studentId}"]`);
   
-  if (!surveyCell || !rouletteCell) return;
+  if (!surveyCell || !rouletteCell) {
+    console.log(`[Survey Display] Cells not found for student: ${studentId}, surveyCell: ${!!surveyCell}, rouletteCell: ${!!rouletteCell}`);
+    return;
+  }
   
   if (!stats) {
     surveyCell.innerHTML = '<span class="text-gray-400">-</span>';
@@ -9517,6 +9520,7 @@ function updateSurveyStatsDisplay(studentId, stats) {
         <i class="fas ${isWin ? 'fa-trophy' : 'fa-times-circle'}"></i>
       </div>
     `;
+    console.log(`[Roulette Display] Student ${studentId}: Result ${isWin ? 'WIN' : 'LOSE'} displayed`);
   } else if (stats.isEligible && stats.isEligible.isEligible) {
     // Eligible but not yet drawn
     rouletteCell.innerHTML = `
@@ -9528,8 +9532,10 @@ function updateSurveyStatsDisplay(studentId, stats) {
         <i class="fas fa-dice"></i>
       </button>
     `;
+    console.log(`[Roulette Display] Student ${studentId}: Test draw button displayed (eligible)`);
   } else {
     rouletteCell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
+    console.log(`[Roulette Display] Student ${studentId}: Not eligible or no result`);
   }
 }
 
