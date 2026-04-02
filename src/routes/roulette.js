@@ -47,8 +47,9 @@ app.post('/generate', async (c) => {
     const token = crypto.randomBytes(32).toString('hex');
     
     // ルーレットURL生成
-    const baseUrl = process.env.APP_BASE_URL || 'https://webapp.pages.dev';
-    const rouletteUrl = `${baseUrl}/roulette?token=${token}`;
+    // Renderの場合は RENDER_EXTERNAL_URL を使用、なければ APP_BASE_URL、最後にデフォルト
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+    const rouletteUrl = `${baseUrl}/roulette.html?token=${token}`;
 
     // 有効期限（30日後）
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -125,8 +126,8 @@ app.get('/verify/:token', async (c) => {
     const pool = getPool();
 
     // トークンから達成記録を検索
-    const baseUrl = process.env.APP_BASE_URL || 'https://webapp.pages.dev';
-    const rouletteUrl = `${baseUrl}/roulette?token=${token}`;
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+    const rouletteUrl = `${baseUrl}/roulette.html?token=${token}`;
 
     const achievementResult = await pool.query(`
       SELECT 
@@ -223,8 +224,8 @@ app.post('/spin', async (c) => {
     const pool = getPool();
 
     // トークン検証
-    const baseUrl = process.env.APP_BASE_URL || 'https://webapp.pages.dev';
-    const rouletteUrl = `${baseUrl}/roulette?token=${token}`;
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+    const rouletteUrl = `${baseUrl}/roulette.html?token=${token}`;
 
     const achievementResult = await pool.query(`
       SELECT 
