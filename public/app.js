@@ -17,6 +17,8 @@ let currentMonth = new Date();
 let selectedTutor = 'all';
 let reservationCountFilter = 'all'; // 'all', 'above2', 'below2'
 let selectedTeam = 'all'; // チームフィルター用
+let selectedTutorYear = new Date().getFullYear(); // Tutor満足度表示年
+let selectedTutorMonth = new Date().getMonth() + 1; // Tutor満足度表示月
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports'
@@ -2255,7 +2257,23 @@ function renderTutorsPage() {
   content.innerHTML = `
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <div class="flex gap-2 items-center flex-wrap">
+      <div class="flex gap-4 items-center flex-wrap">
+        <!-- Month Navigation for Satisfaction Data -->
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-gray-700">
+            <i class="fas fa-calendar mr-1"></i>満足度表示月:
+          </label>
+          <button onclick="changeTutorStatsMonth(-1)" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span class="px-4 py-2 bg-gray-100 rounded font-semibold text-center min-w-[120px]">
+            ${selectedTutorYear}年${selectedTutorMonth}月
+          </span>
+          <button onclick="changeTutorStatsMonth(1)" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+        
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
@@ -2265,7 +2283,7 @@ function renderTutorsPage() {
         </button>
         
         <!-- Team Filter -->
-        <div class="flex items-center gap-2 ml-4">
+        <div class="flex items-center gap-2">
           <label class="text-sm font-medium text-gray-700">チーム絞り込み:</label>
           <select 
             id="teamFilter" 
@@ -2282,7 +2300,8 @@ function renderTutorsPage() {
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-bold text-gray-800 mb-4">
         <i class="fas fa-chart-bar mr-2"></i>
-        統計情報 ${selectedTeam !== 'all' ? `<span class="text-sm text-blue-600">(${selectedTeam}チーム)</span>` : '<span class="text-sm text-gray-500">(全体)</span>'}
+        統計情報 <span class="text-sm text-blue-600">(${selectedTutorYear}年${selectedTutorMonth}月)</span>
+        ${selectedTeam !== 'all' ? `<span class="text-sm text-blue-600">(${selectedTeam}チーム)</span>` : '<span class="text-sm text-gray-500">(全体)</span>'}
       </h2>
       ${renderTutorStatistics()}
     </div>
@@ -2457,6 +2476,22 @@ function renderTeamFilterOptions() {
 }
 
 // Handle team filter change
+// Change tutor satisfaction stats month
+function changeTutorStatsMonth(delta) {
+  selectedTutorMonth += delta;
+  
+  if (selectedTutorMonth < 1) {
+    selectedTutorMonth = 12;
+    selectedTutorYear--;
+  } else if (selectedTutorMonth > 12) {
+    selectedTutorMonth = 1;
+    selectedTutorYear++;
+  }
+  
+  console.log(`[Tutor Stats] Changed to ${selectedTutorYear}/${selectedTutorMonth}`);
+  renderTutorsPage();
+}
+
 function handleTeamFilterChange(team) {
   selectedTeam = team;
   renderTutorsPage();
@@ -2471,7 +2506,7 @@ function renderTutorStatistics() {
     t.job_type.toLowerCase().includes('tutor')
   );
   
-  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+  const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
   
   // Get unique teams
   const uniqueTeams = [...new Set(allActiveTutors.map(t => t.team || '未所属'))].sort();
@@ -2491,7 +2526,7 @@ function renderTutorStatistics() {
     ).length;
     
     const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
-    const currentMonthData = tutorSatisfactionData[currentYearMonth];
+    const currentMonthData = tutorSatisfactionData[selectedYearMonth];
     
     if (currentMonthData && activeStudentCount > 0) {
       const satisfactionValue = currentMonthData.average * 10;
@@ -2533,7 +2568,7 @@ function renderTutorStatistics() {
       ).length;
       
       const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
-      const currentMonthData = tutorSatisfactionData[currentYearMonth];
+      const currentMonthData = tutorSatisfactionData[selectedYearMonth];
       
       if (currentMonthData && activeStudentCount > 0) {
         const satisfactionValue = currentMonthData.average * 10;
@@ -2662,8 +2697,8 @@ function renderTutorRows() {
     `;
   }
 
-  // Get current month in YYYY/M format
-  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
+  // Get selected month in YYYY/M format
+  const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
 
   return filteredTutors.map(tutor => {
     const statusClass = tutor.status === 'アクティブ' ? 'text-green-600 font-semibold' : 'text-gray-600';
@@ -2701,7 +2736,7 @@ function renderTutorRows() {
     
     // Get satisfaction data for this tutor
     const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
-    const currentMonthData = tutorSatisfactionData[currentYearMonth];
+    const currentMonthData = tutorSatisfactionData[selectedYearMonth];
     
     // レッスン満足度 (平均 × 10、100がMAX、小数第2位まで)
     let satisfactionAverage = '-';
