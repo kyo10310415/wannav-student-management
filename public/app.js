@@ -12421,6 +12421,38 @@ function renderRedListStudentCard(item, isHistory) {
   const yearMonth = item.year_month;
   const consecutiveMonths = 1; // TODO: Calculate from history
   
+  // Get satisfaction data from surveyStatsCache
+  const surveyStats = surveyStatsCache[item.student_id];
+  let satisfactionDisplay = '<span class="text-gray-400">-</span>';
+  
+  if (surveyStats && surveyStats.latestSatisfaction) {
+    const sat = surveyStats.latestSatisfaction;
+    
+    // Build satisfaction details
+    const details = [];
+    if (sat.lesson_quality !== undefined) details.push(`レッスン内容: ${sat.lesson_quality}`);
+    if (sat.lesson_support !== undefined) details.push(`サポート: ${sat.lesson_support}`);
+    if (sat.goal_progress !== undefined) details.push(`目標達成感: ${sat.goal_progress}`);
+    if (sat.overall !== undefined) details.push(`総合満足度: ${sat.overall}`);
+    
+    const average = sat.average || 0;
+    const averageScore = (average * 10).toFixed(1); // Convert 0-10 to 0-100
+    const color = average >= 8 ? 'text-green-600' : average >= 6 ? 'text-yellow-600' : 'text-red-600';
+    
+    satisfactionDisplay = `
+      <span class="${color} font-semibold">${averageScore}点</span>
+      <button onclick="showSatisfactionDetails('${item.student_id}')" 
+              class="ml-2 text-blue-600 hover:text-blue-800" 
+              title="詳細を表示">
+        <i class="fas fa-info-circle"></i>
+      </button>
+      <div id="satisfaction-details-${item.student_id}" class="hidden mt-2 text-sm text-gray-600 bg-blue-50 p-3 rounded">
+        ${details.map(d => `<div>• ${d}</div>`).join('')}
+        ${sat.reason ? `<div class="mt-2 text-gray-700"><strong>理由:</strong> ${sat.reason}</div>` : ''}
+      </div>
+    `;
+  }
+  
   return `
     <div class="border-b border-gray-200 py-4 hover:bg-gray-50">
       <div class="flex items-center justify-between">
@@ -12449,6 +12481,10 @@ function renderRedListStudentCard(item, isHistory) {
                   <i class="fas fa-redo-alt"></i> 連続 ${consecutiveMonths}ヶ月
                 </span>
               </div>
+              <div class="mt-2 text-sm">
+                <span class="text-gray-600">今月の満足度: </span>
+                ${satisfactionDisplay}
+              </div>
             </div>
           </div>
         </div>
@@ -12476,6 +12512,13 @@ function updateRedListStats() {
   document.getElementById('redlist-count-middle').textContent = middle;
   document.getElementById('redlist-count-low').textContent = low;
   document.getElementById('redlist-count-resolved').textContent = resolved;
+}
+
+function showSatisfactionDetails(studentId) {
+  const detailsElement = document.getElementById(`satisfaction-details-${studentId}`);
+  if (detailsElement) {
+    detailsElement.classList.toggle('hidden');
+  }
 }
 
 async function updateRedListStatus(studentId, yearMonth, status) {
