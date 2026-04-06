@@ -2984,26 +2984,58 @@ async function exportTutorSatisfactionToSheet() {
     
     // Get active tutors (excluding きょうへい先生)
     console.log('[Export] Total tutors:', tutors.length);
-    console.log('[Export] Sample tutor:', tutors[0]);
+    if (tutors.length > 0) {
+      console.log('[Export] First 3 tutors:', tutors.slice(0, 3));
+      console.log('[Export] Sample tutor structure:', {
+        name: tutors[0].name,
+        tutor_name: tutors[0].tutor_name,
+        status: tutors[0].status,
+        job_type: tutors[0].job_type
+      });
+    }
+    
+    // First, let's see all tutors with 'tutor' in job_type
+    const allTutorsByJobType = tutors.filter(t => t.job_type && t.job_type.includes('tutor'));
+    console.log('[Export] Tutors with job_type containing "tutor":', allTutorsByJobType.length);
+    
+    if (allTutorsByJobType.length > 0) {
+      console.log('[Export] Sample tutor with job_type:', {
+        name: allTutorsByJobType[0].tutor_name,
+        status: allTutorsByJobType[0].status,
+        job_type: allTutorsByJobType[0].job_type
+      });
+      
+      // Show unique status values
+      const uniqueStatuses = [...new Set(allTutorsByJobType.map(t => t.status))];
+      console.log('[Export] Unique status values for tutors:', uniqueStatuses);
+    }
     
     const activeTutors = tutors.filter(t => {
       const isActive = t.status === 'アクティブ';
       const hasJobType = t.job_type && t.job_type.includes('tutor');
       const notKyohei = t.tutor_name !== 'きょうへい先生';
       
-      if (!isActive) console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: status = ${t.status}`);
-      if (!hasJobType) console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: job_type = ${t.job_type}`);
+      if (!isActive && hasJobType) {
+        console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: status = "${t.status}" (expected "アクティブ")`);
+      }
+      if (!hasJobType) {
+        console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: job_type = "${t.job_type}"`);
+      }
       
       return isActive && hasJobType && notKyohei;
     });
     
-    console.log('[Export] Active tutors:', activeTutors.length);
+    console.log('[Export] Active tutors after filtering:', activeTutors.length);
     console.log('[Export] Satisfaction data keys:', Object.keys(satisfactionData).length);
     console.log('[Export] Sorted months:', sortedMonths);
     
     if (activeTutors.length === 0) {
-      console.error('[Export] No active tutors found. Tutors array:', tutors);
-      alert('アクティブなTutorが見つかりません');
+      console.error('[Export] No active tutors found.');
+      console.error('[Export] Possible solutions:');
+      console.error('  1. Check if status field exactly matches "アクティブ" (no extra spaces)');
+      console.error('  2. Verify job_type contains "tutor"');
+      console.error('  3. Check database/Notion sync');
+      alert('アクティブなTutorが見つかりません\n\nコンソールログを確認してください（F12キー）');
       button.disabled = false;
       button.innerHTML = originalHTML;
       return;
