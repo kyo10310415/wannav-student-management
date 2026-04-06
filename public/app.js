@@ -2928,6 +2928,38 @@ async function exportTutorSatisfactionToSheet() {
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>書き出し中...';
     
+    // Ensure tutors data is loaded
+    if (!tutors || tutors.length === 0) {
+      console.log('[Export] Tutors not loaded, loading now...');
+      try {
+        const tutorsRes = await axios.get(`${API_BASE}/api/tutors`);
+        tutors = tutorsRes.data.data;
+        console.log('[Export] Loaded', tutors.length, 'tutors');
+      } catch (error) {
+        console.error('[Export] Failed to load tutors:', error);
+        alert('Tutorデータの読み込みに失敗しました');
+        button.disabled = false;
+        button.innerHTML = originalHTML;
+        return;
+      }
+    }
+    
+    // Ensure satisfaction data is loaded
+    if (!satisfactionData || Object.keys(satisfactionData).length === 0) {
+      console.log('[Export] Satisfaction data not loaded, loading now...');
+      try {
+        const res = await axios.get(`${API_BASE}/api/tutors/satisfaction/all`);
+        satisfactionData = res.data.data || {};
+        console.log('[Export] Loaded satisfaction data for', Object.keys(satisfactionData).length, 'tutors');
+      } catch (error) {
+        console.error('[Export] Failed to load satisfaction data:', error);
+        alert('満足度データの読み込みに失敗しました');
+        button.disabled = false;
+        button.innerHTML = originalHTML;
+        return;
+      }
+    }
+    
     // Collect all unique months from satisfactionData
     const allMonths = new Set();
     Object.values(satisfactionData).forEach(tutorData => {
@@ -2951,17 +2983,26 @@ async function exportTutorSatisfactionToSheet() {
     }
     
     // Get active tutors (excluding きょうへい先生)
-    const activeTutors = tutors.filter(t => 
-      t.status === 'アクティブ' && 
-      t.job_type && t.job_type.includes('tutor') &&
-      t.tutor_name !== 'きょうへい先生'
-    );
+    console.log('[Export] Total tutors:', tutors.length);
+    console.log('[Export] Sample tutor:', tutors[0]);
+    
+    const activeTutors = tutors.filter(t => {
+      const isActive = t.status === 'アクティブ';
+      const hasJobType = t.job_type && t.job_type.includes('tutor');
+      const notKyohei = t.tutor_name !== 'きょうへい先生';
+      
+      if (!isActive) console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: status = ${t.status}`);
+      if (!hasJobType) console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: job_type = ${t.job_type}`);
+      
+      return isActive && hasJobType && notKyohei;
+    });
     
     console.log('[Export] Active tutors:', activeTutors.length);
     console.log('[Export] Satisfaction data keys:', Object.keys(satisfactionData).length);
     console.log('[Export] Sorted months:', sortedMonths);
     
     if (activeTutors.length === 0) {
+      console.error('[Export] No active tutors found. Tutors array:', tutors);
       alert('アクティブなTutorが見つかりません');
       button.disabled = false;
       button.innerHTML = originalHTML;
