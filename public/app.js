@@ -3050,11 +3050,14 @@ async function exportTutorSatisfactionToSheet() {
       
       console.log('[Export] Satisfaction data exported to spreadsheet:', response.data.spreadsheetUrl);
     } else {
-      alert('書き出しに失敗しました: ' + (response.data.error || '不明なエラー'));
+      const errorMsg = response.data.error || '不明なエラー';
+      console.error('[Export] Export failed:', errorMsg);
+      alert('書き出しに失敗しました: ' + errorMsg);
     }
   } catch (error) {
     console.error('[Export] Error exporting satisfaction data:', error);
-    alert('書き出し中にエラーが発生しました');
+    const errorMsg = error.response?.data?.error || error.message || 'ネットワークエラー';
+    alert('書き出し中にエラーが発生しました: ' + errorMsg);
   } finally {
     const button = event.target.closest('button');
     button.disabled = false;

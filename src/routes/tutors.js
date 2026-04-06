@@ -443,19 +443,36 @@ app.get('/monthly-stats/:year/:month', async (c) => {
  */
 app.post('/export-satisfaction', async (c) => {
   try {
+    console.log('[Export] Starting satisfaction export...');
     const { rows, sortedMonths, isManualExport } = await c.req.json();
     
+    console.log('[Export] Received data:', {
+      rowCount: rows?.length,
+      monthCount: sortedMonths?.length,
+      isManualExport
+    });
+    
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      console.error('[Export] Invalid data format:', { rows, sortedMonths });
       return c.json({
         success: false,
         error: 'Invalid data format'
       }, 400);
     }
     
+    console.log('[Export] Initializing Google Sheets API...');
     const { google } = await import('googleapis');
     const sheets = google.sheets('v4');
     
     // Get service account credentials
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      console.error('[Export] GOOGLE_SERVICE_ACCOUNT_KEY not set');
+      return c.json({
+        success: false,
+        error: 'GOOGLE_SERVICE_ACCOUNT_KEY not configured'
+      }, 500);
+    }
+    
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
     const auth = new google.auth.GoogleAuth({
       credentials,
@@ -463,9 +480,11 @@ app.post('/export-satisfaction', async (c) => {
     });
     
     const authClient = await auth.getClient();
+    console.log('[Export] Authentication successful');
     
     // Use dedicated satisfaction spreadsheet
     const spreadsheetId = process.env.TUTOR_SATISFACTION_SHEET_ID || '1qlvFeFXYaA4Ul6R93qa7CiT4fdJHbrppUiI1tNl7bxg';
+    console.log('[Export] Using spreadsheet:', spreadsheetId);
     
     if (isManualExport) {
       // Manual export: Create new sheet with all historical data
@@ -714,10 +733,11 @@ app.post('/export-satisfaction', async (c) => {
       });
     }
   } catch (error) {
-    console.error('Error exporting satisfaction data:', error);
+    console.error('[Export] Error exporting satisfaction data:', error);
+    console.error('[Export] Error stack:', error.stack);
     return c.json({
       success: false,
-      error: error.message
+      error: error.message || 'Unknown error occurred'
     }, 500);
   }
 });
