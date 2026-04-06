@@ -12221,6 +12221,18 @@ async function renderRedListPage() {
   const content = document.getElementById('content');
   
   content.innerHTML = `
+    <!-- Header with Update Button -->
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold text-gray-800">
+        <i class="fas fa-exclamation-triangle text-red-600 mr-2"></i>
+        レッドリスト
+      </h2>
+      <button onclick="updateRedListData()" 
+              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200 shadow-md">
+        <i class="fas fa-sync-alt mr-2"></i>データ更新
+      </button>
+    </div>
+
     <!-- Tabs -->
     <div class="bg-white rounded-lg shadow-md mb-6">
       <div class="border-b border-gray-200">
@@ -12371,6 +12383,41 @@ async function loadRedListCurrentData() {
   } finally {
     document.getElementById('redlist-current-loading').classList.add('hidden');
     document.getElementById('redlist-current-content').classList.remove('hidden');
+  }
+}
+
+async function updateRedListData() {
+  try {
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>更新中...';
+    
+    const response = await axios.post(`${API_BASE}/api/red-list/update`, {}, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      // Reload current data
+      await loadRedListCurrentData();
+      
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+      notification.innerHTML = '<i class="fas fa-check-circle mr-2"></i>レッドリストを更新しました';
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
+    }
+  } catch (error) {
+    console.error('Error updating red list:', error);
+    alert('レッドリストの更新に失敗しました');
+  } finally {
+    const button = event.target.closest('button');
+    button.disabled = false;
+    button.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>データ更新';
   }
 }
 
