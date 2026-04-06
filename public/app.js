@@ -2296,6 +2296,10 @@ function renderTutorsPage() {
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
         
+        <button onclick="exportTutorSatisfactionToSheet()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+          <i class="fas fa-file-excel mr-2"></i>満足度データをスプレッドシートに書き出し
+        </button>
+        
         <button onclick="sendStatsReport()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
           <i class="fas fa-paper-plane mr-2"></i>日次統計レポート送信
         </button>
@@ -2913,6 +2917,147 @@ async function updateTutorCapacity(employeeId, capacity) {
   } catch (error) {
     console.error('Error updating tutor capacity:', error);
     alert('生徒数上限の更新中にエラーが発生しました');
+  }
+}
+
+// Export tutor satisfaction data to spreadsheet
+async function exportTutorSatisfactionToSheet() {
+  try {
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>書き出し中...';
+    
+    // Collect all unique months from satisfactionData
+    const allMonths = new Set();
+    Object.values(satisfactionData).forEach(tutorData => {
+      Object.keys(tutorData).forEach(yearMonth => {
+        allMonths.add(yearMonth);
+      });
+    });
+    
+    // Sort months (oldest first)
+    const sortedMonths = Array.from(allMonths).sort((a, b) => {
+      const [yearA, monthA] = a.split('/').map(Number);
+      const [yearB, monthB] = b.split('/').map(Number);
+      return yearA !== yearB ? yearA - yearB : monthA - monthB;
+    });
+    
+    if (sortedMonths.length === 0) {
+      alert('満足度データがありません');
+      button.disabled = false;
+      button.innerHTML = originalHTML;
+      return;
+    }
+    
+    // Get active tutors (excluding きょうへい先生)
+    const activeTutors = tutors.filter(t => 
+      t.status === 'アクティブ' && 
+      t.job_type && t.job_type.includes('tutor') &&
+      t.tutor_name !== 'きょうへい先生'
+    );
+    
+    // Prepare data rows
+    const rows = [];
+    
+    // Header row
+    const headerRow = ['Tutor名', '項目', ...sortedMonths];
+    rows.push(headerRow);
+    
+    // Data rows for each tutor
+    activeTutors.forEach(tutor => {
+      const tutorName = tutor.tutor_name;
+      const tutorSatisfactionData = satisfactionData[tutorName] || {};
+      
+      // Row 1: レッスン満足度
+      const satisfactionRow = [tutorName, 'レッスン満足度'];
+      sortedMonths.forEach(month => {
+        const monthData = tutorSatisfactionData[month];
+        satisfactionRow.push(monthData ? monthData.average.toFixed(2) : '');
+      });
+      rows.push(satisfactionRow);
+      
+      // Row 2: 回収率
+      const collectionRow = ['', '回収率'];
+      sortedMonths.forEach(month => {
+        const monthData = tutorSatisfactionData[month];
+        if (monthData) {
+          // Calculate active student count for this tutor
+          const activeStudentCount = students.filter(s => 
+            s.homeroom_tutor === tutor.notion_name &&
+            s.status === 'アクティブ' &&
+            s.contract_plan !== '永久会員' &&
+            s.contract_plan !== '在籍プラン'
+          ).length;
+          
+          const collectionRate = activeStudentCount > 0 
+            ? ((monthData.count / activeStudentCount) * 100).toFixed(2)
+            : '0.00';
+          collectionRow.push(collectionRate);
+        } else {
+          collectionRow.push('');
+        }
+      });
+      rows.push(collectionRow);
+      
+      // Row 3: 満足度スコア
+      const scoreRow = ['', '満足度スコア'];
+      sortedMonths.forEach(month => {
+        const monthData = tutorSatisfactionData[month];
+        if (monthData) {
+          const activeStudentCount = students.filter(s => 
+            s.homeroom_tutor === tutor.notion_name &&
+            s.status === 'アクティブ' &&
+            s.contract_plan !== '永久会員' &&
+            s.contract_plan !== '在籍プラン'
+          ).length;
+          
+          const collectionRate = activeStudentCount > 0 
+            ? (monthData.count / activeStudentCount) * 100
+            : 0;
+          
+          const satisfactionScore = (monthData.average * collectionRate / 100).toFixed(2);
+          scoreRow.push(satisfactionScore);
+        } else {
+          scoreRow.push('');
+        }
+      });
+      rows.push(scoreRow);
+    });
+    
+    // Send to backend API
+    const response = await axios.post(`${API_BASE}/api/tutors/export-satisfaction`, {
+      rows: rows,
+      sortedMonths: sortedMonths
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    
+    if (response.data.success) {
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+      notification.innerHTML = `
+        <i class="fas fa-check-circle mr-2"></i>
+        スプレッドシートに書き出しました<br>
+        <a href="${response.data.spreadsheetUrl}" target="_blank" class="underline text-sm">スプレッドシートを開く</a>
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 5000);
+      
+      console.log('[Export] Satisfaction data exported to spreadsheet:', response.data.spreadsheetUrl);
+    } else {
+      alert('書き出しに失敗しました: ' + (response.data.error || '不明なエラー'));
+    }
+  } catch (error) {
+    console.error('[Export] Error exporting satisfaction data:', error);
+    alert('書き出し中にエラーが発生しました');
+  } finally {
+    const button = event.target.closest('button');
+    button.disabled = false;
+    button.innerHTML = '<i class="fas fa-file-excel mr-2"></i>満足度データをスプレッドシートに書き出し';
   }
 }
 

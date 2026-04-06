@@ -435,4 +435,147 @@ app.get('/monthly-stats/:year/:month', async (c) => {
   }
 });
 
+/**
+ * POST /api/tutors/export-satisfaction
+ * Export tutor satisfaction data to Google Spreadsheet
+ */
+app.post('/export-satisfaction', async (c) => {
+  try {
+    const { rows, sortedMonths } = await c.req.json();
+    
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return c.json({
+        success: false,
+        error: 'Invalid data format'
+      }, 400);
+    }
+    
+    const { google } = await import('googleapis');
+    const sheets = google.sheets('v4');
+    
+    // Get service account credentials
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    
+    const authClient = await auth.getClient();
+    
+    // Use existing cache spreadsheet or create new one
+    const spreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    
+    if (!spreadsheetId) {
+      return c.json({
+        success: false,
+        error: 'GOOGLE_CACHE_SHEET_ID not configured'
+      }, 500);
+    }
+    
+    // Sheet name with timestamp
+    const now = new Date();
+    const sheetName = `Tutor満足度_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    // Create new sheet
+    await sheets.spreadsheets.batchUpdate({
+      auth: authClient,
+      spreadsheetId,
+      resource: {
+        requests: [{
+          addSheet: {
+            properties: {
+              title: sheetName,
+              gridProperties: {
+                rowCount: rows.length + 10,
+                columnCount: sortedMonths.length + 5
+              }
+            }
+          }
+        }]
+      }
+    });
+    
+    // Write data
+    await sheets.spreadsheets.values.update({
+      auth: authClient,
+      spreadsheetId,
+      range: `${sheetName}!A1`,
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: rows
+      }
+    });
+    
+    // Apply formatting
+    const requests = [];
+    
+    // Freeze header row
+    requests.push({
+      updateSheetProperties: {
+        properties: {
+          sheetId: (await sheets.spreadsheets.get({
+            auth: authClient,
+            spreadsheetId,
+            ranges: [sheetName]
+          })).data.sheets[0].properties.sheetId,
+          gridProperties: {
+            frozenRowCount: 1,
+            frozenColumnCount: 2
+          }
+        },
+        fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount'
+      }
+    });
+    
+    // Merge cells for tutor names (every 3 rows, column A)
+    for (let i = 1; i < rows.length; i += 3) {
+      requests.push({
+        mergeCells: {
+          range: {
+            sheetId: (await sheets.spreadsheets.get({
+              auth: authClient,
+              spreadsheetId,
+              ranges: [sheetName]
+            })).data.sheets[0].properties.sheetId,
+            startRowIndex: i,
+            endRowIndex: i + 3,
+            startColumnIndex: 0,
+            endColumnIndex: 1
+          },
+          mergeType: 'MERGE_ALL'
+        }
+      });
+    }
+    
+    // Apply formatting
+    await sheets.spreadsheets.batchUpdate({
+      auth: authClient,
+      spreadsheetId,
+      resource: {
+        requests
+      }
+    });
+    
+    const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${(await sheets.spreadsheets.get({
+      auth: authClient,
+      spreadsheetId,
+      ranges: [sheetName]
+    })).data.sheets[0].properties.sheetId}`;
+    
+    console.log(`[Export] Satisfaction data exported to ${sheetName}`);
+    
+    return c.json({
+      success: true,
+      spreadsheetUrl,
+      sheetName
+    });
+  } catch (error) {
+    console.error('Error exporting satisfaction data:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;
