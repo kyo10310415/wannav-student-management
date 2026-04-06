@@ -3115,13 +3115,17 @@ async function exportTutorSatisfactionToSheet() {
     }
     
     // Send to backend API
+    console.log('[Export] Sending', rows.length, 'rows to backend...');
     const response = await axios.post(`${API_BASE}/api/tutors/export-satisfaction`, {
       rows: rows,
       sortedMonths: sortedMonths,
       isManualExport: true
     }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { 'Authorization': `Bearer ${sessionToken}` },
+      timeout: 120000 // 120 seconds timeout for large exports
     });
+    
+    console.log('[Export] Received response:', response.data);
     
     if (response.data.success) {
       const notification = document.createElement('div');
