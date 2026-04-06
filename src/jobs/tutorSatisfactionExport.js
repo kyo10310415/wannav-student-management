@@ -91,7 +91,27 @@ export async function monthlyTutorSatisfactionExport() {
     
     // 5. Export to Google Spreadsheet
     const sheets = google.sheets('v4');
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    
+    if (!process.env.GOOGLE_CREDENTIALS_JSON) {
+      console.error('[Tutor Satisfaction Export] GOOGLE_CREDENTIALS_JSON not set');
+      return { success: false, error: 'GOOGLE_CREDENTIALS_JSON not configured' };
+    }
+    
+    const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
+    let credentials;
+    
+    // Try to parse as base64 first, then as plain JSON
+    try {
+      if (credString.startsWith('{')) {
+        credentials = JSON.parse(credString);
+      } else {
+        credentials = JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
+      }
+    } catch (parseError) {
+      console.error('[Tutor Satisfaction Export] Failed to parse credentials:', parseError.message);
+      return { success: false, error: 'Invalid credentials format' };
+    }
+    
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/spreadsheets']

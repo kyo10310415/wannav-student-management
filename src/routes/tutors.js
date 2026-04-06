@@ -465,15 +465,32 @@ app.post('/export-satisfaction', async (c) => {
     const sheets = google.sheets('v4');
     
     // Get service account credentials
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-      console.error('[Export] GOOGLE_SERVICE_ACCOUNT_KEY not set');
+    if (!process.env.GOOGLE_CREDENTIALS_JSON) {
+      console.error('[Export] GOOGLE_CREDENTIALS_JSON not set');
       return c.json({
         success: false,
-        error: 'GOOGLE_SERVICE_ACCOUNT_KEY not configured'
+        error: 'GOOGLE_CREDENTIALS_JSON not configured'
       }, 500);
     }
     
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
+    let credentials;
+    
+    // Try to parse as base64 first, then as plain JSON
+    try {
+      if (credString.startsWith('{')) {
+        credentials = JSON.parse(credString);
+      } else {
+        credentials = JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
+      }
+    } catch (parseError) {
+      console.error('[Export] Failed to parse credentials:', parseError.message);
+      return c.json({
+        success: false,
+        error: 'Invalid credentials format'
+      }, 500);
+    }
+    
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
