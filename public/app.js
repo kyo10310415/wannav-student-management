@@ -9,6 +9,7 @@ let sessionToken = localStorage.getItem('sessionToken') || null;
 let students = [];
 let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
+let tutorMonthlyStats = { byEmail: {}, rescheduleByName: {} }; // Monthly helper/reschedule counts
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let lessonReportStatus = {}; // { student_id-lesson_date: report_data }
@@ -371,6 +372,9 @@ async function loadInitialData() {
     // Load satisfaction data
     await loadSatisfactionData();
     
+    // Load monthly tutor stats (helper requests, accepted, reschedule counts)
+    await loadTutorMonthlyStats();
+    
     // Load lesson stats and dates for current month
     await loadLessonStats();
     await loadLessonDates();
@@ -433,6 +437,20 @@ async function loadSatisfactionData() {
   } catch (error) {
     console.error('Error loading satisfaction data:', error);
     satisfactionData = {};
+  }
+}
+
+// Load monthly tutor stats (helper requests, accepted, reschedule counts)
+async function loadTutorMonthlyStats() {
+  try {
+    const res = await axios.get(`${API_BASE}/api/tutors/monthly-stats/${selectedTutorYear}/${selectedTutorMonth}`);
+    if (res.data.success) {
+      tutorMonthlyStats = res.data.data || { byEmail: {}, rescheduleByName: {} };
+      console.log(`[Tutor Stats] Loaded monthly stats for ${selectedTutorYear}/${selectedTutorMonth}`);
+    }
+  } catch (error) {
+    console.error('Error loading tutor monthly stats:', error);
+    tutorMonthlyStats = { byEmail: {}, rescheduleByName: {} };
   }
 }
 
@@ -2477,7 +2495,7 @@ function renderTeamFilterOptions() {
 
 // Handle team filter change
 // Change tutor satisfaction stats month
-function changeTutorStatsMonth(delta) {
+async function changeTutorStatsMonth(delta) {
   selectedTutorMonth += delta;
   
   if (selectedTutorMonth < 1) {
@@ -2489,6 +2507,10 @@ function changeTutorStatsMonth(delta) {
   }
   
   console.log(`[Tutor Stats] Changed to ${selectedTutorYear}/${selectedTutorMonth}`);
+  
+  // Load monthly stats for the selected month
+  await loadTutorMonthlyStats();
+  
   renderTutorsPage();
 }
 
@@ -2518,6 +2540,11 @@ function renderTutorStatistics() {
   let overallValidCount = 0;
   
   allActiveTutors.forEach(tutor => {
+    // Skip きょうへい先生 from satisfaction statistics
+    if (tutor.tutor_name === 'きょうへい先生') {
+      return;
+    }
+    
     const activeStudentCount = students.filter(s => 
       s.homeroom_tutor === tutor.notion_name &&
       s.status === 'アクティブ' &&
@@ -2560,6 +2587,11 @@ function renderTutorStatistics() {
     let teamValidCount = 0;
     
     teamTutors.forEach(tutor => {
+      // Skip きょうへい先生 from team satisfaction statistics
+      if (tutor.tutor_name === 'きょうへい先生') {
+        return;
+      }
+      
       const activeStudentCount = students.filter(s => 
         s.homeroom_tutor === tutor.notion_name &&
         s.status === 'アクティブ' &&
@@ -2734,6 +2766,9 @@ function renderTutorRows() {
       }
     }
     
+    // Check if this is きょうへい先生 (hide satisfaction data)
+    const isKyoheiSensei = tutor.tutor_name === 'きょうへい先生';
+    
     // Get satisfaction data for this tutor
     const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
     const currentMonthData = tutorSatisfactionData[selectedYearMonth];
@@ -2742,7 +2777,7 @@ function renderTutorRows() {
     let satisfactionAverage = '-';
     let satisfactionValue = 0;
     let satisfactionColor = 'text-purple-600'; // デフォルト色
-    if (currentMonthData) {
+    if (!isKyoheiSensei && currentMonthData) {
       satisfactionValue = currentMonthData.average * 10; // 0-10 → 0-100
       satisfactionAverage = satisfactionValue.toFixed(2);
       // 80未満は赤文字
@@ -2756,14 +2791,14 @@ function renderTutorRows() {
     let collectionRate = '-';
     let collectionRateValue = 0;
     let collectionRateColor = 'text-green-600'; // デフォルト色
-    if (activeStudentCount > 0 && satisfactionCount > 0) {
+    if (!isKyoheiSensei && activeStudentCount > 0 && satisfactionCount > 0) {
       collectionRateValue = (satisfactionCount / activeStudentCount * 100);
       collectionRate = `${collectionRateValue.toFixed(1)}%`;
       // 50未満は赤文字
       if (collectionRateValue < 50) {
         collectionRateColor = 'text-red-600';
       }
-    } else if (activeStudentCount > 0 && satisfactionCount === 0) {
+    } else if (!isKyoheiSensei && activeStudentCount > 0 && satisfactionCount === 0) {
       collectionRate = '0.0%';
       collectionRateColor = 'text-red-600'; // 0%は赤文字
     }
@@ -2773,7 +2808,7 @@ function renderTutorRows() {
     let satisfactionScore = '-';
     let satisfactionScoreValue = 0;
     let satisfactionScoreColor = 'text-indigo-600'; // デフォルト色
-    if (satisfactionValue > 0 && collectionRateValue > 0) {
+    if (!isKyoheiSensei && satisfactionValue > 0 && collectionRateValue > 0) {
       satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
       satisfactionScore = satisfactionScoreValue.toFixed(2); // 小数第2位まで
       // 60未満は赤文字
@@ -2782,8 +2817,8 @@ function renderTutorRows() {
       }
     }
     
-    // 満足度ボタン (表示月にデータがある場合のみ表示)
-    const satisfactionButton = currentMonthData ? 
+    // 満足度ボタン (表示月にデータがある場合のみ表示、きょうへい先生は非表示)
+    const satisfactionButton = (!isKyoheiSensei && currentMonthData) ? 
       `<button 
         onclick="showSatisfactionModal('${tutor.tutor_name}')" 
         class="text-blue-600 hover:text-blue-800 ml-2"
@@ -2807,9 +2842,11 @@ function renderTutorRows() {
       return 'text-gray-900';
     };
     
-    const helperRequestCount = tutor.helper_request_count || 0;
-    const helperAcceptedCount = tutor.helper_accepted_count || 0;
-    const rescheduleCount = tutor.reschedule_count || 0;
+    // Get monthly counts from tutorMonthlyStats (based on selected month)
+    const tutorEmailStats = tutorMonthlyStats.byEmail[tutor.email] || {};
+    const helperRequestCount = tutorEmailStats.helperRequestCount || 0;
+    const helperAcceptedCount = tutorEmailStats.helperAcceptedCount || 0;
+    const rescheduleCount = tutorMonthlyStats.rescheduleByName[tutor.tutor_name] || 0;
     
     const requestColor = getCounterColor(helperRequestCount);
     const rescheduleColor = getCounterColor(rescheduleCount);

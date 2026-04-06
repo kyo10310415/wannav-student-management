@@ -331,4 +331,108 @@ app.get('/satisfaction/all', async (c) => {
   }
 });
 
+/**
+ * GET /api/tutors/monthly-stats/:year/:month
+ * Get monthly helper request, accepted, and reschedule counts for all tutors
+ */
+app.get('/monthly-stats/:year/:month', async (c) => {
+  try {
+    const year = parseInt(c.req.param('year'));
+    const month = parseInt(c.req.param('month'));
+    
+    if (!year || !month || month < 1 || month > 12) {
+      return c.json({
+        success: false,
+        error: 'Invalid year or month'
+      }, 400);
+    }
+    
+    // Calculate start and end dates for the month
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+    
+    console.log(`[Tutor Monthly Stats] Fetching stats for ${year}/${month}`);
+    console.log(`[Tutor Monthly Stats] Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    
+    // Get helper request counts (status='pending' or 'accepted' or 'completed')
+    // Group by leader_email (the tutor who requested help)
+    const helperRequestResult = await query(`
+      SELECT 
+        leader_email as tutor_email,
+        COUNT(*) as request_count
+      FROM helper_requests
+      WHERE created_at >= $1 AND created_at <= $2
+      GROUP BY leader_email
+    `, [startDate, endDate]);
+    
+    // Get helper accepted counts
+    // Group by assigned_tutor_email (the tutor who accepted the request)
+    const helperAcceptedResult = await query(`
+      SELECT 
+        assigned_tutor_email as tutor_email,
+        COUNT(*) as accepted_count
+      FROM helper_requests
+      WHERE created_at >= $1 AND created_at <= $2
+        AND status IN ('accepted', 'completed')
+        AND assigned_tutor_email IS NOT NULL
+      GROUP BY assigned_tutor_email
+    `, [startDate, endDate]);
+    
+    // Get reschedule counts
+    // Count lessons where reschedule_reason is not null or reschedule_count > 0
+    const rescheduleResult = await query(`
+      SELECT 
+        tutor_name,
+        COUNT(*) as reschedule_count
+      FROM lessons
+      WHERE lesson_date >= $1 AND lesson_date <= $2
+        AND (reschedule_reason IS NOT NULL OR reschedule_count > 0)
+      GROUP BY tutor_name
+    `, [startDate, endDate]);
+    
+    // Build result object: tutor_email/tutor_name -> counts
+    const result = {};
+    
+    // Add helper request counts
+    helperRequestResult.rows.forEach(row => {
+      if (!result[row.tutor_email]) {
+        result[row.tutor_email] = { helperRequestCount: 0, helperAcceptedCount: 0, rescheduleCount: 0 };
+      }
+      result[row.tutor_email].helperRequestCount = parseInt(row.request_count);
+    });
+    
+    // Add helper accepted counts
+    helperAcceptedResult.rows.forEach(row => {
+      if (!result[row.tutor_email]) {
+        result[row.tutor_email] = { helperRequestCount: 0, helperAcceptedCount: 0, rescheduleCount: 0 };
+      }
+      result[row.tutor_email].helperAcceptedCount = parseInt(row.accepted_count);
+    });
+    
+    // Add reschedule counts (by tutor_name, not email)
+    const rescheduleByName = {};
+    rescheduleResult.rows.forEach(row => {
+      rescheduleByName[row.tutor_name] = parseInt(row.reschedule_count);
+    });
+    
+    console.log(`[Tutor Monthly Stats] Helper requests: ${helperRequestResult.rows.length} tutors`);
+    console.log(`[Tutor Monthly Stats] Helper accepted: ${helperAcceptedResult.rows.length} tutors`);
+    console.log(`[Tutor Monthly Stats] Reschedules: ${rescheduleResult.rows.length} tutors`);
+    
+    return c.json({
+      success: true,
+      data: {
+        byEmail: result,
+        rescheduleByName
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching monthly tutor stats:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;
