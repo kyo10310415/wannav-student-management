@@ -2995,7 +2995,7 @@ async function exportTutorSatisfactionToSheet() {
     }
     
     // First, let's see all tutors with 'tutor' in job_type
-    const allTutorsByJobType = tutors.filter(t => t.job_type && t.job_type.includes('tutor'));
+    const allTutorsByJobType = tutors.filter(t => t.job_type && t.job_type.toLowerCase().includes('tutor'));
     console.log('[Export] Tutors with job_type containing "tutor":', allTutorsByJobType.length);
     
     if (allTutorsByJobType.length > 0) {
@@ -3012,14 +3012,11 @@ async function exportTutorSatisfactionToSheet() {
     
     const activeTutors = tutors.filter(t => {
       const isActive = t.status === 'アクティブ';
-      const hasJobType = t.job_type && t.job_type.includes('tutor');
+      const hasJobType = t.job_type && t.job_type.toLowerCase().includes('tutor');
       const notKyohei = t.tutor_name !== 'きょうへい先生';
       
       if (!isActive && hasJobType) {
         console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: status = "${t.status}" (expected "アクティブ")`);
-      }
-      if (!hasJobType) {
-        console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: job_type = "${t.job_type}"`);
       }
       
       return isActive && hasJobType && notKyohei;
