@@ -544,6 +544,19 @@ const migrations = [
       
       DROP INDEX IF EXISTS idx_roulette_results_status;
     `
+  },
+  {
+    version: 22,
+    name: 'add_satisfaction_avg_to_red_list',
+    up: `
+      -- Add satisfaction_avg column to red_list table
+      ALTER TABLE red_list ADD COLUMN IF NOT EXISTS satisfaction_avg NUMERIC(4, 2);
+      
+      COMMENT ON COLUMN red_list.satisfaction_avg IS 'Actual satisfaction average (0-10 scale)';
+    `,
+    down: `
+      ALTER TABLE red_list DROP COLUMN IF EXISTS satisfaction_avg;
+    `
   }
 ];
 
