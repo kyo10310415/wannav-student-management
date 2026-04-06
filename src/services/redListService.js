@@ -15,7 +15,8 @@ export async function calculateRedListScore(studentId, yearMonth) {
     reschedule: 0,        // 0-1 points
     reservation: 0,       // 0-1 points
     total: 0,
-    rank: 'none'
+    rank: 'none',
+    satisfactionAvg: null // Actual satisfaction average (0-10)
   };
 
   // 1. レッスン満足度チェック (4点)
@@ -45,6 +46,9 @@ export async function calculateRedListScore(studentId, yearMonth) {
         
         if (scores_arr.length > 0) {
           const avgScore = scores_arr.reduce((a, b) => a + b, 0) / scores_arr.length;
+          
+          // Store actual satisfaction average
+          scores.satisfactionAvg = avgScore;
           
           // If average satisfaction is 7 or below (out of 10), add 4 points
           if (avgScore <= 7) {
@@ -259,8 +263,8 @@ export async function updateRedList(studentId, yearMonth = null) {
 
   await query(
     `INSERT INTO red_list 
-     (student_id, year_month, satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score, total_score, rank, reservation_locked, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+     (student_id, year_month, satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score, total_score, rank, reservation_locked, satisfaction_avg, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
      ON CONFLICT (student_id, year_month)
      DO UPDATE SET
        satisfaction_score = $3,
@@ -274,6 +278,7 @@ export async function updateRedList(studentId, yearMonth = null) {
          WHEN red_list.reservation_locked = TRUE THEN TRUE
          ELSE $10
        END,
+       satisfaction_avg = $11,
        updated_at = CURRENT_TIMESTAMP`,
     [
       studentId,
@@ -285,7 +290,8 @@ export async function updateRedList(studentId, yearMonth = null) {
       scores.reservation,
       scores.total,
       scores.rank,
-      shouldLockNow
+      shouldLockNow,
+      scores.satisfactionAvg
     ]
   );
 

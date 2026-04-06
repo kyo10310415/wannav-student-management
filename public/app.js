@@ -12397,6 +12397,7 @@ function renderRedListCurrentList() {
 function renderRedListStudentCard(item, isHistory) {
   const student = students.find(s => s.student_id === item.student_id);
   const studentName = student ? student.name : item.student_name || '不明';
+  const tutorName = student ? getTutorDisplayName(student.homeroom_tutor) : '-';
   
   const notionUrl = cachedNotionUrls[item.student_id] || student?.notion_url || '#';
   const discordUrl = student?.discord_url || '#';
@@ -12421,15 +12422,23 @@ function renderRedListStudentCard(item, isHistory) {
   const yearMonth = item.year_month;
   const consecutiveMonths = 1; // TODO: Calculate from history
   
-  // Get satisfaction data from surveyStatsCache
-  const surveyStats = surveyStatsCache[item.student_id];
+  // Get satisfaction average from red list data (preferred) or surveyStatsCache (fallback)
   let satisfactionDisplay = '<span class="text-gray-400">-</span>';
+  const satisfactionAvg = item.satisfaction_avg || item.final_satisfaction_avg;
   
-  if (surveyStats && surveyStats.latestSatisfaction) {
-    const sat = surveyStats.latestSatisfaction;
-    const average = sat.average || 0;
-    const color = average >= 8 ? 'text-green-600' : average >= 6 ? 'text-yellow-600' : 'text-red-600';
-    satisfactionDisplay = `<span class="${color} font-semibold">${average.toFixed(1)}</span>`;
+  if (satisfactionAvg !== null && satisfactionAvg !== undefined) {
+    const avg = parseFloat(satisfactionAvg);
+    const color = avg >= 8 ? 'text-green-600' : avg >= 6 ? 'text-yellow-600' : 'text-red-600';
+    satisfactionDisplay = `<span class="${color} font-semibold">${avg.toFixed(1)}</span>`;
+  } else {
+    // Fallback to surveyStatsCache
+    const surveyStats = surveyStatsCache[item.student_id];
+    if (surveyStats && surveyStats.latestSatisfaction) {
+      const sat = surveyStats.latestSatisfaction;
+      const average = sat.average || 0;
+      const color = average >= 8 ? 'text-green-600' : average >= 6 ? 'text-yellow-600' : 'text-red-600';
+      satisfactionDisplay = `<span class="${color} font-semibold">${average.toFixed(1)}</span>`;
+    }
   }
   
   // Build score breakdown
@@ -12491,6 +12500,9 @@ function renderRedListStudentCard(item, isHistory) {
               <div class="flex items-center space-x-2">
                 <span class="text-sm font-mono text-gray-600">${item.student_id}</span>
                 <span class="text-lg font-bold text-gray-900">${studentName}</span>
+                <span class="text-sm text-gray-600">
+                  <i class="fas fa-user-tie"></i> ${tutorName}
+                </span>
                 <span class="text-sm font-bold text-gray-700">${score}点</span>
               </div>
               <div class="flex items-center space-x-3 mt-1">
