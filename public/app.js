@@ -11823,7 +11823,7 @@ function renderRouletteTable(tab, data) {
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm">
           <select 
-            class="status-select w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            class="status-select w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent ${row.status === '未連絡' ? 'font-bold text-red-600' : row.status === '連絡済み' ? 'font-bold text-orange-600' : ''}"
             data-id="${row.id}"
             onchange="updateWinnerField(${row.id}, 'status', this.value)"
           >
@@ -11872,6 +11872,22 @@ async function updateWinnerField(id, field, value) {
     if (response.data.success) {
       showNotification('更新しました', 'success');
       console.log(`[Roulette] Updated winner ${id} ${field}:`, value);
+      
+      // Update select style if status changed
+      if (field === 'status') {
+        const selectElement = document.querySelector(`select.status-select[data-id="${id}"]`);
+        if (selectElement) {
+          // Remove all status color classes
+          selectElement.classList.remove('font-bold', 'text-red-600', 'text-orange-600');
+          
+          // Add appropriate color class based on new value
+          if (value === '未連絡') {
+            selectElement.classList.add('font-bold', 'text-red-600');
+          } else if (value === '連絡済み') {
+            selectElement.classList.add('font-bold', 'text-orange-600');
+          }
+        }
+      }
     } else {
       showNotification('更新に失敗しました', 'error');
       // Reload to revert changes
