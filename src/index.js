@@ -46,6 +46,7 @@ import sendLessonReportReminder from './jobs/lessonReportReminder.js';
 import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotification.js';
 import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
+import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
 
 const app = new Hono();
 
@@ -265,6 +266,21 @@ cron.schedule('5 0 1 * *', async () => {
     console.log('Monthly red list reset completed');
   } catch (error) {
     console.error('Error in monthly red list reset:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule tutor satisfaction export (runs on 1st of each month at 1:00 JST)
+// Exports previous month's satisfaction data to dedicated spreadsheet
+console.log('Tutor satisfaction export: ENABLED (1st of month at 1:00 JST)');
+cron.schedule('0 1 1 * *', async () => {
+  console.log('Running monthly tutor satisfaction export at 1:00 JST...');
+  try {
+    const result = await monthlyTutorSatisfactionExport();
+    console.log('Monthly tutor satisfaction export completed:', result);
+  } catch (error) {
+    console.error('Error in monthly tutor satisfaction export:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'

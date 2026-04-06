@@ -3028,7 +3028,8 @@ async function exportTutorSatisfactionToSheet() {
     // Send to backend API
     const response = await axios.post(`${API_BASE}/api/tutors/export-satisfaction`, {
       rows: rows,
-      sortedMonths: sortedMonths
+      sortedMonths: sortedMonths,
+      isManualExport: true
     }, {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });

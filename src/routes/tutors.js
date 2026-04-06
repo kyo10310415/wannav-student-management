@@ -438,10 +438,12 @@ app.get('/monthly-stats/:year/:month', async (c) => {
 /**
  * POST /api/tutors/export-satisfaction
  * Export tutor satisfaction data to Google Spreadsheet
+ * If isManualExport=true: Export all historical data to dedicated spreadsheet
+ * If isManualExport=false (monthly auto): Append new month's data to existing sheet
  */
 app.post('/export-satisfaction', async (c) => {
   try {
-    const { rows, sortedMonths } = await c.req.json();
+    const { rows, sortedMonths, isManualExport } = await c.req.json();
     
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       return c.json({
@@ -462,113 +464,255 @@ app.post('/export-satisfaction', async (c) => {
     
     const authClient = await auth.getClient();
     
-    // Use existing cache spreadsheet or create new one
-    const spreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    // Use dedicated satisfaction spreadsheet
+    const spreadsheetId = process.env.TUTOR_SATISFACTION_SHEET_ID || '1qlvFeFXYaA4Ul6R93qa7CiT4fdJHbrppUiI1tNl7bxg';
     
-    if (!spreadsheetId) {
-      return c.json({
-        success: false,
-        error: 'GOOGLE_CACHE_SHEET_ID not configured'
-      }, 500);
-    }
-    
-    // Sheet name with timestamp
-    const now = new Date();
-    const sheetName = `Tutor満足度_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    
-    // Create new sheet
-    await sheets.spreadsheets.batchUpdate({
-      auth: authClient,
-      spreadsheetId,
-      resource: {
-        requests: [{
-          addSheet: {
-            properties: {
-              title: sheetName,
-              gridProperties: {
-                rowCount: rows.length + 10,
-                columnCount: sortedMonths.length + 5
+    if (isManualExport) {
+      // Manual export: Create new sheet with all historical data
+      const now = new Date();
+      const sheetName = `Tutor満足度_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      
+      // Create new sheet
+      const addSheetResponse = await sheets.spreadsheets.batchUpdate({
+        auth: authClient,
+        spreadsheetId,
+        resource: {
+          requests: [{
+            addSheet: {
+              properties: {
+                title: sheetName,
+                gridProperties: {
+                  rowCount: rows.length + 10,
+                  columnCount: sortedMonths.length + 5
+                }
               }
             }
-          }
-        }]
-      }
-    });
-    
-    // Write data
-    await sheets.spreadsheets.values.update({
-      auth: authClient,
-      spreadsheetId,
-      range: `${sheetName}!A1`,
-      valueInputOption: 'USER_ENTERED',
-      resource: {
-        values: rows
-      }
-    });
-    
-    // Apply formatting
-    const requests = [];
-    
-    // Freeze header row
-    requests.push({
-      updateSheetProperties: {
-        properties: {
-          sheetId: (await sheets.spreadsheets.get({
-            auth: authClient,
-            spreadsheetId,
-            ranges: [sheetName]
-          })).data.sheets[0].properties.sheetId,
-          gridProperties: {
-            frozenRowCount: 1,
-            frozenColumnCount: 2
-          }
-        },
-        fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount'
-      }
-    });
-    
-    // Merge cells for tutor names (every 3 rows, column A)
-    for (let i = 1; i < rows.length; i += 3) {
-      requests.push({
-        mergeCells: {
-          range: {
-            sheetId: (await sheets.spreadsheets.get({
-              auth: authClient,
-              spreadsheetId,
-              ranges: [sheetName]
-            })).data.sheets[0].properties.sheetId,
-            startRowIndex: i,
-            endRowIndex: i + 3,
-            startColumnIndex: 0,
-            endColumnIndex: 1
-          },
-          mergeType: 'MERGE_ALL'
+          }]
         }
       });
-    }
-    
-    // Apply formatting
-    await sheets.spreadsheets.batchUpdate({
-      auth: authClient,
-      spreadsheetId,
-      resource: {
-        requests
+      
+      const newSheetId = addSheetResponse.data.replies[0].addSheet.properties.sheetId;
+      
+      // Write data
+      await sheets.spreadsheets.values.update({
+        auth: authClient,
+        spreadsheetId,
+        range: `${sheetName}!A1`,
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: rows
+        }
+      });
+      
+      // Apply formatting
+      const requests = [];
+      
+      // Freeze header row and first 2 columns
+      requests.push({
+        updateSheetProperties: {
+          properties: {
+            sheetId: newSheetId,
+            gridProperties: {
+              frozenRowCount: 1,
+              frozenColumnCount: 2
+            }
+          },
+          fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount'
+        }
+      });
+      
+      // Merge cells for tutor names (every 3 rows, column A)
+      for (let i = 1; i < rows.length; i += 3) {
+        requests.push({
+          mergeCells: {
+            range: {
+              sheetId: newSheetId,
+              startRowIndex: i,
+              endRowIndex: i + 3,
+              startColumnIndex: 0,
+              endColumnIndex: 1
+            },
+            mergeType: 'MERGE_ALL'
+          }
+        });
       }
-    });
-    
-    const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${(await sheets.spreadsheets.get({
-      auth: authClient,
-      spreadsheetId,
-      ranges: [sheetName]
-    })).data.sheets[0].properties.sheetId}`;
-    
-    console.log(`[Export] Satisfaction data exported to ${sheetName}`);
-    
-    return c.json({
-      success: true,
-      spreadsheetUrl,
-      sheetName
-    });
+      
+      // Apply formatting
+      await sheets.spreadsheets.batchUpdate({
+        auth: authClient,
+        spreadsheetId,
+        resource: {
+          requests
+        }
+      });
+      
+      const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${newSheetId}`;
+      
+      console.log(`[Export] Manual satisfaction data exported to ${sheetName}`);
+      
+      return c.json({
+        success: true,
+        spreadsheetUrl,
+        sheetName
+      });
+    } else {
+      // Monthly auto export: Append new month's data to existing sheet
+      const sheetName = 'Tutor満足度';
+      const newMonth = sortedMonths[sortedMonths.length - 1]; // Last month is the new one
+      
+      // Check if sheet exists
+      const spreadsheetMetadata = await sheets.spreadsheets.get({
+        auth: authClient,
+        spreadsheetId
+      });
+      
+      let sheetId;
+      const existingSheet = spreadsheetMetadata.data.sheets.find(s => s.properties.title === sheetName);
+      
+      if (!existingSheet) {
+        // Create new sheet if it doesn't exist
+        const addSheetResponse = await sheets.spreadsheets.batchUpdate({
+          auth: authClient,
+          spreadsheetId,
+          resource: {
+            requests: [{
+              addSheet: {
+                properties: {
+                  title: sheetName,
+                  gridProperties: {
+                    rowCount: rows.length + 10,
+                    columnCount: 50
+                  }
+                }
+              }
+            }]
+          }
+        });
+        
+        sheetId = addSheetResponse.data.replies[0].addSheet.properties.sheetId;
+        
+        // Write initial data (header + all rows)
+        await sheets.spreadsheets.values.update({
+          auth: authClient,
+          spreadsheetId,
+          range: `${sheetName}!A1`,
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: rows
+          }
+        });
+        
+        // Apply initial formatting
+        await sheets.spreadsheets.batchUpdate({
+          auth: authClient,
+          spreadsheetId,
+          resource: {
+            requests: [
+              {
+                updateSheetProperties: {
+                  properties: {
+                    sheetId,
+                    gridProperties: {
+                      frozenRowCount: 1,
+                      frozenColumnCount: 2
+                    }
+                  },
+                  fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount'
+                }
+              }
+            ]
+          }
+        });
+        
+        // Merge cells for tutor names
+        const mergeRequests = [];
+        for (let i = 1; i < rows.length; i += 3) {
+          mergeRequests.push({
+            mergeCells: {
+              range: {
+                sheetId,
+                startRowIndex: i,
+                endRowIndex: i + 3,
+                startColumnIndex: 0,
+                endColumnIndex: 1
+              },
+              mergeType: 'MERGE_ALL'
+            }
+          });
+        }
+        
+        if (mergeRequests.length > 0) {
+          await sheets.spreadsheets.batchUpdate({
+            auth: authClient,
+            spreadsheetId,
+            resource: {
+              requests: mergeRequests
+            }
+          });
+        }
+        
+        console.log(`[Export] Created new sheet ${sheetName} with initial data`);
+      } else {
+        // Sheet exists, append new month's data
+        sheetId = existingSheet.properties.sheetId;
+        
+        // Read existing data to find the next column
+        const existingData = await sheets.spreadsheets.values.get({
+          auth: authClient,
+          spreadsheetId,
+          range: `${sheetName}!A1:ZZ1`
+        });
+        
+        const headerRow = existingData.data.values ? existingData.data.values[0] : [];
+        const nextColumnIndex = headerRow.length;
+        const nextColumnLetter = getColumnLetter(nextColumnIndex);
+        
+        // Check if the new month already exists
+        if (headerRow.includes(newMonth)) {
+          console.log(`[Export] Month ${newMonth} already exists in sheet, skipping`);
+          return c.json({
+            success: true,
+            message: `Month ${newMonth} already exists`,
+            spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`
+          });
+        }
+        
+        // Append new month header
+        await sheets.spreadsheets.values.update({
+          auth: authClient,
+          spreadsheetId,
+          range: `${sheetName}!${nextColumnLetter}1`,
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: [[newMonth]]
+          }
+        });
+        
+        // Append new month data for each tutor
+        const dataRows = rows.slice(1); // Skip header row
+        const updateData = dataRows.map(row => [row[row.length - 1]]); // Last column is the new month
+        
+        await sheets.spreadsheets.values.update({
+          auth: authClient,
+          spreadsheetId,
+          range: `${sheetName}!${nextColumnLetter}2`,
+          valueInputOption: 'USER_ENTERED',
+          resource: {
+            values: updateData
+          }
+        });
+        
+        console.log(`[Export] Appended new month ${newMonth} to ${sheetName}`);
+      }
+      
+      const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`;
+      
+      return c.json({
+        success: true,
+        spreadsheetUrl,
+        sheetName
+      });
+    }
   } catch (error) {
     console.error('Error exporting satisfaction data:', error);
     return c.json({
@@ -577,5 +721,15 @@ app.post('/export-satisfaction', async (c) => {
     }, 500);
   }
 });
+
+// Helper function to convert column index to letter (0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, ...)
+function getColumnLetter(index) {
+  let letter = '';
+  while (index >= 0) {
+    letter = String.fromCharCode((index % 26) + 65) + letter;
+    index = Math.floor(index / 26) - 1;
+  }
+  return letter;
+}
 
 export default app;
