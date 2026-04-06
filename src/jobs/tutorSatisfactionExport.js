@@ -4,7 +4,7 @@ import { google } from 'googleapis';
 
 /**
  * Monthly tutor satisfaction export job
- * Runs on the 1st of each month at 1:00 JST to export previous month's satisfaction data
+ * Runs on the last day of each month at 23:00 JST to export current month's satisfaction data
  */
 export async function monthlyTutorSatisfactionExport() {
   try {
@@ -14,13 +14,12 @@ export async function monthlyTutorSatisfactionExport() {
     const jstOffset = 9 * 60; // JST is UTC+9
     const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
     
-    // Calculate previous month
-    const prevDate = new Date(jstTime.getFullYear(), jstTime.getMonth() - 1, 1);
-    const prevYear = prevDate.getFullYear();
-    const prevMonth = prevDate.getMonth() + 1;
-    const prevYearMonth = `${prevYear}/${prevMonth}`;
+    // Calculate current month (not previous month)
+    const currentYear = jstTime.getFullYear();
+    const currentMonth = jstTime.getMonth() + 1;
+    const currentYearMonth = `${currentYear}/${currentMonth}`;
     
-    console.log(`[Tutor Satisfaction Export] Exporting data for ${prevYearMonth}`);
+    console.log(`[Tutor Satisfaction Export] Exporting data for ${currentYearMonth} (current month)`);
     
     // 1. Fetch satisfaction data from cache
     const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
@@ -35,27 +34,33 @@ export async function monthlyTutorSatisfactionExport() {
     const studentsResult = await query('SELECT * FROM students');
     const students = studentsResult.rows;
     
-    // 3. Fetch active tutors
+    // 3. Fetch active tutors (case-insensitive check for job_type)
     const tutorsResult = await query(`
       SELECT * FROM tutors 
       WHERE status = 'アクティブ' 
-        AND job_type LIKE '%tutor%'
+        AND LOWER(job_type) LIKE '%tutor%'
         AND tutor_name != 'きょうへい先生'
       ORDER BY tutor_name ASC
     `);
     const tutors = tutorsResult.rows;
     
-    // 4. Prepare data for the new month
+    console.log(`[Tutor Satisfaction Export] Found ${tutors.length} active tutors`);
+    
+    // 4. Prepare data for the current month
     const rows = [];
     
     tutors.forEach(tutor => {
       const tutorName = tutor.tutor_name;
       const tutorSatisfactionData = satisfactionData[tutorName] || {};
-      const monthData = tutorSatisfactionData[prevYearMonth];
+      const monthData = tutorSatisfactionData[currentYearMonth];
       
       if (!monthData) {
-        console.log(`[Tutor Satisfaction Export] No data for ${tutorName} in ${prevYearMonth}`);
-        return; // Skip this tutor if no data
+        console.log(`[Tutor Satisfaction Export] No data for ${tutorName} in ${currentYearMonth}`);
+        // Still add empty rows for this tutor to maintain structure
+        rows.push([tutorName, 'レッスン満足度', '']);
+        rows.push(['', '回収率', '']);
+        rows.push(['', '満足度スコア', '']);
+        return;
       }
       
       // Calculate active student count
@@ -153,7 +158,7 @@ export async function monthlyTutorSatisfactionExport() {
       sheetId = addSheetResponse.data.replies[0].addSheet.properties.sheetId;
       
       // Write initial data (header + all rows)
-      const headerRow = ['Tutor名', '項目', prevYearMonth];
+      const headerRow = ['Tutor名', '項目', currentYearMonth];
       const allRows = [headerRow, ...rows];
       
       await sheets.spreadsheets.values.update({
@@ -215,7 +220,7 @@ export async function monthlyTutorSatisfactionExport() {
         });
       }
       
-      console.log(`[Tutor Satisfaction Export] Created new sheet ${sheetName} with initial data for ${prevYearMonth}`);
+      console.log(`[Tutor Satisfaction Export] Created new sheet ${sheetName} with initial data for ${currentYearMonth}`);
     } else {
       // Sheet exists, append new month's data
       sheetId = existingSheet.properties.sheetId;
@@ -232,9 +237,9 @@ export async function monthlyTutorSatisfactionExport() {
       const nextColumnLetter = getColumnLetter(nextColumnIndex);
       
       // Check if the new month already exists
-      if (headerRow.includes(prevYearMonth)) {
-        console.log(`[Tutor Satisfaction Export] Month ${prevYearMonth} already exists in sheet, skipping`);
-        return { success: true, message: `Month ${prevYearMonth} already exists` };
+      if (headerRow.includes(currentYearMonth)) {
+        console.log(`[Tutor Satisfaction Export] Month ${currentYearMonth} already exists in sheet, skipping`);
+        return { success: true, message: `Month ${currentYearMonth} already exists` };
       }
       
       // Append new month header
@@ -244,7 +249,7 @@ export async function monthlyTutorSatisfactionExport() {
         range: `${sheetName}!${nextColumnLetter}1`,
         valueInputOption: 'USER_ENTERED',
         resource: {
-          values: [[prevYearMonth]]
+          values: [[currentYearMonth]]
         }
       });
       
@@ -291,7 +296,7 @@ export async function monthlyTutorSatisfactionExport() {
         });
       }
       
-      console.log(`[Tutor Satisfaction Export] Appended new month ${prevYearMonth} to ${sheetName}`);
+      console.log(`[Tutor Satisfaction Export] Appended new month ${currentYearMonth} to ${sheetName}`);
     }
     
     const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`;
@@ -302,7 +307,7 @@ export async function monthlyTutorSatisfactionExport() {
       success: true,
       spreadsheetUrl,
       sheetName,
-      month: prevYearMonth,
+      month: currentYearMonth,
       tutorCount: tutors.length
     };
   } catch (error) {

@@ -271,16 +271,22 @@ cron.schedule('5 0 1 * *', async () => {
   timezone: 'Asia/Tokyo'
 });
 
-// Schedule tutor satisfaction export (runs on 1st of each month at 1:00 JST)
-// Exports previous month's satisfaction data to dedicated spreadsheet
-console.log('Tutor satisfaction export: ENABLED (1st of month at 1:00 JST)');
-cron.schedule('0 1 1 * *', async () => {
-  console.log('Running monthly tutor satisfaction export at 1:00 JST...');
-  try {
-    const result = await monthlyTutorSatisfactionExport();
-    console.log('Monthly tutor satisfaction export completed:', result);
-  } catch (error) {
-    console.error('Error in monthly tutor satisfaction export:', error);
+// Schedule tutor satisfaction export (runs on last day of each month at 23:00 JST)
+// Exports current month's satisfaction data to dedicated spreadsheet
+console.log('Tutor satisfaction export: ENABLED (last day of month at 23:00 JST)');
+cron.schedule('0 23 28-31 * *', async () => {
+  // Check if tomorrow is the 1st (meaning today is the last day of month)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  if (tomorrow.getDate() === 1) {
+    console.log('Running monthly tutor satisfaction export at 23:00 JST (last day of month)...');
+    try {
+      const result = await monthlyTutorSatisfactionExport();
+      console.log('Monthly tutor satisfaction export completed:', result);
+    } catch (error) {
+      console.error('Error in monthly tutor satisfaction export:', error);
+    }
   }
 }, {
   timezone: 'Asia/Tokyo'
