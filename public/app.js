@@ -2957,6 +2957,17 @@ async function exportTutorSatisfactionToSheet() {
       t.tutor_name !== 'きょうへい先生'
     );
     
+    console.log('[Export] Active tutors:', activeTutors.length);
+    console.log('[Export] Satisfaction data keys:', Object.keys(satisfactionData).length);
+    console.log('[Export] Sorted months:', sortedMonths);
+    
+    if (activeTutors.length === 0) {
+      alert('アクティブなTutorが見つかりません');
+      button.disabled = false;
+      button.innerHTML = originalHTML;
+      return;
+    }
+    
     // Prepare data rows
     const rows = [];
     
@@ -2968,6 +2979,8 @@ async function exportTutorSatisfactionToSheet() {
     activeTutors.forEach(tutor => {
       const tutorName = tutor.tutor_name;
       const tutorSatisfactionData = satisfactionData[tutorName] || {};
+      
+      console.log(`[Export] Processing tutor: ${tutorName}, has data:`, Object.keys(tutorSatisfactionData).length > 0);
       
       // Row 1: レッスン満足度
       const satisfactionRow = [tutorName, 'レッスン満足度'];
@@ -3024,6 +3037,12 @@ async function exportTutorSatisfactionToSheet() {
       });
       rows.push(scoreRow);
     });
+    
+    console.log('[Export] Total rows prepared:', rows.length);
+    console.log('[Export] Sample row 0 (header):', rows[0]);
+    if (rows.length > 1) {
+      console.log('[Export] Sample row 1 (first tutor):', rows[1]);
+    }
     
     // Send to backend API
     const response = await axios.post(`${API_BASE}/api/tutors/export-satisfaction`, {

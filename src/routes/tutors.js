@@ -508,7 +508,11 @@ app.post('/export-satisfaction', async (c) => {
       const now = new Date();
       const sheetName = `Tutor満足度_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
       
+      console.log('[Export] Creating new sheet:', sheetName);
+      console.log('[Export] Data dimensions:', rows.length, 'rows x', sortedMonths.length + 2, 'columns');
+      
       // Create new sheet
+      console.log('[Export] Step 1: Creating sheet...');
       const addSheetResponse = await sheets.spreadsheets.batchUpdate({
         auth: authClient,
         spreadsheetId,
@@ -528,8 +532,10 @@ app.post('/export-satisfaction', async (c) => {
       });
       
       const newSheetId = addSheetResponse.data.replies[0].addSheet.properties.sheetId;
+      console.log('[Export] Sheet created with ID:', newSheetId);
       
       // Write data
+      console.log('[Export] Step 2: Writing data...');
       await sheets.spreadsheets.values.update({
         auth: authClient,
         spreadsheetId,
@@ -539,8 +545,10 @@ app.post('/export-satisfaction', async (c) => {
           values: rows
         }
       });
+      console.log('[Export] Data written successfully');
       
       // Apply formatting
+      console.log('[Export] Step 3: Applying formatting...');
       const requests = [];
       
       // Freeze header row and first 2 columns
@@ -558,6 +566,7 @@ app.post('/export-satisfaction', async (c) => {
       });
       
       // Merge cells for tutor names (every 3 rows, column A)
+      console.log('[Export] Adding merge requests for', Math.floor((rows.length - 1) / 3), 'tutors');
       for (let i = 1; i < rows.length; i += 3) {
         requests.push({
           mergeCells: {
@@ -574,6 +583,7 @@ app.post('/export-satisfaction', async (c) => {
       }
       
       // Apply formatting
+      console.log('[Export] Applying', requests.length, 'formatting requests...');
       await sheets.spreadsheets.batchUpdate({
         auth: authClient,
         spreadsheetId,
@@ -581,10 +591,12 @@ app.post('/export-satisfaction', async (c) => {
           requests
         }
       });
+      console.log('[Export] Formatting applied successfully');
       
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${newSheetId}`;
       
       console.log(`[Export] Manual satisfaction data exported to ${sheetName}`);
+      console.log(`[Export] Spreadsheet URL: ${spreadsheetUrl}`);
       
       return c.json({
         success: true,
