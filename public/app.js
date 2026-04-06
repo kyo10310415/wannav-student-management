@@ -12427,31 +12427,55 @@ function renderRedListStudentCard(item, isHistory) {
   
   if (surveyStats && surveyStats.latestSatisfaction) {
     const sat = surveyStats.latestSatisfaction;
-    
-    // Build satisfaction details
-    const details = [];
-    if (sat.lesson_quality !== undefined) details.push(`レッスン内容: ${sat.lesson_quality}`);
-    if (sat.lesson_support !== undefined) details.push(`サポート: ${sat.lesson_support}`);
-    if (sat.goal_progress !== undefined) details.push(`目標達成感: ${sat.goal_progress}`);
-    if (sat.overall !== undefined) details.push(`総合満足度: ${sat.overall}`);
-    
     const average = sat.average || 0;
-    const averageScore = (average * 10).toFixed(1); // Convert 0-10 to 0-100
     const color = average >= 8 ? 'text-green-600' : average >= 6 ? 'text-yellow-600' : 'text-red-600';
-    
-    satisfactionDisplay = `
-      <span class="${color} font-semibold">${averageScore}点</span>
-      <button onclick="showSatisfactionDetails('${item.student_id}')" 
-              class="ml-2 text-blue-600 hover:text-blue-800" 
-              title="詳細を表示">
-        <i class="fas fa-info-circle"></i>
-      </button>
-      <div id="satisfaction-details-${item.student_id}" class="hidden mt-2 text-sm text-gray-600 bg-blue-50 p-3 rounded">
-        ${details.map(d => `<div>• ${d}</div>`).join('')}
-        ${sat.reason ? `<div class="mt-2 text-gray-700"><strong>理由:</strong> ${sat.reason}</div>` : ''}
-      </div>
-    `;
+    satisfactionDisplay = `<span class="${color} font-semibold">${average.toFixed(1)}</span>`;
   }
+  
+  // Build score breakdown
+  const satisfactionScore = item.satisfaction_score || 0;
+  const absenceScore = item.absence_score || 0;
+  const surveyScore = item.survey_score || 0;
+  const rescheduleScore = item.reschedule_score || 0;
+  const reservationScore = item.reservation_score || 0;
+  
+  const scoreBreakdown = `
+    <div class="mt-2 text-xs">
+      <button onclick="showScoreBreakdown('${item.student_id}')" 
+              class="text-blue-600 hover:text-blue-800" 
+              title="スコア内訳を表示">
+        <i class="fas fa-list-ul"></i> スコア内訳
+      </button>
+      <div id="score-breakdown-${item.student_id}" class="hidden mt-2 bg-gray-50 p-3 rounded border border-gray-200">
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-600">満足度 (0-4):</span>
+            <span class="font-semibold ${satisfactionScore > 0 ? 'text-red-600' : 'text-green-600'}">${satisfactionScore}点</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">欠席 (0-3):</span>
+            <span class="font-semibold ${absenceScore > 0 ? 'text-red-600' : 'text-green-600'}">${absenceScore}点</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">アンケート (0-1):</span>
+            <span class="font-semibold ${surveyScore > 0 ? 'text-red-600' : 'text-green-600'}">${surveyScore}点</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">リスケ (0-1):</span>
+            <span class="font-semibold ${rescheduleScore > 0 ? 'text-red-600' : 'text-green-600'}">${rescheduleScore}点</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">予約 (0-1):</span>
+            <span class="font-semibold ${reservationScore > 0 ? 'text-red-600' : 'text-green-600'}">${reservationScore}点</span>
+          </div>
+          <div class="flex justify-between border-t border-gray-300 pt-2">
+            <span class="text-gray-800 font-bold">合計:</span>
+            <span class="font-bold text-gray-900">${score}点</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
   
   return `
     <div class="border-b border-gray-200 py-4 hover:bg-gray-50">
@@ -12485,6 +12509,7 @@ function renderRedListStudentCard(item, isHistory) {
                 <span class="text-gray-600">今月の満足度: </span>
                 ${satisfactionDisplay}
               </div>
+              ${scoreBreakdown}
             </div>
           </div>
         </div>
@@ -12514,10 +12539,10 @@ function updateRedListStats() {
   document.getElementById('redlist-count-resolved').textContent = resolved;
 }
 
-function showSatisfactionDetails(studentId) {
-  const detailsElement = document.getElementById(`satisfaction-details-${studentId}`);
-  if (detailsElement) {
-    detailsElement.classList.toggle('hidden');
+function showScoreBreakdown(studentId) {
+  const breakdownElement = document.getElementById(`score-breakdown-${studentId}`);
+  if (breakdownElement) {
+    breakdownElement.classList.toggle('hidden');
   }
 }
 
