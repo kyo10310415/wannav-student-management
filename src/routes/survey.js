@@ -385,11 +385,25 @@ app.get('/debug/:studentId', async (c) => {
       conditionApplied = 'pre-check';
     } else if (hasAchievedBefore) {
       conditionApplied = 'reset';
-      if (hasConsecutive6Months(studentResponseMonths)) {
+      // 達成日以降の回答だけを抽出
+      const achievementDate = new Date(previousAchievement.achievement_date);
+      const responsesAfterAchievement = Array.from(studentResponseMonths).filter(month => {
+        // month は "YYYY/M" 形式を "YYYY-MM" 形式に変換
+        const normalizedMonth = month.includes('/') 
+          ? month.replace('/', '-').padStart(7, '0') 
+          : month;
+        const monthDate = new Date(normalizedMonth + '-01');
+        return monthDate > achievementDate;
+      });
+      
+      const responsesAfterSet = new Set(responsesAfterAchievement);
+      
+      if (hasConsecutive6Months(responsesAfterSet)) {
         isEligible = true;
-        eligibilityReason = 'Eligible: 6 consecutive months (after reset)';
+        eligibilityReason = `Eligible: 6 consecutive months after ${achievementDate.toISOString().split('T')[0]} [${responsesAfterAchievement.join(', ')}]`;
       } else {
-        eligibilityReason = 'Need 6 consecutive months of responses (after previous achievement)';
+        const consecutiveCount = checkConsecutiveMonthsFromSpreadsheet(responsesAfterSet);
+        eligibilityReason = `Need 6 consecutive months after ${achievementDate.toISOString().split('T')[0]} (current: ${consecutiveCount}/6, months: [${responsesAfterAchievement.join(', ')}])`;
       }
     } else if (!lessonStartDate) {
       conditionApplied = 'condition_1_no_date';
@@ -714,12 +728,26 @@ app.get('/stats-all', async (c) => {
         
         if (hasAchievedBefore) {
           // リセット後: 全員共通で6カ月連続条件
-          if (hasConsecutive6Months(studentResponseMonths)) {
+          // 達成日以降の回答だけを抽出
+          const achievementDate = new Date(previousAchievement.achievement_date);
+          const responsesAfterAchievement = Array.from(studentResponseMonths).filter(month => {
+            // month は "YYYY/M" 形式を "YYYY-MM" 形式に変換
+            const normalizedMonth = month.includes('/') 
+              ? month.replace('/', '-').padStart(7, '0') 
+              : month;
+            const monthDate = new Date(normalizedMonth + '-01');
+            return monthDate > achievementDate;
+          });
+          
+          const responsesAfterSet = new Set(responsesAfterAchievement);
+          
+          if (hasConsecutive6Months(responsesAfterSet)) {
             isEligible = true;
             achievementType = 'reset_6';
-            eligibilityReason = 'Eligible: 6 consecutive months (after reset)';
+            eligibilityReason = `Eligible: 6 consecutive months after ${achievementDate.toISOString().split('T')[0]}`;
           } else {
-            eligibilityReason = 'Need 6 consecutive months of responses (after previous achievement)';
+            const consecutiveCount = checkConsecutiveMonthsFromSpreadsheet(responsesAfterSet);
+            eligibilityReason = `Need 6 consecutive months after ${achievementDate.toISOString().split('T')[0]} (current: ${consecutiveCount}/6)`;
           }
         } else if (!lessonStartDate) {
           // No lesson start date: use default 80% rule
@@ -1112,9 +1140,9 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
     return { isEligible: false, reason: 'Extension result is not 延長' };
   }
 
-  // 既に達成済みかチェック
+  // 既に達成済みかチェック（achievement_dateも取得）
   const achievementResult = await pool.query(`
-    SELECT id, achievement_type, notified_at
+    SELECT id, achievement_type, notified_at, achievement_date
     FROM stamp_rally_achievements
     WHERE student_id = $1
     ORDER BY achievement_date DESC
@@ -1134,16 +1162,31 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
 
   // リセット後の判定（条件2のみ）
   if (latestAchievement && latestAchievement.notified_at !== null) {
-    // 6ヶ月連続回答チェック（リセット後） - スプレッドシートデータを使用
-    const consecutiveMonths = checkConsecutiveMonthsFromSpreadsheet(studentResponseMonths);
+    // 達成日以降の回答だけを抽出
+    const achievementDate = new Date(latestAchievement.achievement_date);
+    const responsesAfterAchievement = Array.from(studentResponseMonths || []).filter(month => {
+      // month は "2026-04" 形式なので、月初日でパース
+      const monthDate = new Date(month + '-01');
+      return monthDate > achievementDate;
+    });
+    
+    console.log(`[Survey Debug] ${student.student_id}: Achievement date = ${achievementDate.toISOString().split('T')[0]}, Responses after = ${responsesAfterAchievement.length}, Months = [${responsesAfterAchievement.join(', ')}]`);
+    
+    // 達成日以降の6ヶ月連続回答チェック（リセット後）
+    const consecutiveMonths = checkConsecutiveMonthsFromSpreadsheet(new Set(responsesAfterAchievement));
+    console.log(`[Survey Debug] ${student.student_id}: Consecutive months after achievement = ${consecutiveMonths}`);
+    
     if (consecutiveMonths >= 6) {
       return { 
         isEligible: true, 
         achievementType: 'reset_6',
-        reason: 'Reset: 6 consecutive months after previous achievement'
+        reason: `Reset: 6 consecutive months after ${achievementDate.toISOString().split('T')[0]}`
       };
     }
-    return { isEligible: false, reason: 'Not enough consecutive months after reset' };
+    return { 
+      isEligible: false, 
+      reason: `Not enough consecutive months after reset (${consecutiveMonths}/6 months since ${achievementDate.toISOString().split('T')[0]})` 
+    };
   }
 
   // 初回判定
