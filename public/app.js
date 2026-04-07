@@ -10205,6 +10205,71 @@ async function renderVQDiagnosisPage() {
         </div>
       </div>
       
+      <!-- Resend and Management Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- Single Row Resend -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-lg font-bold text-gray-800 mb-2">
+            <i class="fas fa-arrow-right mr-2 text-blue-600"></i>
+            特定行を再送信
+          </h3>
+          <p class="text-sm text-gray-600 mb-4">
+            スプレッドシートの指定行をR列の状態に関係なく再送信します
+          </p>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              行番号（2以上）
+            </label>
+            <input 
+              type="number" 
+              id="vq-single-row" 
+              min="2"
+              placeholder="例: 595"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          
+          <button 
+            onclick="resendVQSingleRow()"
+            class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+          >
+            <i class="fas fa-paper-plane mr-2"></i>この行を再送信
+          </button>
+        </div>
+        
+        <!-- Range Resend -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-lg font-bold text-gray-800 mb-2">
+            <i class="fas fa-arrow-down mr-2 text-indigo-600"></i>
+            指定行から範囲再送信
+          </h3>
+          <p class="text-sm text-gray-600 mb-4">
+            指定行から未送信（R列が「完了」でない）のレコードを順次送信
+          </p>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">
+              開始行番号（2以上）
+            </label>
+            <input 
+              type="number" 
+              id="vq-start-row" 
+              min="2"
+              placeholder="例: 595"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          
+          <button 
+            onclick="resendVQFromRow()"
+            class="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+          >
+            <i class="fas fa-paper-plane mr-2"></i>範囲再送信を実行
+          </button>
+        </div>
+      </div>
+      
       <!-- Test Send Button -->
       <div class="bg-white rounded-lg shadow-md p-6 mb-6 border-2 border-orange-200">
         <div class="mb-4">
@@ -10457,13 +10522,22 @@ function renderVQDiagnosisHistoryRows() {
           ${record.error_message ? `<p class="text-xs text-red-600 mt-1">${escapeHtml(record.error_message)}</p>` : ''}
         </td>
         <td class="px-6 py-4 text-sm">
-          <button 
-            onclick="resendVQDiagnosis(${record.id})"
-            class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-xs"
-            title="再送信"
-          >
-            <i class="fas fa-redo mr-1"></i>再送信
-          </button>
+          <div class="flex gap-2">
+            <button 
+              onclick="resendVQDiagnosis(${record.id})"
+              class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-xs"
+              title="再送信"
+            >
+              <i class="fas fa-redo mr-1"></i>再送信
+            </button>
+            <button 
+              onclick="deleteVQHistory(${record.id}, '${escapeHtml(record.student_name || studentIdCode)}')"
+              class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition text-xs"
+              title="履歴を削除"
+            >
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -11005,6 +11079,133 @@ async function testSendVQDiagnosis() {
     console.error('テスト送信エラー:', error);
     showNotification(
       error.response?.data?.error || 'テスト送信に失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * VQ診断 - 単独行を再送信
+ */
+async function resendVQSingleRow() {
+  try {
+    const rowNumber = parseInt(document.getElementById('vq-single-row').value);
+    
+    if (!rowNumber || rowNumber < 2) {
+      showNotification('2以上の行番号を入力してください', 'error');
+      return;
+    }
+    
+    if (!confirm(`行 ${rowNumber} のデータをR列の状態に関係なく再送信しますか？`)) {
+      return;
+    }
+    
+    showNotification('再送信中...', 'info');
+    
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/resend-single-row`,
+      { rowNumber },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      showNotification(
+        `再送信成功！\n` +
+        `行番号: ${response.data.data.rowNumber}\n` +
+        `学籍番号: ${response.data.data.studentId}\n` +
+        `生徒名: ${response.data.data.studentName}\n` +
+        `診断タイプ: ${response.data.data.diagnosisType}`,
+        'success'
+      );
+      
+      // 履歴を再読み込み
+      await loadVQDiagnosisData();
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('単独行再送信エラー:', error);
+    showNotification(
+      error.response?.data?.error || '再送信に失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * VQ診断 - 範囲再送信
+ */
+async function resendVQFromRow() {
+  try {
+    const startRow = parseInt(document.getElementById('vq-start-row').value);
+    
+    if (!startRow || startRow < 2) {
+      showNotification('2以上の行番号を入力してください', 'error');
+      return;
+    }
+    
+    if (!confirm(`行 ${startRow} から未送信のレコードを再送信しますか？\nR列が「完了」でない行だけが対象です。`)) {
+      return;
+    }
+    
+    showNotification('範囲再送信中...（完了まで数分かかる場合があります）', 'info');
+    
+    const response = await axios.post(
+      `${API_BASE}/api/vq-diagnosis/resend-from-row`,
+      { startRow },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      showNotification(
+        `範囲再送信完了！\n` +
+        `処理件数: ${response.data.data?.processed || 0}件\n` +
+        `エラー件数: ${response.data.data?.errors || 0}件`,
+        'success'
+      );
+      
+      // 履歴を再読み込み
+      await loadVQDiagnosisData();
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('範囲再送信エラー:', error);
+    showNotification(
+      error.response?.data?.error || '範囲再送信に失敗しました',
+      'error'
+    );
+  }
+}
+
+/**
+ * VQ診断 - 履歴を削除
+ */
+async function deleteVQHistory(id, studentName) {
+  try {
+    if (!confirm(`${studentName} の履歴を削除しますか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+    
+    showNotification('削除中...', 'info');
+    
+    const response = await axios.delete(
+      `${API_BASE}/api/vq-diagnosis/history/${id}`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    
+    if (response.data.success) {
+      showNotification(`履歴を削除しました: ${studentName}`, 'success');
+      
+      // 履歴を再読み込み
+      await loadVQDiagnosisData();
+      await renderVQDiagnosisPage();
+    }
+    
+  } catch (error) {
+    console.error('履歴削除エラー:', error);
+    showNotification(
+      error.response?.data?.error || '履歴の削除に失敗しました',
       'error'
     );
   }
