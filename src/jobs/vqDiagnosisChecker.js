@@ -70,6 +70,12 @@ export async function checkAndSendVQDiagnosis() {
     // 各診断結果を処理
     for (const result of results) {
       try {
+        // デバッグ: スプレッドシートから取得したデータを確認
+        console.log(`📋 処理中 行 ${result.rowNumber}:`);
+        console.log(`  学籍番号: "${result.studentId}"`);
+        console.log(`  診断タイプ: "${result.diagnosisType}"`);
+        console.log(`  診断日: "${result.diagnosisDate}"`);
+        
         // 学籍番号から生徒情報を取得
         const studentResult = await dbQuery(
           `SELECT id, name, discord_url FROM students WHERE student_id = $1 LIMIT 1`,
@@ -77,7 +83,8 @@ export async function checkAndSendVQDiagnosis() {
         );
         
         if (studentResult.rows.length === 0) {
-          console.log(`⚠️ 生徒が見つかりません: ${result.studentId} (行 ${result.rowNumber})`);
+          console.log(`⚠️ 生徒が見つかりません: "${result.studentId}" (行 ${result.rowNumber})`);
+          console.log(`  DB検索クエリ: SELECT id, name, discord_url FROM students WHERE student_id = '${result.studentId}' LIMIT 1`);
           errors++;
           
           // エラーでも「完了」をマーク（無限ループ防止）
@@ -106,6 +113,7 @@ export async function checkAndSendVQDiagnosis() {
         }
         
         const student = studentResult.rows[0];
+        console.log(`✅ 生徒情報取得: ${student.name} (ID: ${student.id})`);
         
         if (!student.discord_url) {
           console.log(`⚠️ Discord URLが設定されていません: ${student.name} (${result.studentId})`);

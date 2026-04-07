@@ -8,14 +8,51 @@
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 p-8">
-  <div class="max-w-2xl mx-auto">
+  <div class="max-w-4xl mx-auto">
     <h1 class="text-3xl font-bold text-gray-800 mb-6">
       <i class="fas fa-sync-alt mr-2"></i>
-      VQ診断 再送信
+      VQ診断 再送信・管理
     </h1>
 
+    <!-- 単独行再送信（新機能） -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <h2 class="text-xl font-semibold mb-4">スプレッドシート指定行から再送信</h2>
+      <h2 class="text-xl font-semibold mb-4">
+        <i class="fas fa-arrow-right mr-2 text-blue-600"></i>
+        特定行を再送信（R列を無視）
+      </h2>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 font-medium mb-2">
+          行番号（2以上）
+        </label>
+        <input 
+          type="number" 
+          id="singleRow" 
+          value="" 
+          min="2"
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="例: 595"
+        >
+        <p class="text-sm text-gray-500 mt-1">
+          指定した行のデータをR列の状態に関係なく再送信します。送信後、R列に「完了」が記録されます。
+        </p>
+      </div>
+
+      <button 
+        onclick="resendSingleRow()" 
+        class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+      >
+        <i class="fas fa-paper-plane mr-2"></i>
+        この行を再送信
+      </button>
+    </div>
+
+    <!-- 範囲再送信 -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">
+        <i class="fas fa-arrow-down mr-2 text-purple-600"></i>
+        指定行から範囲再送信（R列を確認）
+      </h2>
       
       <div class="mb-4">
         <label class="block text-gray-700 font-medium mb-2">
@@ -30,7 +67,7 @@
           placeholder="例: 595"
         >
         <p class="text-sm text-gray-500 mt-1">
-          この行番号から未送信のVQ診断結果を順次送信します
+          この行番号から未送信（R列が「完了」でない）のVQ診断結果を順次送信します
         </p>
       </div>
 
@@ -39,8 +76,39 @@
         class="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors"
       >
         <i class="fas fa-paper-plane mr-2"></i>
-        再送信を実行
+        範囲再送信を実行
       </button>
+    </div>
+
+    <!-- 履歴管理 -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">
+        <i class="fas fa-history mr-2 text-green-600"></i>
+        送信履歴の管理
+      </h2>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 font-medium mb-2">
+          学籍番号で検索（オプション）
+        </label>
+        <input 
+          type="text" 
+          id="searchStudentId" 
+          value="" 
+          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          placeholder="例: 2025-A-001"
+        >
+      </div>
+
+      <button 
+        onclick="loadHistory()" 
+        class="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors mb-4"
+      >
+        <i class="fas fa-search mr-2"></i>
+        履歴を表示
+      </button>
+
+      <div id="historyList"></div>
     </div>
 
     <div id="status" class="mb-4"></div>
@@ -48,6 +116,67 @@
   </div>
 
   <script>
+    // 単独行を再送信
+    async function resendSingleRow() {
+      const rowNumber = parseInt(document.getElementById('singleRow').value);
+      
+      if (!rowNumber || rowNumber < 2) {
+        showError('2以上の行番号を入力してください');
+        return;
+      }
+      
+      const statusDiv = document.getElementById('status');
+      const resultDiv = document.getElementById('result');
+      
+      statusDiv.innerHTML = `
+        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          行 ${rowNumber} を再送信中...
+        </div>
+      `;
+      resultDiv.innerHTML = '';
+      
+      try {
+        const response = await fetch('/api/vq-diagnosis/resend-single-row', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ rowNumber })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          statusDiv.innerHTML = `
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+              <i class="fas fa-check-circle mr-2"></i>
+              ${data.message}
+            </div>
+          `;
+          
+          resultDiv.innerHTML = `
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h3 class="text-lg font-semibold mb-3">送信完了</h3>
+              <div class="space-y-2">
+                <p><strong>行番号:</strong> ${data.data.rowNumber}</p>
+                <p><strong>学籍番号:</strong> ${data.data.studentId}</p>
+                <p><strong>生徒名:</strong> ${data.data.studentName}</p>
+                <p><strong>診断タイプ:</strong> ${data.data.diagnosisType}</p>
+              </div>
+            </div>
+          `;
+        } else {
+          showError(data.error || '再送信に失敗しました');
+        }
+        
+      } catch (error) {
+        console.error('再送信エラー:', error);
+        showError('再送信中にエラーが発生しました: ' + error.message);
+      }
+    }
+
+    // 範囲再送信
     async function resendFromRow() {
       const startRow = parseInt(document.getElementById('startRow').value);
       
@@ -59,7 +188,6 @@
       const statusDiv = document.getElementById('status');
       const resultDiv = document.getElementById('result');
       
-      // ステータス表示
       statusDiv.innerHTML = `
         <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg">
           <i class="fas fa-spinner fa-spin mr-2"></i>
@@ -91,9 +219,8 @@
             <div class="bg-white rounded-lg shadow-md p-6">
               <h3 class="text-lg font-semibold mb-3">実行結果</h3>
               <div class="space-y-2">
-                <p><strong>処理件数:</strong> ${data.result.processed}件</p>
-                <p><strong>エラー件数:</strong> ${data.result.errors}件</p>
-                <p><strong>最終行:</strong> ${data.result.lastRow}</p>
+                <p><strong>処理件数:</strong> ${data.data?.processed || 0}件</p>
+                <p><strong>エラー件数:</strong> ${data.data?.errors || 0}件</p>
               </div>
               
               <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
@@ -113,6 +240,94 @@
         showError('再送信中にエラーが発生しました: ' + error.message);
       }
     }
+
+    // 履歴を読み込み
+    async function loadHistory() {
+      const studentId = document.getElementById('searchStudentId').value.trim();
+      const historyList = document.getElementById('historyList');
+      
+      historyList.innerHTML = `
+        <div class="text-center text-gray-500 py-4">
+          <i class="fas fa-spinner fa-spin mr-2"></i>
+          読み込み中...
+        </div>
+      `;
+      
+      try {
+        let url = '/api/vq-diagnosis/history?limit=50';
+        if (studentId) {
+          url += `&student_id=${encodeURIComponent(studentId)}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success && data.history.length > 0) {
+          historyList.innerHTML = `
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+              ${data.history.map(h => `
+                <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <div class="flex-1">
+                    <p class="font-medium">${h.student_name_current || h.student_name || '不明'}</p>
+                    <p class="text-sm text-gray-600">${h.diagnosis_type || '不明'} | 行 ${h.sheet_row_number || '?'}</p>
+                    <p class="text-xs text-gray-500">${new Date(h.sent_at).toLocaleString('ja-JP')}</p>
+                  </div>
+                  <button 
+                    onclick="deleteHistory(${h.id}, '${h.student_name_current || h.student_name || '不明'}')"
+                    class="ml-4 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
+                  >
+                    <i class="fas fa-trash mr-1"></i>
+                    削除
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        } else {
+          historyList.innerHTML = `
+            <div class="text-center text-gray-500 py-4">
+              <i class="fas fa-inbox mr-2"></i>
+              履歴がありません
+            </div>
+          `;
+        }
+        
+      } catch (error) {
+        console.error('履歴読み込みエラー:', error);
+        historyList.innerHTML = `
+          <div class="text-center text-red-500 py-4">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            エラーが発生しました
+          </div>
+        `;
+      }
+    }
+
+    // 履歴を削除
+    async function deleteHistory(id, studentName) {
+      if (!confirm(`${studentName} の履歴を削除しますか？`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/vq-diagnosis/history/${id}`, {
+          method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showSuccess(`履歴を削除しました: ${studentName}`);
+          loadHistory(); // 再読み込み
+        } else {
+          showError(data.error || '削除に失敗しました');
+        }
+        
+      } catch (error) {
+        console.error('削除エラー:', error);
+        showError('削除中にエラーが発生しました: ' + error.message);
+      }
+    }
     
     function showError(message) {
       const statusDiv = document.getElementById('status');
@@ -122,6 +337,18 @@
           ${message}
         </div>
       `;
+      setTimeout(() => { statusDiv.innerHTML = ''; }, 5000);
+    }
+
+    function showSuccess(message) {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `
+        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+          <i class="fas fa-check-circle mr-2"></i>
+          ${message}
+        </div>
+      `;
+      setTimeout(() => { statusDiv.innerHTML = ''; }, 3000);
     }
   </script>
 </body>

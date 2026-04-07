@@ -744,8 +744,10 @@ export async function fetchStudentBroadcastInfo() {
 /**
  * VQ診断結果をスプレッドシートから取得
  * @param {number} startRow - 開始行（1始まり、ヘッダー含む）。デフォルトは2（ヘッダーの次）
+ * @param {number} endRow - 終了行（省略時は最後まで）
+ * @param {boolean} ignoreRColumn - R列（送信済みフラグ）を無視するか（デフォルト: false）
  */
-export async function fetchVQDiagnosisResults(startRow = 2) {
+export async function fetchVQDiagnosisResults(startRow = 2, endRow = null, ignoreRColumn = false) {
   try {
     const spreadsheetId = '1_yJtJn8DMFkQBtdIkDWHNBE8-kpHyE3-0FY_oe0EhJ0';
     const sheetName = '診断結果';
@@ -753,9 +755,11 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
     const sheets = getSheets();
     
     // A列からU列まで取得（タイムスタンプ～詳細＋メール送信済み）
-    const range = `${sheetName}!A${startRow}:U`;
+    const range = endRow 
+      ? `${sheetName}!A${startRow}:U${endRow}`
+      : `${sheetName}!A${startRow}:U`;
     
-    console.log(`📊 VQ診断データ取得開始: 行 ${startRow} から`);
+    console.log(`📊 VQ診断データ取得開始: 行 ${startRow}${endRow ? ` 〜 ${endRow}` : ' から最後まで'}${ignoreRColumn ? ' (R列を無視)' : ''}`);
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -791,9 +795,9 @@ export async function fetchVQDiagnosisResults(startRow = 2) {
         return;
       }
       
-      // R列（メール送信済み）をチェック
+      // R列（メール送信済み）をチェック（ignoreRColumn=trueの場合は無視）
       const emailSent = String(row[17] || '').trim();
-      if (emailSent === '完了') {
+      if (!ignoreRColumn && emailSent === '完了') {
         console.log(`✅ 行 ${actualRow}: 送信済みのためスキップ (${studentId})`);
         return;
       }

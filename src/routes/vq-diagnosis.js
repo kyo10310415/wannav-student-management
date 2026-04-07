@@ -676,4 +676,250 @@ app.post('/resend-from-row', async (c) => {
   }
 });
 
+/**
+ * POST /api/vq-diagnosis/resend-single-row
+ * スプレッドシートの特定行だけを再送信（R列を無視）
+ */
+app.post('/resend-single-row', async (c) => {
+  try {
+    const { rowNumber } = await c.req.json();
+    
+    if (!rowNumber || rowNumber < 2) {
+      return c.json({
+        success: false,
+        error: '有効な行番号を指定してください（2以上）'
+      }, 400);
+    }
+    
+    console.log(`🔄 VQ診断 行 ${rowNumber} を単独再送信...`);
+    
+    // スプレッドシートから指定行のデータを取得（R列を無視）
+    const { fetchVQDiagnosisResults } = await import('../services/sheetsService.js');
+    const { results } = await fetchVQDiagnosisResults(rowNumber, rowNumber, true); // ignoreRColumn=true
+    
+    if (results.length === 0) {
+      return c.json({
+        success: false,
+        error: `行 ${rowNumber} にデータが見つかりません`
+      }, 404);
+    }
+    
+    const result = results[0];
+    
+    // 生徒情報を取得
+    const studentResult = await dbQuery(
+      `SELECT id, name, discord_url FROM students WHERE student_id = $1 LIMIT 1`,
+      [result.studentId]
+    );
+    
+    if (studentResult.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: `生徒が見つかりません: ${result.studentId}`
+      }, 404);
+    }
+    
+    const student = studentResult.rows[0];
+    
+    if (!student.discord_url) {
+      return c.json({
+        success: false,
+        error: `Discord URLが設定されていません: ${student.name}`
+      }, 400);
+    }
+    
+    // 過去の診断履歴を取得（推移グラフ用）
+    const { fetchVQDiagnosisByStudentId } = await import('../services/sheetsService.js');
+    let historyData = [];
+    try {
+      historyData = await fetchVQDiagnosisByStudentId(result.studentId);
+      console.log(`📊 過去の診断履歴: ${historyData.length}件`);
+    } catch (historyError) {
+      console.warn(`⚠️ 履歴取得エラー: ${historyError.message}`);
+    }
+    
+    // 診断タイプに対応する画像URLを取得
+    let typeImageUrl = null;
+    try {
+      const imageResult = await dbQuery(
+        `SELECT image_url FROM vq_diagnosis_images WHERE diagnosis_type = $1`,
+        [result.diagnosisType]
+      );
+      if (imageResult.rows.length > 0) {
+        typeImageUrl = imageResult.rows[0].image_url;
+      }
+    } catch (imageError) {
+      console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
+    }
+    
+    // レーダーチャートを生成
+    const { generateVQRadarChart, generateVQTrendChart } = await import('../services/chartService.js');
+    let radarChartBuffer = null;
+    try {
+      radarChartBuffer = await generateVQRadarChart({
+        snsAccuracy: result.snsAccuracy,
+        streamingAccuracy: result.streamingAccuracy,
+        revenueAccuracy: result.revenueAccuracy
+      });
+    } catch (chartError) {
+      console.warn(`⚠️ レーダーチャート生成エラー: ${chartError.message}`);
+    }
+    
+    // 推移グラフを生成
+    let trendChartBuffer = null;
+    if (historyData.length >= 2) {
+      try {
+        trendChartBuffer = await generateVQTrendChart(historyData);
+      } catch (trendError) {
+        console.warn(`⚠️ 推移グラフ生成エラー: ${trendError.message}`);
+      }
+    }
+    
+    // メッセージを作成
+    const maxOverviewLength = 500;
+    const maxDetailsLength = 800;
+    
+    let overview = result.overview || '（概要なし）';
+    let details = result.details || '（詳細なし）';
+    
+    if (overview.length > maxOverviewLength) {
+      overview = overview.substring(0, maxOverviewLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
+    }
+    
+    if (details.length > maxDetailsLength) {
+      details = details.substring(0, maxDetailsLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
+    }
+    
+    const overviewWithUnderline = overview.split('\n').map((line, index) => {
+      if (index === 0 && line.trim()) {
+        return `__${line}__`;
+      }
+      return line;
+    }).join('\n');
+    
+    const detailsWithUnderline = details.split('\n').map((line, index) => {
+      if (index === 0 && line.trim()) {
+        return `__${line}__`;
+      }
+      return line;
+    }).join('\n');
+    
+    const messageContent = `# 【VQ診断結果】
+
+## ・あなたのタイプ
+${result.diagnosisType}
+
+## ・概要
+${overviewWithUnderline}
+
+## ・詳細
+${detailsWithUnderline}
+
+---
+📅 診断日: ${result.diagnosisDate || '（日付不明）'}
+📊 合計点: ${result.totalScore}点
+🔄 再送信 | 行番号: ${rowNumber}`;
+
+    const message = {
+      content: messageContent
+    };
+    
+    // Discordに送信
+    const discordResponse = await sendDiscordVQDiagnosis(
+      student.discord_url,
+      message,
+      {
+        radarChart: radarChartBuffer,
+        trendChart: trendChartBuffer,
+        typeImage: typeImageUrl
+      }
+    );
+    
+    if (!discordResponse.success) {
+      throw new Error(discordResponse.error || 'Discord送信失敗');
+    }
+    
+    // R列に「完了」を記録
+    const { updateVQDiagnosisEmailStatus } = await import('../services/sheetsService.js');
+    await updateVQDiagnosisEmailStatus(rowNumber, '完了');
+    
+    // データベースに記録
+    await dbQuery(
+      `INSERT INTO vq_diagnosis_notifications 
+       (student_id, student_name, total_score, diagnosis_type, overview, details, diagnosis_date, status, sheet_row_number, sent_at, discord_message_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)`,
+      [
+        student.id,
+        student.name,
+        result.totalScore,
+        result.diagnosisType,
+        result.overview,
+        result.details,
+        result.diagnosisDate,
+        'sent',
+        rowNumber,
+        discordResponse.messageId || null
+      ]
+    );
+    
+    console.log(`✅ 行 ${rowNumber} の再送信成功: ${student.name}`);
+    
+    return c.json({
+      success: true,
+      message: `行 ${rowNumber} の再送信が完了しました`,
+      data: {
+        rowNumber,
+        studentId: result.studentId,
+        studentName: student.name,
+        diagnosisType: result.diagnosisType
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 単独行再送信エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * DELETE /api/vq-diagnosis/history/:id
+ * 送信履歴を削除（1レコード単位）
+ */
+app.delete('/history/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    const result = await dbQuery(
+      `DELETE FROM vq_diagnosis_notifications WHERE id = $1 RETURNING student_name, diagnosis_date`,
+      [id]
+    );
+    
+    if (result.rows.length === 0) {
+      return c.json({
+        success: false,
+        error: '履歴が見つかりません'
+      }, 404);
+    }
+    
+    const deleted = result.rows[0];
+    console.log(`✅ 履歴削除成功: ${deleted.student_name} (${deleted.diagnosis_date})`);
+    
+    return c.json({
+      success: true,
+      message: '履歴を削除しました',
+      deleted
+    });
+    
+  } catch (error) {
+    console.error('❌ 履歴削除エラー:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
 export default app;
