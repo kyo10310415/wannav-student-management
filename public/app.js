@@ -11807,6 +11807,10 @@ async function renderRouletteWinnersPage() {
               <i class="fas fa-trophy mr-2"></i>
               当たり生徒
             </button>
+            <button onclick="switchRouletteTab('completed')" id="tab-completed" class="roulette-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+              <i class="fas fa-check-circle mr-2"></i>
+              実施済み
+            </button>
             <button onclick="switchRouletteTab('losers')" id="tab-losers" class="roulette-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
               <i class="fas fa-times-circle mr-2"></i>
               はずれ生徒
@@ -11843,6 +11847,7 @@ async function renderRouletteWinnersPage() {
                   <option value="未連絡">未連絡</option>
                   <option value="連絡済み">連絡済み</option>
                   <option value="予約あり">予約あり</option>
+                  <option value="実施済み">実施済み</option>
                 </select>
                 
                 <!-- Staff Filter (Winners only) -->
@@ -12044,8 +12049,8 @@ async function loadRouletteData(tab) {
     contentEl.classList.add('hidden');
     if (templateEl) templateEl.classList.add('hidden');
     
-    // Load consultation staff list if viewing winners tab
-    if (tab === 'winners' && !window.consultationStaffList) {
+    // Load consultation staff list if viewing winners or completed tab
+    if ((tab === 'winners' || tab === 'completed') && !window.consultationStaffList) {
       try {
         const staffResponse = await axios.get(`${API_BASE}/api/users/consultation-staff`);
         if (staffResponse.data.success) {
@@ -12062,8 +12067,11 @@ async function loadRouletteData(tab) {
     let title = '';
     
     if (tab === 'winners') {
-      endpoint = '/api/roulette/winners';
+      endpoint = '/api/roulette/winners?tab=winners';
       title = '当たり生徒一覧';
+    } else if (tab === 'completed') {
+      endpoint = '/api/roulette/winners?tab=completed';
+      title = '実施済み一覧';
     } else if (tab === 'losers') {
       endpoint = '/api/roulette/losers';
       title = 'はずれ生徒一覧';
@@ -12092,7 +12100,7 @@ async function loadRouletteData(tab) {
     // Show/hide filters based on tab
     const filtersEl = document.getElementById('roulette-filters');
     if (filtersEl) {
-      if (tab === 'winners' || tab === 'losers' || tab === 'unopened') {
+      if (tab === 'winners' || tab === 'completed' || tab === 'losers' || tab === 'unopened') {
         filtersEl.classList.remove('hidden');
         
         // Populate tutor filter
@@ -12103,8 +12111,8 @@ async function loadRouletteData(tab) {
             uniqueTutors.map(tutor => `<option value="${tutor}">${getTutorDisplayName(tutor)}</option>`).join('');
         }
         
-        // Populate staff filter for winners
-        if (tab === 'winners') {
+        // Populate staff filter for winners and completed
+        if (tab === 'winners' || tab === 'completed') {
           const staffFilter = document.getElementById('filter-staff');
           if (staffFilter && window.consultationStaffList) {
             staffFilter.innerHTML = '<option value="">すべての担当者</option><option value="未割当">未割当</option>' +
@@ -12115,7 +12123,7 @@ async function loadRouletteData(tab) {
           document.getElementById('filter-status')?.parentElement?.classList.remove('hidden');
           document.getElementById('filter-staff')?.parentElement?.classList.remove('hidden');
         } else {
-          // Hide status and staff filters for non-winners
+          // Hide status and staff filters for non-winners/completed
           document.getElementById('filter-status')?.parentElement?.classList.add('hidden');
           document.getElementById('filter-staff')?.parentElement?.classList.add('hidden');
         }
@@ -12171,6 +12179,15 @@ function renderRouletteTable(tab, data) {
     `;
   }
   
+  // Add consultation fields + completion date for completed tab
+  if (tab === 'completed') {
+    headers += `
+      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">コンサル担当</th>
+      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">対応状況</th>
+      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">実施日</th>
+    `;
+  }
+  
   headers += `
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Discord</th>
     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Notion</th>
@@ -12180,9 +12197,10 @@ function renderRouletteTable(tab, data) {
   
   if (data.length === 0) {
     const emptyMessage = tab === 'winners' ? 'まだ当たり生徒はいません' :
+                        tab === 'completed' ? 'まだ実施済みの生徒はいません' :
                         tab === 'losers' ? 'まだはずれ生徒はいません' :
                         'まだ未開封の生徒はいません';
-    const colspan = tab === 'winners' ? 12 : 10;
+    const colspan = tab === 'winners' ? 12 : tab === 'completed' ? 13 : 10;
     tableBody.innerHTML = `
       <tr>
         <td colspan="${colspan}" class="px-4 py-8 text-center text-gray-500">
@@ -12273,7 +12291,35 @@ function renderRouletteTable(tab, data) {
             <option value="未連絡" ${row.status === '未連絡' ? 'selected' : ''}>未連絡</option>
             <option value="連絡済み" ${row.status === '連絡済み' ? 'selected' : ''}>連絡済み</option>
             <option value="予約あり" ${row.status === '予約あり' ? 'selected' : ''}>予約あり</option>
+            <option value="実施済み" ${row.status === '実施済み' ? 'selected' : ''}>実施済み</option>
           </select>
+        </td>
+      `;
+    }
+    
+    // Add consultation fields + completion date for completed tab
+    if (tab === 'completed') {
+      const completedDate = row.completedAt ? new Date(row.completedAt).toLocaleString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '-';
+      
+      rowHtml += `
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+          ${row.consultationStaff || '-'}
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm">
+          <span class="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+            <i class="fas fa-check-circle mr-1"></i>
+            実施済み
+          </span>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+          ${completedDate}
         </td>
       `;
     }
@@ -12316,7 +12362,16 @@ async function updateWinnerField(id, field, value) {
       showNotification('更新しました', 'success');
       console.log(`[Roulette] Updated winner ${id} ${field}:`, value);
       
-      // Update select style if status changed
+      // If status changed to '実施済み', reload the current tab to move the record
+      if (field === 'status' && value === '実施済み') {
+        console.log('[Roulette] Status changed to 実施済み, reloading tab...');
+        setTimeout(() => {
+          loadRouletteData(window.currentRouletteTab || 'winners');
+        }, 500);
+        return;
+      }
+      
+      // Update select style if status changed (but not to 実施済み)
       if (field === 'status') {
         const selectElement = document.querySelector(`select.status-select[data-id="${id}"]`);
         if (selectElement) {
@@ -12334,13 +12389,13 @@ async function updateWinnerField(id, field, value) {
     } else {
       showNotification('更新に失敗しました', 'error');
       // Reload to revert changes
-      loadRouletteData('winners');
+      loadRouletteData(window.currentRouletteTab || 'winners');
     }
   } catch (error) {
     console.error(`[Roulette] Error updating winner ${field}:`, error);
     showNotification('更新に失敗しました', 'error');
     // Reload to revert changes
-    loadRouletteData('winners');
+    loadRouletteData(window.currentRouletteTab || 'winners');
   }
 }
 

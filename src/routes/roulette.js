@@ -594,10 +594,12 @@ app.post('/reset-test-results', async (c) => {
 /**
  * GET /api/roulette/winners
  * 当たりを引いた生徒の一覧を取得
+ * Query params: tab=winners|completed (default: winners)
  */
 app.get('/winners', async (c) => {
   try {
     const pool = getPool();
+    const tab = c.req.query('tab') || 'winners';
 
     let result;
     try {
@@ -610,6 +612,7 @@ app.get('/winners', async (c) => {
           r.created_at,
           r.consultation_staff,
           r.status,
+          r.completed_at,
           s.name as student_name,
           s.notion_url,
           s.notion_page_id,
@@ -624,11 +627,12 @@ app.get('/winners', async (c) => {
           AND r.roulette_url = sa.roulette_url
         WHERE r.result = '当たり' 
           AND (r.is_test = FALSE OR r.is_test IS NULL)
+          AND ${tab === 'completed' ? "r.status = '実施済み'" : "(r.status IS NULL OR r.status != '実施済み')"}
         ORDER BY r.student_id, r.created_at DESC
       `);
     } catch (error) {
-      console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
-      // Fallback without is_test column
+      console.error('[Roulette] Error with query, using fallback:', error.message);
+      // Fallback without completed_at column
       result = await pool.query(`
         SELECT DISTINCT ON (r.student_id)
           r.id,
@@ -652,6 +656,7 @@ app.get('/winners', async (c) => {
           AND r.roulette_url = sa.roulette_url
         WHERE r.result = '当たり' 
           AND r.roulette_url NOT LIKE 'test-draw-%'
+          AND ${tab === 'completed' ? "r.status = '実施済み'" : "(r.status IS NULL OR r.status != '実施済み')"}
         ORDER BY r.student_id, r.created_at DESC
       `);
     }
@@ -676,11 +681,12 @@ app.get('/winners', async (c) => {
         drawnAt: row.created_at,
         consultationStaff: row.consultation_staff,
         status: row.status || '未連絡',
+        completedAt: row.completed_at,
         continuedMonths: row.continued_months || 0
       };
     });
 
-    console.log(`[Roulette] Found ${winners.length} winners`);
+    console.log(`[Roulette] Found ${winners.length} ${tab} winners`);
 
     return c.json({
       success: true,
@@ -720,6 +726,11 @@ app.patch('/winners/:id', async (c) => {
     if (status !== undefined) {
       updates.push(`status = $${paramIndex++}`);
       values.push(status);
+      
+      // If status is being changed to '実施済み', set completed_at
+      if (status === '実施済み') {
+        updates.push(`completed_at = CURRENT_TIMESTAMP`);
+      }
     }
     
     if (updates.length === 0) {
@@ -730,28 +741,62 @@ app.patch('/winners/:id', async (c) => {
     }
     
     values.push(id);
-    const query = `
-      UPDATE roulette_results
-      SET ${updates.join(', ')}
-      WHERE id = $${paramIndex}
-      RETURNING id, consultation_staff, status
-    `;
     
-    const result = await pool.query(query, values);
-    
-    if (result.rows.length === 0) {
+    let query;
+    try {
+      // Try with completed_at first
+      query = `
+        UPDATE roulette_results
+        SET ${updates.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING id, consultation_staff, status, completed_at
+      `;
+      
+      const result = await pool.query(query, values);
+      
+      if (result.rows.length === 0) {
+        return c.json({
+          success: false,
+          error: 'ルーレット結果が見つかりません'
+        }, 404);
+      }
+      
+      console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
+      
       return c.json({
-        success: false,
-        error: 'ルーレット結果が見つかりません'
-      }, 404);
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      // If completed_at column doesn't exist yet, fallback to query without it
+      if (error.message.includes('completed_at')) {
+        console.warn('[Roulette] completed_at column not found, using fallback query');
+        const fallbackUpdates = updates.filter(u => !u.includes('completed_at'));
+        query = `
+          UPDATE roulette_results
+          SET ${fallbackUpdates.join(', ')}
+          WHERE id = $${paramIndex}
+          RETURNING id, consultation_staff, status
+        `;
+        
+        const result = await pool.query(query, values);
+        
+        if (result.rows.length === 0) {
+          return c.json({
+            success: false,
+            error: 'ルーレット結果が見つかりません'
+          }, 404);
+        }
+        
+        console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
+        
+        return c.json({
+          success: true,
+          data: result.rows[0]
+        });
+      }
+      throw error;
     }
-    
-    console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
-    
-    return c.json({
-      success: true,
-      data: result.rows[0]
-    });
   } catch (error) {
     console.error('Error updating winner:', error);
     return c.json({
