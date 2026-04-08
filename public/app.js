@@ -12299,14 +12299,17 @@ function renderRouletteTable(tab, data) {
     
     // Add consultation fields + completion date for completed tab
     if (tab === 'completed') {
-      const completedDate = row.completedAt ? new Date(row.completedAt).toLocaleString('ja-JP', {
-        timeZone: 'Asia/Tokyo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }) : '-';
+      // Format completed_at for datetime-local input (YYYY-MM-DDTHH:mm)
+      let completedDateValue = '';
+      if (row.completedAt) {
+        const date = new Date(row.completedAt);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        completedDateValue = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
       
       rowHtml += `
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
@@ -12318,8 +12321,14 @@ function renderRouletteTable(tab, data) {
             実施済み
           </span>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-          ${completedDate}
+        <td class="px-4 py-3 whitespace-nowrap text-sm">
+          <input 
+            type="datetime-local" 
+            class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+            value="${completedDateValue}"
+            onchange="updateWinnerCompletedDate(${row.id}, this.value)"
+            title="実施日時を手入力できます"
+          />
         </td>
       `;
     }
@@ -12396,6 +12405,39 @@ async function updateWinnerField(id, field, value) {
     showNotification('更新に失敗しました', 'error');
     // Reload to revert changes
     loadRouletteData(window.currentRouletteTab || 'winners');
+  }
+}
+
+/**
+ * Update winner completed date (for completed tab)
+ */
+async function updateWinnerCompletedDate(id, datetimeValue) {
+  try {
+    if (!datetimeValue) {
+      showNotification('日時を入力してください', 'error');
+      return;
+    }
+    
+    // Convert datetime-local value to ISO string
+    const completedAt = new Date(datetimeValue).toISOString();
+    
+    const response = await axios.patch(`${API_BASE}/api/roulette/winners/${id}`, {
+      completedAt
+    });
+    
+    if (response.data.success) {
+      showNotification('実施日を更新しました', 'success');
+      console.log(`[Roulette] Updated winner ${id} completed_at:`, completedAt);
+    } else {
+      showNotification('更新に失敗しました', 'error');
+      // Reload to revert changes
+      loadRouletteData('completed');
+    }
+  } catch (error) {
+    console.error(`[Roulette] Error updating completed date:`, error);
+    showNotification('更新に失敗しました', 'error');
+    // Reload to revert changes
+    loadRouletteData('completed');
   }
 }
 

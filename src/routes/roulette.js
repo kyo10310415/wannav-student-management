@@ -709,9 +709,9 @@ app.get('/winners', async (c) => {
 app.patch('/winners/:id', async (c) => {
   try {
     const { id } = c.req.param();
-    const { consultationStaff, status } = await c.req.json();
+    const { consultationStaff, status, completedAt } = await c.req.json();
     
-    console.log(`[Roulette PATCH] Updating winner ${id}:`, { consultationStaff, status });
+    console.log(`[Roulette PATCH] Updating winner ${id}:`, { consultationStaff, status, completedAt });
     
     const pool = getPool();
     
@@ -742,11 +742,24 @@ app.patch('/winners/:id', async (c) => {
       updates.push(`status = $${paramIndex++}`);
       values.push(status);
       
-      // If status is being changed to '実施済み', set completed_at
+      // If status is being changed to '実施済み', set completed_at to current time
       if (status === '実施済み' && hasCompletedAtColumn) {
         updates.push(`completed_at = CURRENT_TIMESTAMP`);
         console.log('[Roulette PATCH] Adding completed_at = CURRENT_TIMESTAMP');
       }
+    }
+    
+    // If completedAt is provided (manual edit), use that value
+    if (completedAt !== undefined && hasCompletedAtColumn) {
+      // Remove any previous completed_at update
+      const completedAtIndex = updates.findIndex(u => u.includes('completed_at'));
+      if (completedAtIndex !== -1) {
+        updates.splice(completedAtIndex, 1);
+      }
+      
+      updates.push(`completed_at = $${paramIndex++}`);
+      values.push(completedAt);
+      console.log('[Roulette PATCH] Setting completed_at to:', completedAt);
     }
     
     if (updates.length === 0) {
