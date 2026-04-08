@@ -632,7 +632,7 @@ app.get('/winners', async (c) => {
       `);
     } catch (error) {
       console.error('[Roulette] Error with query, using fallback:', error.message);
-      // Fallback without completed_at column
+      // Fallback without is_test column (but keep completed_at)
       result = await pool.query(`
         SELECT DISTINCT ON (r.student_id)
           r.id,
@@ -642,6 +642,7 @@ app.get('/winners', async (c) => {
           r.created_at,
           r.consultation_staff,
           r.status,
+          r.completed_at,
           s.name as student_name,
           s.notion_url,
           s.notion_page_id,
