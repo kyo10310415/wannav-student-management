@@ -713,6 +713,17 @@ app.patch('/winners/:id', async (c) => {
     
     const pool = getPool();
     
+    // Check if completed_at column exists
+    let hasCompletedAtColumn = true;
+    try {
+      await pool.query(`
+        SELECT completed_at FROM roulette_results LIMIT 1
+      `);
+    } catch (err) {
+      hasCompletedAtColumn = false;
+      console.warn('[Roulette] completed_at column not available');
+    }
+    
     // Build update query dynamically
     const updates = [];
     const values = [];
@@ -728,7 +739,7 @@ app.patch('/winners/:id', async (c) => {
       values.push(status);
       
       // If status is being changed to '実施済み', set completed_at
-      if (status === '実施済み') {
+      if (status === '実施済み' && hasCompletedAtColumn) {
         updates.push(`completed_at = CURRENT_TIMESTAMP`);
       }
     }
@@ -742,61 +753,28 @@ app.patch('/winners/:id', async (c) => {
     
     values.push(id);
     
-    let query;
-    try {
-      // Try with completed_at first
-      query = `
-        UPDATE roulette_results
-        SET ${updates.join(', ')}
-        WHERE id = $${paramIndex}
-        RETURNING id, consultation_staff, status, completed_at
-      `;
-      
-      const result = await pool.query(query, values);
-      
-      if (result.rows.length === 0) {
-        return c.json({
-          success: false,
-          error: 'ルーレット結果が見つかりません'
-        }, 404);
-      }
-      
-      console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
-      
+    const query = `
+      UPDATE roulette_results
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING id, consultation_staff, status${hasCompletedAtColumn ? ', completed_at' : ''}
+    `;
+    
+    const result = await pool.query(query, values);
+    
+    if (result.rows.length === 0) {
       return c.json({
-        success: true,
-        data: result.rows[0]
-      });
-    } catch (error) {
-      // If completed_at column doesn't exist yet, fallback to query without it
-      if (error.message.includes('completed_at')) {
-        console.warn('[Roulette] completed_at column not found, using fallback query');
-        const fallbackUpdates = updates.filter(u => !u.includes('completed_at'));
-        query = `
-          UPDATE roulette_results
-          SET ${fallbackUpdates.join(', ')}
-          WHERE id = $${paramIndex}
-          RETURNING id, consultation_staff, status
-        `;
-        
-        const result = await pool.query(query, values);
-        
-        if (result.rows.length === 0) {
-          return c.json({
-            success: false,
-            error: 'ルーレット結果が見つかりません'
-          }, 404);
-        }
-        
-        console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
-        
-        return c.json({
-          success: true,
-          data: result.rows[0]
-        });
-      }
-      throw error;
+        success: false,
+        error: 'ルーレット結果が見つかりません'
+      }, 404);
     }
+    
+    console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
+    
+    return c.json({
+      success: true,
+      data: result.rows[0]
+    });
   } catch (error) {
     console.error('Error updating winner:', error);
     return c.json({
@@ -1078,6 +1056,39 @@ ${rouletteUrl}
 
   } catch (error) {
     console.error('Error sending test notification:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/roulette/fix-completed-dates
+ * Fix completed_at for records with status='実施済み' but completed_at=NULL
+ * This is a one-time fix endpoint
+ */
+app.post('/fix-completed-dates', async (c) => {
+  try {
+    const pool = getPool();
+    
+    // Update all records with status='実施済み' but completed_at=NULL
+    const result = await pool.query(`
+      UPDATE roulette_results
+      SET completed_at = CURRENT_TIMESTAMP
+      WHERE status = '実施済み' AND completed_at IS NULL
+      RETURNING id, student_id, status, completed_at
+    `);
+    
+    console.log(`[Roulette Fix] Updated ${result.rows.length} records with completed_at`);
+    
+    return c.json({
+      success: true,
+      message: `Updated ${result.rows.length} records`,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fixing completed dates:', error);
     return c.json({
       success: false,
       error: error.message
