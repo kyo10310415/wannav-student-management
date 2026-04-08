@@ -711,6 +711,8 @@ app.patch('/winners/:id', async (c) => {
     const { id } = c.req.param();
     const { consultationStaff, status } = await c.req.json();
     
+    console.log(`[Roulette PATCH] Updating winner ${id}:`, { consultationStaff, status });
+    
     const pool = getPool();
     
     // Check if completed_at column exists
@@ -723,6 +725,8 @@ app.patch('/winners/:id', async (c) => {
       hasCompletedAtColumn = false;
       console.warn('[Roulette] completed_at column not available');
     }
+    
+    console.log('[Roulette PATCH] hasCompletedAtColumn:', hasCompletedAtColumn);
     
     // Build update query dynamically
     const updates = [];
@@ -741,6 +745,7 @@ app.patch('/winners/:id', async (c) => {
       // If status is being changed to '実施済み', set completed_at
       if (status === '実施済み' && hasCompletedAtColumn) {
         updates.push(`completed_at = CURRENT_TIMESTAMP`);
+        console.log('[Roulette PATCH] Adding completed_at = CURRENT_TIMESTAMP');
       }
     }
     
@@ -760,6 +765,9 @@ app.patch('/winners/:id', async (c) => {
       RETURNING id, consultation_staff, status${hasCompletedAtColumn ? ', completed_at' : ''}
     `;
     
+    console.log('[Roulette PATCH] Query:', query);
+    console.log('[Roulette PATCH] Values:', values);
+    
     const result = await pool.query(query, values);
     
     if (result.rows.length === 0) {
@@ -769,14 +777,14 @@ app.patch('/winners/:id', async (c) => {
       }, 404);
     }
     
-    console.log(`[Roulette] Updated winner ${id}:`, result.rows[0]);
+    console.log(`[Roulette PATCH] Updated winner ${id} result:`, result.rows[0]);
     
     return c.json({
       success: true,
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error updating winner:', error);
+    console.error('[Roulette PATCH] Error updating winner:', error);
     return c.json({
       success: false,
       error: error.message
@@ -1072,6 +1080,17 @@ app.post('/fix-completed-dates', async (c) => {
   try {
     const pool = getPool();
     
+    // First, check what records need fixing
+    const checkResult = await pool.query(`
+      SELECT id, student_id, status, completed_at, created_at
+      FROM roulette_results
+      WHERE status = '実施済み'
+      ORDER BY id DESC
+      LIMIT 10
+    `);
+    
+    console.log('[Roulette Fix] Current 実施済み records:', JSON.stringify(checkResult.rows, null, 2));
+    
     // Update all records with status='実施済み' but completed_at=NULL
     const result = await pool.query(`
       UPDATE roulette_results
@@ -1085,7 +1104,8 @@ app.post('/fix-completed-dates', async (c) => {
     return c.json({
       success: true,
       message: `Updated ${result.rows.length} records`,
-      data: result.rows
+      before: checkResult.rows,
+      updated: result.rows
     });
   } catch (error) {
     console.error('Error fixing completed dates:', error);
