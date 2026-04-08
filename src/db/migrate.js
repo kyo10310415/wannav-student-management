@@ -557,6 +557,23 @@ const migrations = [
     down: `
       ALTER TABLE red_list DROP COLUMN IF EXISTS satisfaction_avg;
     `
+  },
+  {
+    version: 23,
+    name: 'add_completed_at_to_roulette_results',
+    up: `
+      -- Add completed_at column to track when status changed to '実施済み'
+      ALTER TABLE roulette_results ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
+      
+      -- Add index for querying completed winners
+      CREATE INDEX IF NOT EXISTS idx_roulette_results_completed_at ON roulette_results(completed_at);
+      
+      COMMENT ON COLUMN roulette_results.completed_at IS '実施済みに変更された日時';
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_roulette_results_completed_at;
+      ALTER TABLE roulette_results DROP COLUMN IF EXISTS completed_at;
+    `
   }
 ];
 
