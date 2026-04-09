@@ -45,7 +45,9 @@ app.get('/check', async (c) => {
     // 【優先】レッスン報告データベースから取得
     try {
       const result = await query(
-        'SELECT * FROM lesson_reports WHERE student_id = $1 AND lesson_date = $2',
+        `SELECT * FROM lesson_reports 
+         WHERE student_id = $1 
+         AND DATE(lesson_date) = DATE($2::date)`,
         [studentId, lessonDate]
       );
       
@@ -185,7 +187,6 @@ app.post('/batch', async (c) => {
     
     if (studentIds.length > 0 && lessonDates.length > 0) {
       try {
-        const placeholders = studentIds.map((_, i) => `$${i + 1}`).join(',');
         const result = await query(
           `SELECT student_id, lesson_date, lesson_result, reported_at 
            FROM lesson_reports 
@@ -193,9 +194,16 @@ app.post('/batch', async (c) => {
           [studentIds]
         );
         
-        // Create a map for quick lookup
+        // Create a map for quick lookup (compare dates only, ignoring time)
         result.rows.forEach(row => {
-          const key = `${row.student_id}_${row.lesson_date}`;
+          // Extract date part from lesson_date (YYYY-MM-DD)
+          const dateObj = new Date(row.lesson_date);
+          const year = dateObj.getFullYear();
+          const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const day = String(dateObj.getDate()).padStart(2, '0');
+          const dateOnly = `${year}-${month}-${day}`;
+          
+          const key = `${row.student_id}_${dateOnly}`;
           dbResults.set(key, row);
         });
         
