@@ -346,9 +346,12 @@ app.get('/sync-from-sheet', async (c) => {
       
       if (!studentTutor) {
         unmatchedStudents++;
-        if (unmatchedStudents <= 5) {
-          console.log(`Student not found or no tutor assigned: ${lesson.student_id}`);
-        }
+        // Always log unmatched students for debugging (not just first 5)
+        console.log(`❌ Student not found or no tutor assigned:
+          Student ID: ${lesson.student_id}
+          Student Name: ${lesson.student_name || 'Unknown'}
+          Lesson Date: ${lesson.lesson_date}
+          Event ID: ${lesson.calendar_event_id}`);
         continue;
       }
       
@@ -356,9 +359,12 @@ app.get('/sync-from-sheet', async (c) => {
       if (lesson.tutor_email && studentTutor.email) {
         if (lesson.tutor_email.toLowerCase() !== studentTutor.email.toLowerCase()) {
           mismatchedTutors++;
-          if (mismatchedTutors <= 5) {
-            console.log(`Tutor mismatch for ${lesson.student_id}: sheet=${lesson.tutor_email}, expected=${studentTutor.email}`);
-          }
+          // Always log mismatches for debugging (not just first 5)
+          console.log(`⚠️ Tutor mismatch for ${lesson.student_id} (${lesson.student_name || 'Unknown'}):
+            Sheet Tutor: ${lesson.tutor_email}
+            Expected (Homeroom): ${studentTutor.email} (${studentTutor.notion_name})
+            Lesson Date: ${lesson.lesson_date}
+            Event ID: ${lesson.calendar_event_id}`);
           continue;
         }
       }
@@ -391,6 +397,14 @@ app.get('/sync-from-sheet', async (c) => {
           ]
         );
         validLessons++;
+        
+        // Log successful insertions for OLTS240592-BG specifically
+        if (lesson.student_id === 'OLTS240592-BG') {
+          console.log(`✅ Successfully synced lesson for ${lesson.student_id}:
+            Lesson Date: ${lesson.lesson_date}
+            Tutor: ${lesson.tutor_email}
+            Event ID: ${lesson.calendar_event_id}`);
+        }
       } catch (insertError) {
         console.error(`Error inserting lesson ${lesson.calendar_event_id}:`, insertError.message);
         invalidLessons++;
