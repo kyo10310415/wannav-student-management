@@ -90,11 +90,28 @@ app.get('/sync', async (c) => {
     }
     
     // Get last sync time
-    const syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
-    console.log('Cache last sync:', syncMeta);
+    let syncMeta = null;
+    try {
+      syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
+      console.log('Cache last sync:', syncMeta);
+    } catch (error) {
+      console.warn('Warning: Could not get cache sync time:', error.message);
+      // Continue without sync time
+    }
     
     // Fetch students from cache
-    const students = await fetchStudentsFromCache(cacheSpreadsheetId);
+    let students = [];
+    try {
+      students = await fetchStudentsFromCache(cacheSpreadsheetId);
+    } catch (error) {
+      console.error('Error fetching students from cache:', error.message);
+      return c.json({
+        success: false,
+        error: 'Failed to fetch students from cache spreadsheet',
+        details: error.message,
+        hint: 'Please check GOOGLE_CACHE_SHEET_ID environment variable and ensure the spreadsheet has correct sheet names'
+      }, 500);
+    }
     
     // Check if cache is empty
     if (students.length === 0) {
@@ -106,8 +123,14 @@ app.get('/sync', async (c) => {
     }
     
     // Fetch progress data
-    const progressMap = await fetchProgressFromCache(cacheSpreadsheetId);
-    console.log(`Loaded ${Object.keys(progressMap).length} progress records`);
+    let progressMap = {};
+    try {
+      progressMap = await fetchProgressFromCache(cacheSpreadsheetId);
+      console.log(`Loaded ${Object.keys(progressMap).length} progress records`);
+    } catch (error) {
+      console.warn('Warning: Could not fetch progress data:', error.message);
+      // Continue without progress data
+    }
     
     // Fetch lesson start dates from external DB
     const lessonStartDates = await fetchLessonStartDates();
