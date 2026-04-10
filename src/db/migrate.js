@@ -574,6 +574,40 @@ const migrations = [
       DROP INDEX IF EXISTS idx_roulette_results_completed_at;
       ALTER TABLE roulette_results DROP COLUMN IF EXISTS completed_at;
     `
+  },
+  {
+    version: 24,
+    name: 'add_is_test_to_roulette_results',
+    up: `
+      -- Add is_test column to distinguish test data
+      ALTER TABLE roulette_results ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE;
+      
+      -- Add index for filtering test/production data
+      CREATE INDEX IF NOT EXISTS idx_roulette_results_is_test ON roulette_results(is_test);
+      
+      COMMENT ON COLUMN roulette_results.is_test IS 'テストデータかどうか';
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_roulette_results_is_test;
+      ALTER TABLE roulette_results DROP COLUMN IF EXISTS is_test;
+    `
+  },
+  {
+    version: 25,
+    name: 'add_leader_email_to_tutors',
+    up: `
+      -- Add leader_email column to tutors table
+      ALTER TABLE tutors ADD COLUMN IF NOT EXISTS leader_email VARCHAR(255);
+      
+      -- Add index for querying by leader email
+      CREATE INDEX IF NOT EXISTS idx_tutors_leader_email ON tutors(leader_email);
+      
+      COMMENT ON COLUMN tutors.leader_email IS 'リーダーのメールアドレス';
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_tutors_leader_email;
+      ALTER TABLE tutors DROP COLUMN IF EXISTS leader_email;
+    `
   }
 ];
 
