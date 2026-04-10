@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
-import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime } from '../services/cacheService.js';
+import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime, getSpreadsheetMetadata } from '../services/cacheService.js';
 import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts, fetchSuspensionMonthsMap } from '../services/sheetsService.js';
 import { fetchLessonStartDates, calculateContinuedMonths } from '../services/externalDbService.js';
 import { calculateStudentLessonStats } from '../services/lessonReportService.js';
@@ -475,6 +475,43 @@ app.patch('/:id/pro-plan', async (c) => {
     return c.json({
       success: false,
       error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/students/debug-sheets
+ * Debug endpoint to check spreadsheet structure
+ */
+app.get('/debug-sheets', async (c) => {
+  try {
+    const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
+    
+    if (!cacheSpreadsheetId) {
+      return c.json({
+        success: false,
+        error: 'No spreadsheet ID configured',
+        env: {
+          GOOGLE_CACHE_SHEET_ID: !!process.env.GOOGLE_CACHE_SHEET_ID,
+          GOOGLE_SHEET_ID: !!process.env.GOOGLE_SHEET_ID
+        }
+      });
+    }
+    
+    const metadata = await getSpreadsheetMetadata(cacheSpreadsheetId);
+    
+    return c.json({
+      success: true,
+      spreadsheetId: cacheSpreadsheetId,
+      usingCache: !!process.env.GOOGLE_CACHE_SHEET_ID,
+      metadata
+    });
+  } catch (error) {
+    console.error('Error in debug-sheets:', error);
+    return c.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
     }, 500);
   }
 });

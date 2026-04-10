@@ -17,6 +17,35 @@ function getSheetsClient() {
 }
 
 /**
+ * Get spreadsheet metadata (for debugging)
+ */
+export async function getSpreadsheetMetadata(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.get({
+      spreadsheetId,
+    });
+    
+    return {
+      title: response.data.properties.title,
+      sheets: response.data.sheets.map(sheet => ({
+        title: sheet.properties.title,
+        sheetId: sheet.properties.sheetId,
+        index: sheet.properties.index,
+        gridProperties: {
+          rowCount: sheet.properties.gridProperties?.rowCount,
+          columnCount: sheet.properties.gridProperties?.columnCount
+        }
+      }))
+    };
+  } catch (error) {
+    console.error('Error fetching spreadsheet metadata:', error);
+    throw error;
+  }
+}
+
+/**
  * Fetch students from cache spreadsheet
  */
 export async function fetchStudentsFromCache(spreadsheetId) {
