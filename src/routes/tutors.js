@@ -355,27 +355,27 @@ app.get('/monthly-stats/:year/:month', async (c) => {
     console.log(`[Tutor Monthly Stats] Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
     // Get helper request counts (status='pending' or 'accepted' or 'completed')
-    // Group by leader_email (the tutor who requested help)
+    // Group by requesting_tutor_id (the tutor who requested help)
     const helperRequestResult = await query(`
       SELECT 
-        leader_email as tutor_email,
+        requesting_tutor_id as tutor_id,
         COUNT(*) as request_count
       FROM helper_requests
       WHERE created_at >= $1 AND created_at <= $2
-      GROUP BY leader_email
+      GROUP BY requesting_tutor_id
     `, [startDate, endDate]);
     
     // Get helper accepted counts
-    // Group by assigned_tutor_email (the tutor who accepted the request)
+    // Group by accepted_by_tutor_id (the tutor who accepted the request)
     const helperAcceptedResult = await query(`
       SELECT 
-        assigned_tutor_email as tutor_email,
+        accepted_by_tutor_id as tutor_id,
         COUNT(*) as accepted_count
       FROM helper_requests
       WHERE created_at >= $1 AND created_at <= $2
         AND status IN ('accepted', 'completed')
-        AND assigned_tutor_email IS NOT NULL
-      GROUP BY assigned_tutor_email
+        AND accepted_by_tutor_id IS NOT NULL
+      GROUP BY accepted_by_tutor_id
     `, [startDate, endDate]);
     
     // Get reschedule counts
@@ -390,23 +390,23 @@ app.get('/monthly-stats/:year/:month', async (c) => {
       GROUP BY tutor_name
     `, [startDate, endDate]);
     
-    // Build result object: tutor_email/tutor_name -> counts
+    // Build result object: tutor_id (employee_id) -> counts
     const result = {};
     
     // Add helper request counts
     helperRequestResult.rows.forEach(row => {
-      if (!result[row.tutor_email]) {
-        result[row.tutor_email] = { helperRequestCount: 0, helperAcceptedCount: 0, rescheduleCount: 0 };
+      if (!result[row.tutor_id]) {
+        result[row.tutor_id] = { helperRequestCount: 0, helperAcceptedCount: 0, rescheduleCount: 0 };
       }
-      result[row.tutor_email].helperRequestCount = parseInt(row.request_count);
+      result[row.tutor_id].helperRequestCount = parseInt(row.request_count);
     });
     
     // Add helper accepted counts
     helperAcceptedResult.rows.forEach(row => {
-      if (!result[row.tutor_email]) {
-        result[row.tutor_email] = { helperRequestCount: 0, helperAcceptedCount: 0, rescheduleCount: 0 };
+      if (!result[row.tutor_id]) {
+        result[row.tutor_id] = { helperRequestCount: 0, helperAcceptedCount: 0, rescheduleCount: 0 };
       }
-      result[row.tutor_email].helperAcceptedCount = parseInt(row.accepted_count);
+      result[row.tutor_id].helperAcceptedCount = parseInt(row.accepted_count);
     });
     
     // Add reschedule counts (by tutor_name, not email)
@@ -422,7 +422,7 @@ app.get('/monthly-stats/:year/:month', async (c) => {
     return c.json({
       success: true,
       data: {
-        byEmail: result,
+        byEmployeeId: result,
         rescheduleByName
       }
     });

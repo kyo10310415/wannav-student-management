@@ -9,7 +9,7 @@ let sessionToken = localStorage.getItem('sessionToken') || null;
 let students = [];
 let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
-let tutorMonthlyStats = { byEmail: {}, rescheduleByName: {} }; // Monthly helper/reschedule counts
+let tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} }; // Monthly helper/reschedule counts
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let lessonReportStatus = {}; // { student_id-lesson_date: report_data }
@@ -445,12 +445,12 @@ async function loadTutorMonthlyStats() {
   try {
     const res = await axios.get(`${API_BASE}/api/tutors/monthly-stats/${selectedTutorYear}/${selectedTutorMonth}`);
     if (res.data.success) {
-      tutorMonthlyStats = res.data.data || { byEmail: {}, rescheduleByName: {} };
+      tutorMonthlyStats = res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
       console.log(`[Tutor Stats] Loaded monthly stats for ${selectedTutorYear}/${selectedTutorMonth}`);
     }
   } catch (error) {
     console.error('Error loading tutor monthly stats:', error);
-    tutorMonthlyStats = { byEmail: {}, rescheduleByName: {} };
+    tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} };
   }
 }
 
@@ -2847,9 +2847,9 @@ function renderTutorRows() {
     };
     
     // Get monthly counts from tutorMonthlyStats (based on selected month)
-    const tutorEmailStats = tutorMonthlyStats.byEmail[tutor.email] || {};
-    const helperRequestCount = tutorEmailStats.helperRequestCount || 0;
-    const helperAcceptedCount = tutorEmailStats.helperAcceptedCount || 0;
+    const tutorIdStats = tutorMonthlyStats.byEmployeeId[tutor.employee_id] || {};
+    const helperRequestCount = tutorIdStats.helperRequestCount || 0;
+    const helperAcceptedCount = tutorIdStats.helperAcceptedCount || 0;
     const rescheduleCount = tutorMonthlyStats.rescheduleByName[tutor.tutor_name] || 0;
     
     const requestColor = getCounterColor(helperRequestCount);
