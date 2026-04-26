@@ -184,9 +184,9 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageId) {
  * @param {string} chatUrl - Discord chat URL
  * @param {string} discordId - Discord user ID for mention
  * @param {string} content - Message content
- * @param {string} imageUrl - Image URL (optional)
+ * @param {string} imageId - Image ID stored in database (optional)
  */
-async function sendViaBot(chatUrl, discordId, content, imageUrl) {
+async function sendViaBot(chatUrl, discordId, content, imageId) {
   try {
     // Extract channel ID from URL
     const channelIdMatch = chatUrl.match(/channels\/\d+\/(\d+)/);
@@ -214,9 +214,35 @@ async function sendViaBot(chatUrl, discordId, content, imageUrl) {
       content: messageContent
     };
     
-    // Add image if exists
-    if (imageUrl) {
-      messageOptions.files = [imageUrl];
+    // If imageId exists, fetch image data from database and attach as file
+    if (imageId) {
+      console.log('[Broadcast] Bot: Fetching image from database:', imageId);
+      try {
+        const imageResult = await query(
+          'SELECT filename, content_type, image_data FROM broadcast_images WHERE image_id = $1',
+          [imageId]
+        );
+        
+        if (imageResult.rows.length > 0) {
+          const imageData = imageResult.rows[0];
+          console.log('[Broadcast] Bot: Attaching image from database:', {
+            imageId,
+            size: imageData.image_data.length,
+            type: imageData.content_type,
+            filename: imageData.filename
+          });
+          // discord.js accepts AttachmentBuilder or { attachment: Buffer, name: filename }
+          messageOptions.files = [{
+            attachment: imageData.image_data,
+            name: imageData.filename
+          }];
+        } else {
+          console.warn('[Broadcast] Bot: Image not found in database:', imageId);
+        }
+      } catch (imageError) {
+        console.error('[Broadcast] Bot: Error fetching image:', imageError);
+        // Continue without image
+      }
     }
     
     await channel.send(messageOptions);
@@ -269,7 +295,7 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
       const testDiscordId = '766666980086120470';
       
       try {
-        await sendViaWebhook(testWebhookUrl, testDiscordId, content, imageId, imageStorage);
+        await sendViaWebhook(testWebhookUrl, testDiscordId, content, imageId);
         
         // Log test send
         await logBroadcastSend(
