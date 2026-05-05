@@ -12915,6 +12915,9 @@ function switchRedListTab(tab) {
   // Show/hide content
   document.getElementById('redlist-current-list').classList.toggle('hidden', tab !== 'current');
   document.getElementById('redlist-history-list').classList.toggle('hidden', tab !== 'history');
+
+  // タブ切り替え時に集計パートを再描画
+  updateRedListStats();
 }
 
 async function loadRedListCurrentData() {
@@ -13143,9 +13146,14 @@ function renderRedListStudentCard(item, isHistory) {
 }
 
 function updateRedListStats() {
-  const high = currentRedListData.filter(item => item.rank === 'high').length;
-  const middle = currentRedListData.filter(item => item.rank === 'middle').length;
-  const low = currentRedListData.filter(item => item.rank === 'low').length;
+  // 過去タブが選択中なら historyRedListData を、現在タブなら currentRedListData を使う
+  const isHistory = currentRedListTab === 'history';
+  const data = isHistory ? historyRedListData : currentRedListData;
+  const rankField = isHistory ? 'final_rank' : 'rank';
+
+  const high   = data.filter(item => item[rankField] === 'high').length;
+  const middle = data.filter(item => item[rankField] === 'middle').length;
+  const low    = data.filter(item => item[rankField] === 'low').length;
   const resolved = 0; // TODO: Count resolved status
   
   document.getElementById('redlist-count-high').textContent = high;
@@ -13210,6 +13218,7 @@ async function loadRedListHistoryData() {
       );
       
       renderRedListHistoryList();
+      updateRedListStats();
     }
   } catch (error) {
     console.error('Error loading history data:', error);
