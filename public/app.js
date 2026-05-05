@@ -12772,6 +12772,8 @@ async function updateAllRedLists() {
 let currentRedListTab = 'current';
 let currentRedListData = [];
 let historyRedListData = [];
+let redListMessages = [];       // 送信メッセージテンプレート
+let redListDiscordLogs = {};    // { studentId_yearMonth: [log, ...] }
 
 async function renderRedListPage() {
   const content = document.getElementById('content');
@@ -12800,6 +12802,10 @@ async function renderRedListPage() {
           <button onclick="switchRedListTab('history')" id="redlist-tab-history"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
             <i class="fas fa-history"></i> 過去のレッドリスト
+          </button>
+          <button onclick="switchRedListTab('messages')" id="redlist-tab-messages"
+                  class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+            <i class="fab fa-discord"></i> 送信メッセージ管理
           </button>
         </nav>
       </div>
@@ -12889,6 +12895,105 @@ async function renderRedListPage() {
         <div id="redlist-history-content"></div>
       </div>
     </div>
+
+    <!-- Messages Management Panel -->
+    <div id="redlist-messages-panel" class="hidden">
+      <!-- Message Template List -->
+      <div class="bg-white rounded-lg shadow-md mb-4">
+        <div class="p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">
+              <i class="fab fa-discord text-indigo-500 mr-2"></i>送信メッセージテンプレート
+            </h3>
+            <button onclick="openRedListMessageModal()" 
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition">
+              <i class="fas fa-plus mr-1"></i>新規作成
+            </button>
+          </div>
+          <div id="redlist-messages-loading" class="text-center py-8 hidden">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+            <p class="text-gray-500 mt-2">読み込み中...</p>
+          </div>
+          <div id="redlist-messages-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discord Send Modal -->
+    <div id="redlist-discord-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div class="flex justify-between items-center p-6 border-b">
+          <h3 class="text-lg font-semibold text-gray-800">
+            <i class="fab fa-discord text-indigo-500 mr-2"></i>Discord 送信
+          </h3>
+          <button onclick="closeRedListDiscordModal()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6">
+          <p class="text-sm text-gray-600 mb-4">
+            送信先: <span id="redlist-discord-modal-student" class="font-semibold text-gray-900"></span>
+          </p>
+          <label class="block text-sm font-medium text-gray-700 mb-2">テンプレートを選択</label>
+          <select id="redlist-discord-modal-select"
+                  onchange="onRedListMessageSelectChange()"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:ring-2 focus:ring-indigo-500">
+            <option value="">テンプレートを選択...</option>
+          </select>
+          <label class="block text-sm font-medium text-gray-700 mb-2">送信メッセージ</label>
+          <textarea id="redlist-discord-modal-content"
+                    rows="6"
+                    placeholder="送信するメッセージを入力してください..."
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+          <p class="text-xs text-gray-400 mt-1">※ 生徒様の Discord ID が設定されている場合はメンションが自動付与されます</p>
+        </div>
+        <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
+          <button onclick="closeRedListDiscordModal()" 
+                  class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            キャンセル
+          </button>
+          <button onclick="sendRedListDiscordMessage()" id="redlist-discord-send-btn"
+                  class="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition">
+            <i class="fab fa-discord mr-1"></i>送信
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message Template Edit Modal -->
+    <div id="redlist-msg-edit-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div class="flex justify-between items-center p-6 border-b">
+          <h3 class="text-lg font-semibold text-gray-800" id="redlist-msg-edit-title">メッセージ作成</h3>
+          <button onclick="closeRedListMessageModal()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <input type="hidden" id="redlist-msg-edit-id" value="">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">タイトル（管理用）</label>
+            <input id="redlist-msg-edit-name" type="text" placeholder="例: 欠席が多い生徒向け" 
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">メッセージ本文</label>
+            <textarea id="redlist-msg-edit-content" rows="8" placeholder="送信するメッセージ本文を入力..."
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
+          <button onclick="closeRedListMessageModal()"
+                  class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            キャンセル
+          </button>
+          <button onclick="saveRedListMessage()"
+                  class="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition">
+            <i class="fas fa-save mr-1"></i>保存
+          </button>
+        </div>
+      </div>
+    </div>
   `;
   
   // Populate history months
@@ -12900,44 +13005,55 @@ async function renderRedListPage() {
 
 function switchRedListTab(tab) {
   currentRedListTab = tab;
-  
-  // Update tab buttons
-  document.getElementById('redlist-tab-current').className = 
-    tab === 'current' 
-    ? 'py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600'
-    : 'py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
-  
-  document.getElementById('redlist-tab-history').className = 
-    tab === 'history'
-    ? 'py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600'
-    : 'py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
-  
-  // Show/hide content
-  document.getElementById('redlist-current-list').classList.toggle('hidden', tab !== 'current');
-  document.getElementById('redlist-history-list').classList.toggle('hidden', tab !== 'history');
 
-  // タブ切り替え時に集計パートを再描画
-  updateRedListStats();
+  const tabDefs = [
+    { id: 'current',  elId: 'redlist-tab-current' },
+    { id: 'history',  elId: 'redlist-tab-history' },
+    { id: 'messages', elId: 'redlist-tab-messages' }
+  ];
+  const activeClass   = 'py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600';
+  const inactiveClass = 'py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+
+  tabDefs.forEach(t => {
+    const el = document.getElementById(t.elId);
+    if (el) el.className = tab === t.id ? activeClass : inactiveClass;
+  });
+
+  // Show/hide panels
+  document.getElementById('redlist-current-list').classList.toggle('hidden',   tab !== 'current');
+  document.getElementById('redlist-history-list').classList.toggle('hidden',   tab !== 'history');
+  document.getElementById('redlist-messages-panel').classList.toggle('hidden', tab !== 'messages');
+
+  // 集計パートは current / history のみ更新
+  if (tab !== 'messages') updateRedListStats();
+
+  // メッセージ管理タブを初めて開いたときにデータ取得
+  if (tab === 'messages' && redListMessages.length === 0) {
+    loadRedListMessages();
+  }
 }
 
 async function loadRedListCurrentData() {
   try {
     document.getElementById('redlist-current-loading').classList.remove('hidden');
     document.getElementById('redlist-current-content').classList.add('hidden');
-    
-    const response = await axios.get(`${API_BASE}/api/red-list`);
-    
+
+    const ym = getCurrentYearMonthStr();
+    const [response] = await Promise.all([
+      axios.get(`${API_BASE}/api/red-list`),
+      fetchRedListDiscordLogs(ym)
+    ]);
+
     if (response.data.success) {
-      currentRedListData = response.data.data.filter(item => 
+      currentRedListData = response.data.data.filter(item =>
         item.rank === 'high' || item.rank === 'middle' || item.rank === 'low'
       );
-      
       renderRedListCurrentList();
       updateRedListStats();
     }
   } catch (error) {
     console.error('Error loading red list data:', error);
-    document.getElementById('redlist-current-content').innerHTML = 
+    document.getElementById('redlist-current-content').innerHTML =
       '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
   } finally {
     document.getElementById('redlist-current-loading').classList.add('hidden');
@@ -13128,18 +13244,23 @@ function renderRedListStudentCard(item, isHistory) {
                 ${satisfactionDisplay}
               </div>
               ${scoreBreakdown}
+              ${renderRedListDiscordLogs(item.student_id, yearMonth)}
             </div>
           </div>
         </div>
-        ${!isHistory ? `
-        <div class="flex items-center space-x-3">
+        <div class="flex flex-col items-end space-y-2 ml-4">
+          ${!isHistory ? `
           <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)" 
                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
             <option value="pending" selected>未対応</option>
             <option value="resolved">対応済み</option>
           </select>
+          ` : ''}
+          <button onclick="openRedListDiscordModal('${item.student_id}', '${studentName}', '${yearMonth}')"
+                  class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm transition shadow-sm">
+            <i class="fab fa-discord"></i><span>Discord送信</span>
+          </button>
         </div>
-        ` : ''}
       </div>
     </div>
   `;
@@ -13210,13 +13331,16 @@ async function loadRedListHistoryData() {
     document.getElementById('redlist-history-loading').classList.remove('hidden');
     document.getElementById('redlist-history-content').innerHTML = '';
     
-    const response = await axios.get(`${API_BASE}/api/red-list/history?yearMonth=${yearMonth}`);
-    
+    const [response] = await Promise.all([
+      axios.get(`${API_BASE}/api/red-list/history?yearMonth=${yearMonth}`),
+      fetchRedListDiscordLogs(yearMonth)
+    ]);
+
     if (response.data.success) {
-      historyRedListData = response.data.data.filter(item => 
+      historyRedListData = response.data.data.filter(item =>
         item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low'
       );
-      
+
       renderRedListHistoryList();
       updateRedListStats();
     }
@@ -13248,3 +13372,330 @@ function renderRedListHistoryList() {
   container.innerHTML = historyRedListData.map(item => renderRedListStudentCard(item, true)).join('');
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+//  レッドリスト Discord 送信ログ表示
+// ═══════════════════════════════════════════════════════════════
+
+/** カード内の送信履歴ミニ表示 */
+function renderRedListDiscordLogs(studentId, yearMonth) {
+  const key = `${studentId}_${yearMonth}`;
+  const logs = redListDiscordLogs[key];
+  if (!logs || logs.length === 0) return '';
+
+  const latest = logs[0]; // 最新1件
+  const sentAt = new Date(latest.sent_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo',
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const allRows = logs.map(l => {
+    const t = new Date(l.sent_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo',
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit' });
+    return `<div class="border-b border-indigo-100 py-1 last:border-0">
+      <div class="text-xs text-gray-500">${t} ／ ${l.sent_by || '-'}</div>
+      <div class="text-xs font-medium text-indigo-700 truncate">${escapeHtml(l.message_title || l.message_content.slice(0,30)+'…')}</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="mt-2">
+      <button onclick="toggleRedListLogDetail('${studentId}','${yearMonth}')"
+              class="text-xs text-indigo-600 hover:text-indigo-800 flex items-center space-x-1">
+        <i class="fab fa-discord"></i>
+        <span>送信済み ${logs.length}件（最終: ${sentAt}）</span>
+        <i class="fas fa-chevron-down text-xs" id="rl-log-chevron-${studentId}"></i>
+      </button>
+      <div id="rl-log-detail-${studentId}" class="hidden mt-1 bg-indigo-50 border border-indigo-200 rounded-lg p-2 max-h-40 overflow-y-auto">
+        ${allRows}
+      </div>
+    </div>`;
+}
+
+function toggleRedListLogDetail(studentId, yearMonth) {
+  const el = document.getElementById(`rl-log-detail-${studentId}`);
+  const chevron = document.getElementById(`rl-log-chevron-${studentId}`);
+  if (!el) return;
+  const isHidden = el.classList.toggle('hidden');
+  if (chevron) chevron.className = isHidden
+    ? 'fas fa-chevron-down text-xs'
+    : 'fas fa-chevron-up text-xs';
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  Discord 送信ログ一括取得（ページ表示時・送信後に呼ぶ）
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchRedListDiscordLogs(yearMonth) {
+  try {
+    const ym = yearMonth || getCurrentYearMonthStr();
+    const res = await axios.get(`${API_BASE}/api/red-list/discord/logs?yearMonth=${ym}`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    if (res.data.success) {
+      redListDiscordLogs = {};
+      for (const log of res.data.data) {
+        const key = `${log.student_id}_${log.year_month}`;
+        if (!redListDiscordLogs[key]) redListDiscordLogs[key] = [];
+        redListDiscordLogs[key].push(log);
+      }
+    }
+  } catch (e) {
+    console.warn('Discord logs fetch failed:', e.message);
+  }
+}
+
+function getCurrentYearMonthStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Discord 送信モーダル
+// ═══════════════════════════════════════════════════════════════
+
+let _rlDiscordTarget = { studentId: null, studentName: null, yearMonth: null };
+
+async function openRedListDiscordModal(studentId, studentName, yearMonth) {
+  _rlDiscordTarget = { studentId, studentName, yearMonth };
+
+  // 生徒名表示
+  document.getElementById('redlist-discord-modal-student').textContent =
+    `${studentId} ${studentName}`;
+
+  // テンプレート選択肢を最新状態に更新
+  if (redListMessages.length === 0) {
+    await loadRedListMessages(true); // silent
+  }
+  populateRedListDiscordSelect();
+
+  // テキストエリアをクリア
+  document.getElementById('redlist-discord-modal-content').value = '';
+
+  // モーダル表示
+  document.getElementById('redlist-discord-modal').classList.remove('hidden');
+}
+
+function closeRedListDiscordModal() {
+  document.getElementById('redlist-discord-modal').classList.add('hidden');
+  _rlDiscordTarget = { studentId: null, studentName: null, yearMonth: null };
+}
+
+function populateRedListDiscordSelect() {
+  const sel = document.getElementById('redlist-discord-modal-select');
+  sel.innerHTML = '<option value="">テンプレートを選択...</option>';
+  redListMessages.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.title;
+    opt.dataset.content = m.content;
+    sel.appendChild(opt);
+  });
+}
+
+function onRedListMessageSelectChange() {
+  const sel = document.getElementById('redlist-discord-modal-select');
+  const opt = sel.options[sel.selectedIndex];
+  const textarea = document.getElementById('redlist-discord-modal-content');
+  if (opt && opt.dataset.content) {
+    textarea.value = opt.dataset.content;
+  } else if (!sel.value) {
+    textarea.value = '';
+  }
+}
+
+async function sendRedListDiscordMessage() {
+  const { studentId, studentName, yearMonth } = _rlDiscordTarget;
+  const sel     = document.getElementById('redlist-discord-modal-select');
+  const content = document.getElementById('redlist-discord-modal-content').value.trim();
+  const btn     = document.getElementById('redlist-discord-send-btn');
+
+  if (!content) {
+    showNotification('メッセージを入力してください', 'error');
+    return;
+  }
+
+  const messageId = sel.value ? parseInt(sel.value) : null;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>送信中...';
+
+  try {
+    const res = await axios.post(`${API_BASE}/api/red-list/discord/send`, {
+      studentId,
+      yearMonth,
+      messageId,
+      messageContent: messageId ? undefined : content
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+
+    if (res.data.success) {
+      showNotification(`${studentName} 様に Discord メッセージを送信しました`, 'success');
+      closeRedListDiscordModal();
+
+      // ログを再取得してカードを再描画
+      await fetchRedListDiscordLogs(yearMonth);
+      if (currentRedListTab === 'current') {
+        renderRedListCurrentList();
+      } else if (currentRedListTab === 'history') {
+        renderRedListHistoryList();
+      }
+    } else {
+      showNotification(res.data.error || '送信に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('Discord send error:', e);
+    showNotification(e.response?.data?.error || '送信に失敗しました', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fab fa-discord mr-1"></i>送信';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  送信メッセージ管理タブ
+// ═══════════════════════════════════════════════════════════════
+
+async function loadRedListMessages(silent = false) {
+  const loadingEl  = document.getElementById('redlist-messages-loading');
+  const contentEl  = document.getElementById('redlist-messages-content');
+  if (!silent && loadingEl) loadingEl.classList.remove('hidden');
+
+  try {
+    const res = await axios.get(`${API_BASE}/api/red-list/messages`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    if (res.data.success) {
+      redListMessages = res.data.data;
+      if (!silent) renderRedListMessages();
+    }
+  } catch (e) {
+    console.error('loadRedListMessages error:', e);
+    if (!silent && contentEl) {
+      contentEl.innerHTML = '<div class="text-center py-8 text-red-600">読み込みに失敗しました</div>';
+    }
+  } finally {
+    if (!silent && loadingEl) loadingEl.classList.add('hidden');
+  }
+}
+
+function renderRedListMessages() {
+  const contentEl = document.getElementById('redlist-messages-content');
+  if (!contentEl) return;
+
+  if (redListMessages.length === 0) {
+    contentEl.innerHTML = `
+      <div class="text-center py-12 text-gray-500">
+        <i class="fab fa-discord text-5xl text-indigo-200 mb-4"></i>
+        <p class="text-lg font-medium">送信メッセージがありません</p>
+        <p class="text-sm mt-1">「新規作成」ボタンからテンプレートを追加してください</p>
+      </div>`;
+    return;
+  }
+
+  contentEl.innerHTML = redListMessages.map(m => {
+    const created = new Date(m.created_at).toLocaleDateString('ja-JP',
+      { timeZone: 'Asia/Tokyo', year:'numeric', month:'numeric', day:'numeric' });
+    return `
+      <div class="border border-gray-200 rounded-lg p-4 mb-3 hover:border-indigo-300 transition">
+        <div class="flex justify-between items-start">
+          <div class="flex-1 min-w-0 mr-4">
+            <h4 class="font-semibold text-gray-800 text-sm">${escapeHtml(m.title)}</h4>
+            <p class="text-xs text-gray-400 mt-0.5">${created} 作成 ／ ${m.created_by || '-'}</p>
+            <p class="text-sm text-gray-600 mt-2 whitespace-pre-wrap line-clamp-3">${escapeHtml(m.content)}</p>
+          </div>
+          <div class="flex space-x-2 flex-shrink-0">
+            <button onclick="openRedListMessageModal(${m.id})"
+                    class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button onclick="deleteRedListMessage(${m.id}, '${escapeHtml(m.title)}')"
+                    class="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  メッセージ編集モーダル
+// ═══════════════════════════════════════════════════════════════
+
+function openRedListMessageModal(id = null) {
+  document.getElementById('redlist-msg-edit-id').value = id || '';
+  document.getElementById('redlist-msg-edit-name').value = '';
+  document.getElementById('redlist-msg-edit-content').value = '';
+  document.getElementById('redlist-msg-edit-title').textContent =
+    id ? 'メッセージ編集' : 'メッセージ作成';
+
+  if (id) {
+    const msg = redListMessages.find(m => m.id === id);
+    if (msg) {
+      document.getElementById('redlist-msg-edit-name').value    = msg.title;
+      document.getElementById('redlist-msg-edit-content').value = msg.content;
+    }
+  }
+
+  document.getElementById('redlist-msg-edit-modal').classList.remove('hidden');
+}
+
+function closeRedListMessageModal() {
+  document.getElementById('redlist-msg-edit-modal').classList.add('hidden');
+}
+
+async function saveRedListMessage() {
+  const id      = document.getElementById('redlist-msg-edit-id').value;
+  const title   = document.getElementById('redlist-msg-edit-name').value.trim();
+  const content = document.getElementById('redlist-msg-edit-content').value.trim();
+
+  if (!title || !content) {
+    showNotification('タイトルとメッセージ本文を入力してください', 'error');
+    return;
+  }
+
+  try {
+    let res;
+    if (id) {
+      res = await axios.put(`${API_BASE}/api/red-list/messages/${id}`,
+        { title, content },
+        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+      );
+    } else {
+      res = await axios.post(`${API_BASE}/api/red-list/messages`,
+        { title, content },
+        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+      );
+    }
+
+    if (res.data.success) {
+      showNotification(id ? 'メッセージを更新しました' : 'メッセージを作成しました', 'success');
+      closeRedListMessageModal();
+      await loadRedListMessages();
+    } else {
+      showNotification(res.data.error || '保存に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('saveRedListMessage error:', e);
+    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
+  }
+}
+
+async function deleteRedListMessage(id, title) {
+  if (!confirm(`「${title}」を削除してもよいですか？`)) return;
+  try {
+    const res = await axios.delete(`${API_BASE}/api/red-list/messages/${id}`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    if (res.data.success) {
+      showNotification('メッセージを削除しました', 'success');
+      await loadRedListMessages();
+    } else {
+      showNotification(res.data.error || '削除に失敗しました', 'error');
+    }
+  } catch (e) {
+    showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
+  }
+}
