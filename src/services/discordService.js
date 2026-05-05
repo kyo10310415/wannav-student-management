@@ -42,7 +42,7 @@ function convertGoogleDriveUrl(url) {
  * Fetch student Discord info from Google Sheets
  * This is a placeholder - you'll need to implement actual Google Sheets API
  */
-async function getStudentDiscordInfo(studentId) {
+export async function getStudentDiscordInfo(studentId) {
   try {
     // Import sheets service
     const { getSheets } = await import('./sheetsService.js');
