@@ -608,6 +608,47 @@ const migrations = [
       DROP INDEX IF EXISTS idx_tutors_leader_email;
       ALTER TABLE tutors DROP COLUMN IF EXISTS leader_email;
     `
+  },
+  {
+    version: 26,
+    name: 'add_red_list_discord_features',
+    up: `
+      -- レッドリスト用 送信メッセージテンプレート管理テーブル
+      CREATE TABLE IF NOT EXISTS red_list_messages (
+        id           SERIAL PRIMARY KEY,
+        title        VARCHAR(100) NOT NULL,
+        content      TEXT NOT NULL,
+        created_by   VARCHAR(255),
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      COMMENT ON TABLE red_list_messages IS 'レッドリスト Discord 送信用メッセージテンプレート';
+      COMMENT ON COLUMN red_list_messages.title   IS 'テンプレートタイトル（管理用）';
+      COMMENT ON COLUMN red_list_messages.content IS '送信メッセージ本文';
+
+      -- レッドリスト Discord 送信ログテーブル
+      CREATE TABLE IF NOT EXISTS red_list_discord_logs (
+        id             SERIAL PRIMARY KEY,
+        student_id     VARCHAR(50) NOT NULL,
+        year_month     VARCHAR(7)  NOT NULL,
+        message_id     INTEGER REFERENCES red_list_messages(id) ON DELETE SET NULL,
+        message_title  VARCHAR(100),
+        message_content TEXT NOT NULL,
+        sent_by        VARCHAR(255),
+        sent_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rl_discord_logs_student ON red_list_discord_logs(student_id);
+      CREATE INDEX IF NOT EXISTS idx_rl_discord_logs_year_month ON red_list_discord_logs(year_month);
+      CREATE INDEX IF NOT EXISTS idx_rl_discord_logs_sent_at ON red_list_discord_logs(sent_at DESC);
+
+      COMMENT ON TABLE red_list_discord_logs IS 'レッドリスト Discord 送信履歴';
+    `,
+    down: `
+      DROP TABLE IF EXISTS red_list_discord_logs CASCADE;
+      DROP TABLE IF EXISTS red_list_messages CASCADE;
+    `
   }
 ];
 
