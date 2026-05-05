@@ -28,42 +28,6 @@ app.get('/', async (c) => {
 });
 
 /**
- * GET /api/red-list/:studentId
- * Get red list for a specific student
- */
-app.get('/:studentId', async (c) => {
-  try {
-    const studentId = c.req.param('studentId');
-    const { yearMonth } = c.req.query();
-    
-    const redList = await getRedList(studentId, yearMonth);
-    
-    if (!redList) {
-      // Calculate and save if not exists
-      const scores = await calculateRedListScore(studentId, yearMonth || getCurrentYearMonth());
-      await updateRedList(studentId, yearMonth);
-      
-      return c.json({
-        success: true,
-        data: scores,
-        message: 'Calculated and saved'
-      });
-    }
-    
-    return c.json({
-      success: true,
-      data: redList
-    });
-  } catch (error) {
-    console.error('Error fetching red list:', error);
-    return c.json({
-      success: false,
-      error: error.message
-    }, 500);
-  }
-});
-
-/**
  * POST /api/red-list/update
  * Update red list for all students
  */
@@ -162,6 +126,42 @@ app.get('/history', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching red list history:', error);
+    return c.json({
+      success: false,
+      error: error.message
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/red-list/:studentId
+ * Get red list for a specific student
+ */
+app.get('/:studentId', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    const { yearMonth } = c.req.query();
+    
+    const redList = await getRedList(studentId, yearMonth);
+    
+    if (!redList) {
+      // Calculate and save if not exists
+      const scores = await calculateRedListScore(studentId, yearMonth || getCurrentYearMonth());
+      await updateRedList(studentId, yearMonth);
+      
+      return c.json({
+        success: true,
+        data: scores,
+        message: 'Calculated and saved'
+      });
+    }
+    
+    return c.json({
+      success: true,
+      data: redList
+    });
+  } catch (error) {
+    console.error('Error fetching red list:', error);
     return c.json({
       success: false,
       error: error.message
