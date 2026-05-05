@@ -173,8 +173,12 @@ export async function fetchLessonsForTomorrow() {
         return lessonDateStr === tomorrowStr;
       })
       .filter(lesson => {
-        // Only include schedules with "レッスン" in title
-        return lesson.title && lesson.title.includes('レッスン');
+        // Include schedules with "レッスン", "PROプラン", or "Proプラン" in title
+        return lesson.title && (
+          lesson.title.includes('レッスン') ||
+          lesson.title.includes('PROプラン') ||
+          lesson.title.includes('Proプラン')
+        );
       })
       .map(lesson => {
         // Get homeroom tutor (Notion name) from database
@@ -190,7 +194,7 @@ export async function fetchLessonsForTomorrow() {
       });
     
     console.log(`[Sheets] Total lessons in sheet: ${allLessons.length}`);
-    console.log(`[Sheets] Lessons for tomorrow (with "レッスン" filter): ${tomorrowLessons.length}`);
+    console.log(`[Sheets] Lessons for tomorrow (with "レッスン/PROプラン/Proプラン" filter): ${tomorrowLessons.length}`);
     
     if (tomorrowLessons.length > 0) {
       console.log(`[Sheets] Sample lessons:`);
