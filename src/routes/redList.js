@@ -32,6 +32,11 @@ async function authMiddleware(c, next) {
   }
 }
 
+// Hono v4 では app.use() でスコープを絞って適用する
+app.use('/messages', authMiddleware);
+app.use('/messages/*', authMiddleware);
+app.use('/discord/*', authMiddleware);
+
 // ─────────────────────────────────────────
 // GET /api/red-list  — 今月のレッドリスト一覧
 // ─────────────────────────────────────────
@@ -119,7 +124,7 @@ app.get('/history', async (c) => {
  * GET /api/red-list/messages
  * 送信メッセージテンプレート一覧取得
  */
-app.get('/messages', authMiddleware, async (c) => {
+app.get('/messages', async (c) => {
   try {
     const result = await query(
       `SELECT id, title, content, created_by, created_at, updated_at
@@ -137,7 +142,7 @@ app.get('/messages', authMiddleware, async (c) => {
  * POST /api/red-list/messages
  * 送信メッセージテンプレート作成
  */
-app.post('/messages', authMiddleware, async (c) => {
+app.post('/messages', async (c) => {
   try {
     const user = c.get('user');
     const { title, content } = await c.req.json();
@@ -161,7 +166,7 @@ app.post('/messages', authMiddleware, async (c) => {
  * PUT /api/red-list/messages/:id
  * 送信メッセージテンプレート更新
  */
-app.put('/messages/:id', authMiddleware, async (c) => {
+app.put('/messages/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const { title, content } = await c.req.json();
@@ -189,7 +194,7 @@ app.put('/messages/:id', authMiddleware, async (c) => {
  * DELETE /api/red-list/messages/:id
  * 送信メッセージテンプレート削除
  */
-app.delete('/messages/:id', authMiddleware, async (c) => {
+app.delete('/messages/:id', async (c) => {
   try {
     const id = c.req.param('id');
     await query('DELETE FROM red_list_messages WHERE id = $1', [id]);
@@ -211,7 +216,7 @@ app.delete('/messages/:id', authMiddleware, async (c) => {
  *   - messageId  … red_list_messages.id（テンプレート使用時）
  *   - messageContent … 自由入力テキスト（messageId と排他）
  */
-app.post('/discord/send', authMiddleware, async (c) => {
+app.post('/discord/send', async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.json();
@@ -288,7 +293,7 @@ app.post('/discord/send', authMiddleware, async (c) => {
  * 送信ログ一覧
  * query: studentId (optional), yearMonth (optional)
  */
-app.get('/discord/logs', authMiddleware, async (c) => {
+app.get('/discord/logs', async (c) => {
   try {
     const { studentId, yearMonth } = c.req.query();
     const conditions = [];
