@@ -649,6 +649,26 @@ const migrations = [
       DROP TABLE IF EXISTS red_list_discord_logs CASCADE;
       DROP TABLE IF EXISTS red_list_messages CASCADE;
     `
+  },
+  {
+    version: 27,
+    name: 'add_image_to_red_list_messages',
+    up: `
+      ALTER TABLE red_list_messages
+        ADD COLUMN IF NOT EXISTS image_data         BYTEA,
+        ADD COLUMN IF NOT EXISTS image_filename     VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS image_content_type VARCHAR(100);
+
+      COMMENT ON COLUMN red_list_messages.image_data         IS '添付画像バイナリデータ（JPEG/PNG）';
+      COMMENT ON COLUMN red_list_messages.image_filename     IS '添付画像ファイル名';
+      COMMENT ON COLUMN red_list_messages.image_content_type IS '添付画像 MIME タイプ';
+    `,
+    down: `
+      ALTER TABLE red_list_messages
+        DROP COLUMN IF EXISTS image_data,
+        DROP COLUMN IF EXISTS image_filename,
+        DROP COLUMN IF EXISTS image_content_type;
+    `
   }
 ];
 

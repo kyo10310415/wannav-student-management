@@ -122,12 +122,15 @@ app.get('/history', async (c) => {
 
 /**
  * GET /api/red-list/messages
- * 送信メッセージテンプレート一覧取得
+ * 送信メッセージテンプレート一覧取得（image_data 以外を返す）
  */
 app.get('/messages', async (c) => {
   try {
     const result = await query(
-      `SELECT id, title, content, created_by, created_at, updated_at
+      `SELECT id, title, content,
+              image_filename, image_content_type,
+              CASE WHEN image_data IS NOT NULL THEN true ELSE false END AS has_image,
+              created_by, created_at, updated_at
        FROM red_list_messages
        ORDER BY created_at DESC`
     );
@@ -140,20 +143,45 @@ app.get('/messages', async (c) => {
 
 /**
  * POST /api/red-list/messages
- * 送信メッセージテンプレート作成
+ * 送信メッセージテンプレート作成（multipart/form-data）
+ * フィールド: title (string), content (string), image (File, optional)
  */
 app.post('/messages', async (c) => {
   try {
     const user = c.get('user');
-    const { title, content } = await c.req.json();
+    const contentType = c.req.header('content-type') || '';
+
+    let title, content, imageData = null, imageFilename = null, imageContentType = null;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      title   = formData.get('title');
+      content = formData.get('content');
+      const imageFile = formData.get('image');
+      if (imageFile && imageFile.size > 0) {
+        const buf = await imageFile.arrayBuffer();
+        imageData        = Buffer.from(buf);
+        imageFilename    = imageFile.name;
+        imageContentType = imageFile.type;
+      }
+    } else {
+      const body = await c.req.json();
+      title   = body.title;
+      content = body.content;
+    }
+
     if (!title || !content) {
       return c.json({ success: false, error: 'title と content は必須です' }, 400);
     }
+
     const result = await query(
-      `INSERT INTO red_list_messages (title, content, created_by)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [title.trim(), content.trim(), user.email]
+      `INSERT INTO red_list_messages
+         (title, content, image_data, image_filename, image_content_type, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, title, content, image_filename, image_content_type,
+                 CASE WHEN image_data IS NOT NULL THEN true ELSE false END AS has_image,
+                 created_by, created_at, updated_at`,
+      [title.trim(), content.trim(), imageData, imageFilename, imageContentType, user.email]
     );
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
@@ -164,22 +192,78 @@ app.post('/messages', async (c) => {
 
 /**
  * PUT /api/red-list/messages/:id
- * 送信メッセージテンプレート更新
+ * 送信メッセージテンプレート更新（multipart/form-data）
+ * フィールド: title, content, image (optional), removeImage (optional "true")
  */
 app.put('/messages/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const { title, content } = await c.req.json();
+    const contentType = c.req.header('content-type') || '';
+
+    let title, content, imageData, imageFilename, imageContentType, removeImage = false;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      title       = formData.get('title');
+      content     = formData.get('content');
+      removeImage = formData.get('removeImage') === 'true';
+      const imageFile = formData.get('image');
+      if (imageFile && imageFile.size > 0) {
+        const buf = await imageFile.arrayBuffer();
+        imageData        = Buffer.from(buf);
+        imageFilename    = imageFile.name;
+        imageContentType = imageFile.type;
+      }
+    } else {
+      const body = await c.req.json();
+      title   = body.title;
+      content = body.content;
+    }
+
     if (!title || !content) {
       return c.json({ success: false, error: 'title と content は必須です' }, 400);
     }
-    const result = await query(
-      `UPDATE red_list_messages
-       SET title = $1, content = $2, updated_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
-      [title.trim(), content.trim(), id]
-    );
+
+    let result;
+    if (imageData) {
+      // 新しい画像で上書き
+      result = await query(
+        `UPDATE red_list_messages
+         SET title = $1, content = $2,
+             image_data = $3, image_filename = $4, image_content_type = $5,
+             updated_at = NOW()
+         WHERE id = $6
+         RETURNING id, title, content, image_filename, image_content_type,
+                   CASE WHEN image_data IS NOT NULL THEN true ELSE false END AS has_image,
+                   created_by, created_at, updated_at`,
+        [title.trim(), content.trim(), imageData, imageFilename, imageContentType, id]
+      );
+    } else if (removeImage) {
+      // 画像を削除
+      result = await query(
+        `UPDATE red_list_messages
+         SET title = $1, content = $2,
+             image_data = NULL, image_filename = NULL, image_content_type = NULL,
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING id, title, content, image_filename, image_content_type,
+                   CASE WHEN image_data IS NOT NULL THEN true ELSE false END AS has_image,
+                   created_by, created_at, updated_at`,
+        [title.trim(), content.trim(), id]
+      );
+    } else {
+      // テキストのみ更新（画像は変更しない）
+      result = await query(
+        `UPDATE red_list_messages
+         SET title = $1, content = $2, updated_at = NOW()
+         WHERE id = $3
+         RETURNING id, title, content, image_filename, image_content_type,
+                   CASE WHEN image_data IS NOT NULL THEN true ELSE false END AS has_image,
+                   created_by, created_at, updated_at`,
+        [title.trim(), content.trim(), id]
+      );
+    }
+
     if (result.rows.length === 0) {
       return c.json({ success: false, error: 'メッセージが見つかりません' }, 404);
     }
@@ -205,6 +289,34 @@ app.delete('/messages/:id', async (c) => {
   }
 });
 
+/**
+ * GET /api/red-list/messages/:id/image
+ * テンプレートに添付された画像を返す
+ */
+app.get('/messages/:id/image', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const result = await query(
+      'SELECT image_data, image_content_type, image_filename FROM red_list_messages WHERE id = $1',
+      [id]
+    );
+    if (result.rows.length === 0 || !result.rows[0].image_data) {
+      return c.json({ success: false, error: '画像が見つかりません' }, 404);
+    }
+    const { image_data, image_content_type, image_filename } = result.rows[0];
+    return new Response(image_data, {
+      headers: {
+        'Content-Type': image_content_type || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${image_filename || 'image'}"`,
+        'Cache-Control': 'private, max-age=3600'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching message image:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
 // ─────────────────────────────────────────
 // ▼▼▼  Discord 送信 API  ▼▼▼
 // ─────────────────────────────────────────
@@ -212,15 +324,16 @@ app.delete('/messages/:id', async (c) => {
 /**
  * POST /api/red-list/discord/send
  * 対象生徒に Discord メッセージを送信し、ログを保存
- * body: { studentId, yearMonth, messageId, messageContent? }
- *   - messageId  … red_list_messages.id（テンプレート使用時）
- *   - messageContent … 自由入力テキスト（messageId と排他）
+ * body (JSON): { studentId, yearMonth, studentName, messageId?, messageContent? }
+ *   - messageId      … red_list_messages.id（テンプレート使用時）
+ *   - messageContent … 自由入力テキスト（テンプレート未使用時）
+ *   - studentName    … 〇〇 プレースホルダー置換用
  */
 app.post('/discord/send', async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.json();
-    const { studentId, yearMonth, messageId, messageContent } = body;
+    const { studentId, yearMonth, studentName, messageId, messageContent } = body;
 
     if (!studentId || !yearMonth) {
       return c.json({ success: false, error: 'studentId と yearMonth は必須です' }, 400);
@@ -229,20 +342,31 @@ app.post('/discord/send', async (c) => {
       return c.json({ success: false, error: 'messageId か messageContent のどちらかは必須です' }, 400);
     }
 
-    // メッセージ本文とタイトルを解決
-    let finalContent = messageContent || null;
-    let finalTitle   = null;
+    // メッセージ本文・タイトル・画像を解決
+    let finalContent      = messageContent || null;
+    let finalTitle        = null;
+    let attachmentBuffer  = null;
+    let attachmentFilename = null;
 
     if (messageId) {
       const msgResult = await query(
-        'SELECT title, content FROM red_list_messages WHERE id = $1',
+        'SELECT title, content, image_data, image_filename, image_content_type FROM red_list_messages WHERE id = $1',
         [messageId]
       );
       if (msgResult.rows.length === 0) {
         return c.json({ success: false, error: '指定されたメッセージが見つかりません' }, 404);
       }
-      finalTitle   = msgResult.rows[0].title;
-      finalContent = msgResult.rows[0].content;
+      finalTitle        = msgResult.rows[0].title;
+      finalContent      = msgResult.rows[0].content;
+      attachmentBuffer  = msgResult.rows[0].image_data;
+      attachmentFilename = msgResult.rows[0].image_filename;
+    }
+
+    // 〇〇（全角・半角）→ 生徒名に置換
+    if (studentName && finalContent) {
+      finalContent = finalContent
+        .replace(/〇〇/g, studentName)
+        .replace(/○○/g, studentName);
     }
 
     // 生徒の Discord チャット URL を取得
@@ -251,13 +375,32 @@ app.post('/discord/send', async (c) => {
       return c.json({ success: false, error: `生徒 ${studentId} の Discord チャット URL が設定されていません` }, 400);
     }
 
-    // Discord 送信（discordId があればメンション付き）
-    let sendContent = finalContent;
+    // Discord 送信ペイロードを構築
+    let sendPayload;
     if (discordInfo.discordId) {
-      sendContent = `<@${discordInfo.discordId}>\n\n${finalContent}`;
+      const textWithMention = `<@${discordInfo.discordId}>\n\n${finalContent}`;
+      if (attachmentBuffer) {
+        const { AttachmentBuilder } = await import('discord.js');
+        sendPayload = {
+          content: textWithMention,
+          files: [new AttachmentBuilder(attachmentBuffer, { name: attachmentFilename || 'image.png' })]
+        };
+      } else {
+        sendPayload = textWithMention;
+      }
+    } else {
+      if (attachmentBuffer) {
+        const { AttachmentBuilder } = await import('discord.js');
+        sendPayload = {
+          content: finalContent,
+          files: [new AttachmentBuilder(attachmentBuffer, { name: attachmentFilename || 'image.png' })]
+        };
+      } else {
+        sendPayload = finalContent;
+      }
     }
 
-    const sendResult = await sendDiscordMessage(discordInfo.chatUrl, sendContent);
+    const sendResult = await sendDiscordMessage(discordInfo.chatUrl, sendPayload);
 
     if (!sendResult.success) {
       return c.json({
