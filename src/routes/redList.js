@@ -547,7 +547,7 @@ app.post('/discord/test-send', async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.json();
-    const { messageId, messageContent } = body;
+    const { messageId, messageContent, senderId } = body;
 
     if (!messageId && !messageContent) {
       return c.json({ success: false, error: 'messageId か messageContent のどちらかは必須です' }, 400);
@@ -578,6 +578,18 @@ app.post('/discord/test-send', async (c) => {
       finalContent = finalContent
         .replace(/〇〇/g, 'テスト生徒')
         .replace(/○○/g, 'テスト生徒');
+    }
+
+    // 送信者の予約URLをメッセージ末尾に追加
+    if (senderId) {
+      const senderResult = await query(
+        'SELECT name, booking_url FROM red_list_senders WHERE id = $1',
+        [senderId]
+      );
+      if (senderResult.rows.length > 0) {
+        const { name, booking_url } = senderResult.rows[0];
+        finalContent = `${finalContent}\n\n📅 **予約はこちらから（担当: ${name}）**\n${booking_url}`;
+      }
     }
 
     // テスト用メンション付きメッセージ
