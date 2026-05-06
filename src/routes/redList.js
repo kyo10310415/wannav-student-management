@@ -432,6 +432,88 @@ app.post('/discord/send', async (c) => {
 });
 
 /**
+ * POST /api/red-list/discord/test-send
+ * テスト送信（固定チャンネル・固定ユーザーへ送信）
+ * body (JSON): { messageId?, messageContent? }
+ */
+const TEST_CHANNEL_URL = 'https://discord.com/channels/1176426605309083678/1293539258069417994';
+const TEST_USER_ID     = '766666980086120470';
+
+app.post('/discord/test-send', async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const { messageId, messageContent } = body;
+
+    if (!messageId && !messageContent) {
+      return c.json({ success: false, error: 'messageId か messageContent のどちらかは必須です' }, 400);
+    }
+
+    // メッセージ本文・タイトル・画像を解決
+    let finalContent       = messageContent || null;
+    let finalTitle         = 'テスト送信';
+    let attachmentBuffer   = null;
+    let attachmentFilename = null;
+
+    if (messageId) {
+      const msgResult = await query(
+        'SELECT title, content, image_data, image_filename FROM red_list_messages WHERE id = $1',
+        [messageId]
+      );
+      if (msgResult.rows.length === 0) {
+        return c.json({ success: false, error: '指定されたメッセージが見つかりません' }, 404);
+      }
+      finalTitle         = msgResult.rows[0].title;
+      finalContent       = msgResult.rows[0].content;
+      attachmentBuffer   = msgResult.rows[0].image_data;
+      attachmentFilename = msgResult.rows[0].image_filename;
+    }
+
+    // 〇〇 → テスト表記に置換
+    if (finalContent) {
+      finalContent = finalContent
+        .replace(/〇〇/g, 'テスト生徒')
+        .replace(/○○/g, 'テスト生徒');
+    }
+
+    // テスト用メンション付きメッセージ
+    const testHeader  = `🧪 **【テスト送信】** ｜送信者: ${user.email}\n\n`;
+    const textContent = `<@${TEST_USER_ID}>\n\n${testHeader}${finalContent}`;
+
+    // 送信ペイロードを構築
+    let sendPayload;
+    if (attachmentBuffer) {
+      const { AttachmentBuilder } = await import('discord.js');
+      sendPayload = {
+        content: textContent,
+        files: [new AttachmentBuilder(attachmentBuffer, { name: attachmentFilename || 'image.png' })]
+      };
+    } else {
+      sendPayload = textContent;
+    }
+
+    const sendResult = await sendDiscordMessage(TEST_CHANNEL_URL, sendPayload);
+
+    if (!sendResult.success) {
+      return c.json({
+        success: false,
+        error: sendResult.error || 'テスト送信に失敗しました'
+      }, 500);
+    }
+
+    return c.json({
+      success: true,
+      messageId: sendResult.id,
+      testChannelUrl: TEST_CHANNEL_URL,
+      testUserId: TEST_USER_ID
+    });
+  } catch (error) {
+    console.error('Error sending test discord message:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
  * GET /api/red-list/discord/logs
  * 送信ログ一覧
  * query: studentId (optional), yearMonth (optional)
