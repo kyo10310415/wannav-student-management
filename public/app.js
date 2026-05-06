@@ -13119,6 +13119,22 @@ async function renderRedListPage() {
           <div>
             <p class="text-sm text-gray-700">テンプレート: <span id="redlist-test-send-title" class="font-semibold text-gray-900"></span></p>
           </div>
+          <!-- 送信者選択 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              <i class="fas fa-user-tie mr-1 text-indigo-400"></i>送信者を選択（任意）
+            </label>
+            <select id="redlist-test-send-sender-select"
+                    onchange="onRedListTestSendSenderChange()"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+              <option value="">送信者を選択しない</option>
+            </select>
+            <div id="redlist-test-send-booking-url-wrap" class="hidden mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700">
+              <i class="fas fa-calendar-check mr-1"></i>予約URL:
+              <span id="redlist-test-send-booking-url-preview" class="break-all font-mono"></span>
+              <p class="text-gray-500 mt-1">※ メッセージ末尾に自動的に追加されます</p>
+            </div>
+          </div>
           <input type="hidden" id="redlist-test-send-message-id" value="">
         </div>
         <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
@@ -14026,6 +14042,21 @@ async function deleteRedListMessage(id, title) {
 function openRedListTestSendModal(messageId, messageTitle) {
   document.getElementById('redlist-test-send-message-id').value = messageId;
   document.getElementById('redlist-test-send-title').textContent = messageTitle;
+
+  // 送信者ドロップダウンを最新状態で描画
+  const sel = document.getElementById('redlist-test-send-sender-select');
+  sel.innerHTML = '<option value="">送信者を選択しない</option>';
+  redListSenders.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    opt.dataset.bookingUrl = s.booking_url;
+    sel.appendChild(opt);
+  });
+  sel.value = '';
+  document.getElementById('redlist-test-send-booking-url-wrap').classList.add('hidden');
+  document.getElementById('redlist-test-send-booking-url-preview').textContent = '';
+
   document.getElementById('redlist-test-send-modal').classList.remove('hidden');
 }
 
@@ -14033,10 +14064,29 @@ function closeRedListTestSendModal() {
   document.getElementById('redlist-test-send-modal').classList.add('hidden');
   document.getElementById('redlist-test-send-message-id').value = '';
   document.getElementById('redlist-test-send-title').textContent = '';
+  document.getElementById('redlist-test-send-sender-select').value = '';
+  document.getElementById('redlist-test-send-booking-url-wrap').classList.add('hidden');
+  document.getElementById('redlist-test-send-booking-url-preview').textContent = '';
+}
+
+function onRedListTestSendSenderChange() {
+  const sel     = document.getElementById('redlist-test-send-sender-select');
+  const opt     = sel.options[sel.selectedIndex];
+  const urlWrap = document.getElementById('redlist-test-send-booking-url-wrap');
+  const urlSpan = document.getElementById('redlist-test-send-booking-url-preview');
+  if (opt && opt.dataset.bookingUrl) {
+    urlSpan.textContent = opt.dataset.bookingUrl;
+    urlWrap.classList.remove('hidden');
+  } else {
+    urlWrap.classList.add('hidden');
+    urlSpan.textContent = '';
+  }
 }
 
 async function executeRedListTestSend() {
   const messageId = document.getElementById('redlist-test-send-message-id').value;
+  const senderSel = document.getElementById('redlist-test-send-sender-select');
+  const senderId  = senderSel.value ? parseInt(senderSel.value) : null;
   const btn       = document.getElementById('redlist-test-send-btn');
 
   if (!messageId) {
@@ -14049,7 +14099,8 @@ async function executeRedListTestSend() {
 
   try {
     const res = await axios.post(`${API_BASE}/api/red-list/discord/test-send`, {
-      messageId: parseInt(messageId)
+      messageId: parseInt(messageId),
+      senderId
     }, {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
