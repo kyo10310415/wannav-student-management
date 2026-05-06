@@ -708,7 +708,7 @@ export async function fetchStudentBroadcastInfo() {
     
     const sheets = getSheets();
     
-    // Fetch B (学籍番号), G (Discord ID), H (お知らせWH), I (お役立ちWH), M (チャットURL)
+    // Fetch B (学籍番号), G (Discord ID), H (お知らせWH), I (お役立ちWH), J (案件・追加サポートWH), M (チャットURL)
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: spreadsheetId,
       range: `${sheetName}!B2:M`, // Skip header row
@@ -724,6 +724,7 @@ export async function fetchStudentBroadcastInfo() {
       const discordId = row[5] ? row[5].trim() : null;          // G列 (index 5)
       const noticeWebhook = row[6] ? row[6].trim() : null;      // H列 (index 6)
       const tipsWebhook = row[7] ? row[7].trim() : null;        // I列 (index 7)
+      const ankenWebhook = row[8] ? row[8].trim() : null;       // J列 (index 8)
       const chatUrl = row[11] ? row[11].trim() : null;          // M列 (index 11)
       
       if (studentId) {
@@ -732,6 +733,7 @@ export async function fetchStudentBroadcastInfo() {
           discordId,
           noticeWebhook,
           tipsWebhook,
+          ankenWebhook,
           chatUrl
         });
       }

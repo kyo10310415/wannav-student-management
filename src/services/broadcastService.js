@@ -37,6 +37,13 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
       params.push('永久会員');
       params.push('在籍プラン');
       console.log('[Broadcast] レッスン中 mode: アクティブ excluding 永久会員 and 在籍プラン');
+    } else if (targetStatus === '永久会員') {
+      // 永久会員: アクティブ且つ contract_plan が '永久会員'
+      whereConditions.push(`s.status = $${params.length + 1}`);
+      params.push('アクティブ');
+      whereConditions.push(`s.contract_plan = $${params.length + 1}`);
+      params.push('永久会員');
+      console.log('[Broadcast] 永久会員 mode: アクティブ AND contract_plan = 永久会員');
     } else {
       whereConditions.push(`s.status = $${params.length + 1}`);
       params.push(targetStatus);
@@ -374,6 +381,8 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
           webhookUrl = broadcastInfo.noticeWebhook;
         } else if (channelType === 'tips') {
           webhookUrl = broadcastInfo.tipsWebhook;
+        } else if (channelType === 'anken') {
+          webhookUrl = broadcastInfo.ankenWebhook;
         } else if (channelType === 'chat') {
           webhookUrl = broadcastInfo.chatUrl;
         }
@@ -389,6 +398,7 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
         if (channelType === 'chat') {
           await sendViaBot(webhookUrl, broadcastInfo.discordId, content, imageId);
         } else {
+          // notice / tips / anken はすべて Webhook 送信
           await sendViaWebhook(webhookUrl, broadcastInfo.discordId, content, imageId);
         }
         
