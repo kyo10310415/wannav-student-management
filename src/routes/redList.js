@@ -35,6 +35,8 @@ async function authMiddleware(c, next) {
 // Hono v4 では app.use() でスコープを絞って適用する
 app.use('/messages', authMiddleware);
 app.use('/messages/*', authMiddleware);
+app.use('/senders', authMiddleware);
+app.use('/senders/*', authMiddleware);
 app.use('/discord/*', authMiddleware);
 
 // ─────────────────────────────────────────
@@ -318,6 +320,95 @@ app.get('/messages/:id/image', async (c) => {
 });
 
 // ─────────────────────────────────────────
+// ▼▼▼  送信者管理 API  ▼▼▼
+// ─────────────────────────────────────────
+
+/**
+ * GET /api/red-list/senders
+ * 送信者一覧取得
+ */
+app.get('/senders', async (c) => {
+  try {
+    const result = await query(
+      `SELECT id, name, booking_url, created_by, created_at, updated_at
+       FROM red_list_senders
+       ORDER BY created_at ASC`
+    );
+    return c.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching senders:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/red-list/senders
+ * 送信者作成
+ */
+app.post('/senders', async (c) => {
+  try {
+    const user = c.get('user');
+    const { name, booking_url } = await c.req.json();
+    if (!name || !booking_url) {
+      return c.json({ success: false, error: '送信者名と予約URLは必須です' }, 400);
+    }
+    const result = await query(
+      `INSERT INTO red_list_senders (name, booking_url, created_by)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [name.trim(), booking_url.trim(), user.email]
+    );
+    return c.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating sender:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * PUT /api/red-list/senders/:id
+ * 送信者更新
+ */
+app.put('/senders/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { name, booking_url } = await c.req.json();
+    if (!name || !booking_url) {
+      return c.json({ success: false, error: '送信者名と予約URLは必須です' }, 400);
+    }
+    const result = await query(
+      `UPDATE red_list_senders
+       SET name = $1, booking_url = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [name.trim(), booking_url.trim(), id]
+    );
+    if (result.rows.length === 0) {
+      return c.json({ success: false, error: '送信者が見つかりません' }, 404);
+    }
+    return c.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating sender:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * DELETE /api/red-list/senders/:id
+ * 送信者削除
+ */
+app.delete('/senders/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await query('DELETE FROM red_list_senders WHERE id = $1', [id]);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting sender:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// ─────────────────────────────────────────
 // ▼▼▼  Discord 送信 API  ▼▼▼
 // ─────────────────────────────────────────
 
@@ -328,12 +419,13 @@ app.get('/messages/:id/image', async (c) => {
  *   - messageId      … red_list_messages.id（テンプレート使用時）
  *   - messageContent … 自由入力テキスト（テンプレート未使用時）
  *   - studentName    … 〇〇 プレースホルダー置換用
+ *   - senderId       … red_list_senders.id（送信者選択時、メッセージ末尾に予約URLを付加）
  */
 app.post('/discord/send', async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.json();
-    const { studentId, yearMonth, studentName, messageId, messageContent } = body;
+    const { studentId, yearMonth, studentName, messageId, messageContent, senderId } = body;
 
     if (!studentId || !yearMonth) {
       return c.json({ success: false, error: 'studentId と yearMonth は必須です' }, 400);
@@ -367,6 +459,18 @@ app.post('/discord/send', async (c) => {
       finalContent = finalContent
         .replace(/〇〇/g, studentName)
         .replace(/○○/g, studentName);
+    }
+
+    // 送信者の予約URLをメッセージ末尾に追加
+    if (senderId) {
+      const senderResult = await query(
+        'SELECT name, booking_url FROM red_list_senders WHERE id = $1',
+        [senderId]
+      );
+      if (senderResult.rows.length > 0) {
+        const { name, booking_url } = senderResult.rows[0];
+        finalContent = `${finalContent}\n\n📅 **予約はこちらから（担当: ${name}）**\n${booking_url}`;
+      }
     }
 
     // 生徒の Discord チャット URL を取得
