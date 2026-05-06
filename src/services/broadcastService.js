@@ -262,174 +262,171 @@ async function sendViaBot(chatUrl, discordId, content, imageId) {
 }
 
 /**
- * Send broadcast to multiple students
- * @param {Object} messageData - Message data
- * @param {Array} targetStudents - Array of target students
- * @param {string} userEmail - Current user email
- * @returns {Object} - Send results
+ * ジョブIDを生成して即返す。実際の送信はバックグラウンドで非同期実行。
+ * @returns {string} jobId
  */
-export async function sendBroadcast(messageData, targetStudents, userEmail) {
+export async function enqueueBroadcast(messageData, targetStudents, userEmail) {
   const { content, imageId, channelType, name, saveAsTemplate, isTest } = messageData;
-  
-  let broadcastId = null;
-  
+
+  // 1. broadcast_messages に記録
+  const insertResult = await query(
+    `INSERT INTO broadcast_messages
+      (name, content, image_url, channel_type, target_status, target_tutor, created_by, is_template, last_sent_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+    RETURNING id`,
+    [
+      name || `Broadcast ${new Date().toISOString()}`,
+      content,
+      imageId || null,
+      channelType,
+      messageData.targetStatus || 'active',
+      messageData.targetTutor || null,
+      userEmail,
+      saveAsTemplate || false
+    ]
+  );
+  const broadcastId = insertResult.rows[0].id;
+
+  // 2. ジョブレコードを作成
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const total = isTest ? 1 : targetStudents.length;
+
+  await query(
+    `INSERT INTO broadcast_jobs (job_id, broadcast_id, status, total, sent, failed, is_test, created_by)
+     VALUES ($1, $2, 'pending', $3, 0, 0, $4, $5)`,
+    [jobId, broadcastId, total, isTest, userEmail]
+  );
+
+  // 3. バックグラウンドで送信を開始（await しない）
+  _runBroadcastJob(jobId, broadcastId, messageData, targetStudents, userEmail).catch(err => {
+    console.error(`[Broadcast] Background job ${jobId} crashed:`, err.message);
+  });
+
+  return { jobId, broadcastId, total };
+}
+
+/**
+ * ジョブの進捗を取得
+ */
+export async function getBroadcastJobStatus(jobId) {
+  const result = await query(
+    `SELECT job_id, broadcast_id, status, total, sent, failed, is_test, created_at, updated_at
+     FROM broadcast_jobs WHERE job_id = $1`,
+    [jobId]
+  );
+  return result.rows[0] || null;
+}
+
+/**
+ * 実際の送信処理（バックグラウンド）
+ */
+async function _runBroadcastJob(jobId, broadcastId, messageData, targetStudents, userEmail) {
+  const { content, imageId, channelType, isTest } = messageData;
+
+  // ジョブを running に更新
+  await query(
+    `UPDATE broadcast_jobs SET status = 'running', updated_at = NOW() WHERE job_id = $1`,
+    [jobId]
+  );
+
   try {
-    // Save message to database if template or for logging
-    const insertResult = await query(
-      `INSERT INTO broadcast_messages 
-        (name, content, image_url, channel_type, target_status, target_tutor, created_by, is_template, last_sent_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
-      RETURNING id`,
-      [
-        name || `Broadcast ${new Date().toISOString()}`,
-        content,
-        imageId || null,  // Store imageId instead of imageUrl
-        channelType,
-        'active',
-        messageData.targetTutor || null,
-        userEmail,
-        saveAsTemplate || false
-      ]
-    );
-    
-    broadcastId = insertResult.rows[0].id;
-    
-    // Handle test mode
+    // テストモード
     if (isTest) {
-      console.log('[Broadcast] Test mode: Sending to test webhook');
-      
+      console.log(`[Broadcast Job ${jobId}] Test mode`);
       const testWebhookUrl = 'https://discord.com/api/webhooks/1282616705817903146/M4KSUtmoHYSDqySMBgtgjU0wZywkUkVtfh3KOOA-BNzgXMnwVnEphKwuleMXhFn60MYd';
       const testDiscordId = '766666980086120470';
-      
+
       try {
         await sendViaWebhook(testWebhookUrl, testDiscordId, content, imageId);
-        
-        // Log test send
-        await logBroadcastSend(
-          broadcastId, 
-          { student_id: 'TEST', name: 'Test User' }, 
-          channelType, 
-          testWebhookUrl, 
-          'sent', 
-          null
+        await logBroadcastSend(broadcastId, { student_id: 'TEST', name: 'Test User' }, channelType, testWebhookUrl, 'sent', null);
+        await query(
+          `UPDATE broadcast_jobs SET status = 'completed', sent = 1, failed = 0, updated_at = NOW() WHERE job_id = $1`,
+          [jobId]
         );
-        
-        return {
-          success: true,
-          broadcastId,
-          results: {
-            total: 1,
-            sent: 1,
-            failed: 0,
-            errors: []
-          }
-        };
-      } catch (error) {
-        console.error('[Broadcast] Test send error:', error);
-        
-        await logBroadcastSend(
-          broadcastId, 
-          { student_id: 'TEST', name: 'Test User' }, 
-          channelType, 
-          testWebhookUrl, 
-          'failed', 
-          error.message
+      } catch (err) {
+        await logBroadcastSend(broadcastId, { student_id: 'TEST', name: 'Test User' }, channelType, testWebhookUrl, 'failed', err.message);
+        await query(
+          `UPDATE broadcast_jobs SET status = 'completed', sent = 0, failed = 1, updated_at = NOW() WHERE job_id = $1`,
+          [jobId]
         );
-        
-        return {
-          success: false,
-          broadcastId,
-          results: {
-            total: 1,
-            sent: 0,
-            failed: 1,
-            errors: [{ studentId: 'TEST', error: error.message }]
-          }
-        };
       }
+      return;
     }
-    
-    // Fetch student broadcast info from Google Sheets
+
+    // 通常モード: スプレッドシートから送信先情報を取得
     const studentBroadcastInfo = await fetchStudentBroadcastInfo();
-    const broadcastInfoMap = new Map(
-      studentBroadcastInfo.map(s => [s.studentId, s])
-    );
-    
-    // Send to each student
-    const results = {
-      total: targetStudents.length,
-      sent: 0,
-      failed: 0,
-      errors: []
-    };
-    
+    const broadcastInfoMap = new Map(studentBroadcastInfo.map(s => [s.studentId, s]));
+
+    let sent = 0;
+    let failed = 0;
+
     for (const student of targetStudents) {
       const broadcastInfo = broadcastInfoMap.get(student.student_id);
-      
+
       if (!broadcastInfo) {
-        console.log(`[Broadcast] No broadcast info for student ${student.student_id}`);
-        results.failed++;
+        console.log(`[Broadcast Job ${jobId}] No broadcast info for ${student.student_id}`);
+        failed++;
         await logBroadcastSend(broadcastId, student, channelType, null, 'failed', 'No broadcast info found');
+        // 10件ごとに進捗を DB へ保存
+        if ((sent + failed) % 10 === 0) {
+          await query(
+            `UPDATE broadcast_jobs SET sent = $1, failed = $2, updated_at = NOW() WHERE job_id = $3`,
+            [sent, failed, jobId]
+          );
+        }
         continue;
       }
-      
+
       try {
         let webhookUrl = null;
-        
-        // Determine webhook/chat URL based on channel type
-        if (channelType === 'notice') {
-          webhookUrl = broadcastInfo.noticeWebhook;
-        } else if (channelType === 'tips') {
-          webhookUrl = broadcastInfo.tipsWebhook;
-        } else if (channelType === 'anken') {
-          webhookUrl = broadcastInfo.ankenWebhook;
-        } else if (channelType === 'chat') {
-          webhookUrl = broadcastInfo.chatUrl;
-        }
-        
+        if (channelType === 'notice')      webhookUrl = broadcastInfo.noticeWebhook;
+        else if (channelType === 'tips')   webhookUrl = broadcastInfo.tipsWebhook;
+        else if (channelType === 'anken')  webhookUrl = broadcastInfo.ankenWebhook;
+        else if (channelType === 'chat')   webhookUrl = broadcastInfo.chatUrl;
+
         if (!webhookUrl) {
-          console.log(`[Broadcast] No ${channelType} URL for student ${student.student_id}`);
-          results.failed++;
+          failed++;
           await logBroadcastSend(broadcastId, student, channelType, null, 'failed', `No ${channelType} URL`);
-          continue;
-        }
-        
-        // Send via webhook or bot
-        if (channelType === 'chat') {
-          await sendViaBot(webhookUrl, broadcastInfo.discordId, content, imageId);
         } else {
-          // notice / tips / anken はすべて Webhook 送信
-          await sendViaWebhook(webhookUrl, broadcastInfo.discordId, content, imageId);
+          if (channelType === 'chat') {
+            await sendViaBot(webhookUrl, broadcastInfo.discordId, content, imageId);
+          } else {
+            await sendViaWebhook(webhookUrl, broadcastInfo.discordId, content, imageId);
+          }
+          sent++;
+          await logBroadcastSend(broadcastId, student, channelType, webhookUrl, 'sent', null);
         }
-        
-        results.sent++;
-        await logBroadcastSend(broadcastId, student, channelType, webhookUrl, 'sent', null);
-        
-        // Rate limiting: wait 200ms between sends (5 per second)
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-      } catch (error) {
-        console.error(`[Broadcast] Error sending to ${student.student_id}:`, error.message);
-        results.failed++;
-        results.errors.push({
-          studentId: student.student_id,
-          error: error.message
-        });
-        await logBroadcastSend(broadcastId, student, channelType, null, 'failed', error.message);
+      } catch (err) {
+        console.error(`[Broadcast Job ${jobId}] Error sending to ${student.student_id}:`, err.message);
+        failed++;
+        await logBroadcastSend(broadcastId, student, channelType, null, 'failed', err.message);
       }
+
+      // 10件ごとに進捗を DB へ保存（ポーリングで取得できるようにする）
+      if ((sent + failed) % 10 === 0) {
+        await query(
+          `UPDATE broadcast_jobs SET sent = $1, failed = $2, updated_at = NOW() WHERE job_id = $3`,
+          [sent, failed, jobId]
+        );
+      }
+
+      // レート制限: 200ms 待機（Discord 5req/s 制限対策）
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
-    
-    console.log(`[Broadcast] Completed: ${results.sent}/${results.total} sent, ${results.failed} failed`);
-    
-    return {
-      success: true,
-      broadcastId,
-      results
-    };
-    
-  } catch (error) {
-    console.error('[Broadcast] Error in sendBroadcast:', error);
-    throw error;
+
+    // 完了
+    await query(
+      `UPDATE broadcast_jobs SET status = 'completed', sent = $1, failed = $2, updated_at = NOW() WHERE job_id = $3`,
+      [sent, failed, jobId]
+    );
+    console.log(`[Broadcast Job ${jobId}] Completed: ${sent}/${targetStudents.length} sent, ${failed} failed`);
+
+  } catch (err) {
+    console.error(`[Broadcast Job ${jobId}] Fatal error:`, err.message);
+    await query(
+      `UPDATE broadcast_jobs SET status = 'failed', updated_at = NOW() WHERE job_id = $1`,
+      [jobId]
+    ).catch(() => {});
   }
 }
 

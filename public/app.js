@@ -7948,29 +7948,51 @@ async function runDatabaseMigration() {
 let broadcastTutors = [];
 let broadcastTemplates = [];
 let broadcastLogs = [];
-let broadcastIsSending = false;  // 送信中フラグ（タブ切り替えで維持）
-let broadcastSendResult = null; // 送信完了結果（タブ切り替えで維持）
+let broadcastIsSending = false;   // 送信中フラグ（タブ切り替えで維持）
+let broadcastCurrentJobId = null; // ポーリング中のジョブID
+let broadcastPollingTimer = null; // ポーリングタイマー
 
 /**
  * 送信中オーバーレイを表示（body直下に挿入 → タブ切り替えでも残る）
+ * @param {number} sent  - 送信済み件数
+ * @param {number} total - 合計件数
  */
-function showBroadcastSendingOverlay() {
-  if (document.getElementById('broadcast-sending-overlay')) return;
+function showBroadcastSendingOverlay(sent = 0, total = 0) {
+  const existing = document.getElementById('broadcast-sending-overlay');
+  const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+  const progressHtml = `
+    <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
+      <div id="broadcast-progress-bar"
+           class="bg-blue-500 h-3 rounded-full transition-all duration-500"
+           style="width: ${pct}%"></div>
+    </div>
+    <p id="broadcast-progress-text" class="text-sm text-gray-600 mt-2">
+      ${total > 0 ? `${sent} / ${total} 件送信済み` : '準備中...'}
+    </p>
+  `;
+  if (existing) {
+    // すでに表示中なら進捗部分だけ更新
+    const bar = document.getElementById('broadcast-progress-bar');
+    const txt = document.getElementById('broadcast-progress-text');
+    if (bar) bar.style.width = pct + '%';
+    if (txt) txt.textContent = total > 0 ? `${sent} / ${total} 件送信済み` : '準備中...';
+    return;
+  }
   const overlay = document.createElement('div');
   overlay.id = 'broadcast-sending-overlay';
   overlay.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center';
   overlay.innerHTML = `
-    <div class="bg-white rounded-2xl shadow-2xl p-10 flex flex-col items-center gap-6 max-w-sm w-full mx-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-10 flex flex-col items-center gap-4 max-w-sm w-full mx-4">
       <div class="relative">
         <div class="w-20 h-20 rounded-full border-4 border-blue-100 flex items-center justify-center">
           <i class="fas fa-paper-plane text-blue-600 text-3xl animate-bounce"></i>
         </div>
         <div class="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
       </div>
-      <div class="text-center">
+      <div class="text-center w-full">
         <p class="text-xl font-bold text-gray-800 mb-1">送信中...</p>
-        <p class="text-sm text-gray-500">全員への送信が完了するまでお待ちください</p>
-        <p class="text-xs text-gray-400 mt-2">別のタブに移動しても送信は継続されます</p>
+        <p class="text-xs text-gray-400 mb-3">別のタブに移動しても送信は継続されます</p>
+        ${progressHtml}
       </div>
     </div>
   `;
@@ -8033,9 +8055,12 @@ function showBroadcastCompleteModal(result, isTest) {
  * Render Broadcast Page
  */
 async function renderBroadcastPage() {
-  // タブ切り替えで戻ってきたとき、送信中なら即オーバーレイを再表示
-  if (broadcastIsSending) {
-    showBroadcastSendingOverlay();
+  // タブ切り替えで戻ってきたとき、送信中ならオーバーレイを再表示してポーリングを再接続
+  if (broadcastIsSending && broadcastCurrentJobId) {
+    showBroadcastSendingOverlay(0, 0);
+    if (!broadcastPollingTimer) {
+      _startBroadcastPolling(broadcastCurrentJobId, 0, false);
+    }
   }
 
   document.getElementById('content').innerHTML = `
@@ -8402,35 +8427,20 @@ async function previewBroadcast() {
 }
 
 /**
- * Send broadcast message
+ * Send broadcast message（ジョブ登録 → ポーリングで進捗監視）
  */
 async function sendBroadcast() {
-  const content = document.getElementById('broadcast-content').value.trim();
-  const imageId = document.getElementById('broadcast-image-url').value.trim();
+  const content     = document.getElementById('broadcast-content').value.trim();
+  const imageId     = document.getElementById('broadcast-image-url').value.trim();
   const channelType = document.getElementById('broadcast-channel-type').value;
   const targetStatus = document.getElementById('broadcast-target-status').value;
-  const targetTutor = document.getElementById('broadcast-target-tutor').value;
-  
-  console.log('[Frontend] sendBroadcast called with:', {
-    hasContent: !!content,
-    hasImageId: !!imageId,
-    imageId: imageId || 'none',
-    channelType,
-    targetStatus,
-    targetTutor
-  });
-  
+  const targetTutor  = document.getElementById('broadcast-target-tutor').value;
+
   if (!content) {
     showNotification('メッセージ内容を入力してください', 'error');
     return;
   }
-  
-  // Confirm
-  if (!confirm('メッセージを送信しますか？\nこの操作は取り消せません。')) {
-    return;
-  }
-  
-  // 二重送信防止
+  if (!confirm('メッセージを送信しますか？\nこの操作は取り消せません。')) return;
   if (broadcastIsSending) {
     showNotification('送信中です。完了までお待ちください', 'warning');
     return;
@@ -8440,8 +8450,7 @@ async function sendBroadcast() {
 
   try {
     broadcastIsSending = true;
-    broadcastSendResult = null;
-    showBroadcastSendingOverlay();
+    showBroadcastSendingOverlay(0, 0);
 
     const requestData = {
       content,
@@ -8449,37 +8458,80 @@ async function sendBroadcast() {
       channelType,
       targetStatus,
       targetTutor: (targetTutor === 'all' || targetTutor === 'test') ? null : targetTutor,
-      name: isTest ? `Test Broadcast ${new Date().toLocaleString('ja-JP')}` : `Broadcast ${new Date().toLocaleString('ja-JP')}`,
+      name: isTest
+        ? `Test Broadcast ${new Date().toLocaleString('ja-JP')}`
+        : `Broadcast ${new Date().toLocaleString('ja-JP')}`,
       saveAsTemplate: false,
-      isTest: isTest
+      isTest
     };
 
-    console.log('[Frontend] Sending request data:', requestData);
-
+    // サーバーへジョブ登録（即座に jobId が返る）
     const response = await axios.post(`${API_BASE}/api/broadcast/send`, requestData, {
       headers: { 'Authorization': `Bearer ${sessionToken}` },
-      timeout: 300000  // 5分タイムアウト（大量送信対応）
+      timeout: 30000  // ジョブ登録自体は30秒以内に完了
     });
 
-    if (response.data.success) {
-      broadcastSendResult = { success: true, results: response.data.results, isTest };
-
-      // オーバーレイを外してから完了モーダル
-      hideBroadcastSendingOverlay();
-      showBroadcastCompleteModal(response.data.results, isTest);
-
-      // 送信履歴を更新（broadcastページが表示中であれば）
-      if (currentPage === 'broadcast') {
-        await loadBroadcastLogs();
-      }
+    if (!response.data.success) {
+      throw new Error(response.data.error || '送信ジョブの登録に失敗しました');
     }
+
+    // ポーリング開始
+    broadcastCurrentJobId = response.data.jobId;
+    _startBroadcastPolling(response.data.jobId, response.data.total, isTest);
+
   } catch (error) {
-    console.error('Error sending broadcast:', error);
+    console.error('Error starting broadcast:', error);
     hideBroadcastSendingOverlay();
-    showNotification('送信に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
-  } finally {
     broadcastIsSending = false;
+    broadcastCurrentJobId = null;
+    showNotification('送信の開始に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
   }
+}
+
+/**
+ * ポーリングを開始して進捗を監視する
+ */
+function _startBroadcastPolling(jobId, total, isTest) {
+  // 既存タイマーをクリア
+  if (broadcastPollingTimer) clearInterval(broadcastPollingTimer);
+
+  broadcastPollingTimer = setInterval(async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/broadcast/jobs/${jobId}`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` },
+        timeout: 10000
+      });
+
+      if (!res.data.success) return; // 一時的なエラーはスキップ
+
+      const job = res.data.job;
+
+      // オーバーレイの進捗を更新
+      showBroadcastSendingOverlay(job.sent, job.total);
+
+      // 完了 or 失敗
+      if (job.status === 'completed' || job.status === 'failed') {
+        clearInterval(broadcastPollingTimer);
+        broadcastPollingTimer = null;
+        broadcastIsSending = false;
+        broadcastCurrentJobId = null;
+
+        hideBroadcastSendingOverlay();
+        showBroadcastCompleteModal(
+          { sent: job.sent, total: job.total, failed: job.failed },
+          job.isTest
+        );
+
+        // 送信履歴を更新
+        if (currentPage === 'broadcast') {
+          await loadBroadcastLogs();
+        }
+      }
+    } catch (err) {
+      // ネットワークエラーなどは無視して次のポーリングを待つ
+      console.warn('[Broadcast] Polling error (will retry):', err.message);
+    }
+  }, 2000); // 2秒ごとにポーリング
 }
 
 /**

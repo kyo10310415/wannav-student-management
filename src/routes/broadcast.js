@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { 
   getTargetStudents, 
-  sendBroadcast, 
+  enqueueBroadcast,
+  getBroadcastJobStatus,
   getTemplates, 
   saveTemplate, 
   deleteTemplate,
@@ -114,50 +115,34 @@ app.post('/send', async (c) => {
       }, 400);
     }
     
-    // Handle test mode - skip student lookup
+    // テストモード: 生徒検索をスキップしてすぐにジョブ登録
     if (messageData.isTest) {
-      console.log('[Broadcast] Test mode: Skipping student lookup');
-      console.log('[Broadcast] Test mode message data:', {
-        hasContent: !!messageData.content,
-        hasImageId: !!messageData.imageId,
-        imageId: messageData.imageId || 'none',
-        channelType: messageData.channelType
-      });
-      
-      // Send broadcast in test mode (empty student array)
-      const result = await sendBroadcast(messageData, [], user.email);
-      
-      return c.json({
-        success: true,
-        message: 'Test broadcast sent',
-        broadcastId: result.broadcastId,
-        results: result.results
-      });
+      console.log('[Broadcast] Test mode: enqueuing job');
+      const { jobId, broadcastId, total } = await enqueueBroadcast(messageData, [], user.email);
+      return c.json({ success: true, jobId, broadcastId, total });
     }
-    
-    // Get target students for normal mode
+
+    // 通常モード: 送信対象生徒を取得してジョブ登録
     const targetStudents = await getTargetStudents(
       messageData.targetStatus || 'アクティブ',
       messageData.targetTutor,
       user.email,
       user.role
     );
-    
+
     if (targetStudents.length === 0) {
-      return c.json({
-        success: false,
-        error: 'No target students found'
-      }, 400);
+      return c.json({ success: false, error: '送信対象の生徒が見つかりませんでした' }, 400);
     }
-    
-    // Send broadcast
-    const result = await sendBroadcast(messageData, targetStudents, user.email);
-    
+
+    // ジョブを登録して即座にレスポンスを返す（バックグラウンドで送信開始）
+    const { jobId, broadcastId, total } = await enqueueBroadcast(messageData, targetStudents, user.email);
+
     return c.json({
       success: true,
-      message: `Broadcast sent to ${result.results.sent}/${result.results.total} students`,
-      broadcastId: result.broadcastId,
-      results: result.results
+      jobId,
+      broadcastId,
+      total,
+      message: `送信ジョブを開始しました（対象: ${total}名）`
     });
   } catch (error) {
     console.error('Error sending broadcast:', error);
@@ -278,6 +263,38 @@ app.get('/logs', async (c) => {
       success: false,
       error: error.message
     }, 500);
+  }
+});
+
+/**
+ * GET /api/broadcast/jobs/:jobId
+ * ジョブの進捗を返す（フロントエンドがポーリングで呼び出す）
+ */
+app.get('/jobs/:jobId', async (c) => {
+  try {
+    const jobId = c.req.param('jobId');
+    const job = await getBroadcastJobStatus(jobId);
+
+    if (!job) {
+      return c.json({ success: false, error: 'Job not found' }, 404);
+    }
+
+    return c.json({
+      success: true,
+      job: {
+        jobId:       job.job_id,
+        broadcastId: job.broadcast_id,
+        status:      job.status,       // pending / running / completed / failed
+        total:       job.total,
+        sent:        job.sent,
+        failed:      job.failed,
+        isTest:      job.is_test,
+        updatedAt:   job.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error getting job status:', error);
+    return c.json({ success: false, error: error.message }, 500);
   }
 });
 
