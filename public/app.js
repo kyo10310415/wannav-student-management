@@ -8368,7 +8368,7 @@ async function previewBroadcast() {
         <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">
           閉じる
         </button>
-        <button onclick="closeModal(); sendBroadcast();" class="flex-1 bg-yellow-600 text-white px-6 py-3 rounded-lg hover:bg-yellow-700 transition">
+        <button onclick="closeModal(); sendBroadcast(true);" class="flex-1 bg-yellow-600 text-white px-6 py-3 rounded-lg hover:bg-yellow-700 transition">
           <i class="fas fa-flask mr-2"></i>テスト送信
         </button>
       </div>
@@ -8414,7 +8414,7 @@ async function previewBroadcast() {
           <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">
             閉じる
           </button>
-          <button onclick="closeModal(); sendBroadcast();" class="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition">
+          <button onclick="closeModal(); sendBroadcast(true);" class="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition">
             <i class="fas fa-paper-plane mr-2"></i>この内容で送信
           </button>
         </div>
@@ -8428,8 +8428,15 @@ async function previewBroadcast() {
 
 /**
  * Send broadcast message（ジョブ登録 → ポーリングで進捗監視）
+ * @param {boolean} confirmed - 確認済みかどうか（プレビューモーダルから呼び出す場合 true）
  */
-async function sendBroadcast() {
+async function sendBroadcast(confirmed = false) {
+  // 二重送信防止：最初にチェック（confirm より前）
+  if (broadcastIsSending) {
+    showNotification('送信中です。完了までお待ちください', 'warning');
+    return;
+  }
+
   const content     = document.getElementById('broadcast-content').value.trim();
   const imageId     = document.getElementById('broadcast-image-url').value.trim();
   const channelType = document.getElementById('broadcast-channel-type').value;
@@ -8440,9 +8447,36 @@ async function sendBroadcast() {
     showNotification('メッセージ内容を入力してください', 'error');
     return;
   }
-  if (!confirm('メッセージを送信しますか？\nこの操作は取り消せません。')) return;
-  if (broadcastIsSending) {
-    showNotification('送信中です。完了までお待ちください', 'warning');
+
+  // 未確認の場合は確認モーダルを表示して中断
+  if (!confirmed) {
+    const isTest = targetTutor === 'test';
+    const targetLabel = document.getElementById('broadcast-target-status').options[
+      document.getElementById('broadcast-target-status').selectedIndex
+    ].text;
+    const channelLabel = document.getElementById('broadcast-channel-type').options[
+      document.getElementById('broadcast-channel-type').selectedIndex
+    ].text;
+    showModal(`
+      <div class="text-center">
+        <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fas fa-paper-plane text-yellow-600 text-3xl"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-3">送信確認</h2>
+        <div class="bg-gray-50 rounded-lg p-4 text-left mb-4 space-y-2 text-sm">
+          <p><span class="text-gray-500">送信対象：</span><span class="font-semibold">${targetLabel}</span></p>
+          <p><span class="text-gray-500">チャンネル：</span><span class="font-semibold">${channelLabel}</span></p>
+          ${isTest ? '<p class="text-yellow-600 font-semibold"><i class="fas fa-flask mr-1"></i>テスト送信モード</p>' : ''}
+        </div>
+        <p class="text-sm text-gray-500 mb-6">この操作は取り消せません。</p>
+        <div class="flex gap-3">
+          <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">キャンセル</button>
+          <button onclick="closeModal(); sendBroadcast(true);" class="flex-1 ${isTest ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-green-600 hover:bg-green-700'} text-white px-6 py-3 rounded-lg transition font-semibold">
+            <i class="fas fa-paper-plane mr-2"></i>${isTest ? 'テスト送信' : '送信する'}
+          </button>
+        </div>
+      </div>
+    `);
     return;
   }
 
@@ -8468,7 +8502,7 @@ async function sendBroadcast() {
     // サーバーへジョブ登録（即座に jobId が返る）
     const response = await axios.post(`${API_BASE}/api/broadcast/send`, requestData, {
       headers: { 'Authorization': `Bearer ${sessionToken}` },
-      timeout: 30000  // ジョブ登録自体は30秒以内に完了
+      timeout: 30000
     });
 
     if (!response.data.success) {
