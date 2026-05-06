@@ -7983,6 +7983,7 @@ async function renderBroadcastPage() {
               <select id="broadcast-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <option value="アクティブ">アクティブ生徒のみ</option>
                 <option value="レッスン中">レッスン中（永久会員・在籍プラン除く）</option>
+                <option value="永久会員">永久会員（アクティブ且つ契約状況：永久会員）</option>
                 <option value="レッスン準備中">レッスン準備中</option>
                 <option value="休会">休会中</option>
               </select>
@@ -8005,6 +8006,7 @@ async function renderBroadcastPage() {
             <select id="broadcast-channel-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               <option value="notice">お知らせ</option>
               <option value="tips">お役立ち情報</option>
+              <option value="anken">案件・追加サポート</option>
               <option value="chat">チャット</option>
             </select>
           </div>
@@ -8936,6 +8938,7 @@ function showScheduleModal(scheduleId = null) {
           <select id="schedule-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
             <option value="アクティブ">アクティブ生徒のみ</option>
             <option value="レッスン中">レッスン中（永久会員・在籍プラン除く）</option>
+            <option value="永久会員">永久会員（アクティブ且つ契約状況：永久会員）</option>
             <option value="レッスン準備中">レッスン準備中</option>
             <option value="休会">休会中</option>
           </select>
@@ -8959,6 +8962,7 @@ function showScheduleModal(scheduleId = null) {
           <select id="schedule-channel-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
             <option value="notice">お知らせ</option>
             <option value="tips">お役立ち情報</option>
+            <option value="anken">案件・追加サポート</option>
             <option value="chat">チャット</option>
           </select>
         </div>
