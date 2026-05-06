@@ -19,7 +19,7 @@ async function authMiddleware(c, next) {
       `SELECT u.id, u.email, u.role
        FROM sessions s
        JOIN users u ON s.user_id = u.id
-       WHERE s.token = $1 AND s.expires_at > NOW()`,
+       WHERE s.session_token = $1 AND s.expires_at > CURRENT_TIMESTAMP`,
       [token]
     );
     if (result.rows.length === 0) {
