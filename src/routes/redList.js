@@ -528,7 +528,23 @@ app.post('/discord/send', async (c) => {
       ]
     );
 
-    return c.json({ success: true, messageId: sendResult.id });
+    // 送信者名（senderId があれば送信者マスタの name、なければメールアドレス）を担当にセット
+    let assignedToName = user.email;
+    if (senderId) {
+      const senderRow = await query(
+        'SELECT name FROM red_list_senders WHERE id = $1',
+        [senderId]
+      );
+      if (senderRow.rows.length > 0) assignedToName = senderRow.rows[0].name;
+    }
+    await query(
+      `UPDATE red_list
+         SET assigned_to = $1, updated_at = NOW()
+       WHERE student_id = $2 AND year_month = $3`,
+      [assignedToName, studentId, yearMonth]
+    );
+
+    return c.json({ success: true, messageId: sendResult.id, assignedTo: assignedToName });
   } catch (error) {
     console.error('Error sending red list discord message:', error);
     return c.json({ success: false, error: error.message }, 500);
@@ -664,6 +680,55 @@ app.get('/discord/logs', async (c) => {
     return c.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('Error fetching discord logs:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// ─────────────────────────────────────────
+// PATCH /api/red-list/:studentId/status  — 対応状況・担当を更新
+// ─────────────────────────────────────────
+app.patch('/:studentId/status', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    const { yearMonth, correspondence_status, assigned_to } = await c.req.json();
+
+    if (!yearMonth) {
+      return c.json({ success: false, error: 'yearMonth は必須です' }, 400);
+    }
+
+    const fields = [];
+    const params = [];
+
+    if (correspondence_status !== undefined) {
+      params.push(correspondence_status);
+      fields.push(`correspondence_status = $${params.length}`);
+    }
+    if (assigned_to !== undefined) {
+      params.push(assigned_to);
+      fields.push(`assigned_to = $${params.length}`);
+    }
+
+    if (fields.length === 0) {
+      return c.json({ success: false, error: '更新するフィールドがありません' }, 400);
+    }
+
+    params.push(studentId, yearMonth);
+    const result = await query(
+      `UPDATE red_list
+         SET ${fields.join(', ')}, updated_at = NOW()
+       WHERE student_id = $${params.length - 1}
+         AND year_month = $${params.length}
+       RETURNING *`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return c.json({ success: false, error: 'レコードが見つかりません' }, 404);
+    }
+
+    return c.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating red list status:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });

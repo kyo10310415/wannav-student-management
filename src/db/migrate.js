@@ -671,6 +671,23 @@ const migrations = [
     `
   },
   {
+    version: 29,
+    name: 'add_correspondence_status_to_red_list',
+    up: `
+      ALTER TABLE red_list
+        ADD COLUMN IF NOT EXISTS correspondence_status VARCHAR(20) DEFAULT '未対応',
+        ADD COLUMN IF NOT EXISTS assigned_to           VARCHAR(255);
+
+      COMMENT ON COLUMN red_list.correspondence_status IS '対応状況（未対応 / 対応中 / 対応済み）';
+      COMMENT ON COLUMN red_list.assigned_to           IS '担当者名（Discord送信者が自動セット）';
+    `,
+    down: `
+      ALTER TABLE red_list
+        DROP COLUMN IF EXISTS correspondence_status,
+        DROP COLUMN IF EXISTS assigned_to;
+    `
+  },
+  {
     version: 28,
     name: 'add_red_list_senders',
     up: `

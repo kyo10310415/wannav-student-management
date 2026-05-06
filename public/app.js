@@ -13445,13 +13445,26 @@ function renderRedListStudentCard(item, isHistory) {
           </div>
         </div>
         <div class="flex flex-col items-end space-y-2 ml-4">
-          ${!isHistory ? `
-          <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)" 
-                  class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-            <option value="pending" selected>未対応</option>
-            <option value="resolved">対応済み</option>
-          </select>
-          ` : ''}
+          ${!isHistory ? (() => {
+            const cs = item.correspondence_status || '未対応';
+            const ao = item.assigned_to || '';
+            return `
+            <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)"
+                    id="rl-status-${item.student_id}"
+                    class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="未対応" ${cs === '未対応' ? 'selected' : ''}>未対応</option>
+              <option value="対応中" ${cs === '対応中' ? 'selected' : ''}>対応中</option>
+              <option value="対応済み" ${cs === '対応済み' ? 'selected' : ''}>対応済み</option>
+            </select>
+            <div class="flex items-center space-x-1 mt-1">
+              <i class="fas fa-user-tie text-xs text-indigo-400"></i>
+              <input id="rl-assigned-${item.student_id}" type="text"
+                     value="${escapeHtml(ao)}"
+                     placeholder="担当者名"
+                     onchange="updateRedListAssigned('${item.student_id}', '${yearMonth}', this.value)"
+                     class="border border-gray-200 rounded px-2 py-1 text-xs w-28 focus:ring-1 focus:ring-indigo-400">
+            </div>`;
+          })() : ''}
           <button onclick="openRedListDiscordModal('${item.student_id}', '${studentName}', '${yearMonth}')"
                   class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm transition shadow-sm">
             <i class="fab fa-discord"></i><span>Discord送信</span>
@@ -13488,14 +13501,47 @@ function showScoreBreakdown(studentId) {
 
 async function updateRedListStatus(studentId, yearMonth, status) {
   try {
-    // TODO: Implement API endpoint for status update
-    console.log(`Update status: ${studentId} ${yearMonth} -> ${status}`);
-    
-    updateRedListStats();
-    showNotification(status === 'resolved' ? '対応済みに変更しました' : '未対応に変更しました', 'success');
+    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/status`, {
+      yearMonth,
+      correspondence_status: status
+    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+
+    if (res.data.success) {
+      // ローカルデータを更新（再描画なし）
+      const entry = currentRedListData.find(d => d.student_id === studentId);
+      if (entry) entry.correspondence_status = status;
+      updateRedListStats();
+      showNotification(
+        status === '対応済み' ? '対応済みに変更しました' :
+        status === '対応中'  ? '対応中に変更しました'  : '未対応に変更しました',
+        'success'
+      );
+    } else {
+      showNotification(res.data.error || 'ステータスの更新に失敗しました', 'error');
+    }
   } catch (error) {
     console.error('Error updating status:', error);
     showNotification('ステータスの更新に失敗しました', 'error');
+  }
+}
+
+async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
+  try {
+    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/status`, {
+      yearMonth,
+      assigned_to: assignedTo
+    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+
+    if (res.data.success) {
+      const entry = currentRedListData.find(d => d.student_id === studentId);
+      if (entry) entry.assigned_to = assignedTo;
+      showNotification('担当者を更新しました', 'success');
+    } else {
+      showNotification(res.data.error || '担当者の更新に失敗しました', 'error');
+    }
+  } catch (error) {
+    console.error('Error updating assigned_to:', error);
+    showNotification('担当者の更新に失敗しました', 'error');
   }
 }
 
@@ -13792,6 +13838,12 @@ async function sendRedListDiscordMessage() {
     if (res.data.success) {
       showNotification(`${studentName} 様に Discord メッセージを送信しました`, 'success');
       closeRedListDiscordModal();
+
+      // サーバーが返した担当者名をローカルデータへ即時反映
+      if (res.data.assignedTo) {
+        const entry = currentRedListData.find(d => d.student_id === studentId);
+        if (entry) entry.assigned_to = res.data.assignedTo;
+      }
 
       // ログを再取得してカードを再描画
       await fetchRedListDiscordLogs(yearMonth);
