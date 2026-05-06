@@ -7948,11 +7948,96 @@ async function runDatabaseMigration() {
 let broadcastTutors = [];
 let broadcastTemplates = [];
 let broadcastLogs = [];
+let broadcastIsSending = false;  // 送信中フラグ（タブ切り替えで維持）
+let broadcastSendResult = null; // 送信完了結果（タブ切り替えで維持）
+
+/**
+ * 送信中オーバーレイを表示（body直下に挿入 → タブ切り替えでも残る）
+ */
+function showBroadcastSendingOverlay() {
+  if (document.getElementById('broadcast-sending-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'broadcast-sending-overlay';
+  overlay.className = 'fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center';
+  overlay.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl p-10 flex flex-col items-center gap-6 max-w-sm w-full mx-4">
+      <div class="relative">
+        <div class="w-20 h-20 rounded-full border-4 border-blue-100 flex items-center justify-center">
+          <i class="fas fa-paper-plane text-blue-600 text-3xl animate-bounce"></i>
+        </div>
+        <div class="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
+      </div>
+      <div class="text-center">
+        <p class="text-xl font-bold text-gray-800 mb-1">送信中...</p>
+        <p class="text-sm text-gray-500">全員への送信が完了するまでお待ちください</p>
+        <p class="text-xs text-gray-400 mt-2">別のタブに移動しても送信は継続されます</p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+/**
+ * 送信中オーバーレイを非表示
+ */
+function hideBroadcastSendingOverlay() {
+  const overlay = document.getElementById('broadcast-sending-overlay');
+  if (overlay) overlay.remove();
+}
+
+/**
+ * 送信完了ポップアップを表示
+ */
+function showBroadcastCompleteModal(result, isTest) {
+  const sent = result.sent ?? 1;
+  const total = result.total ?? 1;
+  const failed = result.failed ?? 0;
+  const hasErrors = failed > 0;
+
+  const successHtml = isTest
+    ? `<p class="text-lg text-gray-700">テスト送信が完了しました。</p>`
+    : `
+      <div class="flex justify-center gap-8 my-2">
+        <div class="text-center">
+          <p class="text-3xl font-bold text-green-600">${sent}</p>
+          <p class="text-sm text-gray-500">送信成功</p>
+        </div>
+        ${hasErrors ? `
+        <div class="text-center">
+          <p class="text-3xl font-bold text-red-500">${failed}</p>
+          <p class="text-sm text-gray-500">送信失敗</p>
+        </div>` : ''}
+        <div class="text-center">
+          <p class="text-3xl font-bold text-gray-700">${total}</p>
+          <p class="text-sm text-gray-500">合計</p>
+        </div>
+      </div>
+      ${hasErrors ? `<p class="text-xs text-gray-400 mt-1">詳細は送信履歴をご確認ください</p>` : ''}
+    `;
+
+  showModal(`
+    <div class="text-center">
+      <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i class="fas fa-check-circle text-green-600 text-4xl"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-gray-800 mb-3">送信完了</h2>
+      ${successHtml}
+      <button onclick="closeModal()" class="mt-6 w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-semibold">
+        閉じる
+      </button>
+    </div>
+  `);
+}
 
 /**
  * Render Broadcast Page
  */
 async function renderBroadcastPage() {
+  // タブ切り替えで戻ってきたとき、送信中なら即オーバーレイを再表示
+  if (broadcastIsSending) {
+    showBroadcastSendingOverlay();
+  }
+
   document.getElementById('content').innerHTML = `
     <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
       <div class="max-w-7xl mx-auto">
@@ -8345,11 +8430,19 @@ async function sendBroadcast() {
     return;
   }
   
+  // 二重送信防止
+  if (broadcastIsSending) {
+    showNotification('送信中です。完了までお待ちください', 'warning');
+    return;
+  }
+
+  const isTest = targetTutor === 'test';
+
   try {
-    showNotification('送信中...', 'info');
-    
-    const isTest = targetTutor === 'test';
-    
+    broadcastIsSending = true;
+    broadcastSendResult = null;
+    showBroadcastSendingOverlay();
+
     const requestData = {
       content,
       imageId: imageId || null,
@@ -8360,48 +8453,32 @@ async function sendBroadcast() {
       saveAsTemplate: false,
       isTest: isTest
     };
-    
+
     console.log('[Frontend] Sending request data:', requestData);
-    
+
     const response = await axios.post(`${API_BASE}/api/broadcast/send`, requestData, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { 'Authorization': `Bearer ${sessionToken}` },
+      timeout: 300000  // 5分タイムアウト（大量送信対応）
     });
-    
+
     if (response.data.success) {
-      const message = isTest 
-        ? '✅ テスト送信が完了しました' 
-        : `✅ ${response.data.results.sent}/${response.data.results.total}件 送信完了`;
-      showNotification(message, 'success');
-      
-      // Reload logs
-      await loadBroadcastLogs();
-      
-      // Show detailed results
-      if (response.data.results.failed > 0) {
-        showModal(`
-          <h2 class="text-2xl font-bold mb-4">
-            <i class="fas fa-info-circle mr-2 text-yellow-600"></i>送信結果
-          </h2>
-          <div class="space-y-3">
-            <p class="text-lg">
-              <span class="text-green-600 font-bold">${response.data.results.sent}件</span> 送信成功
-            </p>
-            <p class="text-lg">
-              <span class="text-red-600 font-bold">${response.data.results.failed}件</span> 送信失敗
-            </p>
-            <p class="text-sm text-gray-600 mt-4">
-              詳細は送信履歴をご確認ください。
-            </p>
-          </div>
-          <button onclick="closeModal()" class="mt-4 w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition">
-            閉じる
-          </button>
-        `);
+      broadcastSendResult = { success: true, results: response.data.results, isTest };
+
+      // オーバーレイを外してから完了モーダル
+      hideBroadcastSendingOverlay();
+      showBroadcastCompleteModal(response.data.results, isTest);
+
+      // 送信履歴を更新（broadcastページが表示中であれば）
+      if (currentPage === 'broadcast') {
+        await loadBroadcastLogs();
       }
     }
   } catch (error) {
     console.error('Error sending broadcast:', error);
+    hideBroadcastSendingOverlay();
     showNotification('送信に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
+  } finally {
+    broadcastIsSending = false;
   }
 }
 
