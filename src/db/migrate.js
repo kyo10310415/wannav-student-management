@@ -669,6 +669,27 @@ const migrations = [
         DROP COLUMN IF EXISTS image_filename,
         DROP COLUMN IF EXISTS image_content_type;
     `
+  },
+  {
+    version: 28,
+    name: 'add_red_list_senders',
+    up: `
+      CREATE TABLE IF NOT EXISTS red_list_senders (
+        id           SERIAL PRIMARY KEY,
+        name         VARCHAR(100) NOT NULL,
+        booking_url  TEXT NOT NULL,
+        created_by   VARCHAR(255),
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      COMMENT ON TABLE red_list_senders IS 'レッドリスト Discord 送信者マスタ';
+      COMMENT ON COLUMN red_list_senders.name        IS '送信者名';
+      COMMENT ON COLUMN red_list_senders.booking_url IS '予約URL';
+    `,
+    down: `
+      DROP TABLE IF EXISTS red_list_senders;
+    `
   }
 ];
 
