@@ -13050,6 +13050,45 @@ async function renderRedListPage() {
         </div>
       </div>
     </div>
+
+    <!-- Test Send Modal -->
+    <div id="redlist-test-send-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div class="flex justify-between items-center p-6 border-b">
+          <h3 class="text-lg font-semibold text-gray-800">
+            <i class="fas fa-flask text-green-500 mr-2"></i>テスト送信
+          </h3>
+          <button onclick="closeRedListTestSendModal()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+            <p class="font-semibold mb-1"><i class="fas fa-info-circle mr-1"></i>テスト送信について</p>
+            <p>以下の固定チャンネルへメッセージを送信します。<code class="bg-green-100 px-1 rounded">〇〇</code> は「テスト生徒」に置換されます。</p>
+          </div>
+          <div class="bg-gray-50 rounded-lg border border-gray-200 p-3 text-xs space-y-1">
+            <p class="text-gray-500"><span class="font-medium text-gray-700">送信先チャンネル:</span></p>
+            <p class="text-gray-600 break-all font-mono">https://discord.com/channels/1176426605309083678/1293539258069417994</p>
+            <p class="text-gray-500 mt-1"><span class="font-medium text-gray-700">メンション先 ユーザーID:</span> <span class="font-mono">766666980086120470</span></p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-700">テンプレート: <span id="redlist-test-send-title" class="font-semibold text-gray-900"></span></p>
+          </div>
+          <input type="hidden" id="redlist-test-send-message-id" value="">
+        </div>
+        <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
+          <button onclick="closeRedListTestSendModal()"
+                  class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            キャンセル
+          </button>
+          <button onclick="executeRedListTestSend()" id="redlist-test-send-btn"
+                  class="px-6 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition">
+            <i class="fas fa-paper-plane mr-1"></i>テスト送信
+          </button>
+        </div>
+      </div>
+    </div>
   `;
   
   // Populate history months
@@ -13691,6 +13730,11 @@ function renderRedListMessages() {
             <p class="text-sm text-gray-600 mt-2 whitespace-pre-wrap line-clamp-3">${escapeHtml(m.content)}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
+            <button onclick="openRedListTestSendModal(${m.id}, '${escapeHtml(m.title)}')"
+                    class="text-green-600 hover:text-green-800 text-sm px-2 py-1 rounded border border-green-200 hover:bg-green-50 transition"
+                    title="テスト送信">
+              <i class="fas fa-flask"></i>
+            </button>
             <button onclick="openRedListMessageModal(${m.id})"
                     class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition">
               <i class="fas fa-edit"></i>
@@ -13847,5 +13891,55 @@ async function deleteRedListMessage(id, title) {
     }
   } catch (e) {
     showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  テスト送信モーダル
+// ═══════════════════════════════════════════════════════════════
+
+function openRedListTestSendModal(messageId, messageTitle) {
+  document.getElementById('redlist-test-send-message-id').value = messageId;
+  document.getElementById('redlist-test-send-title').textContent = messageTitle;
+  document.getElementById('redlist-test-send-modal').classList.remove('hidden');
+}
+
+function closeRedListTestSendModal() {
+  document.getElementById('redlist-test-send-modal').classList.add('hidden');
+  document.getElementById('redlist-test-send-message-id').value = '';
+  document.getElementById('redlist-test-send-title').textContent = '';
+}
+
+async function executeRedListTestSend() {
+  const messageId = document.getElementById('redlist-test-send-message-id').value;
+  const btn       = document.getElementById('redlist-test-send-btn');
+
+  if (!messageId) {
+    showNotification('メッセージが指定されていません', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>送信中...';
+
+  try {
+    const res = await axios.post(`${API_BASE}/api/red-list/discord/test-send`, {
+      messageId: parseInt(messageId)
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+
+    if (res.data.success) {
+      showNotification('テスト送信が完了しました ✓', 'success');
+      closeRedListTestSendModal();
+    } else {
+      showNotification(res.data.error || 'テスト送信に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('Test send error:', e);
+    showNotification(e.response?.data?.error || 'テスト送信に失敗しました', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>テスト送信';
   }
 }
