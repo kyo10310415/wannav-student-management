@@ -13404,72 +13404,95 @@ function renderRedListStudentCard(item, isHistory) {
     </div>
   `;
   
+  const cs = item.correspondence_status || '未対応';
+  const ao = item.assigned_to || '';
+  const statusColor =
+    cs === '対応済み' ? 'bg-green-100 text-green-700 border-green-300' :
+    cs === '対応中'   ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                        'bg-red-50 text-red-600 border-red-200';
+
   return `
-    <div class="border-b border-gray-200 py-4 hover:bg-gray-50">
-      <div class="flex items-center justify-between">
-        <div class="flex-1">
-          <div class="flex items-center space-x-4">
-            <div class="flex-shrink-0">
-              <span class="inline-flex items-center justify-center px-3 py-1 rounded-lg ${rankColor} font-bold text-sm">
-                ${rankText}
-              </span>
-            </div>
-            <div>
-              <div class="flex items-center space-x-2">
-                <span class="text-sm font-mono text-gray-600">${item.student_id}</span>
-                <span class="text-lg font-bold text-gray-900">${studentName}</span>
-                <span class="text-sm text-gray-600">
-                  <i class="fas fa-user-tie"></i> ${tutorName}
-                </span>
-                <span class="text-sm font-bold text-gray-700">${score}点</span>
-              </div>
-              <div class="flex items-center space-x-3 mt-1">
-                ${notionUrl !== '#' ? `<a href="${notionUrl}" target="_blank" class="text-gray-600 hover:text-blue-600"><i class="fas fa-file-alt"></i></a>` : '<i class="fas fa-file-alt text-gray-300"></i>'}
-                ${discordUrl !== '#' ? `<a href="${discordUrl}" target="_blank" class="text-gray-600 hover:text-purple-600"><i class="fab fa-discord"></i></a>` : '<i class="fab fa-discord text-gray-300"></i>'}
-                ${youtubeId ? `<a href="${formatYouTubeUrl(youtubeId)}" target="_blank" class="text-gray-600 hover:text-red-600"><i class="fab fa-youtube"></i></a>` : '<i class="fab fa-youtube text-gray-300"></i>'}
-                ${xId ? `<a href="${formatXUrl(xId)}" target="_blank" class="text-gray-600 hover:text-blue-400"><i class="fab fa-x-twitter"></i></a>` : '<i class="fab fa-x-twitter text-gray-300"></i>'}
-                <span class="text-xs text-gray-500">
-                  <i class="fas fa-calendar-alt"></i> ${yearMonth}
-                </span>
-                <span class="text-xs text-gray-500">
-                  <i class="fas fa-redo-alt"></i> 連続 ${consecutiveMonths}ヶ月
-                </span>
-              </div>
-              <div class="mt-2 text-sm">
-                <span class="text-gray-600">今月の満足度: </span>
-                ${satisfactionDisplay}
-              </div>
-              ${scoreBreakdown}
-              ${renderRedListDiscordLogs(item.student_id, yearMonth)}
-            </div>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-3 hover:shadow-md transition-shadow">
+      <!-- カード上部：ランク＋生徒情報＋操作 -->
+      <div class="flex items-start gap-3 p-4">
+
+        <!-- ① ランクバッジ（縦中央） -->
+        <div class="flex-shrink-0 flex flex-col items-center pt-0.5">
+          <span class="inline-flex items-center justify-center w-14 py-1.5 rounded-lg ${rankColor} font-bold text-sm leading-tight text-center">
+            ${rankText}
+          </span>
+          <span class="text-xs font-bold text-gray-500 mt-1">${score}点</span>
+        </div>
+
+        <!-- ② 生徒情報（中央・flex-1で広がる） -->
+        <div class="flex-1 min-w-0">
+          <!-- 氏名行 -->
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span class="text-xs font-mono text-gray-400">${item.student_id}</span>
+            <span class="text-base font-bold text-gray-900">${studentName}</span>
+            <span class="text-xs text-gray-500"><i class="fas fa-user-tie mr-0.5"></i>${tutorName}</span>
+          </div>
+          <!-- SNS・日付行 -->
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+            ${notionUrl !== '#'
+              ? `<a href="${notionUrl}" target="_blank" class="text-gray-400 hover:text-blue-600 text-sm"><i class="fas fa-file-alt"></i></a>`
+              : '<i class="fas fa-file-alt text-gray-200 text-sm"></i>'}
+            ${discordUrl !== '#'
+              ? `<a href="${discordUrl}" target="_blank" class="text-gray-400 hover:text-purple-600 text-sm"><i class="fab fa-discord"></i></a>`
+              : '<i class="fab fa-discord text-gray-200 text-sm"></i>'}
+            ${youtubeId
+              ? `<a href="${formatYouTubeUrl(youtubeId)}" target="_blank" class="text-gray-400 hover:text-red-600 text-sm"><i class="fab fa-youtube"></i></a>`
+              : '<i class="fab fa-youtube text-gray-200 text-sm"></i>'}
+            ${xId
+              ? `<a href="${formatXUrl(xId)}" target="_blank" class="text-gray-400 hover:text-blue-400 text-sm"><i class="fab fa-x-twitter"></i></a>`
+              : '<i class="fab fa-x-twitter text-gray-200 text-sm"></i>'}
+            <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${yearMonth}</span>
+            <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${consecutiveMonths}ヶ月</span>
+          </div>
+          <!-- 満足度 -->
+          <div class="mt-1.5 text-xs text-gray-500">
+            今月の満足度: ${satisfactionDisplay}
           </div>
         </div>
-        <div class="flex flex-col items-end space-y-2 ml-4">
-          ${!isHistory ? (() => {
-            const cs = item.correspondence_status || '未対応';
-            const ao = item.assigned_to || '';
-            return `
-            <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)"
-                    id="rl-status-${item.student_id}"
-                    class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-              <option value="未対応" ${cs === '未対応' ? 'selected' : ''}>未対応</option>
-              <option value="対応中" ${cs === '対応中' ? 'selected' : ''}>対応中</option>
-              <option value="対応済み" ${cs === '対応済み' ? 'selected' : ''}>対応済み</option>
-            </select>
-            <div class="flex items-center space-x-1 mt-1">
-              <i class="fas fa-user-tie text-xs text-indigo-400"></i>
-              <input id="rl-assigned-${item.student_id}" type="text"
-                     value="${escapeHtml(ao)}"
-                     placeholder="担当者名"
-                     onchange="updateRedListAssigned('${item.student_id}', '${yearMonth}', this.value)"
-                     class="border border-gray-200 rounded px-2 py-1 text-xs w-28 focus:ring-1 focus:ring-indigo-400">
-            </div>`;
-          })() : ''}
+
+        <!-- ③ 操作エリア（右端・固定幅） -->
+        <div class="flex-shrink-0 flex flex-col items-end gap-2 min-w-[9rem]">
+          ${!isHistory ? `
+          <!-- 対応状況 -->
+          <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)"
+                  id="rl-status-${item.student_id}"
+                  class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-blue-400 cursor-pointer">
+            <option value="未対応"  ${cs === '未対応'  ? 'selected' : ''}>未対応</option>
+            <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
+            <option value="対応済み" ${cs === '対応済み' ? 'selected' : ''}>対応済み</option>
+          </select>
+          <!-- 担当者 -->
+          <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
+            <i class="fas fa-user-tie text-indigo-300 text-xs flex-shrink-0"></i>
+            <input id="rl-assigned-${item.student_id}" type="text"
+                   value="${escapeHtml(ao)}"
+                   placeholder="担当者名"
+                   onchange="updateRedListAssigned('${item.student_id}', '${yearMonth}', this.value)"
+                   class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
+          </div>
+          ` : `
+          <!-- 履歴タブ：対応状況バッジのみ表示 -->
+          <span class="inline-block border ${statusColor} rounded-lg px-2 py-1 text-xs font-semibold">${cs}</span>
+          ${ao ? `<span class="text-xs text-gray-400"><i class="fas fa-user-tie mr-0.5 text-indigo-300"></i>${escapeHtml(ao)}</span>` : ''}
+          `}
+          <!-- Discord送信ボタン -->
           <button onclick="openRedListDiscordModal('${item.student_id}', '${studentName}', '${yearMonth}')"
-                  class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm transition shadow-sm">
-            <i class="fab fa-discord"></i><span>Discord送信</span>
+                  class="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">
+            <i class="fab fa-discord"></i>Discord送信
           </button>
         </div>
+
+      </div>
+
+      <!-- カード下部：スコア内訳＋Discord送信ログ（折りたたみ） -->
+      <div class="border-t border-gray-100 px-4 pb-2 pt-1">
+        ${scoreBreakdown}
+        ${renderRedListDiscordLogs(item.student_id, yearMonth)}
       </div>
     </div>
   `;
