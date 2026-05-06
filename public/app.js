@@ -12921,7 +12921,7 @@ async function renderRedListPage() {
 
     <!-- Discord Send Modal -->
     <div id="redlist-discord-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-screen overflow-y-auto">
         <div class="flex justify-between items-center p-6 border-b">
           <h3 class="text-lg font-semibold text-gray-800">
             <i class="fab fa-discord text-indigo-500 mr-2"></i>Discord 送信
@@ -12930,22 +12930,40 @@ async function renderRedListPage() {
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
-        <div class="p-6">
-          <p class="text-sm text-gray-600 mb-4">
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-gray-600">
             送信先: <span id="redlist-discord-modal-student" class="font-semibold text-gray-900"></span>
           </p>
-          <label class="block text-sm font-medium text-gray-700 mb-2">テンプレートを選択</label>
-          <select id="redlist-discord-modal-select"
-                  onchange="onRedListMessageSelectChange()"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:ring-2 focus:ring-indigo-500">
-            <option value="">テンプレートを選択...</option>
-          </select>
-          <label class="block text-sm font-medium text-gray-700 mb-2">送信メッセージ</label>
-          <textarea id="redlist-discord-modal-content"
-                    rows="6"
-                    placeholder="送信するメッセージを入力してください..."
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
-          <p class="text-xs text-gray-400 mt-1">※ 生徒様の Discord ID が設定されている場合はメンションが自動付与されます</p>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">テンプレートを選択</label>
+            <select id="redlist-discord-modal-select"
+                    onchange="onRedListMessageSelectChange()"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+              <option value="">テンプレートを選択...</option>
+            </select>
+          </div>
+          <!-- テンプレート添付画像プレビュー -->
+          <div id="redlist-discord-modal-img-wrap" class="hidden">
+            <p class="text-xs font-medium text-gray-600 mb-1"><i class="fas fa-image mr-1 text-indigo-400"></i>添付画像</p>
+            <img id="redlist-discord-modal-img" src="" alt="添付画像"
+                 class="max-h-40 rounded-lg border border-gray-200 object-contain">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">送信メッセージ</label>
+            <textarea id="redlist-discord-modal-content"
+                      rows="6"
+                      placeholder="送信するメッセージを入力してください..."
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+            <!-- Markdown ヒント -->
+            <div class="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-500 space-y-0.5">
+              <p class="font-medium text-gray-600 mb-1">Discord Markdown 記法</p>
+              <p><code class="bg-gray-200 px-1 rounded"># 見出し1</code>　<code class="bg-gray-200 px-1 rounded">## 見出し2</code>　<code class="bg-gray-200 px-1 rounded">### 見出し3</code></p>
+              <p><code class="bg-gray-200 px-1 rounded">**太字**</code>　<code class="bg-gray-200 px-1 rounded">*斜体*</code>　<code class="bg-gray-200 px-1 rounded">__下線__</code>　<code class="bg-gray-200 px-1 rounded">~~打消し~~</code></p>
+              <p><code class="bg-gray-200 px-1 rounded">> 引用</code>　<code class="bg-gray-200 px-1 rounded">- リスト</code>　<code class="bg-gray-200 px-1 rounded">\`コード\`</code></p>
+              <p class="text-indigo-500"><i class="fas fa-user-tag mr-1"></i><code class="bg-indigo-50 px-1 rounded">〇〇</code> と書くと生徒様の名前に自動置換されます</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">※ 生徒様の Discord ID が設定されている場合はメンションが自動付与されます</p>
         </div>
         <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
           <button onclick="closeRedListDiscordModal()" 
@@ -12962,7 +12980,7 @@ async function renderRedListPage() {
 
     <!-- Message Template Edit Modal -->
     <div id="redlist-msg-edit-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-screen overflow-y-auto">
         <div class="flex justify-between items-center p-6 border-b">
           <h3 class="text-lg font-semibold text-gray-800" id="redlist-msg-edit-title">メッセージ作成</h3>
           <button onclick="closeRedListMessageModal()" class="text-gray-400 hover:text-gray-600">
@@ -12978,8 +12996,46 @@ async function renderRedListPage() {
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">メッセージ本文</label>
-            <textarea id="redlist-msg-edit-content" rows="8" placeholder="送信するメッセージ本文を入力..."
+            <textarea id="redlist-msg-edit-content" rows="8"
+                      placeholder="送信するメッセージ本文を入力...\n\n〇〇様 と書くと送信時に生徒様の名前に置換されます"
                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+            <!-- Markdown ヒント -->
+            <div class="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-500 space-y-0.5">
+              <p class="font-medium text-gray-600 mb-1">Discord Markdown 記法</p>
+              <p><code class="bg-gray-200 px-1 rounded"># 見出し1</code>　<code class="bg-gray-200 px-1 rounded">## 見出し2</code>　<code class="bg-gray-200 px-1 rounded">### 見出し3</code></p>
+              <p><code class="bg-gray-200 px-1 rounded">**太字**</code>　<code class="bg-gray-200 px-1 rounded">*斜体*</code>　<code class="bg-gray-200 px-1 rounded">__下線__</code>　<code class="bg-gray-200 px-1 rounded">~~打消し~~</code></p>
+              <p><code class="bg-gray-200 px-1 rounded">> 引用</code>　<code class="bg-gray-200 px-1 rounded">- リスト</code>　<code class="bg-gray-200 px-1 rounded">\`コード\`</code></p>
+              <p class="text-indigo-500"><i class="fas fa-user-tag mr-1"></i><code class="bg-indigo-50 px-1 rounded">〇〇</code> と書くと送信時に生徒様の名前に自動置換されます</p>
+            </div>
+          </div>
+          <!-- 画像添付 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              <i class="fas fa-image mr-1 text-indigo-400"></i>添付画像（JPEG / PNG）
+            </label>
+            <!-- 既存画像プレビュー -->
+            <div id="redlist-msg-edit-img-current" class="hidden mb-2">
+              <p class="text-xs text-gray-500 mb-1">現在の画像:</p>
+              <div class="flex items-center space-x-3">
+                <img id="redlist-msg-edit-img-preview" src="" alt="現在の画像"
+                     class="max-h-32 rounded-lg border border-gray-200 object-contain">
+                <button type="button" onclick="removeRedListMessageImage()"
+                        class="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50">
+                  <i class="fas fa-trash mr-1"></i>削除
+                </button>
+              </div>
+            </div>
+            <!-- 新規画像選択 -->
+            <input type="file" id="redlist-msg-edit-image" accept="image/jpeg,image/png"
+                   onchange="onRedListImageSelected(this)"
+                   class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            <!-- 新規画像プレビュー -->
+            <div id="redlist-msg-edit-img-new-wrap" class="hidden mt-2">
+              <img id="redlist-msg-edit-img-new" src="" alt="新しい画像"
+                   class="max-h-32 rounded-lg border border-gray-200 object-contain">
+            </div>
+            <p class="text-xs text-gray-400 mt-1">最大サイズ: 8MB。Discord に画像として添付されます。</p>
+            <input type="hidden" id="redlist-msg-edit-remove-image" value="false">
           </div>
         </div>
         <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
@@ -13489,18 +13545,40 @@ function populateRedListDiscordSelect() {
     opt.value = m.id;
     opt.textContent = m.title;
     opt.dataset.content = m.content;
+    opt.dataset.hasImage = m.has_image ? '1' : '';
     sel.appendChild(opt);
   });
 }
 
 function onRedListMessageSelectChange() {
-  const sel = document.getElementById('redlist-discord-modal-select');
-  const opt = sel.options[sel.selectedIndex];
-  const textarea = document.getElementById('redlist-discord-modal-content');
+  const sel       = document.getElementById('redlist-discord-modal-select');
+  const opt       = sel.options[sel.selectedIndex];
+  const textarea  = document.getElementById('redlist-discord-modal-content');
+  const imgWrap   = document.getElementById('redlist-discord-modal-img-wrap');
+  const imgEl     = document.getElementById('redlist-discord-modal-img');
+  const { studentName } = _rlDiscordTarget;
+
   if (opt && opt.dataset.content) {
-    textarea.value = opt.dataset.content;
+    // 〇〇 → 生徒名をプレビュー表示（実際の置換はサーバー側で行う）
+    let preview = opt.dataset.content;
+    if (studentName) {
+      preview = preview.replace(/〇〇/g, studentName).replace(/○○/g, studentName);
+    }
+    textarea.value = preview;
+
+    // 添付画像プレビュー
+    if (opt.dataset.hasImage === '1') {
+      const msgId = opt.value;
+      imgEl.src = `${API_BASE}/api/red-list/messages/${msgId}/image`;
+      imgWrap.classList.remove('hidden');
+    } else {
+      imgWrap.classList.add('hidden');
+      imgEl.src = '';
+    }
   } else if (!sel.value) {
     textarea.value = '';
+    imgWrap.classList.add('hidden');
+    imgEl.src = '';
   }
 }
 
@@ -13524,6 +13602,7 @@ async function sendRedListDiscordMessage() {
     const res = await axios.post(`${API_BASE}/api/red-list/discord/send`, {
       studentId,
       yearMonth,
+      studentName,           // サーバー側で 〇〇 置換に使用
       messageId,
       messageContent: messageId ? undefined : content
     }, {
@@ -13597,11 +13676,17 @@ function renderRedListMessages() {
   contentEl.innerHTML = redListMessages.map(m => {
     const created = new Date(m.created_at).toLocaleDateString('ja-JP',
       { timeZone: 'Asia/Tokyo', year:'numeric', month:'numeric', day:'numeric' });
+    const imgBadge = m.has_image
+      ? `<span class="inline-flex items-center text-xs text-indigo-500 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 ml-2"><i class="fas fa-image mr-1"></i>画像あり</span>`
+      : '';
     return `
       <div class="border border-gray-200 rounded-lg p-4 mb-3 hover:border-indigo-300 transition">
         <div class="flex justify-between items-start">
           <div class="flex-1 min-w-0 mr-4">
-            <h4 class="font-semibold text-gray-800 text-sm">${escapeHtml(m.title)}</h4>
+            <div class="flex items-center flex-wrap gap-1">
+              <h4 class="font-semibold text-gray-800 text-sm">${escapeHtml(m.title)}</h4>
+              ${imgBadge}
+            </div>
             <p class="text-xs text-gray-400 mt-0.5">${created} 作成 ／ ${m.created_by || '-'}</p>
             <p class="text-sm text-gray-600 mt-2 whitespace-pre-wrap line-clamp-3">${escapeHtml(m.content)}</p>
           </div>
@@ -13630,12 +13715,24 @@ function openRedListMessageModal(id = null) {
   document.getElementById('redlist-msg-edit-content').value = '';
   document.getElementById('redlist-msg-edit-title').textContent =
     id ? 'メッセージ編集' : 'メッセージ作成';
+  // 画像フィールドをリセット
+  document.getElementById('redlist-msg-edit-image').value = '';
+  document.getElementById('redlist-msg-edit-remove-image').value = 'false';
+  document.getElementById('redlist-msg-edit-img-new-wrap').classList.add('hidden');
+  document.getElementById('redlist-msg-edit-img-current').classList.add('hidden');
 
   if (id) {
     const msg = redListMessages.find(m => m.id === id);
     if (msg) {
       document.getElementById('redlist-msg-edit-name').value    = msg.title;
       document.getElementById('redlist-msg-edit-content').value = msg.content;
+      // 既存画像がある場合はプレビュー表示
+      if (msg.has_image) {
+        const imgWrap    = document.getElementById('redlist-msg-edit-img-current');
+        const imgPreview = document.getElementById('redlist-msg-edit-img-preview');
+        imgPreview.src   = `${API_BASE}/api/red-list/messages/${id}/image`;
+        imgWrap.classList.remove('hidden');
+      }
     }
   }
 
@@ -13646,10 +13743,38 @@ function closeRedListMessageModal() {
   document.getElementById('redlist-msg-edit-modal').classList.add('hidden');
 }
 
+/** 「既存画像を削除」ボタン */
+function removeRedListMessageImage() {
+  document.getElementById('redlist-msg-edit-remove-image').value = 'true';
+  document.getElementById('redlist-msg-edit-img-current').classList.add('hidden');
+}
+
+/** ファイル選択時の新しい画像プレビュー */
+function onRedListImageSelected(input) {
+  const file    = input.files[0];
+  const newWrap = document.getElementById('redlist-msg-edit-img-new-wrap');
+  const newImg  = document.getElementById('redlist-msg-edit-img-new');
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      newImg.src = e.target.result;
+      newWrap.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+    // 新しい画像を追加するときは「削除」フラグをリセット
+    document.getElementById('redlist-msg-edit-remove-image').value = 'false';
+  } else {
+    newWrap.classList.add('hidden');
+    newImg.src = '';
+  }
+}
+
 async function saveRedListMessage() {
-  const id      = document.getElementById('redlist-msg-edit-id').value;
-  const title   = document.getElementById('redlist-msg-edit-name').value.trim();
-  const content = document.getElementById('redlist-msg-edit-content').value.trim();
+  const id          = document.getElementById('redlist-msg-edit-id').value;
+  const title       = document.getElementById('redlist-msg-edit-name').value.trim();
+  const content     = document.getElementById('redlist-msg-edit-content').value.trim();
+  const imageFile   = document.getElementById('redlist-msg-edit-image').files[0];
+  const removeImage = document.getElementById('redlist-msg-edit-remove-image').value === 'true';
 
   if (!title || !content) {
     showNotification('タイトルとメッセージ本文を入力してください', 'error');
@@ -13657,17 +13782,42 @@ async function saveRedListMessage() {
   }
 
   try {
+    // 画像あり または 削除フラグあり → multipart/form-data
     let res;
-    if (id) {
-      res = await axios.put(`${API_BASE}/api/red-list/messages/${id}`,
-        { title, content },
-        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-      );
+    if (imageFile || removeImage) {
+      const formData = new FormData();
+      formData.append('title',       title);
+      formData.append('content',     content);
+      if (imageFile) {
+        formData.append('image', imageFile, imageFile.name);
+      }
+      if (removeImage) {
+        formData.append('removeImage', 'true');
+      }
+      if (id) {
+        res = await axios.put(`${API_BASE}/api/red-list/messages/${id}`,
+          formData,
+          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+      } else {
+        res = await axios.post(`${API_BASE}/api/red-list/messages`,
+          formData,
+          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+      }
     } else {
-      res = await axios.post(`${API_BASE}/api/red-list/messages`,
-        { title, content },
-        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-      );
+      // テキストのみ → JSON
+      if (id) {
+        res = await axios.put(`${API_BASE}/api/red-list/messages/${id}`,
+          { title, content },
+          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+      } else {
+        res = await axios.post(`${API_BASE}/api/red-list/messages`,
+          { title, content },
+          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+      }
     }
 
     if (res.data.success) {

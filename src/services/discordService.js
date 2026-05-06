@@ -718,8 +718,14 @@ export async function sendDiscordMessage(channelUrl, message) {
       return { success: false, error: 'Channel not found or invalid' };
     }
 
-    // メッセージを送信
-    const sentMessage = await channel.send(message);
+    // メッセージを送信（画像添付あり / なし）
+    let sentMessage;
+    if (message && typeof message === 'object' && message.files) {
+      // 画像添付あり: { content: string, files: [AttachmentBuilder] }
+      sentMessage = await channel.send(message);
+    } else {
+      sentMessage = await channel.send(message);
+    }
     
     console.log(`Message sent to channel ${channelId} (message ID: ${sentMessage.id})`);
     return { 
