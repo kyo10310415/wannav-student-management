@@ -707,6 +707,34 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS red_list_senders;
     `
+  },
+  {
+    version: 30,
+    name: 'add_broadcast_jobs',
+    up: `
+      CREATE TABLE IF NOT EXISTS broadcast_jobs (
+        job_id        VARCHAR(64) PRIMARY KEY,
+        broadcast_id  INTEGER REFERENCES broadcast_messages(id),
+        status        VARCHAR(20) NOT NULL DEFAULT 'pending',
+        total         INTEGER NOT NULL DEFAULT 0,
+        sent          INTEGER NOT NULL DEFAULT 0,
+        failed        INTEGER NOT NULL DEFAULT 0,
+        is_test       BOOLEAN NOT NULL DEFAULT false,
+        created_by    VARCHAR(255),
+        created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      COMMENT ON TABLE broadcast_jobs              IS '一斉送信バックグラウンドジョブ管理';
+      COMMENT ON COLUMN broadcast_jobs.job_id      IS 'ジョブID (フロントエンドがポーリングに使用)';
+      COMMENT ON COLUMN broadcast_jobs.status      IS 'pending / running / completed / failed';
+      COMMENT ON COLUMN broadcast_jobs.total       IS '送信対象人数';
+      COMMENT ON COLUMN broadcast_jobs.sent        IS '送信成功件数';
+      COMMENT ON COLUMN broadcast_jobs.failed      IS '送信失敗件数';
+    `,
+    down: `
+      DROP TABLE IF EXISTS broadcast_jobs;
+    `
   }
 ];
 
