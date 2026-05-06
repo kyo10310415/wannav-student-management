@@ -262,6 +262,31 @@ async function sendViaBot(chatUrl, discordId, content, imageId) {
 }
 
 /**
+ * schedulerService.js との後方互換用ラッパー
+ * スケジューラーはサーバー内部で呼ぶので同期的に完了まで待つ
+ */
+export async function sendBroadcast(messageData, targetStudents, userEmail) {
+  const { jobId } = await enqueueBroadcast(messageData, targetStudents, userEmail);
+
+  // バックグラウンドジョブの完了を待つ（スケジューラー用）
+  while (true) {
+    await new Promise(r => setTimeout(r, 1000));
+    const job = await getBroadcastJobStatus(jobId);
+    if (!job || job.status === 'completed' || job.status === 'failed') {
+      return {
+        success: job?.status === 'completed',
+        results: {
+          total:  job?.total  ?? 0,
+          sent:   job?.sent   ?? 0,
+          failed: job?.failed ?? 0,
+          errors: []
+        }
+      };
+    }
+  }
+}
+
+/**
  * ジョブIDを生成して即返す。実際の送信はバックグラウンドで非同期実行。
  * @returns {string} jobId
  */
