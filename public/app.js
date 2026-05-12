@@ -14533,6 +14533,15 @@ let handoverFilterHandover = 'all';   // 引き継ぎ先Tutor filter
 let handoverSortColumn = 'student_id';
 let handoverSortDirection = 'asc';
 
+// 新規割り振りタブ用
+let handoverActiveTab = 'handover';   // 'handover' | 'new'
+let newAssignStudents = [];
+let newAssignNextMonth = '';
+let newAssignFilterAssigned = 'all';
+let newAssignFilterHandover = 'all';
+let newAssignSortColumn = 'lesson_start_date';
+let newAssignSortDirection = 'asc';
+
 async function renderHandoverPage() {
   // Role check: leader+ only
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
@@ -14556,17 +14565,22 @@ async function renderHandoverPage() {
     </div>`;
 
   try {
-    const [studentsRes, sidebarRes] = await Promise.all([
+    const [studentsRes, sidebarRes, newAssignRes] = await Promise.all([
       axios.get(`${API_BASE}/api/handover/students`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       }),
       axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` }
+      }),
+      axios.get(`${API_BASE}/api/handover/new-assignments`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
       })
     ]);
 
-    handoverStudents    = studentsRes.data.data  || [];
-    handoverTutorSidebar = sidebarRes.data.data  || [];
+    handoverStudents     = studentsRes.data.data    || [];
+    handoverTutorSidebar = sidebarRes.data.data     || [];
+    newAssignStudents    = newAssignRes.data.data    || [];
+    newAssignNextMonth   = newAssignRes.data.next_month || '';
 
   } catch (e) {
     console.error('[Handover] Error loading data:', e);
@@ -14585,10 +14599,6 @@ async function renderHandoverPage() {
 function _renderHandoverLayout() {
   const content = document.getElementById('content');
 
-  // Build tutor name lists for filter dropdowns
-  const assignedTutors  = [...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(Boolean))].sort();
-  const handoverTutors  = [...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(Boolean))].sort();
-
   content.innerHTML = `
     <div class="flex gap-4 items-start">
       <!-- Main content (左) -->
@@ -14604,28 +14614,74 @@ function _renderHandoverLayout() {
             </button>
           </div>
 
-          <!-- Filters -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">
-                <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
-              </label>
-              <select id="handover-filter-assigned" onchange="handoverApplyFilter()"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                <option value="all">すべて</option>
-                ${assignedTutors.map(t => `<option value="${escapeHtml(t)}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
-              </select>
+          <!-- Tabs -->
+          <div class="flex gap-2 mb-4 border-b border-gray-200">
+            <button
+              id="handover-tab-handover"
+              onclick="handoverSwitchTab('handover')"
+              class="px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 ${handoverActiveTab === 'handover' ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}">
+              <i class="fas fa-exchange-alt mr-1"></i>引き継ぎ管理
+            </button>
+            <button
+              id="handover-tab-new"
+              onclick="handoverSwitchTab('new')"
+              class="px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 ${handoverActiveTab === 'new' ? 'border-orange-500 text-orange-700 bg-orange-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}">
+              <i class="fas fa-user-plus mr-1"></i>新規割り振り
+              ${newAssignStudents.length > 0 ? `<span class="ml-1 inline-block px-1.5 py-0.5 rounded-full text-xs font-bold bg-orange-500 text-white">${newAssignStudents.length}</span>` : ''}
+            </button>
+          </div>
+
+          <!-- Filters (引き継ぎ管理タブ) -->
+          <div id="handover-filters-handover" class="${handoverActiveTab === 'handover' ? '' : 'hidden'}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
+                </label>
+                <select id="handover-filter-assigned" onchange="handoverApplyFilter()"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="all">すべて</option>
+                  ${[...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  <i class="fas fa-filter mr-1"></i>引き継ぎ先Tutor 絞り込み
+                </label>
+                <select id="handover-filter-handover" onchange="handoverApplyFilter()"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="all">すべて</option>
+                  <option value="__empty__" ${handoverFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
+                  ${[...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+                </select>
+              </div>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">
-                <i class="fas fa-filter mr-1"></i>引き継ぎ先Tutor 絞り込み
-              </label>
-              <select id="handover-filter-handover" onchange="handoverApplyFilter()"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                <option value="all">すべて</option>
-                <option value="__empty__" ${handoverFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
-                ${handoverTutors.map(t => `<option value="${escapeHtml(t)}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
-              </select>
+          </div>
+
+          <!-- Filters (新規割り振りタブ) -->
+          <div id="handover-filters-new" class="${handoverActiveTab === 'new' ? '' : 'hidden'}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
+                </label>
+                <select id="new-assign-filter-assigned" onchange="newAssignApplyFilter()"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
+                  <option value="all">すべて</option>
+                  ${[...new Set(newAssignStudents.map(s => s.homeroom_tutor).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  <i class="fas fa-filter mr-1"></i>引き継ぎ先Tutor 絞り込み
+                </label>
+                <select id="new-assign-filter-handover" onchange="newAssignApplyFilter()"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
+                  <option value="all">すべて</option>
+                  <option value="__empty__" ${newAssignFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
+                  ${[...new Set(newAssignStudents.map(s => s.handover_tutor_name).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -14633,7 +14689,8 @@ function _renderHandoverLayout() {
         <!-- Table card -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <!-- 引き継ぎ管理テーブル -->
+            <table id="handover-table" class="w-full text-sm ${handoverActiveTab === 'handover' ? '' : 'hidden'}">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   ${_handoverTh('student_id', '学籍番号')}
@@ -14651,9 +14708,29 @@ function _renderHandoverLayout() {
                 ${_renderHandoverRows()}
               </tbody>
             </table>
+            <!-- 新規割り振りテーブル -->
+            <table id="new-assign-table" class="w-full text-sm ${handoverActiveTab === 'new' ? '' : 'hidden'}">
+              <thead class="bg-orange-50 border-b border-orange-200">
+                <tr>
+                  ${_newAssignTh('lesson_start_date', 'レッスン開始月')}
+                  ${_newAssignTh('student_id', '学籍番号')}
+                  ${_newAssignTh('name', '生徒名')}
+                  ${_newAssignTh('lesson_progress', 'レッスン進捗')}
+                  ${_newAssignTh('homeroom_tutor', '担当Tutor')}
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">継続月数</th>
+                  ${_newAssignTh('expected_progress', '予想進捗')}
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">予想セクション</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700" style="min-width:160px">引き継ぎ先Tutor</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">リンク</th>
+                </tr>
+              </thead>
+              <tbody id="new-assign-table-body">
+                ${_renderNewAssignRows()}
+              </tbody>
+            </table>
           </div>
           <div id="handover-count-footer" class="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500">
-            ${_handoverCountLabel()}
+            ${handoverActiveTab === 'handover' ? _handoverCountLabel() : _newAssignCountLabel()}
           </div>
         </div>
       </div>
@@ -14682,6 +14759,18 @@ function _handoverTh(col, label) {
   return `
     <th class="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 transition"
         onclick="handoverSort('${col}')">
+      ${label} <i class="fas ${icon} ml-1"></i>
+    </th>`;
+}
+
+function _newAssignTh(col, label) {
+  const isActive = newAssignSortColumn === col;
+  const icon = isActive
+    ? (newAssignSortDirection === 'asc' ? 'fa-sort-up text-orange-600' : 'fa-sort-down text-orange-600')
+    : 'fa-sort text-gray-400';
+  return `
+    <th class="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-orange-100 transition"
+        onclick="newAssignSort('${col}')">
       ${label} <i class="fas ${icon} ml-1"></i>
     </th>`;
 }
@@ -14891,6 +14980,13 @@ function _handoverCountLabel() {
   return `表示中: <strong>${filtered}</strong> / 全 <strong>${total}</strong> 件`;
 }
 
+function _newAssignCountLabel() {
+  const filtered = _getNewAssignFiltered().length;
+  const total    = newAssignStudents.length;
+  const monthLabel = newAssignNextMonth ? ` (${newAssignNextMonth} 開始予定)` : '';
+  return `表示中: <strong>${filtered}</strong> / 全 <strong>${total}</strong> 件${monthLabel}`;
+}
+
 function _renderHandoverSidebar() {
   if (!handoverTutorSidebar.length) {
     return '<p class="text-gray-400 text-xs">Tutorデータなし</p>';
@@ -14930,7 +15026,39 @@ function _renderHandoverSidebar() {
   }).join('');
 }
 
-// ── Filter & sort handlers ──
+// ── Tab switch ──
+
+function handoverSwitchTab(tab) {
+  handoverActiveTab = tab;
+
+  // Tab button styles
+  const tabHandover = document.getElementById('handover-tab-handover');
+  const tabNew      = document.getElementById('handover-tab-new');
+  if (tabHandover) tabHandover.className = `px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 ${
+    tab === 'handover' ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+  }`;
+  if (tabNew) tabNew.className = `px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 ${
+    tab === 'new' ? 'border-orange-500 text-orange-700 bg-orange-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+  }`;
+
+  // Filters visibility
+  const filtersHandover = document.getElementById('handover-filters-handover');
+  const filtersNew      = document.getElementById('handover-filters-new');
+  if (filtersHandover) filtersHandover.classList.toggle('hidden', tab !== 'handover');
+  if (filtersNew)      filtersNew.classList.toggle('hidden', tab !== 'new');
+
+  // Table visibility
+  const tableHandover = document.getElementById('handover-table');
+  const tableNew      = document.getElementById('new-assign-table');
+  if (tableHandover) tableHandover.classList.toggle('hidden', tab !== 'handover');
+  if (tableNew)      tableNew.classList.toggle('hidden', tab !== 'new');
+
+  // Footer
+  const footer = document.getElementById('handover-count-footer');
+  if (footer) footer.innerHTML = tab === 'handover' ? _handoverCountLabel() : _newAssignCountLabel();
+}
+
+// ── Filter & sort handlers (引き継ぎ管理タブ) ──
 
 function handoverApplyFilter() {
   handoverFilterAssigned = document.getElementById('handover-filter-assigned').value;
@@ -14964,6 +15092,176 @@ function _refreshHandoverTable() {
       if (cols[i]) th.outerHTML = _handoverTh(cols[i], labels[i]);
     });
   }
+}
+
+// ── Filter & sort handlers (新規割り振りタブ) ──
+
+function newAssignApplyFilter() {
+  newAssignFilterAssigned = document.getElementById('new-assign-filter-assigned').value;
+  newAssignFilterHandover = document.getElementById('new-assign-filter-handover').value;
+  _refreshNewAssignTable();
+}
+
+function newAssignSort(col) {
+  if (newAssignSortColumn === col) {
+    newAssignSortDirection = newAssignSortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    newAssignSortColumn    = col;
+    newAssignSortDirection = 'asc';
+  }
+  _refreshNewAssignTable();
+}
+
+function _refreshNewAssignTable() {
+  const tbody = document.getElementById('new-assign-table-body');
+  const footer = document.getElementById('handover-count-footer');
+  if (tbody)  tbody.innerHTML  = _renderNewAssignRows();
+  if (footer && handoverActiveTab === 'new') footer.innerHTML = _newAssignCountLabel();
+
+  // Re-render th headers
+  const table = tbody ? tbody.closest('table') : null;
+  if (table) {
+    const headers = table.querySelectorAll('thead th[onclick]');
+    const cols   = ['lesson_start_date', 'student_id', 'name', 'lesson_progress', 'homeroom_tutor', 'expected_progress'];
+    const labels = ['レッスン開始月', '学籍番号', '生徒名', 'レッスン進捗', '担当Tutor', '予想進捗'];
+    headers.forEach((th, i) => {
+      if (cols[i]) th.outerHTML = _newAssignTh(cols[i], labels[i]);
+    });
+  }
+}
+
+function _getNewAssignFiltered() {
+  let data = [...newAssignStudents];
+
+  if (newAssignFilterAssigned !== 'all') {
+    data = data.filter(s => s.homeroom_tutor === newAssignFilterAssigned);
+  }
+  if (newAssignFilterHandover === '__empty__') {
+    data = data.filter(s => !s.handover_tutor_name);
+  } else if (newAssignFilterHandover !== 'all') {
+    data = data.filter(s => s.handover_tutor_name === newAssignFilterHandover);
+  }
+
+  data.sort((a, b) => {
+    let va = a[newAssignSortColumn];
+    let vb = b[newAssignSortColumn];
+
+    if (newAssignSortColumn === 'lesson_progress') {
+      va = va == null ? -1 : parseInt(va, 10);
+      vb = vb == null ? -1 : parseInt(vb, 10);
+      return newAssignSortDirection === 'asc' ? va - vb : vb - va;
+    }
+    if (newAssignSortColumn === 'expected_progress') {
+      const isProA = a.contract_plan === 'PROプラン';
+      const isProB = b.contract_plan === 'PROプラン';
+      va = isProA || a.lesson_progress == null ? -1 : parseInt(a.lesson_progress, 10) + (a.remaining_lessons || 0);
+      vb = isProB || b.lesson_progress == null ? -1 : parseInt(b.lesson_progress, 10) + (b.remaining_lessons || 0);
+      return newAssignSortDirection === 'asc' ? va - vb : vb - va;
+    }
+    // lesson_start_date: 'yyyy/mm/dd' 文字列を辞書順でソート（= 日付順）
+    va = va == null ? '' : String(va);
+    vb = vb == null ? '' : String(vb);
+    if (va < vb) return newAssignSortDirection === 'asc' ? -1 : 1;
+    if (va > vb) return newAssignSortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  return data;
+}
+
+function _renderNewAssignRows() {
+  const data = _getNewAssignFiltered();
+  if (data.length === 0) {
+    return `<tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">
+      <i class="fas fa-inbox text-3xl mb-2"></i><p>対象生徒がいません</p>
+    </td></tr>`;
+  }
+
+  const tutorOptions = handoverTutorSidebar
+    .map(t => `<option value="${escapeHtml(t.tutor_name)}">${escapeHtml(t.tutor_name)}</option>`)
+    .join('');
+
+  return data.map(s => {
+    const isPro      = s.contract_plan === 'PROプラン';
+    const progress   = (s.lesson_progress != null && !isPro) ? parseInt(s.lesson_progress, 10) : null;
+    const badge      = _handoverProgressBadge(progress, isPro);
+    const remaining  = s.remaining_lessons || 0;
+
+    let expectedProgress = null;
+    let expectedBadge = '';
+    if (!isPro && progress != null) {
+      expectedProgress = progress + remaining;
+      expectedBadge = _handoverProgressBadge(expectedProgress, false);
+    }
+
+    const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.created_at);
+    const assignedDisplay = getTutorDisplayName(s.homeroom_tutor) || s.homeroom_tutor || '-';
+
+    // レッスン開始月表示 (yyyy/mm/dd → yyyy/mm)
+    const lessonStartDisplay = s.lesson_start_date
+      ? String(s.lesson_start_date).substring(0, 7)
+      : '-';
+
+    const notionLink  = s.notion_url
+      ? `<a href="${escapeHtml(s.notion_url)}" target="_blank" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
+      : `<span class="text-gray-300 mr-2">Notion</span>`;
+    const discordLink = s.discord_url
+      ? `<a href="${escapeHtml(s.discord_url)}" target="_blank" class="text-indigo-600 hover:underline" title="Discord"><i class="fab fa-discord"></i> Discord</a>`
+      : `<span class="text-gray-300">Discord</span>`;
+
+    const currentHandover = s.handover_tutor_name || '';
+
+    const expectedProgressDisplay = isPro
+      ? '<span class="text-gray-400 text-xs">Pro</span>'
+      : (expectedProgress != null
+          ? `<span class="font-semibold text-gray-700">${expectedProgress}</span><span class="text-gray-400 text-xs ml-1">(+${remaining})</span>${expectedBadge}`
+          : '<span class="text-gray-400 text-xs">-</span>');
+
+    const expectedSectionDisplay = isPro
+      ? _handoverProgressBadge(null, true)
+      : (expectedProgress != null ? expectedBadge : '<span class="text-gray-400 text-xs">-</span>');
+
+    return `
+      <tr class="border-b border-gray-100 hover:bg-orange-50 transition">
+        <td class="px-4 py-3 font-semibold text-orange-700 text-sm whitespace-nowrap">${escapeHtml(lessonStartDisplay)}</td>
+        <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_id || '-')}</td>
+        <td class="px-4 py-3 font-medium text-gray-800">${escapeHtml(s.name || '-')}</td>
+        <td class="px-4 py-3 text-center">
+          ${isPro
+            ? '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">Pro</span>'
+            : `<span class="font-semibold text-gray-700">${progress != null ? progress : '-'}</span>${badge}`
+          }
+        </td>
+        <td class="px-4 py-3 text-gray-700">${escapeHtml(assignedDisplay)}</td>
+        <td class="px-4 py-3">${continuedMonthsBadge}</td>
+        <td class="px-4 py-3 text-center">${expectedProgressDisplay}</td>
+        <td class="px-4 py-3 text-center">${expectedSectionDisplay}</td>
+        <td class="px-4 py-3">
+          <select
+            class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+            onchange="newAssignUpdateAssignment('${s.student_id}', this.value)"
+          >
+            <option value="">— 未設定 —</option>
+            ${tutorOptions.replace(
+              `value="${escapeHtml(currentHandover)}"`,
+              `value="${escapeHtml(currentHandover)}" selected`
+            )}
+          </select>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-xs">
+          <div class="flex items-center gap-2">
+            ${notionLink}${discordLink}
+            <button
+              onclick="handoverCopyInfo('${escapeHtml(s.name || '')}', '${escapeHtml(s.notion_url || '')}', '${escapeHtml(s.discord_url || '')}')"
+              class="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition text-xs font-medium"
+              title="コピー"
+            >
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
 }
 
 // ── Assignment save ──
@@ -15005,6 +15303,48 @@ async function handoverUpdateAssignment(studentId, tutorName) {
     }
   } catch (e) {
     console.error('[Handover] Error updating assignment:', e);
+    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
+  }
+}
+
+// 新規割り振りタブ用 assignment save
+async function newAssignUpdateAssignment(studentId, tutorName) {
+  try {
+    const res = await axios.put(
+      `${API_BASE}/api/handover/students/${studentId}/assignment`,
+      { handover_tutor_name: tutorName || null },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+
+    if (res.data.success) {
+      // ローカル state 更新 (新規割り振り側)
+      const student = newAssignStudents.find(s => s.student_id === studentId);
+      if (student) student.handover_tutor_name = tutorName || '';
+
+      showNotification(
+        tutorName ? `割り振り先を「${tutorName}」に設定しました` : '割り振り先をリセットしました',
+        'success'
+      );
+
+      // サイドバー更新
+      try {
+        const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        handoverTutorSidebar = sidebarRes.data.data || [];
+        const sidebarEl = document.getElementById('handover-sidebar-list');
+        if (sidebarEl) sidebarEl.innerHTML = _renderHandoverSidebar();
+      } catch (_) {}
+
+      // フッター更新
+      const footer = document.getElementById('handover-count-footer');
+      if (footer) footer.innerHTML = _newAssignCountLabel();
+
+    } else {
+      showNotification(res.data.error || '保存に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[Handover] Error updating new assignment:', e);
     showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
   }
 }
