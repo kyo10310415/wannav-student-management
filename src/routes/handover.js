@@ -5,21 +5,45 @@ const app = new Hono();
 
 /**
  * GET /api/handover/students
- * 引き継ぎ管理対象生徒一覧
+ * 引き継ぎ管理対象生徒一覧 + 今月残りレッスン数
  * アクティブ かつ 永久会員・休会・在籍プラン以外
  */
 app.get('/students', async (c) => {
   try {
+    // 今月の今日以降の日付範囲（JST）
+    const now = new Date();
+    const jst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    // 今日の JST 0:00
+    const todayJst = new Date(jst.getFullYear(), jst.getMonth(), jst.getDate());
+    // 今月末 JST 23:59:59
+    const monthEnd = new Date(jst.getFullYear(), jst.getMonth() + 1, 0, 23, 59, 59);
+
+    // 今月残りレッスン数: 今日以降のレッスンを生徒ごとに集計
+    const remainingResult = await query(`
+      SELECT
+        student_id,
+        COUNT(*) AS remaining_lessons
+      FROM lessons
+      WHERE lesson_date >= $1
+        AND lesson_date <= $2
+      GROUP BY student_id
+    `, [todayJst.toISOString(), monthEnd.toISOString()]);
+
+    const remainingMap = {};
+    for (const row of remainingResult.rows) {
+      remainingMap[row.student_id] = parseInt(row.remaining_lessons, 10);
+    }
+
     const result = await query(`
       SELECT
         s.id,
         s.student_id,
         s.name,
         s.lesson_progress,
+        s.contract_plan,
         s.homeroom_tutor,
         s.notion_url,
         s.discord_url,
-        s.contract_plan,
         s.status,
         s.created_at,
         COALESCE(ha.handover_tutor_name, '') AS handover_tutor_name,
@@ -33,7 +57,13 @@ app.get('/students', async (c) => {
       ORDER BY s.student_id ASC NULLS LAST, s.name ASC
     `);
 
-    return c.json({ success: true, data: result.rows });
+    // 今月残りレッスン数を付加
+    const data = result.rows.map(row => ({
+      ...row,
+      remaining_lessons: remainingMap[row.student_id] || 0
+    }));
+
+    return c.json({ success: true, data });
   } catch (error) {
     console.error('[Handover] Error fetching students:', error);
     return c.json({ success: false, error: error.message }, 500);

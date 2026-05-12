@@ -14641,6 +14641,8 @@ function _renderHandoverLayout() {
                   ${_handoverTh('lesson_progress', 'レッスン進捗')}
                   ${_handoverTh('homeroom_tutor', '担当Tutor')}
                   <th class="px-4 py-3 text-left font-semibold text-gray-700">継続月数</th>
+                  ${_handoverTh('expected_progress', '予想進捗')}
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">予想セクション</th>
                   <th class="px-4 py-3 text-left font-semibold text-gray-700" style="min-width:160px">引き継ぎ先Tutor</th>
                   <th class="px-4 py-3 text-left font-semibold text-gray-700">リンク</th>
                 </tr>
@@ -14706,6 +14708,14 @@ function _getHandoverFiltered() {
       vb = vb == null ? -1 : parseInt(vb, 10);
       return handoverSortDirection === 'asc' ? va - vb : vb - va;
     }
+    if (handoverSortColumn === 'expected_progress') {
+      // PROプランは lesson_progress=null → 計算不可、-1 扱い
+      const isProA = a.contract_plan === 'PROプラン';
+      const isProB = b.contract_plan === 'PROプラン';
+      va = isProA || a.lesson_progress == null ? -1 : parseInt(a.lesson_progress, 10) + (a.remaining_lessons || 0);
+      vb = isProB || b.lesson_progress == null ? -1 : parseInt(b.lesson_progress, 10) + (b.remaining_lessons || 0);
+      return handoverSortDirection === 'asc' ? va - vb : vb - va;
+    }
     if (handoverSortColumn === 'student_id') {
       va = va == null ? '' : String(va);
       vb = vb == null ? '' : String(vb);
@@ -14724,7 +14734,7 @@ function _getHandoverFiltered() {
 function _renderHandoverRows() {
   const data = _getHandoverFiltered();
   if (data.length === 0) {
-    return `<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">
+    return `<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">
       <i class="fas fa-inbox text-3xl mb-2"></i><p>対象生徒がいません</p>
     </td></tr>`;
   }
@@ -14735,8 +14745,19 @@ function _renderHandoverRows() {
     .join('');
 
   return data.map(s => {
-    const progress    = s.lesson_progress != null ? parseInt(s.lesson_progress, 10) : null;
-    const badge       = _handoverProgressBadge(progress);
+    const isPro      = s.contract_plan === 'PROプラン';
+    const progress   = (s.lesson_progress != null && !isPro) ? parseInt(s.lesson_progress, 10) : null;
+    const badge      = _handoverProgressBadge(progress, isPro);
+    const remaining  = s.remaining_lessons || 0;
+
+    // 予想進捗: PROプランはそのまま表示なし、それ以外は progress + remaining_lessons
+    let expectedProgress = null;
+    let expectedBadge = '';
+    if (!isPro && progress != null) {
+      expectedProgress = progress + remaining;
+      expectedBadge = _handoverProgressBadge(expectedProgress, false);
+    }
+
     const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.created_at);
     const assignedDisplay = getTutorDisplayName(s.homeroom_tutor) || s.homeroom_tutor || '-';
     const notionLink  = s.notion_url
@@ -14748,16 +14769,32 @@ function _renderHandoverRows() {
 
     const currentHandover = s.handover_tutor_name || '';
 
+    // 予想進捗の表示文字列
+    const expectedProgressDisplay = isPro
+      ? '<span class="text-gray-400 text-xs">Pro</span>'
+      : (expectedProgress != null
+          ? `<span class="font-semibold text-gray-700">${expectedProgress}</span><span class="text-gray-400 text-xs ml-1">(+${remaining})</span>${expectedBadge}`
+          : '<span class="text-gray-400 text-xs">-</span>');
+
+    // 予想セクション表示
+    const expectedSectionDisplay = isPro
+      ? _handoverProgressBadge(null, true)
+      : (expectedProgress != null ? expectedBadge : '<span class="text-gray-400 text-xs">-</span>');
+
     return `
       <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
         <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_id || '-')}</td>
         <td class="px-4 py-3 font-medium text-gray-800">${escapeHtml(s.name || '-')}</td>
         <td class="px-4 py-3 text-center">
-          <span class="font-semibold text-gray-700">${progress != null ? progress : '-'}</span>
-          ${badge}
+          ${isPro
+            ? '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">Pro</span>'
+            : `<span class="font-semibold text-gray-700">${progress != null ? progress : '-'}</span>${badge}`
+          }
         </td>
         <td class="px-4 py-3 text-gray-700">${escapeHtml(assignedDisplay)}</td>
         <td class="px-4 py-3">${continuedMonthsBadge}</td>
+        <td class="px-4 py-3 text-center">${expectedProgressDisplay}</td>
+        <td class="px-4 py-3 text-center">${expectedSectionDisplay}</td>
         <td class="px-4 py-3">
           <select
             class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
@@ -14777,13 +14814,23 @@ function _renderHandoverRows() {
   }).join('');
 }
 
-function _handoverProgressBadge(progress) {
-  if (progress == null) return '';
+// isPro=true のとき progress に関わらず Pro バッジを返す
+// progress=null かつ isPro=false のとき空文字を返す
+function _handoverProgressBadge(progress, isPro) {
   let label, cls;
-  if (progress <= 9)        { label = 'C';   cls = 'bg-gray-200 text-gray-700'; }
-  else if (progress <= 18)  { label = 'B';   cls = 'bg-blue-100 text-blue-700'; }
-  else if (progress <= 28)  { label = 'A';   cls = 'bg-green-100 text-green-700'; }
-  else                      { label = 'Pro'; cls = 'bg-purple-100 text-purple-700'; }
+  if (isPro) {
+    label = 'Pro'; cls = 'bg-purple-100 text-purple-700';
+  } else if (progress == null) {
+    return '';
+  } else if (progress <= 9)  {
+    label = 'C';   cls = 'bg-gray-200 text-gray-700';
+  } else if (progress <= 18) {
+    label = 'B';   cls = 'bg-blue-100 text-blue-700';
+  } else if (progress <= 28) {
+    label = 'A';   cls = 'bg-green-100 text-green-700';
+  } else {
+    label = 'Pro'; cls = 'bg-purple-100 text-purple-700';
+  }
   return `<span class="ml-1 inline-block px-1.5 py-0.5 rounded text-xs font-bold ${cls}">${label}</span>`;
 }
 
@@ -14870,8 +14917,8 @@ function _refreshHandoverTable() {
   const table = tbody ? tbody.closest('table') : null;
   if (table) {
     const headers = table.querySelectorAll('thead th[onclick]');
-    const cols = ['student_id', 'name', 'lesson_progress', 'homeroom_tutor'];
-    const labels = ['学籍番号', '生徒名', 'レッスン進捗', '担当Tutor'];
+    const cols = ['student_id', 'name', 'lesson_progress', 'homeroom_tutor', 'expected_progress'];
+    const labels = ['学籍番号', '生徒名', 'レッスン進捗', '担当Tutor', '予想進捗'];
     headers.forEach((th, i) => {
       if (cols[i]) th.outerHTML = _handoverTh(cols[i], labels[i]);
     });
