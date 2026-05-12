@@ -198,6 +198,81 @@ app.get('/tutor-sidebar', async (c) => {
 });
 
 /**
+ * GET /api/handover/new-assignments
+ * 新規割り振り対象生徒一覧
+ * ステータス = 'レッスン準備中' かつ lesson_start_date が翌月
+ * lesson_start_date は 'yyyy/mm/dd' 形式で保存されている
+ */
+app.get('/new-assignments', async (c) => {
+  try {
+    // JST で翌月の年・月を計算
+    const now = new Date();
+    const jst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    const nextMonth = new Date(jst.getFullYear(), jst.getMonth() + 1, 1);
+    const nextYear  = nextMonth.getFullYear();
+    const nextMon   = nextMonth.getMonth() + 1; // 1-indexed
+
+    // 今月残りレッスン数（引き継ぎ管理と同じロジック）
+    const todayJst = new Date(jst.getFullYear(), jst.getMonth(), jst.getDate());
+    const monthEnd = new Date(jst.getFullYear(), jst.getMonth() + 1, 0, 23, 59, 59);
+
+    const remainingResult = await query(`
+      SELECT
+        student_id,
+        COUNT(*) AS remaining_lessons
+      FROM lessons
+      WHERE lesson_date >= $1
+        AND lesson_date <= $2
+      GROUP BY student_id
+    `, [todayJst.toISOString(), monthEnd.toISOString()]);
+
+    const remainingMap = {};
+    for (const row of remainingResult.rows) {
+      remainingMap[row.student_id] = parseInt(row.remaining_lessons, 10);
+    }
+
+    // lesson_start_date は 'yyyy/mm/dd' 形式の TEXT or DATE
+    // EXTRACT で年・月を比較する
+    const result = await query(`
+      SELECT
+        s.id,
+        s.student_id,
+        s.name,
+        s.lesson_progress,
+        s.contract_plan,
+        s.homeroom_tutor,
+        s.notion_url,
+        s.discord_url,
+        s.status,
+        s.created_at,
+        s.lesson_start_date,
+        COALESCE(ha.handover_tutor_name, '') AS handover_tutor_name,
+        ha.assigned_at,
+        ha.reset_at
+      FROM students s
+      LEFT JOIN handover_assignments ha ON ha.student_id = s.student_id
+      WHERE
+        s.status = 'レッスン準備中'
+        AND s.lesson_start_date IS NOT NULL
+        AND s.lesson_start_date <> ''
+        AND TO_DATE(s.lesson_start_date::TEXT, 'YYYY/MM/DD') >= DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month'
+        AND TO_DATE(s.lesson_start_date::TEXT, 'YYYY/MM/DD') <  DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '2 month'
+      ORDER BY s.lesson_start_date ASC, s.student_id ASC
+    `);
+
+    const data = result.rows.map(row => ({
+      ...row,
+      remaining_lessons: remainingMap[row.student_id] || 0
+    }));
+
+    return c.json({ success: true, data, next_month: `${nextYear}/${String(nextMon).padStart(2, '0')}` });
+  } catch (error) {
+    console.error('[Handover] Error fetching new assignments:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
  * POST /api/handover/reset
  * 引き継ぎ先Tutorを一括リセット (毎月10日 スケジューラーから呼ぶ)
  */
