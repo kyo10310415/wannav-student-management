@@ -735,6 +735,33 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS broadcast_jobs;
     `
+  },
+  {
+    version: 31,
+    name: 'create_handover_assignments',
+    up: `
+      CREATE TABLE IF NOT EXISTS handover_assignments (
+        id                  SERIAL PRIMARY KEY,
+        student_id          INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        handover_tutor_name VARCHAR(255),
+        assigned_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        reset_at            TIMESTAMP WITH TIME ZONE,
+        created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_handover_assignments_student
+        ON handover_assignments(student_id);
+
+      COMMENT ON TABLE handover_assignments IS '引き継ぎ管理: 生徒ごとの引き継ぎ先Tutor割り当て';
+      COMMENT ON COLUMN handover_assignments.student_id          IS '生徒ID';
+      COMMENT ON COLUMN handover_assignments.handover_tutor_name IS '引き継ぎ先Tutor名';
+      COMMENT ON COLUMN handover_assignments.reset_at            IS '最後にリセットされた日時 (毎月10日)';
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_handover_assignments_student;
+      DROP TABLE IF EXISTS handover_assignments;
+    `
   }
 ];
 

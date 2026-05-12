@@ -34,6 +34,7 @@ import lessonReportReminderRoutes from './routes/lessonReportReminder.js';
 import vqDiagnosisRoutes from './routes/vq-diagnosis.js';
 import lessonReportRoutes from './routes/lessonReports.js';
 import redListRoutes from './routes/redList.js';
+import handoverRoutes from './routes/handover.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -87,6 +88,7 @@ app.route('/api/lesson-report-reminder', lessonReportReminderRoutes);
 app.route('/api/vq-diagnosis', vqDiagnosisRoutes);
 app.route('/api/lesson-reports', lessonReportRoutes);
 app.route('/api/red-list', redListRoutes);
+app.route('/api/handover', handoverRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
@@ -266,6 +268,30 @@ cron.schedule('5 0 1 * *', async () => {
     console.log('Monthly red list reset completed');
   } catch (error) {
     console.error('Error in monthly red list reset:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule handover assignments reset (runs on 10th of each month at 0:10 JST)
+// 毎月10日に引き継ぎ先Tutorを空欄にリセット
+console.log('Handover monthly reset: ENABLED (10th of month at 00:10 JST)');
+cron.schedule('10 0 10 * *', async () => {
+  console.log('[Handover] Running monthly handover reset at 00:10 JST on the 10th...');
+  try {
+    const { query: dbQuery } = await import('./db/connection.js');
+    const result = await dbQuery(`
+      UPDATE handover_assignments
+      SET handover_tutor_name = NULL,
+          reset_at            = NOW(),
+          updated_at          = NOW()
+      WHERE handover_tutor_name IS NOT NULL
+        AND handover_tutor_name <> ''
+      RETURNING id
+    `);
+    console.log(`[Handover] Monthly reset completed: cleared ${result.rowCount} assignments`);
+  } catch (error) {
+    console.error('[Handover] Error in monthly handover reset:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'

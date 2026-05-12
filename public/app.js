@@ -260,6 +260,11 @@ function renderHeader() {
               <button id="nav-broadcast" onclick="changePage('broadcast')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'broadcast' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-bullhorn mr-2"></i>一斉送信
               </button>
+              ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+              <button id="nav-handover" onclick="changePage('handover')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'handover' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+                <i class="fas fa-exchange-alt mr-2"></i>引き継ぎ管理
+              </button>
+              ` : ''}
             </div>
             
             <!-- Divider -->
@@ -665,6 +670,8 @@ async function renderApp() {
     await renderLessonReportsPage();
   } else if (currentPage === 'roulette-winners') {
     await renderRouletteWinnersPage();
+  } else if (currentPage === 'handover') {
+    await renderHandoverPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -14513,3 +14520,397 @@ async function deleteRedListSender(id, name) {
     showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
   }
 }
+
+// ============================================================
+// 引き継ぎ管理ページ
+// ============================================================
+
+// State
+let handoverStudents = [];
+let handoverTutorSidebar = [];
+let handoverFilterAssigned = 'all';   // 担当Tutor filter
+let handoverFilterHandover = 'all';   // 引き継ぎ先Tutor filter
+let handoverSortColumn = 'student_number';
+let handoverSortDirection = 'asc';
+
+async function renderHandoverPage() {
+  // Role check: leader+ only
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+    const content = document.getElementById('content');
+    content.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-20 text-center">
+        <i class="fas fa-lock text-6xl text-red-400 mb-4"></i>
+        <h2 class="text-2xl font-bold text-gray-700 mb-2">アクセス権限がありません</h2>
+        <p class="text-gray-500 mb-6">このページはリーダー以上のみ閲覧できます。</p>
+        <button onclick="changePage('today')" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+          <i class="fas fa-home mr-2"></i>ホームに戻る
+        </button>
+      </div>`;
+    return;
+  }
+
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="flex items-center justify-center py-10 text-gray-500">
+      <i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...
+    </div>`;
+
+  try {
+    const [studentsRes, sidebarRes] = await Promise.all([
+      axios.get(`${API_BASE}/api/handover/students`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
+      }),
+      axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
+      })
+    ]);
+
+    handoverStudents    = studentsRes.data.data  || [];
+    handoverTutorSidebar = sidebarRes.data.data  || [];
+
+  } catch (e) {
+    console.error('[Handover] Error loading data:', e);
+    content.innerHTML = `
+      <div class="text-center py-20 text-red-500">
+        <i class="fas fa-exclamation-circle text-4xl mb-3"></i>
+        <p>データの読み込みに失敗しました。</p>
+        <button onclick="renderHandoverPage()" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg">再試行</button>
+      </div>`;
+    return;
+  }
+
+  _renderHandoverLayout();
+}
+
+function _renderHandoverLayout() {
+  const content = document.getElementById('content');
+
+  // Build tutor name lists for filter dropdowns
+  const assignedTutors  = [...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(Boolean))].sort();
+  const handoverTutors  = [...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(Boolean))].sort();
+
+  content.innerHTML = `
+    <div class="flex gap-4 items-start">
+      <!-- Main content (左) -->
+      <div class="flex-1 min-w-0">
+        <!-- Header card -->
+        <div class="bg-white rounded-lg shadow-md p-5 mb-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 class="text-xl font-bold text-gray-800">
+              <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>引き継ぎ管理
+            </h2>
+            <button onclick="renderHandoverPage()" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+              <i class="fas fa-sync-alt mr-1"></i>更新
+            </button>
+          </div>
+
+          <!-- Filters -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">
+                <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
+              </label>
+              <select id="handover-filter-assigned" onchange="handoverApplyFilter()"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="all">すべて</option>
+                ${assignedTutors.map(t => `<option value="${escapeHtml(t)}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">
+                <i class="fas fa-filter mr-1"></i>引き継ぎ先Tutor 絞り込み
+              </label>
+              <select id="handover-filter-handover" onchange="handoverApplyFilter()"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="all">すべて</option>
+                <option value="__empty__" ${handoverFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
+                ${handoverTutors.map(t => `<option value="${escapeHtml(t)}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table card -->
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  ${_handoverTh('student_number', '学籍番号')}
+                  ${_handoverTh('name', '生徒名')}
+                  ${_handoverTh('lesson_progress', 'レッスン進捗')}
+                  ${_handoverTh('homeroom_tutor', '担当Tutor')}
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">継続月数</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700" style="min-width:160px">引き継ぎ先Tutor</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">リンク</th>
+                </tr>
+              </thead>
+              <tbody id="handover-table-body">
+                ${_renderHandoverRows()}
+              </tbody>
+            </table>
+          </div>
+          <div id="handover-count-footer" class="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500">
+            ${_handoverCountLabel()}
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar (右) -->
+      <div class="w-64 flex-shrink-0">
+        <div class="bg-white rounded-lg shadow-md p-4 sticky top-4">
+          <h3 class="text-base font-bold text-gray-800 mb-3">
+            <i class="fas fa-users mr-2 text-purple-600"></i>Tutor 引き継ぎ可能人数
+          </h3>
+          <p class="text-xs text-gray-500 mb-3">残り受け入れ可能数 − アクティブ生徒数 − 引き継ぎ予定数</p>
+          <div class="space-y-2" id="handover-sidebar-list">
+            ${_renderHandoverSidebar()}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function _handoverTh(col, label) {
+  const isActive = handoverSortColumn === col;
+  const icon = isActive
+    ? (handoverSortDirection === 'asc' ? 'fa-sort-up text-blue-600' : 'fa-sort-down text-blue-600')
+    : 'fa-sort text-gray-400';
+  return `
+    <th class="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 transition"
+        onclick="handoverSort('${col}')">
+      ${label} <i class="fas ${icon} ml-1"></i>
+    </th>`;
+}
+
+function _getHandoverFiltered() {
+  let data = [...handoverStudents];
+
+  if (handoverFilterAssigned !== 'all') {
+    data = data.filter(s => s.homeroom_tutor === handoverFilterAssigned);
+  }
+  if (handoverFilterHandover === '__empty__') {
+    data = data.filter(s => !s.handover_tutor_name);
+  } else if (handoverFilterHandover !== 'all') {
+    data = data.filter(s => s.handover_tutor_name === handoverFilterHandover);
+  }
+
+  // Sort
+  data.sort((a, b) => {
+    let va = a[handoverSortColumn];
+    let vb = b[handoverSortColumn];
+
+    if (handoverSortColumn === 'lesson_progress') {
+      va = va == null ? -1 : parseInt(va, 10);
+      vb = vb == null ? -1 : parseInt(vb, 10);
+      return handoverSortDirection === 'asc' ? va - vb : vb - va;
+    }
+    if (handoverSortColumn === 'student_number') {
+      va = va == null ? '' : String(va);
+      vb = vb == null ? '' : String(vb);
+    } else {
+      va = va == null ? '' : String(va).toLowerCase();
+      vb = vb == null ? '' : String(vb).toLowerCase();
+    }
+    if (va < vb) return handoverSortDirection === 'asc' ? -1 : 1;
+    if (va > vb) return handoverSortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  return data;
+}
+
+function _renderHandoverRows() {
+  const data = _getHandoverFiltered();
+  if (data.length === 0) {
+    return `<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">
+      <i class="fas fa-inbox text-3xl mb-2"></i><p>対象生徒がいません</p>
+    </td></tr>`;
+  }
+
+  // Build tutor name list for dropdown (tutor_name column)
+  const tutorOptions = handoverTutorSidebar
+    .map(t => `<option value="${escapeHtml(t.tutor_name)}">${escapeHtml(t.tutor_name)}</option>`)
+    .join('');
+
+  return data.map(s => {
+    const progress    = s.lesson_progress != null ? parseInt(s.lesson_progress, 10) : null;
+    const badge       = _handoverProgressBadge(progress);
+    const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.created_at);
+    const assignedDisplay = getTutorDisplayName(s.homeroom_tutor) || s.homeroom_tutor || '-';
+    const notionLink  = s.notion_url
+      ? `<a href="${escapeHtml(s.notion_url)}" target="_blank" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
+      : `<span class="text-gray-300 mr-2">Notion</span>`;
+    const discordLink = s.discord_url
+      ? `<a href="${escapeHtml(s.discord_url)}" target="_blank" class="text-indigo-600 hover:underline" title="Discord"><i class="fab fa-discord"></i> Discord</a>`
+      : `<span class="text-gray-300">Discord</span>`;
+
+    const currentHandover = s.handover_tutor_name || '';
+
+    return `
+      <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+        <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_number || '-')}</td>
+        <td class="px-4 py-3 font-medium text-gray-800">${escapeHtml(s.name || '-')}</td>
+        <td class="px-4 py-3 text-center">
+          <span class="font-semibold text-gray-700">${progress != null ? progress : '-'}</span>
+          ${badge}
+        </td>
+        <td class="px-4 py-3 text-gray-700">${escapeHtml(assignedDisplay)}</td>
+        <td class="px-4 py-3">${continuedMonthsBadge}</td>
+        <td class="px-4 py-3">
+          <select
+            class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            onchange="handoverUpdateAssignment(${s.id}, this.value)"
+          >
+            <option value="">— 未設定 —</option>
+            ${tutorOptions.replace(
+              `value="${escapeHtml(currentHandover)}"`,
+              `value="${escapeHtml(currentHandover)}" selected`
+            )}
+          </select>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-xs">
+          ${notionLink}${discordLink}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function _handoverProgressBadge(progress) {
+  if (progress == null) return '';
+  let label, cls;
+  if (progress < 20)       { label = 'C'; cls = 'bg-gray-200 text-gray-700'; }
+  else if (progress < 40)  { label = 'B'; cls = 'bg-blue-100 text-blue-700'; }
+  else if (progress < 60)  { label = 'A'; cls = 'bg-green-100 text-green-700'; }
+  else                     { label = 'Pro'; cls = 'bg-purple-100 text-purple-700'; }
+  return `<span class="ml-1 inline-block px-1.5 py-0.5 rounded text-xs font-bold ${cls}">${label}</span>`;
+}
+
+function _handoverContinuedMonthsBadge(createdAt) {
+  if (!createdAt) return '<span class="text-gray-400 text-xs">-</span>';
+  const start = new Date(createdAt);
+  const now   = new Date();
+  const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  let cls;
+  if (months < 3)       cls = 'bg-gray-100 text-gray-600';
+  else if (months < 6)  cls = 'bg-blue-100 text-blue-700';
+  else if (months < 12) cls = 'bg-green-100 text-green-700';
+  else                  cls = 'bg-yellow-100 text-yellow-700';
+  return `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}">${months}ヶ月</span>`;
+}
+
+function _handoverCountLabel() {
+  const filtered = _getHandoverFiltered().length;
+  const total    = handoverStudents.length;
+  return `表示中: <strong>${filtered}</strong> / 全 <strong>${total}</strong> 件`;
+}
+
+function _renderHandoverSidebar() {
+  if (!handoverTutorSidebar.length) {
+    return '<p class="text-gray-400 text-xs">Tutorデータなし</p>';
+  }
+
+  return handoverTutorSidebar.map(t => {
+    const available = t.available;
+    let cls, icon;
+    if (available == null)   { cls = 'text-gray-400'; icon = ''; }
+    else if (available <= 0) { cls = 'text-red-600 font-bold'; icon = '<i class="fas fa-times-circle mr-1"></i>'; }
+    else if (available <= 2) { cls = 'text-orange-500 font-semibold'; icon = '<i class="fas fa-exclamation-circle mr-1"></i>'; }
+    else                     { cls = 'text-green-600 font-semibold'; icon = '<i class="fas fa-check-circle mr-1"></i>'; }
+
+    const availStr = available != null ? available : '-';
+    const detailStr = t.capacity != null
+      ? `<span class="text-gray-400 text-xs">(容量${t.capacity} - 担当${t.active_count} - 予定${t.pending_count})</span>`
+      : `<span class="text-gray-400 text-xs">(容量未設定)</span>`;
+
+    return `
+      <div class="flex flex-col gap-0.5 border-b border-gray-100 pb-2">
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-gray-700 font-medium">${escapeHtml(t.tutor_name)}</span>
+          <span class="${cls} text-sm">${icon}${availStr}名</span>
+        </div>
+        <div class="text-right">${detailStr}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Filter & sort handlers ──
+
+function handoverApplyFilter() {
+  handoverFilterAssigned = document.getElementById('handover-filter-assigned').value;
+  handoverFilterHandover = document.getElementById('handover-filter-handover').value;
+  _refreshHandoverTable();
+}
+
+function handoverSort(col) {
+  if (handoverSortColumn === col) {
+    handoverSortDirection = handoverSortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    handoverSortColumn    = col;
+    handoverSortDirection = 'asc';
+  }
+  _refreshHandoverTable();
+}
+
+function _refreshHandoverTable() {
+  const tbody = document.getElementById('handover-table-body');
+  const footer = document.getElementById('handover-count-footer');
+  if (tbody)  tbody.innerHTML  = _renderHandoverRows();
+  if (footer) footer.innerHTML = _handoverCountLabel();
+
+  // Re-render th headers so sort arrows update
+  const table = tbody ? tbody.closest('table') : null;
+  if (table) {
+    const headers = table.querySelectorAll('thead th[onclick]');
+    const cols = ['student_number', 'name', 'lesson_progress', 'homeroom_tutor'];
+    const labels = ['学籍番号', '生徒名', 'レッスン進捗', '担当Tutor'];
+    headers.forEach((th, i) => {
+      if (cols[i]) th.outerHTML = _handoverTh(cols[i], labels[i]);
+    });
+  }
+}
+
+// ── Assignment save ──
+
+async function handoverUpdateAssignment(studentId, tutorName) {
+  try {
+    const res = await axios.put(
+      `${API_BASE}/api/handover/students/${studentId}/assignment`,
+      { handover_tutor_name: tutorName || null },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+
+    if (res.data.success) {
+      // Update local state
+      const student = handoverStudents.find(s => s.id === studentId);
+      if (student) student.handover_tutor_name = tutorName || '';
+
+      showNotification(
+        tutorName ? `引き継ぎ先を「${tutorName}」に設定しました` : '引き継ぎ先をリセットしました',
+        'success'
+      );
+
+      // Refresh sidebar counts in background
+      try {
+        const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
+          headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        handoverTutorSidebar = sidebarRes.data.data || [];
+        const sidebarEl = document.getElementById('handover-sidebar-list');
+        if (sidebarEl) sidebarEl.innerHTML = _renderHandoverSidebar();
+      } catch (_) {}
+
+      // Refresh count footer
+      const footer = document.getElementById('handover-count-footer');
+      if (footer) footer.innerHTML = _handoverCountLabel();
+
+    } else {
+      showNotification(res.data.error || '保存に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[Handover] Error updating assignment:', e);
+    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
+  }
+}
+
