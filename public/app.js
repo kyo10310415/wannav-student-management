@@ -14808,10 +14808,48 @@ function _renderHandoverRows() {
           </select>
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-xs">
-          ${notionLink}${discordLink}
+          <div class="flex items-center gap-2">
+            ${notionLink}${discordLink}
+            <button
+              onclick="handoverCopyInfo('${escapeHtml(s.name || '')}', '${escapeHtml(s.notion_url || '')}', '${escapeHtml(s.discord_url || '')}')"
+              class="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition text-xs font-medium"
+              title="コピー"
+            >
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
         </td>
       </tr>`;
   }).join('');
+}
+
+// ── Copy info ──
+function handoverCopyInfo(name, notionUrl, discordUrl) {
+  const lines = [
+    `生徒名：${name ? name + '様' : ''}`,
+    `Notionリンク：${notionUrl || ''}`,
+    `Discordリンク：${discordUrl || ''}`,
+  ];
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    showNotification('クリップボードにコピーしました', 'success');
+  }).catch(() => {
+    // fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showNotification('クリップボードにコピーしました', 'success');
+    } catch (_) {
+      showNotification('コピーに失敗しました', 'error');
+    }
+    document.body.removeChild(ta);
+  });
 }
 
 // isPro=true のとき progress に関わらず Pro バッジを返す
