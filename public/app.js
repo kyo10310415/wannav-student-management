@@ -14911,10 +14911,13 @@ function _renderHandoverSidebar() {
       detailParts.push(`担当${t.active_count}`);
       if (t.to_count   > 0) detailParts.push(`<span class="text-red-400">受取-${t.to_count}</span>`);
       if (t.from_count > 0) detailParts.push(`<span class="text-green-500">送出+${t.from_count}</span>`);
-      var detailStr = `<span class="text-gray-400 text-xs">(${detailParts.join(' ')})</span>`;
     } else {
-      var detailStr = `<span class="text-gray-400 text-xs">(容量未設定)</span>`;
+      detailParts.push('容量未設定');
+      detailParts.push(`担当${t.active_count}`);
+      if (t.to_count   > 0) detailParts.push(`<span class="text-red-400">受取-${t.to_count}</span>`);
+      if (t.from_count > 0) detailParts.push(`<span class="text-green-500">送出+${t.from_count}</span>`);
     }
+    var detailStr = `<span class="text-gray-400 text-xs">(${detailParts.join(' ')})</span>`;
 
     return `
       <div class="flex flex-col gap-0.5 border-b border-gray-100 pb-2">
