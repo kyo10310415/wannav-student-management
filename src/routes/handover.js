@@ -13,8 +13,8 @@ app.get('/students', async (c) => {
     const result = await query(`
       SELECT
         s.id,
+        s.student_id,
         s.name,
-        s.student_number,
         s.lesson_progress,
         s.homeroom_tutor,
         s.notion_url,
@@ -26,11 +26,11 @@ app.get('/students', async (c) => {
         ha.assigned_at,
         ha.reset_at
       FROM students s
-      LEFT JOIN handover_assignments ha ON ha.student_id = s.id
+      LEFT JOIN handover_assignments ha ON ha.student_id = s.student_id
       WHERE
         s.status = 'アクティブ'
         AND s.contract_plan NOT IN ('永久会員', '休会', '在籍プラン')
-      ORDER BY s.student_number ASC NULLS LAST, s.name ASC
+      ORDER BY s.student_id ASC NULLS LAST, s.name ASC
     `);
 
     return c.json({ success: true, data: result.rows });
@@ -46,10 +46,10 @@ app.get('/students', async (c) => {
  */
 app.put('/students/:studentId/assignment', async (c) => {
   try {
-    const studentId = parseInt(c.req.param('studentId'));
+    const studentId = c.req.param('studentId');
     const { handover_tutor_name } = await c.req.json();
 
-    if (isNaN(studentId)) {
+    if (!studentId) {
       return c.json({ success: false, error: 'Invalid student ID' }, 400);
     }
 
