@@ -14780,10 +14780,10 @@ function _renderHandoverRows() {
 function _handoverProgressBadge(progress) {
   if (progress == null) return '';
   let label, cls;
-  if (progress < 20)       { label = 'C'; cls = 'bg-gray-200 text-gray-700'; }
-  else if (progress < 40)  { label = 'B'; cls = 'bg-blue-100 text-blue-700'; }
-  else if (progress < 60)  { label = 'A'; cls = 'bg-green-100 text-green-700'; }
-  else                     { label = 'Pro'; cls = 'bg-purple-100 text-purple-700'; }
+  if (progress <= 9)        { label = 'C';   cls = 'bg-gray-200 text-gray-700'; }
+  else if (progress <= 18)  { label = 'B';   cls = 'bg-blue-100 text-blue-700'; }
+  else if (progress <= 28)  { label = 'A';   cls = 'bg-green-100 text-green-700'; }
+  else                      { label = 'Pro'; cls = 'bg-purple-100 text-purple-700'; }
   return `<span class="ml-1 inline-block px-1.5 py-0.5 rounded text-xs font-bold ${cls}">${label}</span>`;
 }
 
@@ -14820,9 +14820,16 @@ function _renderHandoverSidebar() {
     else                     { cls = 'text-green-600 font-semibold'; icon = '<i class="fas fa-check-circle mr-1"></i>'; }
 
     const availStr = available != null ? available : '-';
-    const detailStr = t.capacity != null
-      ? `<span class="text-gray-400 text-xs">(容量${t.capacity} - 担当${t.active_count} - 予定${t.pending_count})</span>`
-      : `<span class="text-gray-400 text-xs">(容量未設定)</span>`;
+    let detailParts = [];
+    if (t.capacity != null) {
+      detailParts.push(`容量${t.capacity}`);
+      detailParts.push(`担当${t.active_count}`);
+      if (t.to_count   > 0) detailParts.push(`<span class="text-red-400">受取-${t.to_count}</span>`);
+      if (t.from_count > 0) detailParts.push(`<span class="text-green-500">送出+${t.from_count}</span>`);
+      var detailStr = `<span class="text-gray-400 text-xs">(${detailParts.join(' ')})</span>`;
+    } else {
+      var detailStr = `<span class="text-gray-400 text-xs">(容量未設定)</span>`;
+    }
 
     return `
       <div class="flex flex-col gap-0.5 border-b border-gray-100 pb-2">

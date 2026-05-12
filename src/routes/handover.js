@@ -76,7 +76,10 @@ app.put('/students/:studentId/assignment', async (c) => {
 /**
  * GET /api/handover/tutor-sidebar
  * 右サイドバー用: Tutor名 + 引き継ぎ可能人数
- * 計算式: student_capacity - activeStudents - pendingHandoverCount
+ * 計算式: student_capacity - activeStudents - 引き継ぎ先件数(受取) + 引き継ぎ元件数(送出)
+ *
+ * 例) AさんのTutor担当生徒の引き継ぎ先がBさんの場合
+ *   → Aさん: +1（送り出し）、Bさん: -1（受け取り）
  */
 app.get('/tutor-sidebar', async (c) => {
   try {
@@ -110,34 +113,49 @@ app.get('/tutor-sidebar', async (c) => {
       activeCountMap[row.homeroom_tutor] = parseInt(row.cnt, 10);
     }
 
-    // 3. 引き継ぎ先Tutorの件数 (handover_assignments テーブル、空でないもの)
-    const handoverCountResult = await query(`
+    // 3. 引き継ぎ割り当て情報を取得
+    //    引き継ぎ先Tutor名 + 担当Tutor（homeroom_tutor = notion_name）を一緒に取得
+    const assignmentResult = await query(`
       SELECT
-        handover_tutor_name,
-        COUNT(*) AS cnt
-      FROM handover_assignments
-      WHERE handover_tutor_name IS NOT NULL
-        AND handover_tutor_name <> ''
-      GROUP BY handover_tutor_name
+        ha.handover_tutor_name,
+        s.homeroom_tutor
+      FROM handover_assignments ha
+      JOIN students s ON s.student_id = ha.student_id
+      WHERE ha.handover_tutor_name IS NOT NULL
+        AND ha.handover_tutor_name <> ''
     `);
-    const handoverCountMap = {};
-    for (const row of handoverCountResult.rows) {
-      handoverCountMap[row.handover_tutor_name] = parseInt(row.cnt, 10);
+
+    // 引き継ぎ先Tutor名 → 受け取り件数（-1される側）
+    const handoverToMap = {};   // key: tutor_name (引き継ぎ先)
+    // 担当Tutor notion_name → 送り出し件数（+1される側）
+    const handoverFromMap = {}; // key: notion_name (担当Tutor)
+
+    for (const row of assignmentResult.rows) {
+      // 受け取り側 (引き継ぎ先Tutor)
+      handoverToMap[row.handover_tutor_name] = (handoverToMap[row.handover_tutor_name] || 0) + 1;
+      // 送り出し側 (担当Tutor = homeroom_tutor = notion_name)
+      if (row.homeroom_tutor) {
+        handoverFromMap[row.homeroom_tutor] = (handoverFromMap[row.homeroom_tutor] || 0) + 1;
+      }
     }
 
     // 4. 各Tutorの引き継ぎ可能人数を計算
     const data = tutorsResult.rows.map(tutor => {
-      const capacity     = tutor.student_capacity != null ? parseInt(tutor.student_capacity, 10) : null;
-      const active       = activeCountMap[tutor.notion_name] || 0;
-      const pending      = handoverCountMap[tutor.tutor_name] || 0;
-      const available    = capacity != null ? capacity - active - pending : null;
+      const capacity  = tutor.student_capacity != null ? parseInt(tutor.student_capacity, 10) : null;
+      const active    = activeCountMap[tutor.notion_name] || 0;
+      // 引き継ぎ先として受け取る件数（マイナス）
+      const toCount   = handoverToMap[tutor.tutor_name] || 0;
+      // 担当生徒が引き継ぎに出ている件数（プラス）
+      const fromCount = handoverFromMap[tutor.notion_name] || 0;
+      const available = capacity != null ? capacity - active - toCount + fromCount : null;
 
       return {
         tutor_name:    tutor.tutor_name,
         notion_name:   tutor.notion_name,
         capacity:      capacity,
         active_count:  active,
-        pending_count: pending,
+        to_count:      toCount,
+        from_count:    fromCount,
         available:     available
       };
     });
