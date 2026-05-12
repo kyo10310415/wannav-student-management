@@ -14530,7 +14530,7 @@ let handoverStudents = [];
 let handoverTutorSidebar = [];
 let handoverFilterAssigned = 'all';   // 担当Tutor filter
 let handoverFilterHandover = 'all';   // 引き継ぎ先Tutor filter
-let handoverSortColumn = 'student_number';
+let handoverSortColumn = 'student_id';
 let handoverSortDirection = 'asc';
 
 async function renderHandoverPage() {
@@ -14636,7 +14636,7 @@ function _renderHandoverLayout() {
             <table class="w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  ${_handoverTh('student_number', '学籍番号')}
+                  ${_handoverTh('student_id', '学籍番号')}
                   ${_handoverTh('name', '生徒名')}
                   ${_handoverTh('lesson_progress', 'レッスン進捗')}
                   ${_handoverTh('homeroom_tutor', '担当Tutor')}
@@ -14706,7 +14706,7 @@ function _getHandoverFiltered() {
       vb = vb == null ? -1 : parseInt(vb, 10);
       return handoverSortDirection === 'asc' ? va - vb : vb - va;
     }
-    if (handoverSortColumn === 'student_number') {
+    if (handoverSortColumn === 'student_id') {
       va = va == null ? '' : String(va);
       vb = vb == null ? '' : String(vb);
     } else {
@@ -14750,7 +14750,7 @@ function _renderHandoverRows() {
 
     return `
       <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
-        <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_number || '-')}</td>
+        <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_id || '-')}</td>
         <td class="px-4 py-3 font-medium text-gray-800">${escapeHtml(s.name || '-')}</td>
         <td class="px-4 py-3 text-center">
           <span class="font-semibold text-gray-700">${progress != null ? progress : '-'}</span>
@@ -14761,7 +14761,7 @@ function _renderHandoverRows() {
         <td class="px-4 py-3">
           <select
             class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-            onchange="handoverUpdateAssignment(${s.id}, this.value)"
+            onchange="handoverUpdateAssignment('${s.student_id}', this.value)"
           >
             <option value="">— 未設定 —</option>
             ${tutorOptions.replace(
@@ -14863,7 +14863,7 @@ function _refreshHandoverTable() {
   const table = tbody ? tbody.closest('table') : null;
   if (table) {
     const headers = table.querySelectorAll('thead th[onclick]');
-    const cols = ['student_number', 'name', 'lesson_progress', 'homeroom_tutor'];
+    const cols = ['student_id', 'name', 'lesson_progress', 'homeroom_tutor'];
     const labels = ['学籍番号', '生徒名', 'レッスン進捗', '担当Tutor'];
     headers.forEach((th, i) => {
       if (cols[i]) th.outerHTML = _handoverTh(cols[i], labels[i]);
@@ -14883,7 +14883,7 @@ async function handoverUpdateAssignment(studentId, tutorName) {
 
     if (res.data.success) {
       // Update local state
-      const student = handoverStudents.find(s => s.id === studentId);
+      const student = handoverStudents.find(s => s.student_id === studentId);
       if (student) student.handover_tutor_name = tutorName || '';
 
       showNotification(
