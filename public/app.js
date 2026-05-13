@@ -12960,10 +12960,16 @@ async function renderRedListPage() {
         <i class="fas fa-exclamation-triangle text-red-600 mr-2"></i>
         レッドリスト
       </h2>
-      <button onclick="updateRedListData()" 
-              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200 shadow-md">
-        <i class="fas fa-sync-alt mr-2"></i>データ更新
-      </button>
+      <div class="flex gap-2">
+        <button onclick="exportRedListCsv()"
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200 shadow-md">
+          <i class="fas fa-file-csv mr-2"></i>CSV出力
+        </button>
+        <button onclick="updateRedListData()" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200 shadow-md">
+          <i class="fas fa-sync-alt mr-2"></i>データ更新
+        </button>
+      </div>
     </div>
 
     <!-- Tabs -->
@@ -13495,6 +13501,12 @@ function renderRedListStudentCard(item, isHistory) {
   const discordUrl = student?.discord_url || '#';
   const youtubeId = student?.youtube_channel_id || '';
   const xId = student?.x_account_id || '';
+
+  // 継続月数（休会期間差し引き）
+  const suspensionMonths = student?.suspension_months || 0;
+  const continuedMonths = student?.lesson_start_date
+    ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths)
+    : null;
   
   let rankColor = 'bg-gray-100 text-gray-700';
   let rankText = '-';
@@ -13622,6 +13634,9 @@ function renderRedListStudentCard(item, isHistory) {
               : '<i class="fab fa-x-twitter text-gray-200 text-sm"></i>'}
             <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${yearMonth}</span>
             <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${consecutiveMonths}ヶ月</span>
+            ${continuedMonths !== null
+              ? `<span class="text-xs text-blue-500 font-semibold"><i class="fas fa-hourglass-half mr-0.5"></i>継続 ${continuedMonths}ヶ月</span>`
+              : ''}
           </div>
           <!-- 満足度 -->
           <div class="mt-1.5 text-xs text-gray-500">
@@ -13858,6 +13873,113 @@ function toggleRedListLogDetail(studentId, yearMonth) {
   if (chevron) chevron.className = isHidden
     ? 'fas fa-chevron-down text-xs'
     : 'fas fa-chevron-up text-xs';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CSV 出力
+// ═══════════════════════════════════════════════════════════════
+
+function exportRedListCsv() {
+  // 現在タブ or 過去タブのデータを使用
+  const isHistory = currentRedListTab === 'history';
+  const data = isHistory ? historyRedListData : currentRedListData;
+
+  if (!data || data.length === 0) {
+    showNotification('出力するデータがありません', 'error');
+    return;
+  }
+
+  // CSV ヘッダー
+  const headers = [
+    '生徒名',
+    '学籍番号',
+    'ランク',
+    'レッドリストスコア',
+    '継続月数',
+    'Discord送信回数',
+    'Discord送信履歴（最終送信日時）',
+    'Discord送信履歴（タイトル）',
+    'Discord送信者',
+  ];
+
+  const rows = data.map(item => {
+    const student = students.find(s => s.student_id === item.student_id);
+    const studentName = student ? student.name : item.student_name || '不明';
+    const score = item.total_score ?? item.final_score ?? 0;
+    const rank = (item.rank || item.final_rank || '-').toUpperCase();
+    const yearMonth = item.year_month;
+
+    // 継続月数
+    const suspensionMonths = student?.suspension_months || 0;
+    const continuedMonths = student?.lesson_start_date
+      ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths)
+      : '';
+
+    // Discord送信ログ
+    const key = `${item.student_id}_${yearMonth}`;
+    const logs = redListDiscordLogs[key] || [];
+    const sendCount = logs.length;
+
+    // 最終送信日時・タイトル・送信者（最新1件）
+    let lastSentAt = '';
+    let lastTitle = '';
+    let lastSender = '';
+    if (logs.length > 0) {
+      const latest = logs[0]; // 降順で並んでいるので [0] が最新
+      lastSentAt = new Date(latest.sent_at).toLocaleString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+      lastTitle  = latest.message_title || latest.message_content?.slice(0, 30) || '';
+      lastSender = latest.sent_by || '';
+    }
+
+    return [
+      studentName,
+      item.student_id,
+      rank,
+      score,
+      continuedMonths,
+      sendCount,
+      lastSentAt,
+      lastTitle,
+      lastSender,
+    ];
+  });
+
+  // CSV 文字列生成（ダブルクォート囲み・カンマエスケープ）
+  const escapeCsvCell = v => {
+    const s = String(v ?? '');
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const csvLines = [
+    headers.map(escapeCsvCell).join(','),
+    ...rows.map(row => row.map(escapeCsvCell).join(','))
+  ];
+  const csvContent = '\uFEFF' + csvLines.join('\n'); // BOM付き UTF-8（Excel対応）
+
+  // ダウンロード
+  const now = new Date();
+  const ymd = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const label = isHistory ? 'history' : 'current';
+  const filename = `redlist_${label}_${ymd}.csv`;
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showNotification(`CSV出力完了: ${rows.length}件`, 'success');
 }
 
 
