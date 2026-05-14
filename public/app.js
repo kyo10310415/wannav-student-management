@@ -13525,6 +13525,28 @@ function renderRedListStudentCard(item, isHistory) {
   const score = item.total_score || item.final_score || 0;
   const yearMonth = item.year_month;
   const consecutiveMonths = 1; // TODO: Calculate from history
+
+  // ── 経過日数計算 ──────────────────────────────────
+  // ① レッドリストに追加されてから何日経過したか（created_at基準）
+  let addedDaysAgo = null;
+  if (item.created_at) {
+    const addedDate = new Date(item.created_at);
+    const nowJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    addedDaysAgo = Math.floor((nowJst - addedDate) / (1000 * 60 * 60 * 24));
+  }
+
+  // ② 今月最初のDiscord送信から何日経過したか
+  // redListDiscordLogs は降順なので末尾 [length-1] が最古
+  let firstDiscordDaysAgo = null;
+  const logKey = `${item.student_id}_${yearMonth}`;
+  const logsForItem = redListDiscordLogs[logKey];
+  if (logsForItem && logsForItem.length > 0) {
+    const firstLog = logsForItem[logsForItem.length - 1]; // 最古
+    const firstSentDate = new Date(firstLog.sent_at);
+    const nowJst2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    firstDiscordDaysAgo = Math.floor((nowJst2 - firstSentDate) / (1000 * 60 * 60 * 24));
+  }
+  // ─────────────────────────────────────────────────
   
   // Get satisfaction average from red list data (preferred) or surveyStatsCache (fallback)
   let satisfactionDisplay = '<span class="text-gray-400">-</span>';
@@ -13636,6 +13658,19 @@ function renderRedListStudentCard(item, isHistory) {
             <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${consecutiveMonths}ヶ月</span>
             ${continuedMonths !== null
               ? `<span class="text-xs text-blue-500 font-semibold"><i class="fas fa-hourglass-half mr-0.5"></i>継続 ${continuedMonths}ヶ月</span>`
+              : ''}
+          </div>
+          <!-- 経過日数行 -->
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+            ${addedDaysAgo !== null
+              ? `<span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${addedDaysAgo >= 14 ? 'bg-red-100 text-red-700' : addedDaysAgo >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'} font-semibold">
+                  <i class="fas fa-calendar-plus"></i>追加から${addedDaysAgo}日
+                </span>`
+              : ''}
+            ${firstDiscordDaysAgo !== null
+              ? `<span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${firstDiscordDaysAgo >= 14 ? 'bg-purple-100 text-purple-700' : firstDiscordDaysAgo >= 7 ? 'bg-indigo-100 text-indigo-700' : 'bg-indigo-50 text-indigo-500'} font-semibold">
+                  <i class="fab fa-discord"></i>初回送信から${firstDiscordDaysAgo}日
+                </span>`
               : ''}
           </div>
           <!-- 満足度 -->
@@ -13896,6 +13931,8 @@ function exportRedListCsv() {
     'ランク',
     'レッドリストスコア',
     '継続月数',
+    '追加からの経過日数',
+    'Discord初回送信からの経過日数',
     'Discord送信回数',
     'Discord送信履歴（最終送信日時）',
     'Discord送信履歴（タイトル）',
@@ -13915,10 +13952,27 @@ function exportRedListCsv() {
       ? calculateContinuedMonths(student.lesson_start_date, suspensionMonths)
       : '';
 
+    // 追加からの経過日数
+    let csvAddedDaysAgo = '';
+    if (item.created_at) {
+      const addedDate = new Date(item.created_at);
+      const nowJst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      csvAddedDaysAgo = Math.floor((nowJst - addedDate) / (1000 * 60 * 60 * 24));
+    }
+
     // Discord送信ログ
     const key = `${item.student_id}_${yearMonth}`;
     const logs = redListDiscordLogs[key] || [];
     const sendCount = logs.length;
+
+    // 初回送信からの経過日数（最古ログ）
+    let csvFirstDiscordDaysAgo = '';
+    if (logs.length > 0) {
+      const firstLog = logs[logs.length - 1]; // 降順なので末尾が最古
+      const firstSentDate = new Date(firstLog.sent_at);
+      const nowJst2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      csvFirstDiscordDaysAgo = Math.floor((nowJst2 - firstSentDate) / (1000 * 60 * 60 * 24));
+    }
 
     // 最終送信日時・タイトル・送信者（最新1件）
     let lastSentAt = '';
@@ -13941,6 +13995,8 @@ function exportRedListCsv() {
       rank,
       score,
       continuedMonths,
+      csvAddedDaysAgo,
+      csvFirstDiscordDaysAgo,
       sendCount,
       lastSentAt,
       lastTitle,
