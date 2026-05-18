@@ -220,13 +220,15 @@ export async function updateRedList(studentId, yearMonth = null) {
 
   // Check if reservation is already locked
   const existingResult = await query(
-    `SELECT reservation_locked, reservation_score FROM red_list 
+    `SELECT reservation_locked, reservation_score, ex_rank FROM red_list 
      WHERE student_id = $1 AND year_month = $2`,
     [studentId, yearMonth]
   );
   
   const isReservationLocked = existingResult.rows.length > 0 && existingResult.rows[0].reservation_locked;
   const lockedReservationScore = isReservationLocked ? existingResult.rows[0].reservation_score : null;
+  // 手動でEXが設定されている場合は保持する
+  const manualExRank = existingResult.rows.length > 0 ? existingResult.rows[0].ex_rank : false;
 
   const scores = await calculateRedListScore(studentId, yearMonth);
   
@@ -249,6 +251,49 @@ export async function updateRedList(studentId, yearMonth = null) {
     console.log(`[Red List] ${studentId} - Reservation score locked at ${lockedReservationScore} point(s)`);
   }
 
+  // ── EX ランク自動判定 ─────────────────────────────────────
+  // 今月がレッドリスト（low/middle/high）かつ
+  // 直前2ヶ月連続でレッドリストに入っていれば自動EX
+  let autoExRank = false;
+  if (scores.rank !== 'none') {
+    try {
+      const [year, month] = yearMonth.split('-').map(Number);
+      // 直前2ヶ月分の yearMonth を生成
+      const prev1Date = new Date(year, month - 2, 1);
+      const prev2Date = new Date(year, month - 3, 1);
+      const prev1YM = `${prev1Date.getFullYear()}-${String(prev1Date.getMonth() + 1).padStart(2, '0')}`;
+      const prev2YM = `${prev2Date.getFullYear()}-${String(prev2Date.getMonth() + 1).padStart(2, '0')}`;
+
+      // red_list_history から直前2ヶ月を確認
+      const historyResult = await query(
+        `SELECT year_month, final_rank FROM red_list_history
+         WHERE student_id = $1 AND year_month IN ($2, $3)`,
+        [studentId, prev1YM, prev2YM]
+      );
+
+      const redRanks = new Set(['low', 'middle', 'high']);
+      const prev1InList = historyResult.rows.some(
+        r => r.year_month === prev1YM && redRanks.has(r.final_rank)
+      );
+      const prev2InList = historyResult.rows.some(
+        r => r.year_month === prev2YM && redRanks.has(r.final_rank)
+      );
+
+      // 直前1ヶ月がレッドリスト入りしていれば自動EX（= 今月で2ヶ月連続）
+      // 直前2ヶ月もレッドリスト入りしていれば継続EX
+      if (prev1InList) {
+        autoExRank = true;
+        console.log(`[Red List] ${studentId} - Auto EX: consecutive red list (prev1=${prev1YM})`);
+      }
+    } catch (err) {
+      console.error(`[Red List] Error checking EX rank for ${studentId}:`, err.message);
+    }
+  }
+
+  // 手動EXが設定済みならそちらを優先（手動EXは自動判定でリセットされない）
+  const finalExRank = manualExRank || autoExRank;
+  // ────────────────────────────────────────────────────────────
+
   // Determine if we should lock the reservation score now
   const [year, month] = yearMonth.split('-').map(Number);
   const now = new Date();
@@ -263,8 +308,8 @@ export async function updateRedList(studentId, yearMonth = null) {
 
   await query(
     `INSERT INTO red_list 
-     (student_id, year_month, satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score, total_score, rank, reservation_locked, satisfaction_avg, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+     (student_id, year_month, satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score, total_score, rank, reservation_locked, satisfaction_avg, ex_rank, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
      ON CONFLICT (student_id, year_month)
      DO UPDATE SET
        satisfaction_score = $3,
@@ -279,6 +324,10 @@ export async function updateRedList(studentId, yearMonth = null) {
          ELSE $10
        END,
        satisfaction_avg = $11,
+       ex_rank = CASE
+         WHEN red_list.ex_rank = TRUE THEN TRUE
+         ELSE $12
+       END,
        updated_at = CURRENT_TIMESTAMP`,
     [
       studentId,
@@ -291,10 +340,12 @@ export async function updateRedList(studentId, yearMonth = null) {
       scores.total,
       scores.rank,
       shouldLockNow,
-      scores.satisfactionAvg
+      scores.satisfactionAvg,
+      finalExRank
     ]
   );
 
+  scores.exRank = finalExRank;
   return scores;
 }
 

@@ -13002,6 +13002,11 @@ function updateRedListDisplay(studentId, redList) {
     textColor = 'text-yellow-700';
     rankText = 'LOW';
   }
+
+  // EXバッジ（バッジ上部に重ねて表示）
+  const exBadge = redList.ex_rank
+    ? '<span class="text-xs px-1 rounded bg-purple-600 text-white font-black block text-center leading-tight">EX</span>'
+    : '';
   
   // Build breakdown tooltip
   const breakdown = [
@@ -13026,6 +13031,7 @@ function updateRedListDisplay(studentId, redList) {
   cell.innerHTML = `
     <div class="relative inline-flex flex-col items-center cursor-pointer red-list-item group">
       <span class="text-xs font-bold ${textColor}">${redList.total_score}点</span>
+      ${exBadge}
       <span class="text-xs px-1 rounded ${bgColor} ${textColor} font-semibold">${rankText}</span>
       
       <!-- Tooltip -->
@@ -13125,7 +13131,20 @@ async function renderRedListPage() {
     </div>
 
     <!-- Stats Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div class="bg-white rounded-lg shadow-md p-4">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <span class="text-purple-700 text-sm font-black">EX</span>
+            </div>
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-gray-600">EX</p>
+            <p class="text-2xl font-bold text-purple-700" id="redlist-count-ex">0</p>
+          </div>
+        </div>
+      </div>
       <div class="bg-white rounded-lg shadow-md p-4">
         <div class="flex items-center">
           <div class="flex-shrink-0">
@@ -13550,7 +13569,7 @@ async function loadRedListCurrentData() {
 
     if (response.data.success) {
       currentRedListData = response.data.data.filter(item =>
-        item.rank === 'high' || item.rank === 'middle' || item.rank === 'low'
+        item.rank === 'high' || item.rank === 'middle' || item.rank === 'low' || item.ex_rank === true
       );
       renderRedListCurrentList();
       updateRedListStats();
@@ -13649,6 +13668,9 @@ function renderRedListStudentCard(item, isHistory) {
     rankColor = 'bg-yellow-100 text-yellow-700';
     rankText = 'LOW';
   }
+
+  // EXランク（HighよりさらにHighの上）
+  const isEx = item.ex_rank === true || item.final_ex_rank === true;
   
   const score = item.total_score || item.final_score || 0;
   const yearMonth = item.year_month;
@@ -13754,9 +13776,18 @@ function renderRedListStudentCard(item, isHistory) {
 
         <!-- ① ランクバッジ（縦中央） -->
         <div class="flex-shrink-0 flex flex-col items-center pt-0.5">
+          ${isEx ? `
+          <span class="inline-flex items-center justify-center w-14 py-1 rounded-t-lg bg-purple-600 text-white font-black text-sm leading-tight text-center">
+            EX
+          </span>
+          <span class="inline-flex items-center justify-center w-14 py-1 rounded-b-lg ${rankColor} font-bold text-sm leading-tight text-center">
+            ${rankText}
+          </span>
+          ` : `
           <span class="inline-flex items-center justify-center w-14 py-1.5 rounded-lg ${rankColor} font-bold text-sm leading-tight text-center">
             ${rankText}
           </span>
+          `}
           <span class="text-xs font-bold text-gray-500 mt-1">${score}点</span>
         </div>
 
@@ -13837,6 +13868,12 @@ function renderRedListStudentCard(item, isHistory) {
                   class="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">
             <i class="fab fa-discord"></i>Discord送信
           </button>
+          <!-- EXランク手動設定ボタン -->
+          <button onclick="toggleExRank('${item.student_id}', '${yearMonth}', ${isEx})"
+                  id="ex-rank-btn-${item.student_id}"
+                  class="w-full flex items-center justify-center gap-1 ${isEx ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'} px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm border ${isEx ? 'border-purple-600' : 'border-gray-300'}">
+            <span class="font-black">EX</span>${isEx ? ' 解除' : ' 手動設定'}
+          </button>
         </div>
 
       </div>
@@ -13855,12 +13892,16 @@ function updateRedListStats() {
   const isHistory = currentRedListTab === 'history';
   const data = isHistory ? historyRedListData : currentRedListData;
   const rankField = isHistory ? 'final_rank' : 'rank';
+  const exField   = isHistory ? 'final_ex_rank' : 'ex_rank';
 
+  const ex     = data.filter(item => item[exField] === true).length;
   const high   = data.filter(item => item[rankField] === 'high').length;
   const middle = data.filter(item => item[rankField] === 'middle').length;
   const low    = data.filter(item => item[rankField] === 'low').length;
   const resolved = 0; // TODO: Count resolved status
   
+  const exEl = document.getElementById('redlist-count-ex');
+  if (exEl) exEl.textContent = ex;
   document.getElementById('redlist-count-high').textContent = high;
   document.getElementById('redlist-count-middle').textContent = middle;
   document.getElementById('redlist-count-low').textContent = low;
@@ -13920,6 +13961,33 @@ async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
   }
 }
 
+async function toggleExRank(studentId, yearMonth, currentEx) {
+  const newEx = !currentEx;
+  try {
+    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/ex-rank`, {
+      yearMonth,
+      ex_rank: newEx
+    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+
+    if (res.data.success) {
+      // ローカルデータを更新して再描画
+      const entry = currentRedListData.find(d => d.student_id === studentId);
+      if (entry) entry.ex_rank = newEx;
+      updateRedListStats();
+      renderRedListCurrentList();
+      showNotification(
+        newEx ? 'EXランクを設定しました' : 'EXランクを解除しました',
+        'success'
+      );
+    } else {
+      showNotification(res.data.error || 'EXランクの更新に失敗しました', 'error');
+    }
+  } catch (error) {
+    console.error('Error toggling EX rank:', error);
+    showNotification('EXランクの更新に失敗しました', 'error');
+  }
+}
+
 function populateRedListHistoryMonths() {
   const select = document.getElementById('redlist-history-month');
   const today = new Date();
@@ -13955,7 +14023,7 @@ async function loadRedListHistoryData() {
 
     if (response.data.success) {
       historyRedListData = response.data.data.filter(item =>
-        item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low'
+        item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low' || item.final_ex_rank === true
       );
 
       renderRedListHistoryList();
@@ -14056,6 +14124,7 @@ function exportRedListCsv() {
   const headers = [
     '生徒名',
     '学籍番号',
+    'EXランク',
     'ランク',
     'レッドリストスコア',
     '継続月数',
@@ -14072,6 +14141,7 @@ function exportRedListCsv() {
     const studentName = student ? student.name : item.student_name || '不明';
     const score = item.total_score ?? item.final_score ?? 0;
     const rank = (item.rank || item.final_rank || '-').toUpperCase();
+    const exRank = (item.ex_rank || item.final_ex_rank) ? 'EX' : '';
     const yearMonth = item.year_month;
 
     // 継続月数
@@ -14120,6 +14190,7 @@ function exportRedListCsv() {
     return [
       studentName,
       item.student_id,
+      exRank,
       rank,
       score,
       continuedMonths,
