@@ -13477,6 +13477,46 @@ async function renderRedListPage() {
       </div>
     </div>
 
+    <!-- EX理由入力モーダル -->
+    <div id="ex-reason-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+        <div class="flex justify-between items-center p-6 border-b">
+          <h3 class="text-lg font-semibold text-gray-800">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-purple-600 text-white font-black text-sm mr-2">EX</span>
+            EXランク手動設定
+          </h3>
+          <button onclick="closeExReasonModal()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-800">
+            <i class="fas fa-info-circle mr-1"></i>
+            EXランクに設定する理由を入力してください（任意）
+          </div>
+          <input type="hidden" id="ex-reason-student-id" value="">
+          <input type="hidden" id="ex-reason-year-month" value="">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">設定理由</label>
+            <textarea id="ex-reason-input"
+                      rows="4"
+                      placeholder="例: 3ヶ月連続で出席率50%以下、保護者からクレームあり"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"></textarea>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
+          <button onclick="closeExReasonModal()"
+                  class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            キャンセル
+          </button>
+          <button onclick="confirmExRank()"
+                  class="px-6 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition">
+            <span class="font-black">EX</span> 設定する
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Sender Edit Modal -->
     <div id="redlist-sender-edit-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
       <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
@@ -13674,7 +13714,7 @@ function renderRedListStudentCard(item, isHistory) {
   
   const score = item.total_score || item.final_score || 0;
   const yearMonth = item.year_month;
-  const consecutiveMonths = 1; // TODO: Calculate from history
+  const consecutiveMonths = item.consecutive_months || 1;
 
   // ── 経過日数計算 ──────────────────────────────────
   // ① レッドリストに追加されてから何日経過したか（created_at基準）
@@ -13815,6 +13855,9 @@ function renderRedListStudentCard(item, isHistory) {
               : '<i class="fab fa-x-twitter text-gray-200 text-sm"></i>'}
             <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${yearMonth}</span>
             <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${consecutiveMonths}ヶ月</span>
+            ${isEx && item.ex_reason
+              ? `<span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold"><i class="fas fa-comment-alt"></i>${escapeHtml(item.ex_reason)}</span>`
+              : ''}
             ${continuedMonths !== null
               ? `<span class="text-xs text-blue-500 font-semibold"><i class="fas fa-hourglass-half mr-0.5"></i>継続 ${continuedMonths}ヶ月</span>`
               : ''}
@@ -13962,28 +14005,84 @@ async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
 }
 
 async function toggleExRank(studentId, yearMonth, currentEx) {
-  const newEx = !currentEx;
+  if (!currentEx) {
+    // EX設定 → モーダルを開いて理由入力
+    openExReasonModal(studentId, yearMonth);
+  } else {
+    // EX解除 → 直接API実行
+    await confirmClearExRank(studentId, yearMonth);
+  }
+}
+
+function openExReasonModal(studentId, yearMonth) {
+  document.getElementById('ex-reason-student-id').value = studentId;
+  document.getElementById('ex-reason-year-month').value = yearMonth;
+  document.getElementById('ex-reason-input').value = '';
+  document.getElementById('ex-reason-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('ex-reason-input').focus(), 100);
+}
+
+function closeExReasonModal() {
+  document.getElementById('ex-reason-modal').classList.add('hidden');
+  document.getElementById('ex-reason-student-id').value = '';
+  document.getElementById('ex-reason-year-month').value = '';
+  document.getElementById('ex-reason-input').value = '';
+}
+
+async function confirmExRank() {
+  const studentId = document.getElementById('ex-reason-student-id').value;
+  const yearMonth = document.getElementById('ex-reason-year-month').value;
+  const reason    = document.getElementById('ex-reason-input').value.trim();
+  if (!studentId || !yearMonth) return;
+
+  closeExReasonModal();
+
   try {
     const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/ex-rank`, {
       yearMonth,
-      ex_rank: newEx
+      ex_rank: true,
+      ex_reason: reason || null
     }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
 
     if (res.data.success) {
-      // ローカルデータを更新して再描画
       const entry = currentRedListData.find(d => d.student_id === studentId);
-      if (entry) entry.ex_rank = newEx;
+      if (entry) {
+        entry.ex_rank = true;
+        entry.ex_reason = reason || null;
+      }
       updateRedListStats();
       renderRedListCurrentList();
-      showNotification(
-        newEx ? 'EXランクを設定しました' : 'EXランクを解除しました',
-        'success'
-      );
+      showNotification('EXランクを設定しました', 'success');
     } else {
       showNotification(res.data.error || 'EXランクの更新に失敗しました', 'error');
     }
   } catch (error) {
-    console.error('Error toggling EX rank:', error);
+    console.error('Error setting EX rank:', error);
+    showNotification('EXランクの更新に失敗しました', 'error');
+  }
+}
+
+async function confirmClearExRank(studentId, yearMonth) {
+  try {
+    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/ex-rank`, {
+      yearMonth,
+      ex_rank: false
+    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+
+    if (res.data.success) {
+      const entry = currentRedListData.find(d => d.student_id === studentId);
+      if (entry) {
+        entry.ex_rank = false;
+        entry.ex_reason = null;
+      }
+      updateRedListStats();
+      renderRedListCurrentList();
+      showNotification('EXランクを解除しました', 'success');
+    } else {
+      showNotification(res.data.error || 'EXランクの更新に失敗しました', 'error');
+    }
+  } catch (error) {
+    console.error('Error clearing EX rank:', error);
     showNotification('EXランクの更新に失敗しました', 'error');
   }
 }

@@ -855,6 +855,20 @@ const migrations = [
       ALTER TABLE red_list DROP COLUMN IF EXISTS ex_rank;
       ALTER TABLE red_list_history DROP COLUMN IF EXISTS final_ex_rank;
     `
+  },
+  {
+    version: 35,
+    name: 'add_ex_reason_to_red_list',
+    up: `
+      -- EXランク手動設定時の理由を保存するカラム
+      ALTER TABLE red_list
+        ADD COLUMN IF NOT EXISTS ex_reason TEXT;
+
+      COMMENT ON COLUMN red_list.ex_reason IS 'EXランク手動設定の理由';
+    `,
+    down: `
+      ALTER TABLE red_list DROP COLUMN IF EXISTS ex_reason;
+    `
   }
 ];
 
