@@ -10,6 +10,7 @@ let students = [];
 let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
 let tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} }; // Monthly helper/reschedule counts
+let tutorWeeklySnapshotData = {}; // notion_name -> snapshot (前週スナップショット)
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
 let lessonReportStatus = {}; // { student_id-lesson_date: report_data }
@@ -380,6 +381,9 @@ async function loadInitialData() {
     // Load monthly tutor stats (helper requests, accepted, reschedule counts)
     await loadTutorMonthlyStats();
     
+    // Load weekly snapshot (前週スナップショット)
+    await loadTutorWeeklySnapshot();
+    
     // Load lesson stats and dates for current month
     await loadLessonStats();
     await loadLessonDates();
@@ -456,6 +460,23 @@ async function loadTutorMonthlyStats() {
   } catch (error) {
     console.error('Error loading tutor monthly stats:', error);
     tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} };
+  }
+}
+
+// Load weekly snapshot for the selected year/month (前週スナップショット)
+async function loadTutorWeeklySnapshot() {
+  try {
+    const ym = `${selectedTutorYear}/${selectedTutorMonth}`;
+    const res = await axios.get(`${API_BASE}/api/tutors/weekly-snapshot/latest?year_month=${encodeURIComponent(ym)}`);
+    if (res.data.success) {
+      tutorWeeklySnapshotData = res.data.data || {};
+      console.log(`[Tutor Snapshot] Loaded weekly snapshot for ${ym}, tutors=${Object.keys(tutorWeeklySnapshotData).length}`);
+    } else {
+      tutorWeeklySnapshotData = {};
+    }
+  } catch (error) {
+    console.error('Error loading tutor weekly snapshot:', error);
+    tutorWeeklySnapshotData = {};
   }
 }
 
@@ -2311,6 +2332,25 @@ function renderTutorsPage() {
           <i class="fas fa-paper-plane mr-2"></i>日次統計レポート送信
         </button>
         
+        <!-- 前週スナップショット基準日表示 -->
+        <div class="flex items-center gap-2 ml-2">
+          <span class="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+            <i class="fas fa-history mr-1"></i>
+            前週基準日:
+            <span class="font-semibold text-gray-700">
+              ${(function() {
+                const snapDates = Object.values(tutorWeeklySnapshotData).map(s => s.snapshot_date).filter(Boolean);
+                if (snapDates.length === 0) return 'データなし';
+                const latest = snapDates.sort().pop();
+                return new Date(latest).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) + '（日）';
+              })()}
+            </span>
+          </span>
+          <button onclick="triggerWeeklySnapshot()" class="text-xs px-2 py-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition" title="今すぐスナップショットを取得">
+            <i class="fas fa-camera mr-1"></i>今すぐ取得
+          </button>
+        </div>
+        
         <!-- Team Filter -->
         <div class="flex items-center gap-2">
           <label class="text-sm font-medium text-gray-700">チーム絞り込み:</label>
@@ -2355,9 +2395,15 @@ function renderTutorsPage() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">助っ人受諾</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リスケ回数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度
+                <div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div>
+              </th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率
+                <div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div>
+              </th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア
+                <div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div>
+              </th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">わなみさん</th>
             </tr>
           </thead>
@@ -2521,6 +2567,9 @@ async function changeTutorStatsMonth(delta) {
   
   // Load monthly stats for the selected month
   await loadTutorMonthlyStats();
+  
+  // Load weekly snapshot for the selected month
+  await loadTutorWeeklySnapshot();
   
   renderTutorsPage();
 }
@@ -2865,6 +2914,60 @@ function renderTutorRows() {
     // わなみさん使用回数（担当生徒の合計）
     const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${tutor.notion_name}">...</span>`;
     
+    // ── 前週スナップショット取得 ────────────────────────────────────
+    const prevSnap = tutorWeeklySnapshotData[tutor.notion_name] || null;
+    
+    // 前週との差分バッジ生成ヘルパー
+    // delta: 数値差分, suffix: 単位文字列, higherIsBetter: true=増加が緑/減少が赤
+    function _diffBadge(currentVal, prevVal, suffix, higherIsBetter) {
+      if (prevVal === null || prevVal === undefined || currentVal === '-' || currentVal === null) return '';
+      const curr = parseFloat(currentVal);
+      const prev = parseFloat(prevVal);
+      if (isNaN(curr) || isNaN(prev)) return '';
+      const diff = curr - prev;
+      if (Math.abs(diff) < 0.005) {
+        return `<span class="inline-block text-xs text-gray-400 ml-0.5">±0</span>`;
+      }
+      const sign = diff > 0 ? '+' : '';
+      const colorClass = (diff > 0) === higherIsBetter
+        ? 'text-green-600'
+        : 'text-red-600';
+      const arrow = diff > 0 ? '▲' : '▼';
+      return `<span class="inline-block text-xs font-semibold ${colorClass} ml-0.5">${arrow}${sign}${Math.abs(diff).toFixed(2)}${suffix}</span>`;
+    }
+
+    // 前週満足度
+    const prevSatisfactionValue = prevSnap ? prevSnap.satisfaction_value : null;
+    const prevCollectionRate    = prevSnap ? prevSnap.collection_rate    : null;
+    const prevSatisfactionScore = prevSnap ? prevSnap.satisfaction_score : null;
+    const prevSnapshotDateStr   = prevSnap ? (prevSnap.snapshot_date ? new Date(prevSnap.snapshot_date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '') : '';
+
+    // 差分バッジ
+    const satisfactionDiff = _diffBadge(
+      satisfactionValue > 0 ? satisfactionValue.toFixed(2) : null,
+      prevSatisfactionValue, '', true
+    );
+    const collectionRateDiff = _diffBadge(
+      collectionRateValue > 0 ? collectionRateValue.toFixed(1) : null,
+      prevCollectionRate, '%', true
+    );
+    const satisfactionScoreDiff = _diffBadge(
+      satisfactionScoreValue > 0 ? satisfactionScoreValue.toFixed(2) : null,
+      prevSatisfactionScore, '', true
+    );
+
+    // 前週値表示
+    const prevSatisfactionDisplay = prevSatisfactionValue !== null
+      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevSatisfactionValue).toFixed(2)}</div>`
+      : '';
+    const prevCollectionRateDisplay = prevCollectionRate !== null
+      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevCollectionRate).toFixed(1)}%</div>`
+      : '';
+    const prevSatisfactionScoreDisplay = prevSatisfactionScore !== null
+      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevSatisfactionScore).toFixed(2)}</div>`
+      : '';
+    // ─────────────────────────────────────────────────────────────────
+
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
@@ -2886,16 +2989,41 @@ function renderTutorRows() {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-gray-900">${helperAcceptedCount}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold ${rescheduleColor}">${rescheduleCount}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">${progressCircle}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
-          <span class="font-semibold ${satisfactionColor}">${satisfactionAverage}</span>
-          ${satisfactionButton}
+        <td class="px-4 py-3 text-sm text-center">
+          <div><span class="font-semibold ${satisfactionColor}">${satisfactionAverage}</span>${satisfactionDiff}${satisfactionButton}</div>
+          ${prevSatisfactionDisplay}
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold ${collectionRateColor}">${collectionRate}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${satisfactionScore}</td>
+        <td class="px-4 py-3 text-sm text-center">
+          <div><span class="font-semibold ${collectionRateColor}">${collectionRate}</span>${collectionRateDiff}</div>
+          ${prevCollectionRateDisplay}
+        </td>
+        <td class="px-4 py-3 text-sm text-center">
+          <div><span class="font-bold ${satisfactionScoreColor}">${satisfactionScore}</span>${satisfactionScoreDiff}</div>
+          ${prevSatisfactionScoreDisplay}
+        </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${wanamiUsage}</td>
       </tr>
     `;
   }).join('');
+}
+
+// Trigger weekly snapshot manually (admin debug)
+async function triggerWeeklySnapshot() {
+  try {
+    showNotification('スナップショットを取得しています...', 'info');
+    const res = await axios.post(`${API_BASE}/api/tutors/weekly-snapshot/trigger`);
+    if (res.data.success) {
+      showNotification(`スナップショットを取得しました（${res.data.savedCount}件保存）`, 'success');
+      // リロード
+      await loadTutorWeeklySnapshot();
+      renderTutorsPage();
+    } else {
+      showNotification('スナップショットの取得に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[Snapshot] Error:', e);
+    showNotification('スナップショットの取得でエラーが発生しました', 'error');
+  }
 }
 
 // Update tutor student capacity

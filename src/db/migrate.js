@@ -793,6 +793,46 @@ const migrations = [
       DROP INDEX IF EXISTS idx_handover_assignments_student;
       DROP TABLE IF EXISTS handover_assignments;
     `
+  },
+  {
+    version: 33,
+    name: 'create_tutor_weekly_snapshots_table',
+    up: `
+      -- Tutor週次スナップショットテーブル
+      -- 毎週日曜日23:59 JSTに各Tutorの満足度・回収率・満足度スコアを保存する
+      CREATE TABLE IF NOT EXISTS tutor_weekly_snapshots (
+        id                    SERIAL PRIMARY KEY,
+        snapshot_date         DATE NOT NULL,             -- スナップショット取得日（日曜日の日付）
+        tutor_notion_name     VARCHAR(255) NOT NULL,     -- tutors.notion_name
+        year_month            VARCHAR(7) NOT NULL,       -- 対象年月 YYYY/M
+        active_student_count  INTEGER NOT NULL DEFAULT 0,
+        satisfaction_count    INTEGER NOT NULL DEFAULT 0, -- アンケート回答数
+        satisfaction_avg      NUMERIC(6,4),              -- 満足度平均 (0-10スケール)
+        satisfaction_value    NUMERIC(6,2),              -- 満足度 (0-100スケール)
+        collection_rate       NUMERIC(6,2),              -- 回収率 (%)
+        satisfaction_score    NUMERIC(6,2),              -- 満足度スコア
+        created_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(snapshot_date, tutor_notion_name)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tutor_weekly_snapshots_date
+        ON tutor_weekly_snapshots(snapshot_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_tutor_weekly_snapshots_tutor
+        ON tutor_weekly_snapshots(tutor_notion_name);
+
+      COMMENT ON TABLE tutor_weekly_snapshots IS 'Tutor週次スナップショット（毎週日曜日23:59 JSTに取得）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.snapshot_date IS 'スナップショット取得日（日曜日）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.tutor_notion_name IS 'Notion名（tutors.notion_name）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.year_month IS '対象年月（YYYY/M形式）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.satisfaction_value IS '満足度（0-100スケール）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.collection_rate IS '回収率（%）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.satisfaction_score IS '満足度スコア（満足度×回収率/100）';
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_tutor_weekly_snapshots_tutor;
+      DROP INDEX IF EXISTS idx_tutor_weekly_snapshots_date;
+      DROP TABLE IF EXISTS tutor_weekly_snapshots;
+    `
   }
 ];
 

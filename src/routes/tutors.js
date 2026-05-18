@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchTutors } from '../services/notionService.js';
 import { fetchTutorsFromCache, fetchSatisfactionFromCache, getCacheSyncTime } from '../services/cacheService.js';
+import { weeklyTutorSnapshot } from '../jobs/tutorWeeklySnapshot.js';
 
 const app = new Hono();
 
@@ -780,5 +781,81 @@ function getColumnLetter(index) {
   }
   return letter;
 }
+
+/**
+ * GET /api/tutors/weekly-snapshot/latest
+ * 直近の前週スナップショット（先週日曜日のデータ）を全Tutor分返す
+ * クエリパラメータ:
+ *   ?year_month=2025/5  (省略時は現在のJST年月)
+ */
+app.get('/weekly-snapshot/latest', async (c) => {
+  try {
+    const ymParam = c.req.query('year_month');
+
+    // JST年月を計算
+    const now = new Date();
+    const jstOffset = 9 * 60;
+    const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
+    const defaultYm = `${jstTime.getFullYear()}/${jstTime.getMonth() + 1}`;
+    const yearMonth = ymParam || defaultYm;
+
+    // 先週日曜日の日付を計算（今日が日曜なら今日ではなく7日前の日曜）
+    const jstDay = jstTime.getDay(); // 0=Sun
+    const daysToLastSun = jstDay === 0 ? 7 : jstDay;
+    const lastSunday = new Date(jstTime);
+    lastSunday.setDate(jstTime.getDate() - daysToLastSun);
+    const lastSundayStr = `${lastSunday.getFullYear()}-${String(lastSunday.getMonth() + 1).padStart(2, '0')}-${String(lastSunday.getDate()).padStart(2, '0')}`;
+
+    // 先週日曜日のスナップショットを取得（なければ直近の過去スナップショット）
+    const result = await query(`
+      SELECT DISTINCT ON (tutor_notion_name)
+        id, snapshot_date, tutor_notion_name, year_month,
+        active_student_count, satisfaction_count,
+        satisfaction_avg, satisfaction_value, collection_rate, satisfaction_score
+      FROM tutor_weekly_snapshots
+      WHERE snapshot_date <= $1
+        AND year_month = $2
+      ORDER BY tutor_notion_name, snapshot_date DESC
+    `, [lastSundayStr, yearMonth]);
+
+    // notion_name -> snapshot のマップ
+    const snapshotMap = {};
+    result.rows.forEach(row => {
+      snapshotMap[row.tutor_notion_name] = {
+        snapshot_date:        row.snapshot_date,
+        active_student_count: row.active_student_count,
+        satisfaction_count:   row.satisfaction_count,
+        satisfaction_avg:     row.satisfaction_avg !== null ? parseFloat(row.satisfaction_avg) : null,
+        satisfaction_value:   row.satisfaction_value !== null ? parseFloat(row.satisfaction_value) : null,
+        collection_rate:      row.collection_rate !== null ? parseFloat(row.collection_rate) : null,
+        satisfaction_score:   row.satisfaction_score !== null ? parseFloat(row.satisfaction_score) : null,
+      };
+    });
+
+    return c.json({
+      success: true,
+      data: snapshotMap,
+      last_sunday: lastSundayStr,
+      year_month: yearMonth
+    });
+  } catch (error) {
+    console.error('Error fetching weekly snapshot:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/tutors/weekly-snapshot/trigger
+ * 手動でスナップショットを即時取得する（管理者向けデバッグ用）
+ */
+app.post('/weekly-snapshot/trigger', async (c) => {
+  try {
+    const result = await weeklyTutorSnapshot();
+    return c.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Error triggering weekly snapshot:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
 
 export default app;

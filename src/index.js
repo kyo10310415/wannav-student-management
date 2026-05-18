@@ -48,6 +48,7 @@ import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotificati
 import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
 import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
+import { weeklyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
 
 const app = new Hono();
 
@@ -268,6 +269,20 @@ cron.schedule('5 0 1 * *', async () => {
     console.log('Monthly red list reset completed');
   } catch (error) {
     console.error('Error in monthly red list reset:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule weekly tutor snapshot (every Sunday at 23:59 JST)
+console.log('Weekly tutor snapshot: ENABLED (Sunday 23:59 JST)');
+cron.schedule('59 23 * * 0', async () => {
+  console.log('[Tutor Weekly Snapshot] Running weekly snapshot at 23:59 JST on Sunday...');
+  try {
+    const result = await weeklyTutorSnapshot();
+    console.log('[Tutor Weekly Snapshot] Completed:', result);
+  } catch (error) {
+    console.error('[Tutor Weekly Snapshot] Error:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
