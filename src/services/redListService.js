@@ -412,15 +412,55 @@ export async function getAllRedLists(yearMonth = null) {
     yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  // consecutive_months: 今月を含めて連続でレッドリスト入り（low/middle/high）している月数
+  // ロジック:
+  //   1) 今月が red_list で low/middle/high → 最低1ヶ月
+  //   2) red_list_history を直前月から降順に走査し、連続していれば +1
+  //   ※ 今月のデータ自体は red_list に、過去は red_list_history にある
   const result = await query(
-    `SELECT 
-      rl.*,
-      s.name as student_name,
-      s.homeroom_tutor
-     FROM red_list rl
-     LEFT JOIN students s ON rl.student_id = s.student_id
-     WHERE rl.year_month = $1
-     ORDER BY rl.total_score DESC, rl.student_id`,
+    `WITH current_month AS (
+       SELECT
+         rl.*,
+         s.name         AS student_name,
+         s.homeroom_tutor
+       FROM red_list rl
+       LEFT JOIN students s ON rl.student_id = s.student_id
+       WHERE rl.year_month = $1
+     ),
+     history_ranked AS (
+       -- 各生徒ごとに過去月を降順に並べ、連続インデックスを付与
+       SELECT
+         rlh.student_id,
+         rlh.year_month,
+         rlh.final_rank,
+         ROW_NUMBER() OVER (
+           PARTITION BY rlh.student_id
+           ORDER BY rlh.year_month DESC
+         ) AS rn
+       FROM red_list_history rlh
+       WHERE rlh.final_rank IN ('low','middle','high')
+         AND rlh.year_month < $1
+     ),
+     -- 連続している月数を集計:
+     -- 直前月(rn=1)が存在すれば +1、rn=1との差が0なら連続、rn=2との差が0なら更に連続...
+     -- 簡易実装: 直前から何ヶ月分 gap なく続いているかを計算
+     consecutive AS (
+       SELECT
+         hr.student_id,
+         COUNT(*) AS consec_history
+       FROM history_ranked hr
+       -- 直前月から連続しているか: 月差 = rn となるはず（連続している場合）
+       WHERE TO_DATE(hr.year_month, 'YYYY-MM')
+             = (DATE_TRUNC('month', TO_DATE($1, 'YYYY-MM')) - (hr.rn * INTERVAL '1 month'))::DATE
+       GROUP BY hr.student_id
+     )
+     SELECT
+       cm.*,
+       -- 今月 + 連続した過去月数
+       1 + COALESCE(c.consec_history, 0) AS consecutive_months
+     FROM current_month cm
+     LEFT JOIN consecutive c ON cm.student_id = c.student_id
+     ORDER BY cm.total_score DESC, cm.student_id`,
     [yearMonth]
   );
 

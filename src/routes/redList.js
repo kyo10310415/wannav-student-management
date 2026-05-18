@@ -690,7 +690,7 @@ app.get('/discord/logs', async (c) => {
 app.patch('/:studentId/ex-rank', async (c) => {
   try {
     const studentId = c.req.param('studentId');
-    const { yearMonth, ex_rank } = await c.req.json();
+    const { yearMonth, ex_rank, ex_reason } = await c.req.json();
 
     if (!yearMonth) {
       return c.json({ success: false, error: 'yearMonth は必須です' }, 400);
@@ -699,20 +699,23 @@ app.patch('/:studentId/ex-rank', async (c) => {
       return c.json({ success: false, error: 'ex_rank は boolean で指定してください' }, 400);
     }
 
+    // EX解除時は理由もクリア
+    const reasonValue = ex_rank ? (ex_reason || null) : null;
+
     const result = await query(
       `UPDATE red_list
-         SET ex_rank = $1, updated_at = NOW()
-       WHERE student_id = $2
-         AND year_month = $3
+         SET ex_rank = $1, ex_reason = $2, updated_at = NOW()
+       WHERE student_id = $3
+         AND year_month = $4
        RETURNING *`,
-      [ex_rank, studentId, yearMonth]
+      [ex_rank, reasonValue, studentId, yearMonth]
     );
 
     if (result.rows.length === 0) {
       return c.json({ success: false, error: 'レコードが見つかりません' }, 404);
     }
 
-    console.log(`[Red List] EX rank ${ex_rank ? 'set' : 'cleared'} for ${studentId} (${yearMonth})`);
+    console.log(`[Red List] EX rank ${ex_rank ? 'set' : 'cleared'} for ${studentId} (${yearMonth})${ex_reason ? ` reason: ${ex_reason}` : ''}`);
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error updating EX rank:', error);
