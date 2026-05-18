@@ -833,6 +833,28 @@ const migrations = [
       DROP INDEX IF EXISTS idx_tutor_weekly_snapshots_date;
       DROP TABLE IF EXISTS tutor_weekly_snapshots;
     `
+  },
+  {
+    version: 34,
+    name: 'add_ex_rank_to_red_list',
+    up: `
+      -- red_list テーブルに EX ランクフラグを追加
+      -- EX: 2ヶ月以上連続でレッドリストに入る（自動判定）または手動設定
+      ALTER TABLE red_list
+        ADD COLUMN IF NOT EXISTS ex_rank BOOLEAN NOT NULL DEFAULT FALSE;
+
+      COMMENT ON COLUMN red_list.ex_rank IS 'EXランクフラグ（2ヶ月以上連続または手動設定）';
+
+      -- red_list_history テーブルにも EX ランクフラグを追加
+      ALTER TABLE red_list_history
+        ADD COLUMN IF NOT EXISTS final_ex_rank BOOLEAN NOT NULL DEFAULT FALSE;
+
+      COMMENT ON COLUMN red_list_history.final_ex_rank IS 'EXランクフラグ（月末確定値）';
+    `,
+    down: `
+      ALTER TABLE red_list DROP COLUMN IF EXISTS ex_rank;
+      ALTER TABLE red_list_history DROP COLUMN IF EXISTS final_ex_rank;
+    `
   }
 ];
 
