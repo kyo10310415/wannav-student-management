@@ -15036,12 +15036,12 @@ async function exportHandoverToSheet() {
       // 成功: URLを開く確認ダイアログ
       const url = res.data.spreadsheetUrl;
       showNotification(
-        `スプレッドシートを作成しました (${res.data.sheetCount}シート)`,
+        `スプレッドシートに書き出しました (${res.data.sheetCount}シート)`,
         'success'
       );
       // 少し待ってから新しいタブで開く
       setTimeout(() => {
-        if (confirm(`スプレッドシートを開きますか？\n${res.data.fileName}`)) {
+        if (confirm(`スプレッドシートを開きますか？\n出力ラベル: ${res.data.exportLabel}`)) {
           window.open(url, '_blank');
         }
       }, 300);
