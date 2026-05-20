@@ -394,60 +394,55 @@ app.post('/export', async (c) => {
     const timeLabel = `${String(jst.getHours()).padStart(2,'0')}${String(jst.getMinutes()).padStart(2,'0')}`;
     const fileName = `引き継ぎ情報_${dateLabel}_${timeLabel}`;
 
-    // まず空のスプレッドシートを作成
-    const createRes = await drive.files.create({
-      resource: {
-        name: fileName,
-        mimeType: 'application/vnd.google-apps.spreadsheet',
-        parents: [FOLDER_ID],
-      },
-      fields: 'id, webViewLink',
-    });
-
-    const spreadsheetId = createRes.data.id;
-    const spreadsheetUrl = createRes.data.webViewLink;
-
-    // --- シート構成: Tutor別「受取」「送出」 ---
-    // 最初に作成されるデフォルトシート(Sheet1)のIDを取得
-    const metaRes = await sheets.spreadsheets.get({ spreadsheetId });
-    const defaultSheetId = metaRes.data.sheets[0].properties.sheetId;
-
-    // シート追加リクエストを構築
-    // 順序: Aさん受取, Aさん送出, Bさん受取, Bさん送出 ...
-    const addSheetRequests = [];
+    // シート定義を先に組み立てる
     const sheetDefs = []; // { title, type: 'receive'|'send', tutorName }
-
     for (const tutor of allTutors) {
       sheetDefs.push({ title: `${tutor}_受取`, type: 'receive', tutorName: tutor });
       sheetDefs.push({ title: `${tutor}_送出`, type: 'send',    tutorName: tutor });
     }
 
-    for (const def of sheetDefs) {
-      addSheetRequests.push({
-        addSheet: {
+    // Sheets API で直接スプレッドシートを作成（シート定義込み）
+    // ※ Drive API files.create ではなく Sheets API を使うことで
+    //   サービスアカウントのマイドライブ容量問題を回避する
+    const createRes = await sheets.spreadsheets.create({
+      resource: {
+        properties: { title: fileName },
+        sheets: sheetDefs.map(def => ({
           properties: {
             title: def.title,
             gridProperties: { rowCount: 100, columnCount: 10 },
           },
-        },
-      });
-    }
-
-    // デフォルトシートを削除するリクエスト（後で追加）
-    const batchRes = await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      resource: {
-        requests: [
-          ...addSheetRequests,
-          { deleteSheet: { sheetId: defaultSheetId } },
-        ],
+        })),
       },
     });
 
-    // 新しいシートIDを取得
-    const addedSheets = batchRes.data.replies
-      .filter(r => r.addSheet)
-      .map((r, i) => ({ ...sheetDefs[i], sheetId: r.addSheet.properties.sheetId }));
+    const spreadsheetId = createRes.data.spreadsheetId;
+
+    // 作成されたシートのIDをsheetDefsに紐付け
+    const createdSheets = createRes.data.sheets;
+    const addedSheets = sheetDefs.map((def, i) => ({
+      ...def,
+      sheetId: createdSheets[i].properties.sheetId,
+    }));
+
+    // Drive API でフォルダに移動（supportsAllDrives: true で共有ドライブにも対応）
+    // 現在の親フォルダを取得して removeParents に指定する
+    const fileMeta = await drive.files.get({
+      fileId: spreadsheetId,
+      fields: 'parents',
+      supportsAllDrives: true,
+    });
+    const currentParents = (fileMeta.data.parents || []).join(',');
+
+    await drive.files.update({
+      fileId: spreadsheetId,
+      addParents: FOLDER_ID,
+      removeParents: currentParents,
+      supportsAllDrives: true,
+      fields: 'id, webViewLink, parents',
+    });
+
+    const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
 
     // --- 各シートにデータ書き込み ---
     const HEADER = ['生徒名', '担当Tutor', '引き継ぎ先Tutor', 'Notionリンク', 'Discordリンク'];
