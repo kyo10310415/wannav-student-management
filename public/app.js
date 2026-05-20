@@ -791,7 +791,7 @@ function renderReservationsPage() {
         <i class="fas fa-chart-bar mr-2"></i>
         統計情報 <span class="text-sm text-gray-500">(アクティブ・レッスン中/PROプランのみ)</span>
       </h2>
-      <div class="grid grid-cols-4 md:grid-cols-8 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         ${renderStatistics()}
       </div>
     </div>
@@ -932,18 +932,6 @@ function renderStatistics() {
   const oneLessons = lessonCounts.filter(c => c === 1).length;
   const twoLessons = lessonCounts.filter(c => c === 2).length;
   const threePlusLessons = lessonCounts.filter(c => c >= 3).length;
-
-  // Section counts (C/B/A/Pro) using getLessonSection()
-  let sectionC = 0, sectionB = 0, sectionA = 0, sectionPro = 0;
-  filteredStudents.forEach(s => {
-    const isPro = s.contract_plan === 'PROプラン';
-    const sec = getLessonSection(s.lesson_progress, isPro);
-    if (!sec) return;
-    if (sec.label === 'C')   sectionC++;
-    else if (sec.label === 'B')   sectionB++;
-    else if (sec.label === 'A')   sectionA++;
-    else if (sec.label === 'Pro') sectionPro++;
-  });
   
   return `
     <div class="text-center">
@@ -961,22 +949,6 @@ function renderStatistics() {
     <div class="text-center">
       <div class="text-3xl font-bold text-cyan-600">${threePlusLessons}</div>
       <div class="text-sm text-gray-600 mt-1">予約3回以上</div>
-    </div>
-    <div class="text-center">
-      <div class="text-3xl font-bold text-gray-600">${sectionC}</div>
-      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-bold text-xs">C</span></div>
-    </div>
-    <div class="text-center">
-      <div class="text-3xl font-bold text-blue-500">${sectionB}</div>
-      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-xs">B</span></div>
-    </div>
-    <div class="text-center">
-      <div class="text-3xl font-bold text-green-600">${sectionA}</div>
-      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold text-xs">A</span></div>
-    </div>
-    <div class="text-center">
-      <div class="text-3xl font-bold text-purple-600">${sectionPro}</div>
-      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-xs">Pro</span></div>
     </div>
   `;
 }
@@ -1606,7 +1578,7 @@ function renderStudentsPage() {
         <i class="fas fa-chart-bar mr-2"></i>
         統計情報 <span class="text-sm text-gray-500">(アクティブ・レッスン中/PROプランのみ)</span>
       </h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         ${renderStudentStatistics()}
       </div>
     </div>
@@ -2137,6 +2109,18 @@ function renderStudentStatistics() {
   ).length;
   const proStudents = activeStudents.filter(s => s.contract_plan === 'PROプラン').length;
 
+  // Section counts (C/B/A/Pro) using getLessonSection()
+  let sectionC = 0, sectionB = 0, sectionA = 0, sectionPro = 0;
+  activeStudents.forEach(s => {
+    const isPro = s.contract_plan === 'PROプラン';
+    const sec = getLessonSection(s.lesson_progress, isPro);
+    if (!sec) return;
+    if (sec.label === 'C')        sectionC++;
+    else if (sec.label === 'B')   sectionB++;
+    else if (sec.label === 'A')   sectionA++;
+    else if (sec.label === 'Pro') sectionPro++;
+  });
+
   return `
     <div class="bg-blue-50 p-4 rounded-lg">
       <div class="text-sm text-gray-600 mb-1">総生徒数</div>
@@ -2152,6 +2136,27 @@ function renderStudentStatistics() {
       <div class="text-sm text-gray-600 mb-1">PROプラン</div>
       <div class="text-3xl font-bold text-purple-600">${proStudents}名</div>
       <div class="text-xs text-gray-500 mt-1">アクティブのみ</div>
+    </div>
+    <div class="bg-gray-50 p-4 rounded-lg col-span-2 md:col-span-1">
+      <div class="text-sm text-gray-600 mb-2">セクション別</div>
+      <div class="flex flex-wrap gap-2">
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-bold text-sm">C</span>
+          <span class="text-xl font-bold text-gray-600">${sectionC}</span>
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-sm">B</span>
+          <span class="text-xl font-bold text-blue-500">${sectionB}</span>
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold text-sm">A</span>
+          <span class="text-xl font-bold text-green-600">${sectionA}</span>
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="inline-block px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-sm">Pro</span>
+          <span class="text-xl font-bold text-purple-600">${sectionPro}</span>
+        </span>
+      </div>
     </div>
   `;
 }
