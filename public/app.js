@@ -791,7 +791,7 @@ function renderReservationsPage() {
         <i class="fas fa-chart-bar mr-2"></i>
         統計情報 <span class="text-sm text-gray-500">(アクティブ・レッスン中/PROプランのみ)</span>
       </h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-4 md:grid-cols-8 gap-4">
         ${renderStatistics()}
       </div>
     </div>
@@ -932,6 +932,18 @@ function renderStatistics() {
   const oneLessons = lessonCounts.filter(c => c === 1).length;
   const twoLessons = lessonCounts.filter(c => c === 2).length;
   const threePlusLessons = lessonCounts.filter(c => c >= 3).length;
+
+  // Section counts (C/B/A/Pro) using getLessonSection()
+  let sectionC = 0, sectionB = 0, sectionA = 0, sectionPro = 0;
+  filteredStudents.forEach(s => {
+    const isPro = s.contract_plan === 'PROプラン';
+    const sec = getLessonSection(s.lesson_progress, isPro);
+    if (!sec) return;
+    if (sec.label === 'C')   sectionC++;
+    else if (sec.label === 'B')   sectionB++;
+    else if (sec.label === 'A')   sectionA++;
+    else if (sec.label === 'Pro') sectionPro++;
+  });
   
   return `
     <div class="text-center">
@@ -949,6 +961,22 @@ function renderStatistics() {
     <div class="text-center">
       <div class="text-3xl font-bold text-cyan-600">${threePlusLessons}</div>
       <div class="text-sm text-gray-600 mt-1">予約3回以上</div>
+    </div>
+    <div class="text-center">
+      <div class="text-3xl font-bold text-gray-600">${sectionC}</div>
+      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-gray-200 text-gray-700 font-bold text-xs">C</span></div>
+    </div>
+    <div class="text-center">
+      <div class="text-3xl font-bold text-blue-500">${sectionB}</div>
+      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-xs">B</span></div>
+    </div>
+    <div class="text-center">
+      <div class="text-3xl font-bold text-green-600">${sectionA}</div>
+      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-green-100 text-green-700 font-bold text-xs">A</span></div>
+    </div>
+    <div class="text-center">
+      <div class="text-3xl font-bold text-purple-600">${sectionPro}</div>
+      <div class="text-sm mt-1"><span class="inline-block px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-xs">Pro</span></div>
     </div>
   `;
 }
@@ -1312,6 +1340,17 @@ function getLessonProgressClass(progress) {
   if (!progress) return 'text-gray-400';
   if (progress === 'Proプラン') return 'text-gray-700';
   return 'text-blue-600';
+}
+
+// Get lesson section (C/B/A/Pro) — same rules as _handoverProgressBadge()
+function getLessonSection(progress, isPro) {
+  if (isPro || progress === 'Proプラン') return { label: 'Pro', cls: 'bg-purple-100 text-purple-700' };
+  const p = parseInt(progress, 10);
+  if (isNaN(p)) return null;
+  if (p <= 9)  return { label: 'C', cls: 'bg-gray-200 text-gray-700' };
+  if (p <= 18) return { label: 'B', cls: 'bg-blue-100 text-blue-700' };
+  if (p <= 28) return { label: 'A', cls: 'bg-green-100 text-green-700' };
+  return { label: 'Pro', cls: 'bg-purple-100 text-purple-700' };
 }
 
 // Get previous month in YYYY-MM format for result system
@@ -2202,13 +2241,14 @@ function renderStudentRowsSimple() {
         </div>
         
         <!-- Row 2: Stats & Data (Compact) -->
-        <div class="grid grid-cols-5 md:grid-cols-11 gap-1 text-center">
+        <div class="grid grid-cols-5 md:grid-cols-9 gap-1 text-center">
           <!-- Lesson Progress -->
           <div class="${rowBgColor} rounded p-1">
             <div class="text-xs text-gray-600">進捗</div>
             <div class="text-xs font-semibold ${getLessonProgressClass(student.lesson_progress)}">
               ${student.lesson_progress === 'Proプラン' ? 'Pro' : (student.lesson_progress ? `L${student.lesson_progress}` : '-')}
             </div>
+            ${(() => { const sec = getLessonSection(student.lesson_progress, student.contract_plan === 'PROプラン'); return sec ? `<span class="inline-block px-1 py-0.5 rounded text-xs font-bold ${sec.cls}">${sec.label}</span>` : ''; })()}
           </div>
           
           <!-- Start Date -->
@@ -2269,8 +2309,8 @@ function renderStudentRowsSimple() {
             <div class="text-xs font-semibold ${absenceColorClass}">${absenceCount}</div>
           </div>
           
-          <!-- Survey Status -->
-          <div class="bg-gray-50 rounded p-1">
+          <!-- Survey Status (hidden) -->
+          <div class="hidden bg-gray-50 rounded p-1">
             <div class="text-xs text-gray-600">
               <i class="fas fa-clipboard-check text-blue-600 text-xs"></i>
             </div>
@@ -2279,8 +2319,8 @@ function renderStudentRowsSimple() {
             </div>
           </div>
           
-          <!-- Roulette Result -->
-          <div class="bg-gray-50 rounded p-1 col-span-5 md:col-span-1">
+          <!-- Roulette Result (hidden) -->
+          <div class="hidden bg-gray-50 rounded p-1 col-span-5 md:col-span-1">
             <div class="text-xs text-gray-600">
               <i class="fas fa-dice text-purple-600 text-xs"></i>
             </div>
