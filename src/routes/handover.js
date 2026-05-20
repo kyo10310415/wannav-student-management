@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
+import { google } from 'googleapis';
 
 const app = new Hono();
 
@@ -292,6 +293,275 @@ app.post('/reset', async (c) => {
     return c.json({ success: true, cleared: result.rowCount });
   } catch (error) {
     console.error('[Handover] Error resetting assignments:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/handover/export
+ * 引き継ぎ情報をGoogleスプレッドシートに書き出す
+ * 指定フォルダに新規スプレッドシートを作成し、
+ * Tutor別に「受取シート」「送出シート」を作成する
+ */
+app.post('/export', async (c) => {
+  try {
+    if (!process.env.GOOGLE_CREDENTIALS_JSON) {
+      return c.json({ success: false, error: 'GOOGLE_CREDENTIALS_JSON not configured' }, 500);
+    }
+
+    // --- Google認証 (Sheets + Drive スコープ) ---
+    const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
+    let credentials;
+    try {
+      credentials = credString.startsWith('{')
+        ? JSON.parse(credString)
+        : JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
+    } catch (e) {
+      return c.json({ success: false, error: 'Invalid credentials format' }, 500);
+    }
+
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive',
+      ],
+    });
+    const authClient = await auth.getClient();
+    const sheets = google.sheets({ version: 'v4', auth: authClient });
+    const drive  = google.drive({ version: 'v3', auth: authClient });
+
+    // --- 対象フォルダID ---
+    const FOLDER_ID = '1Iy0ueE_CmW7No7R0hAPKZ3S6lMMHKUiA';
+
+    // --- データ取得 ---
+    // 引き継ぎ管理対象 (アクティブ生徒)
+    const handoverResult = await query(`
+      SELECT
+        s.student_id,
+        s.name,
+        s.homeroom_tutor,
+        s.notion_url,
+        s.discord_url,
+        COALESCE(ha.handover_tutor_name, '') AS handover_tutor_name
+      FROM students s
+      LEFT JOIN handover_assignments ha ON ha.student_id = s.student_id
+      WHERE
+        s.status = 'アクティブ'
+        AND s.contract_plan NOT IN ('永久会員', '休会', '在籍プラン')
+        AND ha.handover_tutor_name IS NOT NULL
+        AND ha.handover_tutor_name <> ''
+      ORDER BY ha.handover_tutor_name ASC, s.homeroom_tutor ASC, s.student_id ASC
+    `);
+
+    // 新規割り振り対象 (レッスン準備中・翌月開始)
+    const newAssignResult = await query(`
+      SELECT
+        s.student_id,
+        s.name,
+        s.homeroom_tutor,
+        s.notion_url,
+        s.discord_url,
+        COALESCE(ha.handover_tutor_name, '') AS handover_tutor_name
+      FROM students s
+      LEFT JOIN handover_assignments ha ON ha.student_id = s.student_id
+      WHERE
+        s.status = 'レッスン準備中'
+        AND s.lesson_start_date IS NOT NULL
+        AND s.lesson_start_date <> ''
+        AND TO_DATE(s.lesson_start_date::TEXT, 'YYYY/MM/DD') >= DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month'
+        AND TO_DATE(s.lesson_start_date::TEXT, 'YYYY/MM/DD') <  DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '2 month'
+        AND ha.handover_tutor_name IS NOT NULL
+        AND ha.handover_tutor_name <> ''
+      ORDER BY ha.handover_tutor_name ASC, s.homeroom_tutor ASC, s.student_id ASC
+    `);
+
+    // 全データを統合
+    const allRows = [
+      ...handoverResult.rows.map(r => ({ ...r, type: '引き継ぎ管理' })),
+      ...newAssignResult.rows.map(r => ({ ...r, type: '新規割り振り' })),
+    ];
+
+    // Tutor名一覧を収集 (受取側 = handover_tutor_name, 送出側 = homeroom_tutor)
+    const receiveeTutors = [...new Set(allRows.map(r => r.handover_tutor_name).filter(Boolean))].sort();
+    const senderTutors   = [...new Set(allRows.map(r => r.homeroom_tutor).filter(Boolean))].sort();
+    const allTutors = [...new Set([...receiveeTutors, ...senderTutors])].sort();
+
+    // --- スプレッドシート新規作成 ---
+    const now = new Date();
+    const jst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    const dateLabel = `${jst.getFullYear()}${String(jst.getMonth()+1).padStart(2,'0')}${String(jst.getDate()).padStart(2,'0')}`;
+    const timeLabel = `${String(jst.getHours()).padStart(2,'0')}${String(jst.getMinutes()).padStart(2,'0')}`;
+    const fileName = `引き継ぎ情報_${dateLabel}_${timeLabel}`;
+
+    // まず空のスプレッドシートを作成
+    const createRes = await drive.files.create({
+      resource: {
+        name: fileName,
+        mimeType: 'application/vnd.google-apps.spreadsheet',
+        parents: [FOLDER_ID],
+      },
+      fields: 'id, webViewLink',
+    });
+
+    const spreadsheetId = createRes.data.id;
+    const spreadsheetUrl = createRes.data.webViewLink;
+
+    // --- シート構成: Tutor別「受取」「送出」 ---
+    // 最初に作成されるデフォルトシート(Sheet1)のIDを取得
+    const metaRes = await sheets.spreadsheets.get({ spreadsheetId });
+    const defaultSheetId = metaRes.data.sheets[0].properties.sheetId;
+
+    // シート追加リクエストを構築
+    // 順序: Aさん受取, Aさん送出, Bさん受取, Bさん送出 ...
+    const addSheetRequests = [];
+    const sheetDefs = []; // { title, type: 'receive'|'send', tutorName }
+
+    for (const tutor of allTutors) {
+      sheetDefs.push({ title: `${tutor}_受取`, type: 'receive', tutorName: tutor });
+      sheetDefs.push({ title: `${tutor}_送出`, type: 'send',    tutorName: tutor });
+    }
+
+    for (const def of sheetDefs) {
+      addSheetRequests.push({
+        addSheet: {
+          properties: {
+            title: def.title,
+            gridProperties: { rowCount: 100, columnCount: 10 },
+          },
+        },
+      });
+    }
+
+    // デフォルトシートを削除するリクエスト（後で追加）
+    const batchRes = await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      resource: {
+        requests: [
+          ...addSheetRequests,
+          { deleteSheet: { sheetId: defaultSheetId } },
+        ],
+      },
+    });
+
+    // 新しいシートIDを取得
+    const addedSheets = batchRes.data.replies
+      .filter(r => r.addSheet)
+      .map((r, i) => ({ ...sheetDefs[i], sheetId: r.addSheet.properties.sheetId }));
+
+    // --- 各シートにデータ書き込み ---
+    const HEADER = ['生徒名', '担当Tutor', '引き継ぎ先Tutor', 'Notionリンク', 'Discordリンク'];
+
+    const valueData = [];    // values.batchUpdate用
+    const formatRequests = []; // formatting用
+
+    for (const sheet of addedSheets) {
+      let rows;
+      if (sheet.type === 'receive') {
+        // 受取: 自分が引き継ぎ先 (handover_tutor_name === tutorName)
+        rows = allRows.filter(r => r.handover_tutor_name === sheet.tutorName);
+      } else {
+        // 送出: 自分が担当 (homeroom_tutor === tutorName)
+        rows = allRows.filter(r => r.homeroom_tutor === sheet.tutorName);
+      }
+
+      const sheetValues = [HEADER];
+      for (const r of rows) {
+        sheetValues.push([
+          r.name             || '',
+          r.homeroom_tutor   || '',
+          r.handover_tutor_name || '',
+          r.notion_url       || '',
+          r.discord_url      || '',
+        ]);
+      }
+
+      valueData.push({
+        range: `'${sheet.title}'!A1`,
+        values: sheetValues,
+      });
+
+      // ヘッダー行の背景色設定
+      const headerColor = sheet.type === 'receive'
+        ? { red: 0.24, green: 0.52, blue: 0.78 }   // 青系 (受取)
+        : { red: 0.18, green: 0.62, blue: 0.45 };   // 緑系 (送出)
+
+      formatRequests.push({
+        repeatCell: {
+          range: {
+            sheetId: sheet.sheetId,
+            startRowIndex: 0,
+            endRowIndex: 1,
+            startColumnIndex: 0,
+            endColumnIndex: 5,
+          },
+          cell: {
+            userEnteredFormat: {
+              backgroundColor: headerColor,
+              textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+            },
+          },
+          fields: 'userEnteredFormat(backgroundColor,textFormat)',
+        },
+      });
+
+      // 1行目を凍結
+      formatRequests.push({
+        updateSheetProperties: {
+          properties: {
+            sheetId: sheet.sheetId,
+            gridProperties: { frozenRowCount: 1 },
+          },
+          fields: 'gridProperties.frozenRowCount',
+        },
+      });
+
+      // 列幅調整 (A:生徒名=140, B:担当Tutor=130, C:引継先=130, D:Notion=250, E:Discord=250)
+      const colWidths = [140, 130, 130, 250, 250];
+      colWidths.forEach((w, i) => {
+        formatRequests.push({
+          updateDimensionProperties: {
+            range: {
+              sheetId: sheet.sheetId,
+              dimension: 'COLUMNS',
+              startIndex: i,
+              endIndex: i + 1,
+            },
+            properties: { pixelSize: w },
+            fields: 'pixelSize',
+          },
+        });
+      });
+    }
+
+    // 一括書き込み
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      resource: {
+        valueInputOption: 'USER_ENTERED',
+        data: valueData,
+      },
+    });
+
+    // 一括フォーマット
+    if (formatRequests.length > 0) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: { requests: formatRequests },
+      });
+    }
+
+    console.log(`[Handover Export] Created spreadsheet: ${spreadsheetUrl}`);
+    return c.json({
+      success: true,
+      spreadsheetUrl,
+      spreadsheetId,
+      fileName,
+      sheetCount: addedSheets.length,
+    });
+
+  } catch (error) {
+    console.error('[Handover Export] Error:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });

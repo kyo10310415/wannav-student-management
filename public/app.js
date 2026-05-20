@@ -15018,6 +15018,48 @@ let newAssignFilterHandover = 'all';
 let newAssignSortColumn = 'lesson_start_date';
 let newAssignSortDirection = 'asc';
 
+async function exportHandoverToSheet() {
+  const btn = document.getElementById('handover-export-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>書き出し中...';
+  }
+
+  try {
+    const res = await axios.post(
+      `${API_BASE}/api/handover/export`,
+      {},
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+
+    if (res.data.success) {
+      // 成功: URLを開く確認ダイアログ
+      const url = res.data.spreadsheetUrl;
+      showNotification(
+        `スプレッドシートを作成しました (${res.data.sheetCount}シート)`,
+        'success'
+      );
+      // 少し待ってから新しいタブで開く
+      setTimeout(() => {
+        if (confirm(`スプレッドシートを開きますか？\n${res.data.fileName}`)) {
+          window.open(url, '_blank');
+        }
+      }, 300);
+    } else {
+      showNotification(res.data.error || 'スプレッドシートの作成に失敗しました', 'error');
+    }
+  } catch (error) {
+    console.error('[Handover Export] Error:', error);
+    const msg = error.response?.data?.error || 'スプレッドシートの作成に失敗しました';
+    showNotification(msg, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-file-spreadsheet mr-1"></i>スプレッドシート出力';
+    }
+  }
+}
+
 async function renderHandoverPage() {
   // Role check: leader+ only
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
@@ -15085,9 +15127,15 @@ function _renderHandoverLayout() {
             <h2 class="text-xl font-bold text-gray-800">
               <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>引き継ぎ管理
             </h2>
-            <button onclick="renderHandoverPage()" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
-              <i class="fas fa-sync-alt mr-1"></i>更新
-            </button>
+            <div class="flex items-center gap-2">
+              <button onclick="exportHandoverToSheet()" id="handover-export-btn"
+                      class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition text-sm">
+                <i class="fas fa-file-spreadsheet mr-1"></i>スプレッドシート出力
+              </button>
+              <button onclick="renderHandoverPage()" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+                <i class="fas fa-sync-alt mr-1"></i>更新
+              </button>
+            </div>
           </div>
 
           <!-- Tabs -->
