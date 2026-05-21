@@ -15416,7 +15416,7 @@ function _renderHandoverRows() {
       expectedBadge = _handoverProgressBadge(expectedProgress, false);
     }
 
-    const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.created_at);
+    const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.lesson_start_date, s.suspension_months);
     const assignedDisplay = getTutorDisplayName(s.homeroom_tutor) || s.homeroom_tutor || '-';
     const notionLink  = s.notion_url
       ? `<a href="${escapeHtml(s.notion_url)}" target="_blank" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
@@ -15530,11 +15530,9 @@ function _handoverProgressBadge(progress, isPro) {
   return `<span class="ml-1 inline-block px-1.5 py-0.5 rounded text-xs font-bold ${cls}">${label}</span>`;
 }
 
-function _handoverContinuedMonthsBadge(createdAt) {
-  if (!createdAt) return '<span class="text-gray-400 text-xs">-</span>';
-  const start = new Date(createdAt);
-  const now   = new Date();
-  const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+function _handoverContinuedMonthsBadge(lessonStartDate, suspensionMonths) {
+  const months = calculateContinuedMonths(lessonStartDate, suspensionMonths || 0);
+  if (!months || months <= 0) return '<span class="text-gray-400 text-xs">-</span>';
   let cls;
   if (months < 3)       cls = 'bg-gray-100 text-gray-600';
   else if (months < 6)  cls = 'bg-blue-100 text-blue-700';
@@ -15763,7 +15761,7 @@ function _renderNewAssignRows() {
       expectedBadge = _handoverProgressBadge(expectedProgress, false);
     }
 
-    const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.created_at);
+    const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.lesson_start_date, s.suspension_months);
     const assignedDisplay = getTutorDisplayName(s.homeroom_tutor) || s.homeroom_tutor || '-';
 
     // レッスン開始月表示 (yyyy/mm/dd → yyyy/mm)
