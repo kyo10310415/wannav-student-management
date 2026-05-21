@@ -47,6 +47,8 @@ app.get('/students', async (c) => {
         s.discord_url,
         s.status,
         s.created_at,
+        s.lesson_start_date,
+        s.suspension_months,
         COALESCE(ha.handover_tutor_name, '') AS handover_tutor_name,
         ha.assigned_at,
         ha.reset_at
