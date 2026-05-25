@@ -2640,7 +2640,8 @@ function renderTutorStatistics() {
   
   // Calculate overall statistics
   let overallSatisfaction = 0;
-  let overallCollectionRate = 0;
+  let overallTotalAnswers = 0;    // 全回答数合計（回収率加重平均用）
+  let overallTotalStudents = 0;   // 全アクティブ生徒数合計（回収率加重平均用）
   let overallSatisfactionScore = 0;
   let overallValidCount = 0;
   
@@ -2667,14 +2668,16 @@ function renderTutorStatistics() {
       const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
       
       overallSatisfaction += satisfactionValue;
-      overallCollectionRate += collectionRateValue;
+      overallTotalAnswers  += satisfactionCount;      // 回答数を累積
+      overallTotalStudents += activeStudentCount;     // 生徒数を累積
       overallSatisfactionScore += satisfactionScoreValue;
       overallValidCount++;
     }
   });
   
   const overallAvgSatisfaction = overallValidCount > 0 ? (overallSatisfaction / overallValidCount).toFixed(2) : '-';
-  const overallAvgCollectionRate = overallValidCount > 0 ? (overallCollectionRate / overallValidCount).toFixed(2) : '-';
+  // 回収率 = 全回答数合計 ÷ 全アクティブ生徒数合計 × 100（加重平均）
+  const overallAvgCollectionRate = overallTotalStudents > 0 ? (overallTotalAnswers / overallTotalStudents * 100).toFixed(2) : '-';
   const overallAvgSatisfactionScore = overallValidCount > 0 ? (overallSatisfactionScore / overallValidCount).toFixed(2) : '-';
   
   // Color coding for overall
@@ -2687,7 +2690,8 @@ function renderTutorStatistics() {
   uniqueTeams.forEach(team => {
     const teamTutors = allActiveTutors.filter(t => (t.team || '未所属') === team);
     let teamSatisfaction = 0;
-    let teamCollectionRate = 0;
+    let teamTotalAnswers = 0;    // チーム内全回答数合計（回収率加重平均用）
+    let teamTotalStudents = 0;   // チーム内全アクティブ生徒数合計（回収率加重平均用）
     let teamSatisfactionScore = 0;
     let teamValidCount = 0;
     
@@ -2714,7 +2718,8 @@ function renderTutorStatistics() {
         const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
         
         teamSatisfaction += satisfactionValue;
-        teamCollectionRate += collectionRateValue;
+        teamTotalAnswers  += satisfactionCount;      // 回答数を累積
+        teamTotalStudents += activeStudentCount;     // 生徒数を累積
         teamSatisfactionScore += satisfactionScoreValue;
         teamValidCount++;
       }
@@ -2723,7 +2728,8 @@ function renderTutorStatistics() {
     teamStats[team] = {
       tutorCount: teamTutors.length,
       satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
-      collectionRate: teamValidCount > 0 ? (teamCollectionRate / teamValidCount).toFixed(2) : '-',
+      // 回収率 = チーム内全回答数合計 ÷ チーム内全アクティブ生徒数合計 × 100（加重平均）
+      collectionRate: teamTotalStudents > 0 ? (teamTotalAnswers / teamTotalStudents * 100).toFixed(2) : '-',
       satisfactionScore: teamValidCount > 0 ? (teamSatisfactionScore / teamValidCount).toFixed(2) : '-',
       wanamiUsage: 0  // Will be populated later from API
     };
