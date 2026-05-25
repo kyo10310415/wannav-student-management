@@ -2755,7 +2755,7 @@ function renderTutorStatistics() {
           <div class="text-3xl font-bold ${overallSatisfactionColor}">${overallAvgSatisfaction}</div>
         </div>
         <div class="bg-green-50 p-4 rounded-lg border-2 border-green-200">
-          <div class="text-sm text-gray-600 mb-1">回収率平均</div>
+          <div class="text-sm text-gray-600 mb-1">全体回収率</div>
           <div class="text-3xl font-bold ${overallCollectionRateColor}">${overallAvgCollectionRate}${overallAvgCollectionRate !== '-' ? '%' : ''}</div>
         </div>
         <div class="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
@@ -2777,7 +2777,7 @@ function renderTutorStatistics() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チーム名</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度平均</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">回収率平均</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">全体回収率</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア平均</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">わなみさん合計</th>
             </tr>
