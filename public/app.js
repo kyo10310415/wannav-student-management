@@ -2674,7 +2674,7 @@ function renderTutorStatistics() {
   });
   
   const overallAvgSatisfaction = overallValidCount > 0 ? (overallSatisfaction / overallValidCount).toFixed(2) : '-';
-  const overallAvgCollectionRate = overallValidCount > 0 ? (overallCollectionRate / overallValidCount).toFixed(1) : '-';
+  const overallAvgCollectionRate = overallValidCount > 0 ? (overallCollectionRate / overallValidCount).toFixed(2) : '-';
   const overallAvgSatisfactionScore = overallValidCount > 0 ? (overallSatisfactionScore / overallValidCount).toFixed(2) : '-';
   
   // Color coding for overall
@@ -2723,7 +2723,7 @@ function renderTutorStatistics() {
     teamStats[team] = {
       tutorCount: teamTutors.length,
       satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
-      collectionRate: teamValidCount > 0 ? (teamCollectionRate / teamValidCount).toFixed(1) : '-',
+      collectionRate: teamValidCount > 0 ? (teamCollectionRate / teamValidCount).toFixed(2) : '-',
       satisfactionScore: teamValidCount > 0 ? (teamSatisfactionScore / teamValidCount).toFixed(2) : '-',
       wanamiUsage: 0  // Will be populated later from API
     };
@@ -2898,13 +2898,13 @@ function renderTutorRows() {
     let collectionRateColor = 'text-green-600'; // デフォルト色
     if (!isKyoheiSensei && activeStudentCount > 0 && satisfactionCount > 0) {
       collectionRateValue = (satisfactionCount / activeStudentCount * 100);
-      collectionRate = `${collectionRateValue.toFixed(1)}%`;
+      collectionRate = `${collectionRateValue.toFixed(2)}%`;
       // 50未満は赤文字
       if (collectionRateValue < 50) {
         collectionRateColor = 'text-red-600';
       }
     } else if (!isKyoheiSensei && activeStudentCount > 0 && satisfactionCount === 0) {
-      collectionRate = '0.0%';
+      collectionRate = '0.00%';
       collectionRateColor = 'text-red-600'; // 0%は赤文字
     }
     
@@ -2993,7 +2993,7 @@ function renderTutorRows() {
       prevSatisfactionValue, '', true
     );
     const collectionRateDiff = _diffBadge(
-      collectionRateValue > 0 ? collectionRateValue.toFixed(1) : null,
+      collectionRateValue > 0 ? collectionRateValue.toFixed(2) : null,
       prevCollectionRate, '%', true
     );
     const satisfactionScoreDiff = _diffBadge(
@@ -3006,7 +3006,7 @@ function renderTutorRows() {
       ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevSatisfactionValue).toFixed(2)}</div>`
       : '';
     const prevCollectionRateDisplay = prevCollectionRate !== null
-      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevCollectionRate).toFixed(1)}%</div>`
+      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevCollectionRate).toFixed(2)}%</div>`
       : '';
     const prevSatisfactionScoreDisplay = prevSatisfactionScore !== null
       ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevSatisfactionScore).toFixed(2)}</div>`
@@ -3478,7 +3478,7 @@ function showSatisfactionModal(tutorName) {
               </div>
               <div>
                 <div class="text-sm text-gray-600">回収率</div>
-                <div class="text-3xl font-bold ${modalCollectionRateColor}">${currentCollectionRate.toFixed(1)}%</div>
+                <div class="text-3xl font-bold ${modalCollectionRateColor}">${currentCollectionRate.toFixed(2)}%</div>
               </div>
               <div>
                 <div class="text-sm text-gray-600">満足度スコア</div>
