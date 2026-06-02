@@ -2786,8 +2786,8 @@ function renderTutorStatistics() {
             ${uniqueTeams
               .filter(team => {
                 const stats = teamStats[team];
-                // TUTOR数が2名以下のチームは非表示
-                return stats.tutorCount > 2;
+                // TUTOR数が0名のチームは非表示
+                return stats.tutorCount > 0;
               })
               .map(team => {
               const stats = teamStats[team];
