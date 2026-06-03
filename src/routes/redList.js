@@ -725,6 +725,7 @@ app.patch('/:studentId/ex-rank', async (c) => {
 
 // ─────────────────────────────────────────
 // PATCH /api/red-list/:studentId/status  — 対応状況・担当を更新
+// red_list（今月）と red_list_history（過去月）の両方に対応
 // ─────────────────────────────────────────
 app.patch('/:studentId/status', async (c) => {
   try {
@@ -752,7 +753,9 @@ app.patch('/:studentId/status', async (c) => {
     }
 
     params.push(studentId, yearMonth);
-    const result = await query(
+
+    // まず red_list（今月）を試みる
+    let result = await query(
       `UPDATE red_list
          SET ${fields.join(', ')}, updated_at = NOW()
        WHERE student_id = $${params.length - 1}
@@ -760,6 +763,18 @@ app.patch('/:studentId/status', async (c) => {
        RETURNING *`,
       params
     );
+
+    // red_list に該当なければ red_list_history（過去月）を更新
+    if (result.rows.length === 0) {
+      result = await query(
+        `UPDATE red_list_history
+           SET ${fields.join(', ')}
+         WHERE student_id = $${params.length - 1}
+           AND year_month = $${params.length}
+         RETURNING *`,
+        params
+      );
+    }
 
     if (result.rows.length === 0) {
       return c.json({ success: false, error: 'レコードが見つかりません' }, 404);

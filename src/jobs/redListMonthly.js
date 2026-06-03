@@ -22,10 +22,12 @@ export async function monthlyRedListReset() {
     const archiveResult = await query(`
       INSERT INTO red_list_history 
         (student_id, year_month, final_score, final_rank, 
-         satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score)
+         satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score,
+         correspondence_status, assigned_to)
       SELECT 
         student_id, year_month, total_score, rank,
-        satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score
+        satisfaction_score, absence_score, survey_score, reschedule_score, reservation_score,
+        correspondence_status, assigned_to
       FROM red_list
       WHERE year_month = $1
       ON CONFLICT DO NOTHING
