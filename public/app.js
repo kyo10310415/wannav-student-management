@@ -13934,8 +13934,7 @@ function renderRedListStudentCard(item, isHistory) {
 
         <!-- ③ 操作エリア（右端・固定幅） -->
         <div class="flex-shrink-0 flex flex-col items-end gap-2 min-w-[9rem]">
-          ${!isHistory ? `
-          <!-- 対応状況 -->
+          <!-- 対応状況（今月・過去タブ共通） -->
           <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)"
                   id="rl-status-${item.student_id}"
                   class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-blue-400 cursor-pointer">
@@ -13943,7 +13942,7 @@ function renderRedListStudentCard(item, isHistory) {
             <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
             <option value="対応済み" ${cs === '対応済み' ? 'selected' : ''}>対応済み</option>
           </select>
-          <!-- 担当者 -->
+          <!-- 担当者（今月・過去タブ共通） -->
           <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
             <i class="fas fa-user-tie text-indigo-300 text-xs flex-shrink-0"></i>
             <input id="rl-assigned-${item.student_id}" type="text"
@@ -13952,11 +13951,6 @@ function renderRedListStudentCard(item, isHistory) {
                    onchange="updateRedListAssigned('${item.student_id}', '${yearMonth}', this.value)"
                    class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
           </div>
-          ` : `
-          <!-- 履歴タブ：対応状況バッジのみ表示 -->
-          <span class="inline-block border ${statusColor} rounded-lg px-2 py-1 text-xs font-semibold">${cs}</span>
-          ${ao ? `<span class="text-xs text-gray-400"><i class="fas fa-user-tie mr-0.5 text-indigo-300"></i>${escapeHtml(ao)}</span>` : ''}
-          `}
           <!-- Discord送信ボタン -->
           <button onclick="openRedListDiscordModal('${item.student_id}', '${studentName}', '${yearMonth}')"
                   class="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">
@@ -14017,8 +14011,9 @@ async function updateRedListStatus(studentId, yearMonth, status) {
     }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
 
     if (res.data.success) {
-      // ローカルデータを更新（再描画なし）
-      const entry = currentRedListData.find(d => d.student_id === studentId);
+      // ローカルデータを更新（今月・過去タブ両方を検索）
+      const entry = currentRedListData.find(d => d.student_id === studentId)
+                 || historyRedListData.find(d => d.student_id === studentId);
       if (entry) entry.correspondence_status = status;
       updateRedListStats();
       showNotification(
@@ -14043,7 +14038,8 @@ async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
     }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
 
     if (res.data.success) {
-      const entry = currentRedListData.find(d => d.student_id === studentId);
+      const entry = currentRedListData.find(d => d.student_id === studentId)
+                 || historyRedListData.find(d => d.student_id === studentId);
       if (entry) entry.assigned_to = assignedTo;
       showNotification('担当者を更新しました', 'success');
     } else {
@@ -14277,6 +14273,8 @@ function exportRedListCsv() {
     'EXランク',
     'ランク',
     'レッドリストスコア',
+    '対応状況',
+    '担当者',
     '継続月数',
     '追加からの経過日数',
     'Discord初回送信からの経過日数',
@@ -14343,6 +14341,8 @@ function exportRedListCsv() {
       exRank,
       rank,
       score,
+      item.correspondence_status || '未対応',
+      item.assigned_to || '',
       continuedMonths,
       csvAddedDaysAgo,
       csvFirstDiscordDaysAgo,

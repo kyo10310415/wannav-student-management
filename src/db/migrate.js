@@ -869,6 +869,24 @@ const migrations = [
     down: `
       ALTER TABLE red_list DROP COLUMN IF EXISTS ex_reason;
     `
+  },
+  {
+    version: 36,
+    name: 'add_correspondence_to_red_list_history',
+    up: `
+      -- 対応状況・担当者を red_list_history にも追加（今月タブで設定した内容を過去タブでも表示・編集できるようにする）
+      ALTER TABLE red_list_history
+        ADD COLUMN IF NOT EXISTS correspondence_status VARCHAR(20) DEFAULT '未対応',
+        ADD COLUMN IF NOT EXISTS assigned_to           VARCHAR(255);
+
+      COMMENT ON COLUMN red_list_history.correspondence_status IS '対応状況（未対応 / 対応中 / 対応済み）';
+      COMMENT ON COLUMN red_list_history.assigned_to IS '担当者名';
+    `,
+    down: `
+      ALTER TABLE red_list_history
+        DROP COLUMN IF EXISTS correspondence_status,
+        DROP COLUMN IF EXISTS assigned_to;
+    `
   }
 ];
 
