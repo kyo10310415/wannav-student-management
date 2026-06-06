@@ -887,6 +887,44 @@ const migrations = [
         DROP COLUMN IF EXISTS correspondence_status,
         DROP COLUMN IF EXISTS assigned_to;
     `
+  },
+  {
+    version: 37,
+    name: 'create_tutor_red_list_table',
+    up: `
+      -- Tutorレッドリストテーブル
+      -- スコアに基づいてTutorを自動的にレッドリストに登録・管理する
+      CREATE TABLE IF NOT EXISTS tutor_red_list (
+        id                 SERIAL PRIMARY KEY,
+        tutor_id           VARCHAR(50)  NOT NULL,          -- employee_id
+        tutor_name         VARCHAR(255) NOT NULL,
+        registered_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- 登録日時
+        rank               VARCHAR(10)  NOT NULL DEFAULT 'Low',  -- High / Middle / Low
+        total_score        INTEGER      NOT NULL DEFAULT 0,
+        -- スコア内訳
+        helper_request_score  INTEGER   NOT NULL DEFAULT 0,  -- 助っ人依頼点数
+        attendance_score      INTEGER   NOT NULL DEFAULT 0,  -- MTG/研修/1on1出席率点数
+        -- 対応状況
+        correspondence_status VARCHAR(20) NOT NULL DEFAULT '未対応',  -- 未対応 / 対応中 / 対応済み
+        assigned_to        VARCHAR(255),
+        notes              TEXT,
+        -- 登録時スナップショット（参照用）
+        snapshot_satisfaction NUMERIC(5,2),  -- 登録時の満足度平均
+        snapshot_team      VARCHAR(100),     -- 登録時の所属チーム
+        created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (tutor_id)  -- 同一Tutorは1エントリのみ（再登録時は更新）
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tutor_red_list_tutor_id  ON tutor_red_list(tutor_id);
+      CREATE INDEX IF NOT EXISTS idx_tutor_red_list_rank      ON tutor_red_list(rank);
+      CREATE INDEX IF NOT EXISTS idx_tutor_red_list_status    ON tutor_red_list(correspondence_status);
+
+      COMMENT ON TABLE tutor_red_list IS 'Tutorレッドリスト（スコアベース）';
+    `,
+    down: `
+      DROP TABLE IF EXISTS tutor_red_list;
+    `
   }
 ];
 
