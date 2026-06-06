@@ -276,6 +276,11 @@ function renderHeader() {
               <button id="nav-tutors" onclick="changePage('tutors')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
               </button>
+              ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+              <button id="nav-tutor-red-list" onclick="changePage('tutor-red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+                <i class="fas fa-exclamation-triangle mr-2"></i>Tutorレッドリスト
+              </button>
+              ` : ''}
               <button id="nav-schedules" onclick="changePage('schedules')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-calendar-alt mr-2"></i>スケジュール
               </button>
@@ -693,6 +698,8 @@ async function renderApp() {
     await renderRouletteWinnersPage();
   } else if (currentPage === 'handover') {
     await renderHandoverPage();
+  } else if (currentPage === 'tutor-red-list') {
+    await renderTutorRedListPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -15919,6 +15926,384 @@ async function newAssignUpdateAssignment(studentId, tutorName) {
   } catch (e) {
     console.error('[Handover] Error updating new assignment:', e);
     showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
+  }
+}
+
+// ============================================================
+// Tutor Red List Page
+// ============================================================
+
+let tutorRedListData = [];
+let tutorRedListYear  = new Date().getFullYear();
+let tutorRedListMonth = new Date().getMonth() + 1;
+
+/**
+ * Tutorレッドリストページを描画する
+ */
+async function renderTutorRedListPage() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('content').classList.add('hidden');
+
+  // リーダー以上のみアクセス可
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+    document.getElementById('content').innerHTML = `
+      <div class="text-center py-16 text-gray-500">
+        <i class="fas fa-lock text-5xl mb-4"></i>
+        <p class="text-lg font-semibold">アクセス権限がありません</p>
+        <p class="text-sm mt-2">このページはリーダー以上のみ閲覧できます。</p>
+      </div>
+    `;
+    return;
+  }
+
+  try {
+    const res = await axios.get(
+      `${API_BASE}/api/tutor-red-list?year=${tutorRedListYear}&month=${tutorRedListMonth}`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    tutorRedListData = res.data.success ? res.data.data : [];
+  } catch (e) {
+    console.error('[TutorRedList] fetch error:', e);
+    tutorRedListData = [];
+  }
+
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  _renderTutorRedListContent();
+}
+
+/**
+ * ページコンテンツを描画（再描画共通）
+ */
+function _renderTutorRedListContent() {
+  const content = document.getElementById('content');
+  if (!content) return;
+
+  const highList   = tutorRedListData.filter(e => e.rank === 'High');
+  const middleList = tutorRedListData.filter(e => e.rank === 'Middle');
+  const lowList    = tutorRedListData.filter(e => e.rank === 'Low');
+
+  content.innerHTML = `
+    <!-- ヘッダー操作エリア -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="flex flex-wrap items-center gap-4">
+        <h1 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>Tutorレッドリスト
+        </h1>
+
+        <!-- 月選択 -->
+        <div class="flex items-center gap-2 ml-2">
+          <label class="text-sm font-medium text-gray-700"><i class="fas fa-calendar mr-1"></i>集計月:</label>
+          <button onclick="changeTutorRedListMonth(-1)" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span class="px-4 py-2 bg-gray-100 rounded font-semibold min-w-[120px] text-center">
+            ${tutorRedListYear}年${tutorRedListMonth}月
+          </span>
+          <button onclick="changeTutorRedListMonth(1)" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+
+        <!-- 再計算ボタン -->
+        <button onclick="recalcTutorRedList()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold">
+          <i class="fas fa-sync-alt mr-2"></i>スコア再計算
+        </button>
+
+        <div class="text-xs text-gray-400 ml-2">
+          <i class="fas fa-info-circle mr-1"></i>
+          助っ人依頼1回=1点 / MTG・研修・1on1出席率70%以下=3点
+          <span class="ml-2 font-semibold text-red-600">High≥7点</span>
+          <span class="ml-1 font-semibold text-orange-500">Middle 4〜6点</span>
+          <span class="ml-1 font-semibold text-yellow-600">Low 3点</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- サマリー -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+        <div class="text-3xl font-bold text-red-600">${highList.length}</div>
+        <div class="text-sm font-semibold text-red-500 mt-1"><i class="fas fa-arrow-up mr-1"></i>High（7点以上）</div>
+      </div>
+      <div class="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
+        <div class="text-3xl font-bold text-orange-500">${middleList.length}</div>
+        <div class="text-sm font-semibold text-orange-400 mt-1"><i class="fas fa-minus mr-1"></i>Middle（4〜6点）</div>
+      </div>
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+        <div class="text-3xl font-bold text-yellow-600">${lowList.length}</div>
+        <div class="text-sm font-semibold text-yellow-500 mt-1"><i class="fas fa-arrow-down mr-1"></i>Low（3点）</div>
+      </div>
+    </div>
+
+    <!-- リスト本体 -->
+    <div class="space-y-6">
+      ${_renderTutorRedListSection('High',   highList,   'red',    'fas fa-arrow-up',  '7点以上')}
+      ${_renderTutorRedListSection('Middle', middleList, 'orange', 'fas fa-minus',     '4〜6点')}
+      ${_renderTutorRedListSection('Low',    lowList,    'yellow', 'fas fa-arrow-down','3点')}
+    </div>
+
+    ${tutorRedListData.length === 0 ? `
+      <div class="bg-white rounded-lg shadow-md p-12 text-center text-gray-500 mt-6">
+        <i class="fas fa-check-circle text-5xl text-green-400 mb-4"></i>
+        <p class="text-lg font-semibold text-green-600">レッドリスト対象のTutorはいません</p>
+        <p class="text-sm mt-2 text-gray-400">「スコア再計算」を押すと最新データで更新されます。</p>
+      </div>
+    ` : ''}
+  `;
+}
+
+/**
+ * ランクセクション（High / Middle / Low）の描画
+ */
+function _renderTutorRedListSection(rank, list, color, iconClass, scoreLabel) {
+  const colorMap = {
+    red:    { bg: 'bg-red-50',    border: 'border-red-200',    header: 'bg-red-600',    badge: 'bg-red-100 text-red-700',    text: 'text-red-600'    },
+    orange: { bg: 'bg-orange-50', border: 'border-orange-200', header: 'bg-orange-500', badge: 'bg-orange-100 text-orange-700', text: 'text-orange-500' },
+    yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', header: 'bg-yellow-500', badge: 'bg-yellow-100 text-yellow-700', text: 'text-yellow-600' },
+  };
+  const c = colorMap[color];
+
+  return `
+    <div class="${c.bg} ${c.border} border rounded-lg shadow-sm overflow-hidden">
+      <!-- セクションヘッダー -->
+      <div class="${c.header} text-white px-6 py-3 flex items-center gap-3">
+        <i class="${iconClass} text-lg"></i>
+        <span class="text-lg font-bold">${rank}</span>
+        <span class="text-sm opacity-90">${scoreLabel}</span>
+        <span class="ml-auto bg-white/20 rounded-full px-3 py-0.5 text-sm font-semibold">${list.length}名</span>
+      </div>
+
+      ${list.length === 0 ? `
+        <div class="px-6 py-6 text-center text-gray-400">
+          <i class="fas fa-check text-2xl mb-2"></i>
+          <p class="text-sm">対象者なし</p>
+        </div>
+      ` : `
+        <div class="divide-y divide-gray-200">
+          ${list.map(entry => _renderTutorRedListCard(entry, c)).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+/**
+ * 各TutorカードのHTML
+ */
+function _renderTutorRedListCard(entry, c) {
+  const registeredAt = entry.registered_at
+    ? new Date(entry.registered_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '不明';
+
+  const satisfactionStr = entry.current_satisfaction !== null && entry.current_satisfaction !== undefined
+    ? Number(entry.current_satisfaction).toFixed(2)
+    : '-';
+  const satisfactionColor = entry.current_satisfaction !== null && entry.current_satisfaction !== undefined && entry.current_satisfaction < 80
+    ? 'text-red-600 font-bold' : 'text-gray-700';
+
+  const attendanceStr = entry.current_attendance_rate !== null && entry.current_attendance_rate !== undefined
+    ? Number(entry.current_attendance_rate).toFixed(1) + '%'
+    : '-';
+  const attendanceColor = entry.current_attendance_rate !== null && entry.current_attendance_rate !== undefined && entry.current_attendance_rate <= 70
+    ? 'text-red-600 font-bold' : 'text-gray-700';
+
+  const helperCount = entry.current_helper_request_count ?? 0;
+  const helperColor = helperCount >= 5 ? 'text-red-600 font-bold' : helperCount >= 3 ? 'text-orange-600 font-semibold' : 'text-gray-700';
+
+  const cs = entry.correspondence_status || '未対応';
+  const statusColorMap = {
+    '未対応': 'border-gray-300 text-gray-600',
+    '対応中': 'border-blue-400 text-blue-700 bg-blue-50',
+    '対応済み': 'border-green-500 text-green-700 bg-green-50',
+  };
+  const statusColor = statusColorMap[cs] || statusColorMap['未対応'];
+
+  const ao = escapeHtml(entry.assigned_to || '');
+  const team = escapeHtml(entry.snapshot_team || entry.current_team || '未所属');
+
+  // スコア内訳バッジ
+  const helperScoreBadge = entry.helper_request_score > 0
+    ? `<span class="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5">助っ人依頼 +${entry.helper_request_score}点</span>`
+    : '';
+  const attendanceScoreBadge = entry.attendance_score > 0
+    ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${entry.attendance_score}点</span>`
+    : '';
+
+  return `
+    <div class="bg-white px-6 py-4 flex flex-wrap gap-4 items-start">
+      <!-- 左: Tutor情報 -->
+      <div class="flex-1 min-w-[200px]">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-bold text-gray-900 text-base">${escapeHtml(entry.tutor_name)}</span>
+          <span class="text-xs text-gray-400">${escapeHtml(team)}</span>
+          <span class="${c.text} font-bold text-sm ml-1">${entry.total_score}点</span>
+        </div>
+        <div class="flex flex-wrap gap-1 mb-2">
+          ${helperScoreBadge}
+          ${attendanceScoreBadge}
+        </div>
+        <div class="text-xs text-gray-400">
+          <i class="fas fa-clock mr-1"></i>登録日時: ${registeredAt}
+        </div>
+      </div>
+
+      <!-- 中: 現在のデータ -->
+      <div class="flex gap-6 items-center flex-wrap">
+        <!-- 満足度 -->
+        <div class="text-center">
+          <div class="text-xs text-gray-400 mb-1">満足度平均</div>
+          <div class="text-lg font-bold ${satisfactionColor}">${satisfactionStr}</div>
+        </div>
+        <!-- 出席率 -->
+        <div class="text-center">
+          <div class="text-xs text-gray-400 mb-1">MTG出席率</div>
+          <div class="text-lg font-bold ${attendanceColor}">${attendanceStr}</div>
+        </div>
+        <!-- 助っ人依頼 -->
+        <div class="text-center">
+          <div class="text-xs text-gray-400 mb-1">助っ人依頼</div>
+          <div class="text-lg font-bold ${helperColor}">${helperCount}回</div>
+        </div>
+      </div>
+
+      <!-- 右: 対応状況 -->
+      <div class="flex flex-col gap-2 items-end min-w-[9rem]">
+        <!-- 対応状況セレクト -->
+        <select onchange="updateTutorRedListStatus('${entry.tutor_id}', this.value)"
+                id="trl-status-${entry.tutor_id}"
+                class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-purple-400 cursor-pointer">
+          <option value="未対応"  ${cs === '未対応'  ? 'selected' : ''}>未対応</option>
+          <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
+          <option value="対応済み" ${cs === '対応済み' ? 'selected' : ''}>対応済み</option>
+        </select>
+        <!-- 担当者 -->
+        <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
+          <i class="fas fa-user-tie text-purple-300 text-xs flex-shrink-0"></i>
+          <input id="trl-assigned-${entry.tutor_id}" type="text"
+                 value="${ao}"
+                 placeholder="担当者名"
+                 onchange="updateTutorRedListAssigned('${entry.tutor_id}', this.value)"
+                 class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
+        </div>
+        <!-- 削除ボタン -->
+        <button onclick="deleteTutorRedListEntry('${entry.tutor_id}', '${escapeHtml(entry.tutor_name)}')"
+                class="w-full flex items-center justify-center gap-1 border border-gray-300 text-gray-500 hover:border-red-400 hover:text-red-500 px-2 py-1 rounded-lg text-xs transition">
+          <i class="fas fa-times"></i>除外
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Tutorレッドリストの集計月変更
+ */
+async function changeTutorRedListMonth(offset) {
+  tutorRedListMonth += offset;
+  if (tutorRedListMonth > 12) { tutorRedListMonth = 1;  tutorRedListYear++; }
+  if (tutorRedListMonth < 1)  { tutorRedListMonth = 12; tutorRedListYear--; }
+  await renderTutorRedListPage();
+}
+
+/**
+ * スコア再計算APIを呼び出す
+ */
+async function recalcTutorRedList() {
+  try {
+    showNotification('スコアを再計算中...', 'info');
+    const res = await axios.post(
+      `${API_BASE}/api/tutor-red-list/recalc`,
+      { year: tutorRedListYear, month: tutorRedListMonth },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    if (res.data.success) {
+      showNotification(res.data.message, 'success');
+      await renderTutorRedListPage();
+    } else {
+      showNotification(res.data.error || '再計算に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[TutorRedList] recalc error:', e);
+    showNotification(e.response?.data?.error || '再計算に失敗しました', 'error');
+  }
+}
+
+/**
+ * 対応状況を更新する
+ */
+async function updateTutorRedListStatus(tutorId, status) {
+  try {
+    const res = await axios.patch(
+      `${API_BASE}/api/tutor-red-list/${tutorId}/status`,
+      { correspondence_status: status },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    if (res.data.success) {
+      const entry = tutorRedListData.find(d => d.tutor_id === tutorId);
+      if (entry) entry.correspondence_status = status;
+      // セレクトの色を即時更新
+      const sel = document.getElementById(`trl-status-${tutorId}`);
+      if (sel) {
+        const colorMap = { '未対応': 'border-gray-300 text-gray-600', '対応中': 'border-blue-400 text-blue-700 bg-blue-50', '対応済み': 'border-green-500 text-green-700 bg-green-50' };
+        sel.className = sel.className.replace(/border-\S+ text-\S+( bg-\S+)?/g, '');
+        sel.classList.add(...(colorMap[status] || colorMap['未対応']).split(' '));
+      }
+      showNotification('対応状況を更新しました', 'success');
+    } else {
+      showNotification(res.data.error || '更新に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[TutorRedList] updateStatus error:', e);
+    showNotification(e.response?.data?.error || '更新に失敗しました', 'error');
+  }
+}
+
+/**
+ * 担当者を更新する
+ */
+async function updateTutorRedListAssigned(tutorId, assignedTo) {
+  try {
+    const res = await axios.patch(
+      `${API_BASE}/api/tutor-red-list/${tutorId}/status`,
+      { assigned_to: assignedTo },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    if (res.data.success) {
+      const entry = tutorRedListData.find(d => d.tutor_id === tutorId);
+      if (entry) entry.assigned_to = assignedTo;
+      showNotification('担当者を更新しました', 'success');
+    } else {
+      showNotification(res.data.error || '更新に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[TutorRedList] updateAssigned error:', e);
+    showNotification(e.response?.data?.error || '更新に失敗しました', 'error');
+  }
+}
+
+/**
+ * エントリをレッドリストから削除する
+ */
+async function deleteTutorRedListEntry(tutorId, tutorName) {
+  if (!confirm(`「${tutorName}」をTutorレッドリストから除外しますか？\n（次回の再計算で条件に該当する場合は再登録されます）`)) return;
+  try {
+    const res = await axios.delete(
+      `${API_BASE}/api/tutor-red-list/${tutorId}`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    if (res.data.success) {
+      tutorRedListData = tutorRedListData.filter(d => d.tutor_id !== tutorId);
+      _renderTutorRedListContent();
+      showNotification(`「${tutorName}」をレッドリストから除外しました`, 'success');
+    } else {
+      showNotification(res.data.error || '削除に失敗しました', 'error');
+    }
+  } catch (e) {
+    console.error('[TutorRedList] delete error:', e);
+    showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
   }
 }
 

@@ -35,6 +35,7 @@ import vqDiagnosisRoutes from './routes/vq-diagnosis.js';
 import lessonReportRoutes from './routes/lessonReports.js';
 import redListRoutes from './routes/redList.js';
 import handoverRoutes from './routes/handover.js';
+import tutorRedListRoutes from './routes/tutorRedList.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -90,6 +91,7 @@ app.route('/api/vq-diagnosis', vqDiagnosisRoutes);
 app.route('/api/lesson-reports', lessonReportRoutes);
 app.route('/api/red-list', redListRoutes);
 app.route('/api/handover', handoverRoutes);
+app.route('/api/tutor-red-list', tutorRedListRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
