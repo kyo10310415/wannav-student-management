@@ -380,16 +380,17 @@ app.get('/monthly-stats/:year/:month', async (c) => {
     `, [startDate, endDate]);
     
     // Get reschedule counts
-    // Count lessons where reschedule_reason is not null or reschedule_count > 0
+    // absence_requests テーブルの absence_type='reschedule' から集計
+    // year/month カラムで絞り込む（lessons テーブルには reschedule カラムが存在しない）
     const rescheduleResult = await query(`
       SELECT 
         tutor_name,
         COUNT(*) as reschedule_count
-      FROM lessons
-      WHERE lesson_date >= $1 AND lesson_date <= $2
-        AND (reschedule_reason IS NOT NULL OR reschedule_count > 0)
+      FROM absence_requests
+      WHERE year = $1 AND month = $2
+        AND absence_type = 'reschedule'
       GROUP BY tutor_name
-    `, [startDate, endDate]);
+    `, [year, month]);
     
     // Build result object: tutor_id (employee_id) -> counts
     const result = {};
