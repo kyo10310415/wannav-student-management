@@ -8283,13 +8283,15 @@ async function renderBroadcastPage() {
               <label class="block text-sm font-semibold text-gray-700 mb-2">
                 <i class="fas fa-users mr-1"></i>送信対象
               </label>
-              <select id="broadcast-target-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              <select id="broadcast-target-status" onchange="updateBroadcastTargetInfo(); updatePreviewCount();" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <option value="アクティブ">アクティブ生徒のみ</option>
                 <option value="レッスン中">レッスン中（永久会員・在籍プラン除く）</option>
                 <option value="永久会員">永久会員（アクティブ且つ契約状況：永久会員）</option>
                 <option value="レッスン準備中">レッスン準備中</option>
                 <option value="休会">休会中</option>
               </select>
+              <!-- 送信対象の条件バッジ -->
+              <div id="broadcast-target-info" class="mt-2"></div>
             </div>
             
             <div>
@@ -8433,6 +8435,7 @@ async function renderBroadcastPage() {
   
   // Load tutors and initial preview
   await loadBroadcastTutors();
+  updateBroadcastTargetInfo();   // 初期表示時にもバッジを描画
   await updatePreviewCount();
   await loadSchedules();
   await loadBroadcastLogs();
@@ -8485,6 +8488,93 @@ async function loadBroadcastTutors() {
     console.error('Error loading tutors:', error);
     showNotification('Tutor一覧の取得に失敗しました', 'error');
   }
+}
+
+/**
+ * 送信対象ドロップダウン変更時にステータス・契約プランのバッジを表示する
+ */
+function updateBroadcastTargetInfo() {
+  const el = document.getElementById('broadcast-target-info');
+  if (!el) return;
+
+  const val = document.getElementById('broadcast-target-status')?.value || 'アクティブ';
+
+  // 各オプションの条件定義
+  const infoMap = {
+    'アクティブ': {
+      rows: [
+        { label: 'ステータス',   badges: [{ text: 'アクティブ', color: 'green' }] },
+        { label: '契約プラン', badges: [{ text: '（指定なし・全プラン対象）', color: 'gray' }] },
+      ],
+      note: null,
+    },
+    'レッスン中': {
+      rows: [
+        { label: 'ステータス',   badges: [{ text: 'アクティブ', color: 'green' }] },
+        { label: '契約プラン', badges: [
+          { text: '永久会員', color: 'red', exclude: true },
+          { text: '在籍プラン', color: 'red', exclude: true },
+        ]},
+      ],
+      note: '※ 永久会員・在籍プランを除いた通常レッスン中の生徒',
+    },
+    '永久会員': {
+      rows: [
+        { label: 'ステータス',   badges: [{ text: 'アクティブ', color: 'green' }] },
+        { label: '契約プラン', badges: [{ text: '永久会員', color: 'purple' }] },
+      ],
+      note: '※ アクティブ かつ 契約プランが永久会員の生徒のみ',
+    },
+    'レッスン準備中': {
+      rows: [
+        { label: 'ステータス',   badges: [{ text: 'レッスン準備中', color: 'blue' }] },
+        { label: '契約プラン', badges: [{ text: '（指定なし・全プラン対象）', color: 'gray' }] },
+      ],
+      note: null,
+    },
+    '休会': {
+      rows: [
+        { label: 'ステータス',   badges: [{ text: '休会', color: 'orange' }] },
+        { label: '契約プラン', badges: [{ text: '（指定なし・全プラン対象）', color: 'gray' }] },
+      ],
+      note: null,
+    },
+  };
+
+  const colorClass = {
+    green:  'bg-green-100 text-green-800 border border-green-300',
+    blue:   'bg-blue-100 text-blue-800 border border-blue-300',
+    purple: 'bg-purple-100 text-purple-800 border border-purple-300',
+    orange: 'bg-orange-100 text-orange-800 border border-orange-300',
+    gray:   'bg-gray-100 text-gray-600 border border-gray-200',
+    red:    'bg-red-100 text-red-700 border border-red-300 line-through',
+  };
+
+  const info = infoMap[val];
+  if (!info) { el.innerHTML = ''; return; }
+
+  const rowsHtml = info.rows.map(row => `
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-xs text-gray-500 w-20 shrink-0">${row.label}:</span>
+      <div class="flex items-center gap-1 flex-wrap">
+        ${row.badges.map(b => {
+          const excludePrefix = b.exclude ? '<span class="text-red-500 font-bold mr-0.5">✕</span>' : '';
+          return `<span class="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${colorClass[b.color] || colorClass.gray}">${excludePrefix}${b.text}</span>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  const noteHtml = info.note
+    ? `<p class="text-xs text-gray-400 mt-1"><i class="fas fa-info-circle mr-1"></i>${info.note}</p>`
+    : '';
+
+  el.innerHTML = `
+    <div class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 space-y-1">
+      ${rowsHtml}
+      ${noteHtml}
+    </div>
+  `;
 }
 
 /**
