@@ -299,12 +299,32 @@ app.get('/sync-from-sheet', async (c) => {
     }
     
     // Get last sync time
-    const syncMeta = await getLastSyncTime(spreadsheetId);
-    console.log('Last GAS sync:', syncMeta);
+    let syncMeta = null;
+    try {
+      syncMeta = await getLastSyncTime(spreadsheetId);
+      console.log('Last GAS sync:', syncMeta);
+    } catch (error) {
+      console.warn('Warning: Could not get last sync time:', error.message);
+      // Continue without sync time
+    }
     
     // Fetch lessons from sheet
-    const lessons = await fetchLessonsFromSheet(spreadsheetId);
-    console.log(`Fetched ${lessons.length} lessons from Google Sheets`);
+    let lessons = [];
+    try {
+      lessons = await fetchLessonsFromSheet(spreadsheetId);
+      console.log(`Fetched ${lessons.length} lessons from Google Sheets`);
+    } catch (error) {
+      console.error('Error syncing lessons from sheet:', error.message);
+      // Google API が一時的に失敗した場合はスキップして成功を返す
+      console.warn('⚠️ Google Sheets unavailable — skipping lesson sync, using existing DB data');
+      return c.json({
+        success: true,
+        message: 'Google Sheets unavailable (Google API error) — using existing DB data',
+        synced: 0,
+        errors: 0,
+        cache_error: true
+      });
+    }
     
     // Get student-tutor mapping from database
     const studentTutorMapping = await query(`
