@@ -9,6 +9,7 @@ let sessionToken = localStorage.getItem('sessionToken') || null;
 let students = [];
 let tutors = [];
 let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
+let satisfactionDataCacheError = false; // Google API障害時にtrueになる
 let tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} }; // Monthly helper/reschedule counts
 let tutorWeeklySnapshotData = {}; // notion_name -> snapshot (前週スナップショット)
 let lessonStats = {};
@@ -458,10 +459,17 @@ async function loadSatisfactionData() {
   try {
     const res = await axios.get(`${API_BASE}/api/tutors/satisfaction/all`);
     satisfactionData = res.data.data || {};
-    console.log('Loaded satisfaction data:', Object.keys(satisfactionData).length, 'tutors');
+    if (res.data.cache_error) {
+      satisfactionDataCacheError = true;
+      console.warn('⚠️ Satisfaction data: Google API unavailable — empty data returned');
+    } else {
+      satisfactionDataCacheError = false;
+      console.log('Loaded satisfaction data:', Object.keys(satisfactionData).length, 'tutors');
+    }
   } catch (error) {
     console.error('Error loading satisfaction data:', error);
     satisfactionData = {};
+    satisfactionDataCacheError = false;
   }
 }
 
@@ -2372,6 +2380,13 @@ function renderTutorsPage() {
   const content = document.getElementById('content');
   
   content.innerHTML = `
+    ${satisfactionDataCacheError ? `
+    <div class="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
+      <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+      <span class="text-yellow-800 text-sm">Google Sheets に一時的に接続できないため、満足度データを取得できませんでした。しばらく待ってから「データ更新」を押してください。</span>
+      <button onclick="refreshData()" class="ml-auto px-3 py-1 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-xs rounded">データ更新</button>
+    </div>
+    ` : ''}
     <!-- Controls -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <div class="flex gap-4 items-center flex-wrap">
@@ -7744,10 +7759,18 @@ async function renderSuspensionsPage() {
     // Fetch suspension data
     const response = await axios.get('/api/suspensions');
     const suspensions = response.data.data || [];
+    const isCacheError = response.data.cache_error === true;
     
     // Render page
     content.innerHTML = `
       <div class="max-w-7xl mx-auto">
+        ${isCacheError ? `
+        <div class="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
+          <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+          <span class="text-yellow-800 text-sm">Google Sheets に一時的に接続できないため、データを取得できませんでした。しばらく待ってから再読み込みしてください。</span>
+          <button onclick="renderSuspensionsPage()" class="ml-auto px-3 py-1 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-xs rounded">再読み込み</button>
+        </div>
+        ` : ''}
         <div class="bg-white rounded-lg shadow-md p-6 mb-6">
           <div class="flex justify-between items-center mb-6">
             <h2 class="text-2xl font-bold text-gray-800">

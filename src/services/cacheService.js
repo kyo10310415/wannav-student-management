@@ -1,19 +1,12 @@
-import { google } from 'googleapis';
+import { getSheets } from './sheetsService.js';
 
 /**
  * Get Google Sheets client
+ * sheetsService.js の getSheets() シングルトンを再利用することで
+ * Google OAuth2 トークンの再生成を避け、Premature close エラーを防ぐ
  */
 function getSheetsClient() {
-  const credentials = JSON.parse(
-    Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, 'base64').toString('utf-8')
-  );
-
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
-
-  return google.sheets({ version: 'v4', auth });
+  return getSheets();
 }
 
 /**
