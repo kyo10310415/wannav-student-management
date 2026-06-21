@@ -2680,6 +2680,14 @@ function renderTutorStatistics() {
   // Get unique teams
   const uniqueTeams = [...new Set(allActiveTutors.map(t => t.team || '未所属'))].sort();
   
+  // 全体担当セクション別人数集計
+  const overallSectionCounts = { Pro: 0, A: 0, B: 0, C: 0, unset: 0 };
+  allActiveTutors.forEach(t => {
+    const s = t.responsible_section;
+    if (s === 'Pro' || s === 'A' || s === 'B' || s === 'C') overallSectionCounts[s]++;
+    else overallSectionCounts.unset++;
+  });
+
   // Calculate overall statistics
   let overallSatisfaction = 0;
   let overallTotalAnswers = 0;    // 全回答数合計（回収率加重平均用）
@@ -2731,6 +2739,11 @@ function renderTutorStatistics() {
   const teamStats = {};
   uniqueTeams.forEach(team => {
     const teamTutors = allActiveTutors.filter(t => (t.team || '未所属') === team);
+    // チーム別担当セクション人数集計
+    const teamSectionCounts = { Pro: 0, A: 0, B: 0, C: 0 };
+    teamTutors.forEach(t => {
+      if (['Pro', 'A', 'B', 'C'].includes(t.responsible_section)) teamSectionCounts[t.responsible_section]++;
+    });
     let teamSatisfaction = 0;
     let teamTotalAnswers = 0;    // チーム内全回答数合計（回収率加重平均用）
     let teamTotalStudents = 0;   // チーム内全アクティブ生徒数合計（回収率加重平均用）
@@ -2769,6 +2782,7 @@ function renderTutorStatistics() {
     
     teamStats[team] = {
       tutorCount: teamTutors.length,
+      sectionCounts: teamSectionCounts,
       satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
       // 回収率 = チーム内全回答数合計 ÷ チーム内全アクティブ生徒数合計 × 100（加重平均）
       collectionRate: teamTotalStudents > 0 ? (teamTotalAnswers / teamTotalStudents * 100).toFixed(2) : '-',
@@ -2783,10 +2797,20 @@ function renderTutorStatistics() {
       <h3 class="text-lg font-semibold text-gray-800 mb-3">
         <i class="fas fa-globe mr-2"></i>全体統計
       </h3>
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div class="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
           <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
           <div class="text-3xl font-bold text-blue-600">${allActiveTutors.length}名</div>
+        </div>
+        <div class="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
+          <div class="text-sm text-gray-600 mb-1">担当セクション</div>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">Pro:${overallSectionCounts.Pro}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">A:${overallSectionCounts.A}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800">B:${overallSectionCounts.B}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">C:${overallSectionCounts.C}</span>
+            ${overallSectionCounts.unset > 0 ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600">未:${overallSectionCounts.unset}</span>` : ''}
+          </div>
         </div>
         <div class="bg-green-50 p-4 rounded-lg border-2 border-green-200">
           <div class="text-sm text-gray-600 mb-1">所属チーム数</div>
@@ -2818,6 +2842,7 @@ function renderTutorStatistics() {
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">チーム名</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor数</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">担当セクション</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度平均</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">全体回収率</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア平均</th>
@@ -2841,6 +2866,15 @@ function renderTutorStatistics() {
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${team}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-blue-600 font-semibold">${stats.tutorCount}名</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+                    <div class="flex flex-wrap gap-1 justify-center">
+                      ${stats.sectionCounts.Pro > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">Pro:${stats.sectionCounts.Pro}</span>` : ''}
+                      ${stats.sectionCounts.A > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">A:${stats.sectionCounts.A}</span>` : ''}
+                      ${stats.sectionCounts.B > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800">B:${stats.sectionCounts.B}</span>` : ''}
+                      ${stats.sectionCounts.C > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">C:${stats.sectionCounts.C}</span>` : ''}
+                      ${(stats.sectionCounts.Pro + stats.sectionCounts.A + stats.sectionCounts.B + stats.sectionCounts.C) === 0 ? '<span class="text-gray-400 text-xs">-</span>' : ''}
+                    </div>
+                  </td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionColor}">${stats.satisfaction}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${collectionRateColor}">${stats.collectionRate}${stats.collectionRate !== '-' ? '%' : ''}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${stats.satisfactionScore}</td>
