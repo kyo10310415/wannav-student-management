@@ -106,16 +106,26 @@ app.get('/sync', async (c) => {
     
     // Fetch students from cache
     let students = [];
+    let cacheUnavailable = false;
     try {
       students = await fetchStudentsFromCache(cacheSpreadsheetId);
     } catch (error) {
       console.error('Error fetching students from cache:', error.message);
+      // Google API が一時的に失敗した場合はDBの既存データで続行
+      cacheUnavailable = true;
+      console.warn('⚠️ Cache unavailable — skipping sync, using existing DB data');
+    }
+    
+    // Cache が使えない場合はスキップして成功を返す（DBの既存データをそのまま使用）
+    if (cacheUnavailable) {
       return c.json({
-        success: false,
-        error: 'Failed to fetch students from cache spreadsheet',
-        details: error.message,
-        hint: 'Please check GOOGLE_CACHE_SHEET_ID environment variable and ensure the spreadsheet has correct sheet names'
-      }, 500);
+        success: true,
+        message: 'Cache unavailable (Google API error) — using existing DB data',
+        count: 0,
+        errors: 0,
+        skipped: 0,
+        cache_error: true
+      });
     }
     
     // Check if cache is empty
