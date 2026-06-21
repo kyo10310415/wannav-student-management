@@ -46,11 +46,34 @@ app.get('/sync', async (c) => {
     }
     
     // Get last sync time
-    const syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
-    console.log('Cache last sync:', syncMeta);
+    let syncMeta = null;
+    try {
+      syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
+      console.log('Cache last sync:', syncMeta);
+    } catch (error) {
+      console.warn('Warning: Could not get cache sync time:', error.message);
+      // Continue without sync time
+    }
     
     // Fetch tutors from cache
-    const tutors = await fetchTutorsFromCache(cacheSpreadsheetId);
+    let tutors = [];
+    try {
+      tutors = await fetchTutorsFromCache(cacheSpreadsheetId);
+    } catch (error) {
+      console.error('Error fetching tutors from cache:', error.message);
+      // Google API が一時的に失敗した場合はDBの既存データで続行
+      console.warn('⚠️ Cache unavailable — skipping tutor sync, using existing DB data');
+      return c.json({
+        success: true,
+        message: 'Cache unavailable (Google API error) — using existing DB data',
+        count: 0,
+        errors: 0,
+        skipped: 0,
+        deleted: 0,
+        lastCacheSync: null,
+        cache_error: true
+      });
+    }
     
     // Filter out tutors without employee_id or name
     const skippedTutors = [];
