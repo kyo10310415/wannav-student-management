@@ -11,7 +11,13 @@ const app = new Hono();
 app.get('/', async (c) => {
   try {
     // Fetch schedules from Google Sheets
-    const schedules = await fetchSchedulesFromSheet();
+    let schedules = [];
+    try {
+      schedules = await fetchSchedulesFromSheet();
+    } catch (error) {
+      console.warn('⚠️ fetchSchedulesFromSheet failed (Google API error) — returning empty list:', error.message);
+      return c.json({ success: true, data: [], cache_error: true });
+    }
     
     // Fetch tutors from database for email mapping
     const tutorsResult = await query('SELECT email, tutor_name FROM tutors');
@@ -370,7 +376,14 @@ app.get('/absence-stats', async (c) => {
     });
     
     // Fetch schedules from Google Sheets to calculate scheduled count
-    const schedules = await fetchSchedulesFromSheet();
+    // Google API が失敗した場合はスケジュール数を 0 として DB の欠席集計のみで返す
+    let schedules = [];
+    try {
+      schedules = await fetchSchedulesFromSheet();
+    } catch (error) {
+      console.warn('⚠️ fetchSchedulesFromSheet failed in absence-stats (Google API error) — using DB data only:', error.message);
+      // schedules を空配列のまま続行（scheduled_count=0、attendance_rate=計算不可）
+    }
     
     // Get tutors for email to tutor name mapping
     const tutorsResult = await query('SELECT email, tutor_name FROM tutors');

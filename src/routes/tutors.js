@@ -323,7 +323,13 @@ app.get('/satisfaction/all', async (c) => {
     }
     
     // Fetch satisfaction data from cache
-    const satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
+    let satisfactionData = [];
+    try {
+      satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
+    } catch (error) {
+      console.warn('⚠️ fetchSatisfactionFromCache failed (Google API error) — returning empty data:', error.message);
+      return c.json({ success: true, data: {}, cache_error: true });
+    }
     
     // Group by tutor and month, calculate averages
     const tutorMonthlyData = {};
