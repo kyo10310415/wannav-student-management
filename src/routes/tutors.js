@@ -326,9 +326,11 @@ app.get('/satisfaction/all', async (c) => {
     let satisfactionData = [];
     try {
       satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
+      console.log(`✅ fetchSatisfactionFromCache succeeded: ${satisfactionData.length} records`);
     } catch (error) {
-      console.warn('⚠️ fetchSatisfactionFromCache failed (Google API error) — returning empty data:', error.message);
-      return c.json({ success: true, data: {}, cache_error: true });
+      console.error('⚠️ fetchSatisfactionFromCache failed:', error.message);
+      console.error('  Error code:', error.code);
+      return c.json({ success: true, data: {}, cache_error: true, cache_error_message: error.message });
     }
     
     // Group by tutor and month, calculate averages
