@@ -40,7 +40,12 @@ app.get('/', async (c) => {
     );
     
     // Get lesson statistics from lesson reports
-    const lessonStats = await calculateStudentLessonStats();
+    let lessonStats = {};
+    try {
+      lessonStats = await calculateStudentLessonStats();
+    } catch (error) {
+      console.warn('Warning: Could not calculate lesson stats for GET /students:', error.message);
+    }
     
     // Calculate PRO plan continued months and merge lesson stats for each student
     const studentsWithStats = result.rows.map(student => {
@@ -133,16 +138,28 @@ app.get('/sync', async (c) => {
     }
     
     // Fetch lesson start dates from external DB
-    const lessonStartDates = await fetchLessonStartDates();
-    console.log(`Loaded ${Object.keys(lessonStartDates).length} lesson start dates`);
+    let lessonStartDates = {};
+    try {
+      lessonStartDates = await fetchLessonStartDates();
+      console.log(`Loaded ${Object.keys(lessonStartDates).length} lesson start dates`);
+    } catch (error) {
+      console.warn('Warning: Could not fetch lesson start dates from external DB:', error.message);
+      // Continue without lesson start dates
+    }
     
     // Fetch suspension months map
     const suspensionMonthsMap = await fetchSuspensionMonthsMap();
     console.log(`Loaded suspension data for ${Object.keys(suspensionMonthsMap).length} students`);
     
     // Get lesson statistics from lesson reports (優先使用)
-    const lessonStats = await calculateStudentLessonStats();
-    console.log(`Calculated lesson stats for ${Object.keys(lessonStats).length} students from lesson reports`);
+    let lessonStats = {};
+    try {
+      lessonStats = await calculateStudentLessonStats();
+      console.log(`Calculated lesson stats for ${Object.keys(lessonStats).length} students from lesson reports`);
+    } catch (error) {
+      console.warn('Warning: Could not calculate lesson stats:', error.message);
+      // Continue without lesson stats
+    }
     
     // Filter out students without student_id
     const skippedStudents = [];
