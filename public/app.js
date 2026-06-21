@@ -2680,12 +2680,21 @@ function renderTutorStatistics() {
   // Get unique teams
   const uniqueTeams = [...new Set(allActiveTutors.map(t => t.team || '未所属'))].sort();
   
-  // 全体担当セクション別人数集計
-  const overallSectionCounts = { Pro: 0, A: 0, B: 0, C: 0, unset: 0 };
+  // 全体担当セクション別人数集計（Tutor数 + アクティブ生徒数）
+  const overallSectionCounts    = { Pro: 0, A: 0, B: 0, C: 0, unset: 0 };
+  const overallSectionStudents  = { Pro: 0, A: 0, B: 0, C: 0, unset: 0 };
   allActiveTutors.forEach(t => {
     const s = t.responsible_section;
-    if (s === 'Pro' || s === 'A' || s === 'B' || s === 'C') overallSectionCounts[s]++;
-    else overallSectionCounts.unset++;
+    const key = (s === 'Pro' || s === 'A' || s === 'B' || s === 'C') ? s : 'unset';
+    overallSectionCounts[key]++;
+    // そのTutorのアクティブ担当生徒数を加算
+    const studentCount = students.filter(st =>
+      st.homeroom_tutor === t.notion_name &&
+      st.status === 'アクティブ' &&
+      st.contract_plan !== '永久会員' &&
+      st.contract_plan !== '在籍プラン'
+    ).length;
+    overallSectionStudents[key] += studentCount;
   });
 
   // Calculate overall statistics
@@ -2739,10 +2748,21 @@ function renderTutorStatistics() {
   const teamStats = {};
   uniqueTeams.forEach(team => {
     const teamTutors = allActiveTutors.filter(t => (t.team || '未所属') === team);
-    // チーム別担当セクション人数集計
-    const teamSectionCounts = { Pro: 0, A: 0, B: 0, C: 0 };
+    // チーム別担当セクション人数集計（Tutor数 + アクティブ生徒数）
+    const teamSectionCounts   = { Pro: 0, A: 0, B: 0, C: 0 };
+    const teamSectionStudents = { Pro: 0, A: 0, B: 0, C: 0 };
     teamTutors.forEach(t => {
-      if (['Pro', 'A', 'B', 'C'].includes(t.responsible_section)) teamSectionCounts[t.responsible_section]++;
+      const s = t.responsible_section;
+      if (['Pro', 'A', 'B', 'C'].includes(s)) {
+        teamSectionCounts[s]++;
+        const sc = students.filter(st =>
+          st.homeroom_tutor === t.notion_name &&
+          st.status === 'アクティブ' &&
+          st.contract_plan !== '永久会員' &&
+          st.contract_plan !== '在籍プラン'
+        ).length;
+        teamSectionStudents[s] += sc;
+      }
     });
     let teamSatisfaction = 0;
     let teamTotalAnswers = 0;    // チーム内全回答数合計（回収率加重平均用）
@@ -2783,6 +2803,7 @@ function renderTutorStatistics() {
     teamStats[team] = {
       tutorCount: teamTutors.length,
       sectionCounts: teamSectionCounts,
+      sectionStudents: teamSectionStudents,
       satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
       // 回収率 = チーム内全回答数合計 ÷ チーム内全アクティブ生徒数合計 × 100（加重平均）
       collectionRate: teamTotalStudents > 0 ? (teamTotalAnswers / teamTotalStudents * 100).toFixed(2) : '-',
@@ -2804,12 +2825,22 @@ function renderTutorStatistics() {
         </div>
         <div class="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
           <div class="text-sm text-gray-600 mb-1">担当セクション</div>
-          <div class="flex flex-wrap gap-1 mt-1">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">Pro:${overallSectionCounts.Pro}</span>
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">A:${overallSectionCounts.A}</span>
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800">B:${overallSectionCounts.B}</span>
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">C:${overallSectionCounts.C}</span>
-            ${overallSectionCounts.unset > 0 ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600">未:${overallSectionCounts.unset}</span>` : ''}
+          <div class="flex flex-col gap-1 mt-1">
+            <div class="flex flex-wrap gap-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">Pro:${overallSectionCounts.Pro}名</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">A:${overallSectionCounts.A}名</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800">B:${overallSectionCounts.B}名</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">C:${overallSectionCounts.C}名</span>
+              ${overallSectionCounts.unset > 0 ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600">未:${overallSectionCounts.unset}名</span>` : ''}
+            </div>
+            <div class="text-xs text-gray-500 mt-0.5">生徒数</div>
+            <div class="flex flex-wrap gap-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-700">Pro:${overallSectionStudents.Pro}名</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-700">A:${overallSectionStudents.A}名</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-yellow-50 text-yellow-700">B:${overallSectionStudents.B}名</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-50 text-green-700">C:${overallSectionStudents.C}名</span>
+              ${overallSectionCounts.unset > 0 ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-50 text-gray-500">未:${overallSectionStudents.unset}名</span>` : ''}
+            </div>
           </div>
         </div>
         <div class="bg-green-50 p-4 rounded-lg border-2 border-green-200">
@@ -2866,14 +2897,25 @@ function renderTutorStatistics() {
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${team}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-blue-600 font-semibold">${stats.tutorCount}名</td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
-                    <div class="flex flex-wrap gap-1 justify-center">
-                      ${stats.sectionCounts.Pro > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">Pro:${stats.sectionCounts.Pro}</span>` : ''}
-                      ${stats.sectionCounts.A > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">A:${stats.sectionCounts.A}</span>` : ''}
-                      ${stats.sectionCounts.B > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800">B:${stats.sectionCounts.B}</span>` : ''}
-                      ${stats.sectionCounts.C > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">C:${stats.sectionCounts.C}</span>` : ''}
-                      ${(stats.sectionCounts.Pro + stats.sectionCounts.A + stats.sectionCounts.B + stats.sectionCounts.C) === 0 ? '<span class="text-gray-400 text-xs">-</span>' : ''}
-                    </div>
+                  <td class="px-4 py-3 text-sm text-center">
+                    ${(stats.sectionCounts.Pro + stats.sectionCounts.A + stats.sectionCounts.B + stats.sectionCounts.C) === 0
+                      ? '<span class="text-gray-400 text-xs">-</span>'
+                      : `<div class="flex flex-col gap-0.5 items-center">
+                          <div class="flex flex-wrap gap-1 justify-center">
+                            ${stats.sectionCounts.Pro > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800">Pro:${stats.sectionCounts.Pro}名</span>` : ''}
+                            ${stats.sectionCounts.A > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800">A:${stats.sectionCounts.A}名</span>` : ''}
+                            ${stats.sectionCounts.B > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-800">B:${stats.sectionCounts.B}名</span>` : ''}
+                            ${stats.sectionCounts.C > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">C:${stats.sectionCounts.C}名</span>` : ''}
+                          </div>
+                          <div class="text-xs text-gray-400">生徒数</div>
+                          <div class="flex flex-wrap gap-1 justify-center">
+                            ${stats.sectionCounts.Pro > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-700">Pro:${stats.sectionStudents.Pro}名</span>` : ''}
+                            ${stats.sectionCounts.A > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-700">A:${stats.sectionStudents.A}名</span>` : ''}
+                            ${stats.sectionCounts.B > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-50 text-yellow-700">B:${stats.sectionStudents.B}名</span>` : ''}
+                            ${stats.sectionCounts.C > 0 ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-green-50 text-green-700">C:${stats.sectionStudents.C}名</span>` : ''}
+                          </div>
+                        </div>`
+                    }
                   </td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionColor}">${stats.satisfaction}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${collectionRateColor}">${stats.collectionRate}${stats.collectionRate !== '-' ? '%' : ''}</td>
