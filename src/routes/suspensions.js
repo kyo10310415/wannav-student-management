@@ -11,7 +11,18 @@ app.get('/', async (c) => {
   try {
     console.log('📋 Fetching suspension data...');
     
-    const suspensions = await fetchSuspensionData();
+    let suspensions = [];
+    try {
+      suspensions = await fetchSuspensionData();
+    } catch (error) {
+      console.warn('⚠️ fetchSuspensionData failed (Google API error) — returning empty list:', error.message);
+      return c.json({
+        success: true,
+        data: [],
+        count: 0,
+        cache_error: true
+      });
+    }
     
     return c.json({
       success: true,
