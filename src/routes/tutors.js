@@ -251,6 +251,40 @@ app.put('/:id/capacity', async (c) => {
 });
 
 /**
+ * PUT /api/tutors/:id/section
+ * Update tutor responsible_section (担当セクション: Pro / A / B / C)
+ */
+app.put('/:id/section', async (c) => {
+  try {
+    const employeeId = c.req.param('id');
+    const { responsible_section } = await c.req.json();
+
+    // Validate: null（未設定）または Pro/A/B/C のみ許可
+    const allowed = [null, '', 'Pro', 'A', 'B', 'C'];
+    if (!allowed.includes(responsible_section)) {
+      return c.json({ success: false, error: 'Invalid responsible_section value' }, 400);
+    }
+
+    const result = await query(
+      `UPDATE tutors
+         SET responsible_section = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = $2
+       RETURNING *`,
+      [responsible_section || null, employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      return c.json({ success: false, error: 'Tutor not found' }, 404);
+    }
+
+    return c.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating tutor section:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
  * GET /api/tutors/satisfaction/all
  * Get satisfaction data for all tutors with monthly averages
  */

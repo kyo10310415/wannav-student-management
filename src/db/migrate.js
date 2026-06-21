@@ -925,6 +925,19 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS tutor_red_list;
     `
+  },
+  {
+    version: 38,
+    name: 'add_responsible_section_to_tutors',
+    up: `
+      ALTER TABLE tutors
+        ADD COLUMN IF NOT EXISTS responsible_section VARCHAR(10) DEFAULT NULL;
+
+      COMMENT ON COLUMN tutors.responsible_section IS '担当セクション（Pro / A / B / C）';
+    `,
+    down: `
+      ALTER TABLE tutors DROP COLUMN IF EXISTS responsible_section;
+    `
   }
 ];
 

@@ -2253,15 +2253,23 @@ function renderStudentRowsSimple() {
         </div>
         
         <!-- Row 2: Stats & Data (Compact) -->
-        <div class="grid grid-cols-5 md:grid-cols-9 gap-1 text-center">
+        <div class="grid grid-cols-6 md:grid-cols-10 gap-1 text-center">
           <!-- Lesson Progress -->
           <div class="${rowBgColor} rounded p-1">
             <div class="text-xs text-gray-600">進捗</div>
             <div class="text-xs font-semibold ${getLessonProgressClass(student.lesson_progress)}">
               ${student.lesson_progress === 'Proプラン' ? 'Pro' : (student.lesson_progress ? `L${student.lesson_progress}` : '-')}
             </div>
-            ${(() => { const sec = getLessonSection(student.lesson_progress, student.contract_plan === 'PROプラン'); return sec ? `<span class="inline-block px-1 py-0.5 rounded text-xs font-bold ${sec.cls}">${sec.label}</span>` : ''; })()}
           </div>
+          
+          <!-- Section (C/B/A/Pro) -->
+          ${(() => {
+            const sec = getLessonSection(student.lesson_progress, student.contract_plan === 'PROプラン');
+            return `<div class="bg-gray-50 rounded p-1">
+              <div class="text-xs text-gray-500">区分</div>
+              ${sec ? `<span class="inline-block px-1 py-0.5 rounded text-xs font-bold ${sec.cls}">${sec.label}</span>` : '<span class="text-xs text-gray-300">-</span>'}
+            </div>`;
+          })()}
           
           <!-- Start Date -->
           <div class="bg-gray-50 rounded p-1">
@@ -2440,6 +2448,7 @@ function renderTutorsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">従業員ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Tutor名</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">所属チーム</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">担当<br>セクション</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">アクティブ<br>生徒数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">生徒数<br>上限</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">残り受入<br>可能数</th>
@@ -2839,7 +2848,7 @@ function renderTutorRows() {
   if (filteredTutors.length === 0) {
     return `
       <tr>
-        <td colspan="14" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="15" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>アクティブなTutorが見つかりません</p>
         </td>
@@ -3031,6 +3040,18 @@ function renderTutorRows() {
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.tutor_name || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+          <select
+            onchange="updateTutorSection('${tutor.employee_id}', this.value)"
+            class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="" ${!tutor.responsible_section ? 'selected' : ''}>未設定</option>
+            <option value="Pro" ${tutor.responsible_section === 'Pro' ? 'selected' : ''}>Pro</option>
+            <option value="A" ${tutor.responsible_section === 'A' ? 'selected' : ''}>A</option>
+            <option value="B" ${tutor.responsible_section === 'B' ? 'selected' : ''}>B</option>
+            <option value="C" ${tutor.responsible_section === 'C' ? 'selected' : ''}>C</option>
+          </select>
+        </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${activeStudentCount}名</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <input 
@@ -3110,6 +3131,31 @@ async function updateTutorCapacity(employeeId, capacity) {
   } catch (error) {
     console.error('Error updating tutor capacity:', error);
     alert('生徒数上限の更新中にエラーが発生しました');
+  }
+}
+
+// Update tutor responsible section
+async function updateTutorSection(employeeId, section) {
+  try {
+    const sectionValue = section === '' ? null : section;
+    
+    const response = await axios.put(`${API_BASE}/api/tutors/${employeeId}/section`, {
+      responsible_section: sectionValue
+    });
+    
+    if (response.data.success) {
+      // Update local tutor data
+      const tutor = tutors.find(t => t.employee_id === employeeId);
+      if (tutor) {
+        tutor.responsible_section = sectionValue;
+      }
+      console.log('担当セクションを更新しました');
+    } else {
+      alert('担当セクションの更新に失敗しました');
+    }
+  } catch (error) {
+    console.error('Error updating tutor section:', error);
+    alert('担当セクションの更新中にエラーが発生しました');
   }
 }
 
@@ -15685,13 +15731,32 @@ function _renderHandoverSidebar() {
     }
     var detailStr = `<span class="text-gray-400 text-xs">(${detailParts.join(' ')})</span>`;
 
+    // 担当セクションバッジ
+    const sectionBadgeMap = {
+      'Pro': 'bg-purple-100 text-purple-700',
+      'A':   'bg-green-100 text-green-700',
+      'B':   'bg-blue-100 text-blue-700',
+      'C':   'bg-gray-100 text-gray-600'
+    };
+    const sectionBadge = t.responsible_section
+      ? `<span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold ${sectionBadgeMap[t.responsible_section] || 'bg-gray-100 text-gray-600'}">${escapeHtml(t.responsible_section)}</span>`
+      : `<span class="text-xs text-gray-300">未設定</span>`;
+
+    // セクション別人数
+    const sc = t.section_counts || { Pro: 0, A: 0, B: 0, C: 0 };
+    const sectionCountsStr = `<span class="text-gray-400 text-xs">Pro:${sc.Pro} A:${sc.A} B:${sc.B} C:${sc.C}</span>`;
+
     return `
       <div class="flex flex-col gap-0.5 border-b border-gray-100 pb-2">
         <div class="flex items-center justify-between">
           <span class="text-sm text-gray-700 font-medium">${escapeHtml(t.tutor_name)}</span>
           <span class="${cls} text-sm">${icon}${availStr}名</span>
         </div>
-        <div class="text-right">${detailStr}</div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1">${sectionBadge}</div>
+          <div>${detailStr}</div>
+        </div>
+        <div class="text-right">${sectionCountsStr}</div>
       </div>`;
   }).join('');
 }
