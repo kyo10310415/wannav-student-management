@@ -122,7 +122,8 @@ app.get('/tutor-sidebar', async (c) => {
         t.id,
         t.tutor_name,
         t.notion_name,
-        t.student_capacity
+        t.student_capacity,
+        t.responsible_section
       FROM tutors t
       WHERE t.tutor_name IS NOT NULL
         AND t.tutor_name <> ''
@@ -144,6 +145,40 @@ app.get('/tutor-sidebar', async (c) => {
     const activeCountMap = {};
     for (const row of activeCountResult.rows) {
       activeCountMap[row.homeroom_tutor] = parseInt(row.cnt, 10);
+    }
+
+    // 2b. セクション別人数を notion_name ベースで集計
+    //     getLessonSection() と同じルール:
+    //       progress <= 9  → C
+    //       <= 18          → B
+    //       <= 28          → A
+    //       > 28 or Pro    → Pro
+    const sectionCountResult = await query(`
+      SELECT
+        homeroom_tutor,
+        SUM(CASE WHEN contract_plan = 'PROプラン' OR lesson_progress = 'Proプラン' THEN 1 ELSE 0 END) AS section_pro,
+        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
+                      AND lesson_progress ~ '^[0-9]+$' AND lesson_progress::int > 28 THEN 1 ELSE 0 END) AS section_a_over,
+        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
+                      AND lesson_progress ~ '^[0-9]+$' AND lesson_progress::int BETWEEN 19 AND 28 THEN 1 ELSE 0 END) AS section_a,
+        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
+                      AND lesson_progress ~ '^[0-9]+$' AND lesson_progress::int BETWEEN 10 AND 18 THEN 1 ELSE 0 END) AS section_b,
+        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
+                      AND (lesson_progress IS NULL OR lesson_progress = '' OR (lesson_progress ~ '^[0-9]+$' AND lesson_progress::int <= 9)) THEN 1 ELSE 0 END) AS section_c
+      FROM students
+      WHERE status = 'アクティブ'
+        AND contract_plan NOT IN ('永久会員', '在籍プラン')
+      GROUP BY homeroom_tutor
+    `);
+    // sectionCountMap: notion_name → { Pro, A, B, C }
+    const sectionCountMap = {};
+    for (const row of sectionCountResult.rows) {
+      sectionCountMap[row.homeroom_tutor] = {
+        Pro: parseInt(row.section_pro, 10) || 0,
+        A:   (parseInt(row.section_a, 10) || 0) + (parseInt(row.section_a_over, 10) || 0),
+        B:   parseInt(row.section_b, 10) || 0,
+        C:   parseInt(row.section_c, 10) || 0
+      };
     }
 
     // 3. 引き継ぎ割り当て情報を取得
@@ -183,13 +218,15 @@ app.get('/tutor-sidebar', async (c) => {
       const available = capacity != null ? capacity - active - toCount + fromCount : null;
 
       return {
-        tutor_name:    tutor.tutor_name,
-        notion_name:   tutor.notion_name,
-        capacity:      capacity,
-        active_count:  active,
-        to_count:      toCount,
-        from_count:    fromCount,
-        available:     available
+        tutor_name:           tutor.tutor_name,
+        notion_name:          tutor.notion_name,
+        capacity:             capacity,
+        active_count:         active,
+        to_count:             toCount,
+        from_count:           fromCount,
+        available:            available,
+        responsible_section:  tutor.responsible_section || null,
+        section_counts:       sectionCountMap[tutor.notion_name] || { Pro: 0, A: 0, B: 0, C: 0 }
       };
     });
 
