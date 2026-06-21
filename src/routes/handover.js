@@ -156,15 +156,37 @@ app.get('/tutor-sidebar', async (c) => {
     const sectionCountResult = await query(`
       SELECT
         homeroom_tutor,
-        SUM(CASE WHEN contract_plan = 'PROプラン' OR lesson_progress = 'Proプラン' THEN 1 ELSE 0 END) AS section_pro,
-        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
-                      AND lesson_progress ~ '^[0-9]+$' AND lesson_progress::int > 28 THEN 1 ELSE 0 END) AS section_a_over,
-        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
-                      AND lesson_progress ~ '^[0-9]+$' AND lesson_progress::int BETWEEN 19 AND 28 THEN 1 ELSE 0 END) AS section_a,
-        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
-                      AND lesson_progress ~ '^[0-9]+$' AND lesson_progress::int BETWEEN 10 AND 18 THEN 1 ELSE 0 END) AS section_b,
-        SUM(CASE WHEN contract_plan <> 'PROプラン' AND lesson_progress <> 'Proプラン'
-                      AND (lesson_progress IS NULL OR lesson_progress = '' OR (lesson_progress ~ '^[0-9]+$' AND lesson_progress::int <= 9)) THEN 1 ELSE 0 END) AS section_c
+        SUM(CASE
+          WHEN COALESCE(contract_plan, '') = 'PROプラン'
+            OR COALESCE(lesson_progress, '') = 'Proプラン'
+          THEN 1 ELSE 0 END) AS section_pro,
+        SUM(CASE
+          WHEN COALESCE(contract_plan, '') <> 'PROプラン'
+           AND COALESCE(lesson_progress, '') <> 'Proプラン'
+           AND lesson_progress ~ '^[0-9]+$'
+           AND lesson_progress::int > 28
+          THEN 1 ELSE 0 END) AS section_a_over,
+        SUM(CASE
+          WHEN COALESCE(contract_plan, '') <> 'PROプラン'
+           AND COALESCE(lesson_progress, '') <> 'Proプラン'
+           AND lesson_progress ~ '^[0-9]+$'
+           AND lesson_progress::int BETWEEN 19 AND 28
+          THEN 1 ELSE 0 END) AS section_a,
+        SUM(CASE
+          WHEN COALESCE(contract_plan, '') <> 'PROプラン'
+           AND COALESCE(lesson_progress, '') <> 'Proプラン'
+           AND lesson_progress ~ '^[0-9]+$'
+           AND lesson_progress::int BETWEEN 10 AND 18
+          THEN 1 ELSE 0 END) AS section_b,
+        SUM(CASE
+          WHEN COALESCE(contract_plan, '') <> 'PROプラン'
+           AND COALESCE(lesson_progress, '') <> 'Proプラン'
+           AND (
+             lesson_progress IS NULL
+             OR lesson_progress = ''
+             OR (lesson_progress ~ '^[0-9]+$' AND lesson_progress::int <= 9)
+           )
+          THEN 1 ELSE 0 END) AS section_c
       FROM students
       WHERE status = 'アクティブ'
         AND contract_plan NOT IN ('永久会員', '在籍プラン')

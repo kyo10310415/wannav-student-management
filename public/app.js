@@ -348,19 +348,32 @@ async function loadInitialData() {
           throw syncError;
         }
       }
-      throw syncError;
+      const status = syncError.response ? syncError.response.status : 'network';
+      throw new Error(`[students/sync] ${syncError.message} (HTTP ${status})`);
     }
     
-    const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
-    console.log('Tutor sync result:', tutorSyncRes.data);
-    if (tutorSyncRes.data.deleted > 0) {
-      console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+    try {
+      const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+      console.log('Tutor sync result:', tutorSyncRes.data);
+      if (tutorSyncRes.data.deleted > 0) {
+        console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+      }
+    } catch (tutorSyncError) {
+      console.error('Error syncing tutors:', tutorSyncError);
+      const status = tutorSyncError.response ? tutorSyncError.response.status : 'network';
+      throw new Error(`[tutors/sync] ${tutorSyncError.message} (HTTP ${status})`);
     }
     
     // Sync lessons from Google Sheets (populated by GAS)
-    console.log('Syncing lessons from Google Sheets...');
-    const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
-    console.log('Sheet sync result:', sheetSyncRes.data);
+    try {
+      console.log('Syncing lessons from Google Sheets...');
+      const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
+      console.log('Sheet sync result:', sheetSyncRes.data);
+    } catch (lessonSyncError) {
+      console.error('Error syncing lessons from sheet:', lessonSyncError);
+      const status = lessonSyncError.response ? lessonSyncError.response.status : 'network';
+      throw new Error(`[lessons/sync-from-sheet] ${lessonSyncError.message} (HTTP ${status})`);
+    }
     
     // Load data
     const [studentsRes, tutorsRes] = await Promise.all([
