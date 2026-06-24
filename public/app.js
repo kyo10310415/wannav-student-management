@@ -32,6 +32,7 @@ let pendingRequests = []; // Pending absence requests
 let dailyReportTutors = [];       // アクティブTutor＋最新日報日
 let dailyReportHistory = null;    // 表示中の日報履歴 { tutorId, tutorName, reports, total, offset }
 let dailyReportViewTutorId = null;
+let dailyReportReminderEnabled = true; // 通知トグル状態
 
 // Current authenticated tutor (for absence requests) - kept for backward compatibility
 let currentTutorEmail = null;
@@ -16646,10 +16647,14 @@ async function renderDailyReportsPage() {
   document.getElementById('content').classList.add('hidden');
 
   try {
-    const res = await axios.get('/api/daily-reports/tutors');
-    dailyReportTutors = res.data.success ? res.data.data : [];
+    const [tutorsRes, settingRes] = await Promise.all([
+      axios.get('/api/daily-reports/tutors'),
+      axios.get('/api/daily-reports/reminder-setting').catch(() => ({ data: { enabled: true } }))
+    ]);
+    dailyReportTutors          = tutorsRes.data.success  ? tutorsRes.data.data    : [];
+    dailyReportReminderEnabled = settingRes.data.enabled !== false;
   } catch (e) {
-    console.error('[DailyReports] fetch tutors error:', e);
+    console.error('[DailyReports] fetch error:', e);
     dailyReportTutors = [];
   }
 
@@ -16666,10 +16671,31 @@ function _renderDailyReportsContent() {
   const todayStr = jstNow.toISOString().slice(0, 10);
 
   // クルーは自分のTutorのみ
-  const isCrew = currentUser && currentUser.role === 'crew';
+  const isCrew          = currentUser && currentUser.role === 'crew';
+  const isAdminOrLeader = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader');
   const displayTutors = isCrew
     ? dailyReportTutors.filter(t => t.tutor_name === (currentUser.tutorName || currentUser.email))
     : dailyReportTutors;
+
+  // トグルUI（admin/leader のみ表示）
+  const toggleHtml = isAdminOrLeader ? `
+    <div class="flex items-center gap-3">
+      <span class="text-sm font-semibold text-gray-700">未提出通知</span>
+      <button
+        id="drReminderToggle"
+        onclick="toggleDailyReportReminder()"
+        class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${dailyReportReminderEnabled ? 'bg-green-500' : 'bg-gray-400'}"
+      >
+        <span
+          id="drReminderIndicator"
+          class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${dailyReportReminderEnabled ? 'translate-x-6' : 'translate-x-1'}"
+        ></span>
+      </button>
+      <span id="drReminderLabel" class="text-sm font-bold ${dailyReportReminderEnabled ? 'text-green-600' : 'text-gray-500'}">
+        ${dailyReportReminderEnabled ? 'ON' : 'OFF'}
+      </span>
+    </div>
+  ` : '';
 
   // 提出チェック（今日提出済みかどうか）
   const todaySubmittedMap = {};
@@ -16683,8 +16709,12 @@ function _renderDailyReportsContent() {
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-clipboard-list mr-2 text-purple-600"></i>日報管理
+          <span class="text-sm font-normal text-gray-500 ml-2">（役職: クルーのみ表示）</span>
         </h2>
-        <div class="text-sm text-gray-500">本日: ${todayStr.replace(/-/g, '/')}</div>
+        <div class="flex items-center gap-4">
+          ${toggleHtml}
+          <div class="text-sm text-gray-500">本日: ${todayStr.replace(/-/g, '/')}</div>
+        </div>
       </div>
 
       <!-- Tutor一覧テーブル -->
@@ -17065,3 +17095,31 @@ async function deleteDailyReportComment(commentId, reportId) {
 
 // ─── ユーティリティ（escapeHtml は既存実装を利用）
 // escapeHtml is already declared at line ~11209
+
+// ─── 日報未提出通知トグル ──────────────────────────────────────────────────────
+async function toggleDailyReportReminder() {
+  const newEnabled = !dailyReportReminderEnabled;
+  try {
+    const res = await axios.put('/api/daily-reports/reminder-setting', { enabled: newEnabled });
+    if (!res.data.success) throw new Error(res.data.error);
+
+    dailyReportReminderEnabled = newEnabled;
+
+    // UIを即時更新
+    const btn       = document.getElementById('drReminderToggle');
+    const indicator = document.getElementById('drReminderIndicator');
+    const label     = document.getElementById('drReminderLabel');
+
+    if (btn) btn.className = `relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${newEnabled ? 'bg-green-500' : 'bg-gray-400'}`;
+    if (indicator) indicator.className = `inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${newEnabled ? 'translate-x-6' : 'translate-x-1'}`;
+    if (label) {
+      label.textContent = newEnabled ? 'ON' : 'OFF';
+      label.className = `text-sm font-bold ${newEnabled ? 'text-green-600' : 'text-gray-500'}`;
+    }
+
+    showNotification(`日報未提出通知を${newEnabled ? 'ON' : 'OFF'}にしました`, 'success');
+  } catch (e) {
+    console.error('[DailyReports] toggle reminder error:', e);
+    showNotification('設定の更新に失敗しました', 'error');
+  }
+}

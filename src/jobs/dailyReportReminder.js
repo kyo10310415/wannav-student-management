@@ -3,14 +3,25 @@ import axios from 'axios';
 
 /**
  * 毎日14時JST に前日の日報未提出Tutorに Discord 通知を送る
- * 除外条件: 前日にレッスン予定がない
+ * 通知対象: users.job_title = 'クルー' のTutorのみ
+ * 除外条件: 前日にレッスン予定がない / system_settings の daily_report_reminder_enabled が 'false'
  */
 async function sendDailyReportReminder() {
   try {
     console.log('[DailyReportReminder] Starting job...');
 
+    // 通知ON/OFF チェック
+    const settingResult = await query(
+      `SELECT setting_value FROM system_settings WHERE setting_key = 'daily_report_reminder_enabled'`
+    );
+    const enabled = settingResult.rows[0]?.setting_value !== 'false';
+    if (!enabled) {
+      console.log('[DailyReportReminder] Notifications are disabled. Skipping.');
+      return;
+    }
+
     // 前日の日付（JST）
-    const now = new Date();
+    const now    = new Date();
     const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const yesterday = new Date(jstNow);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -22,7 +33,7 @@ async function sendDailyReportReminder() {
 
     console.log(`[DailyReportReminder] Target date: ${yesterdayStr}`);
 
-    // 前日にレッスンがあったTutor一覧を取得（除外条件判定用）
+    // 前日にレッスンがあったTutor一覧（除外条件判定用）
     const lessonTutorResult = await query(`
       SELECT DISTINCT t.id AS tutor_id
       FROM lessons l
@@ -40,12 +51,13 @@ async function sendDailyReportReminder() {
     }
 
     // 前日に日報を提出済みのTutor
-    const submittedResult = await query(`
-      SELECT tutor_id FROM daily_reports WHERE report_date = $1
-    `, [yesterdayStr]);
+    const submittedResult = await query(
+      `SELECT tutor_id FROM daily_reports WHERE report_date = $1`,
+      [yesterdayStr]
+    );
     const submittedIds = new Set(submittedResult.rows.map(r => r.tutor_id));
 
-    // 未提出かつ前日レッスンありのTutor
+    // 未提出 かつ 前日レッスンあり の tutor_id リスト
     const unsubmittedIds = [...tutorIdsWithLesson].filter(id => !submittedIds.has(id));
     console.log(`[DailyReportReminder] Unsubmitted tutors: ${unsubmittedIds.length}`);
 
@@ -55,6 +67,7 @@ async function sendDailyReportReminder() {
     }
 
     // 未提出TutorのDiscord情報を取得
+    // ★ job_title = 'クルー' のみ通知対象
     const tutorResult = await query(`
       SELECT
         t.id   AS tutor_id,
@@ -62,11 +75,20 @@ async function sendDailyReportReminder() {
         t.team,
         t.email,
         u.discord_webhook_url,
-        u.discord_user_id
+        u.discord_user_id,
+        u.job_title
       FROM tutors t
       LEFT JOIN users u ON LOWER(t.email) = LOWER(u.email)
       WHERE t.id = ANY($1::int[])
+        AND u.job_title = 'クルー'
     `, [unsubmittedIds]);
+
+    console.log(`[DailyReportReminder] Crew tutors to notify: ${tutorResult.rows.length}`);
+
+    if (tutorResult.rows.length === 0) {
+      console.log('[DailyReportReminder] No crew tutors to notify.');
+      return;
+    }
 
     // チームリーダーのDiscord情報
     const leaderResult = await query(`
@@ -146,9 +168,9 @@ async function sendDiscordMessage(webhookUrl, userId, tutor, dateStr, recipientT
       description: `**${tutor.tutor_name}** さんの ${formattedDate} の日報が提出されていません。\n提出をお願いします！`,
       color:       0xF59E0B, // amber
       fields: [
-        { name: '📅 対象日',   value: formattedDate,       inline: true },
-        { name: '👨‍🏫 Tutor名', value: tutor.tutor_name,   inline: true },
-        { name: '🏢 チーム',   value: tutor.team || '-',   inline: true }
+        { name: '📅 対象日',    value: formattedDate,     inline: true },
+        { name: '👨‍🏫 Tutor名', value: tutor.tutor_name, inline: true },
+        { name: '🏢 チーム',    value: tutor.team || '-', inline: true }
       ],
       footer:    { text: '日報管理ページから提出してください' },
       timestamp: new Date().toISOString()

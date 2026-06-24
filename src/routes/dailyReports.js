@@ -5,7 +5,7 @@ const app = new Hono();
 
 // ─────────────────────────────────────────────
 // GET /api/daily-reports/tutors
-// アクティブTutor一覧＋最新日報提出日
+// アクティブTutor一覧＋最新日報提出日（役職=クルーのみ）
 // ─────────────────────────────────────────────
 app.get('/tutors', async (c) => {
   try {
@@ -16,17 +16,58 @@ app.get('/tutors', async (c) => {
         t.team,
         t.status,
         t.job_type,
+        u.job_title,
         MAX(dr.report_date) AS latest_report_date
       FROM tutors t
       LEFT JOIN daily_reports dr ON dr.tutor_id = t.id
+      LEFT JOIN users u ON LOWER(t.email) = LOWER(u.email)
       WHERE t.status = 'アクティブ'
         AND t.job_type ILIKE '%tutor%'
-      GROUP BY t.id, t.tutor_name, t.team, t.status, t.job_type
+        AND u.job_title = 'クルー'
+      GROUP BY t.id, t.tutor_name, t.team, t.status, t.job_type, u.job_title
       ORDER BY t.team, t.tutor_name
     `);
     return c.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('[DailyReports] GET /tutors error:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/daily-reports/reminder-setting
+// 通知ON/OFF設定を取得
+// ─────────────────────────────────────────────
+app.get('/reminder-setting', async (c) => {
+  try {
+    const result = await query(
+      `SELECT setting_value FROM system_settings WHERE setting_key = 'daily_report_reminder_enabled'`
+    );
+    const enabled = result.rows[0]?.setting_value !== 'false';
+    return c.json({ success: true, enabled });
+  } catch (error) {
+    console.error('[DailyReports] GET /reminder-setting error:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// ─────────────────────────────────────────────
+// PUT /api/daily-reports/reminder-setting
+// 通知ON/OFFを更新
+// Body: { enabled: true|false }
+// ─────────────────────────────────────────────
+app.put('/reminder-setting', async (c) => {
+  try {
+    const { enabled } = await c.req.json();
+    await query(
+      `UPDATE system_settings SET setting_value = $1, updated_at = NOW()
+       WHERE setting_key = 'daily_report_reminder_enabled'`,
+      [enabled ? 'true' : 'false']
+    );
+    console.log(`[DailyReports] reminder-setting updated: ${enabled}`);
+    return c.json({ success: true, enabled: !!enabled });
+  } catch (error) {
+    console.error('[DailyReports] PUT /reminder-setting error:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });
