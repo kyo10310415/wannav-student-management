@@ -987,6 +987,18 @@ const migrations = [
     down: `
       ALTER TABLE users DROP COLUMN IF EXISTS job_title;
     `
+  },
+  {
+    version: 41,
+    name: 'add_daily_report_reminder_setting',
+    up: `
+      INSERT INTO system_settings (setting_key, setting_value, description, updated_by)
+      VALUES ('daily_report_reminder_enabled', 'true', '日報未提出通知のON/OFF', 'system')
+      ON CONFLICT (setting_key) DO NOTHING;
+    `,
+    down: `
+      DELETE FROM system_settings WHERE setting_key = 'daily_report_reminder_enabled';
+    `
   }
 ];
 
