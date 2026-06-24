@@ -6893,6 +6893,7 @@ async function renderUsersPage() {
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">メールアドレス</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor名</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">権限</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">役職</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Discord設定</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">パスワード変更必須</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">最終ログイン</th>
@@ -6913,6 +6914,20 @@ async function renderUsersPage() {
                       <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理者</option>
                       <option value="leader" ${user.role === 'leader' ? 'selected' : ''}>リーダー</option>
                       <option value="crew" ${user.role === 'crew' ? 'selected' : ''}>クルー</option>
+                    </select>
+                  </td>
+                  <td class="px-4 py-3">
+                    <select
+                      class="px-2 py-1 border rounded text-sm ${getJobTitleBadgeClass(user.job_title)}"
+                      onchange="updateUserJobTitle(${user.id}, this.value)"
+                    >
+                      <option value="" ${!user.job_title ? 'selected' : ''}>未設定</option>
+                      <option value="マネージャー" ${user.job_title === 'マネージャー' ? 'selected' : ''}>マネージャー</option>
+                      <option value="統括" ${user.job_title === '統括' ? 'selected' : ''}>統括</option>
+                      <option value="リーダー" ${user.job_title === 'リーダー' ? 'selected' : ''}>リーダー</option>
+                      <option value="クルー" ${user.job_title === 'クルー' ? 'selected' : ''}>クルー</option>
+                      <option value="部署移動" ${user.job_title === '部署移動' ? 'selected' : ''}>部署移動</option>
+                      <option value="契約解除" ${user.job_title === '契約解除' ? 'selected' : ''}>契約解除</option>
                     </select>
                   </td>
                   <td class="px-4 py-3">
@@ -6982,6 +6997,21 @@ function getRoleBadgeClass(role) {
     case 'leader': return 'bg-blue-100 text-blue-800 border-blue-300';
     case 'crew': return 'bg-gray-100 text-gray-800 border-gray-300';
     default: return 'bg-gray-100 text-gray-800 border-gray-300';
+  }
+}
+
+/**
+ * Get job title badge class
+ */
+function getJobTitleBadgeClass(jobTitle) {
+  switch(jobTitle) {
+    case 'マネージャー': return 'bg-purple-100 text-purple-800 border-purple-300';
+    case '統括':       return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+    case 'リーダー':   return 'bg-blue-100 text-blue-800 border-blue-300';
+    case 'クルー':     return 'bg-green-100 text-green-800 border-green-300';
+    case '部署移動':   return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    case '契約解除':   return 'bg-red-100 text-red-800 border-red-300';
+    default:           return 'bg-gray-100 text-gray-600 border-gray-300';
   }
 }
 
@@ -7135,6 +7165,29 @@ async function updateUserRole(userId, newRole) {
     }
   } catch (error) {
     alert('権限更新に失敗しました: ' + (error.response?.data?.error || error.message));
+    await renderUsersPage();
+  }
+}
+
+/**
+ * Update user job title
+ */
+async function updateUserJobTitle(userId, newJobTitle) {
+  try {
+    const response = await axios.put(`${API_BASE}/api/users/${userId}/job-title`, {
+      job_title: newJobTitle || null
+    }, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+
+    if (response.data.success) {
+      showNotification('役職を更新しました', 'success');
+    } else {
+      alert('エラー: ' + response.data.error);
+      await renderUsersPage();
+    }
+  } catch (error) {
+    alert('役職更新に失敗しました: ' + (error.response?.data?.error || error.message));
     await renderUsersPage();
   }
 }

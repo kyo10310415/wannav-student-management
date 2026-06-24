@@ -57,6 +57,7 @@ app.get('/', requireAdmin, async (c) => {
           u.last_login,
           u.discord_webhook_url,
           u.discord_user_id,
+          u.job_title,
           t.tutor_name as tutor_name
         FROM users u
         LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
@@ -73,6 +74,7 @@ app.get('/', requireAdmin, async (c) => {
           u.must_change_password, 
           u.created_at, 
           u.last_login,
+          u.job_title,
           t.tutor_name as tutor_name
         FROM users u
         LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
@@ -220,6 +222,31 @@ app.put('/:id', requireAdmin, async (c) => {
       success: false,
       error: 'ユーザー更新に失敗しました'
     }, 500);
+  }
+});
+
+/**
+ * Update user job_title (admin only)
+ */
+app.put('/:id/job-title', requireAdmin, async (c) => {
+  try {
+    const userId = c.req.param('id');
+    const { job_title } = await c.req.json();
+
+    const VALID_TITLES = ['マネージャー', '統括', 'リーダー', 'クルー', '部署移動', '契約解除', ''];
+    if (!VALID_TITLES.includes(job_title ?? '')) {
+      return c.json({ success: false, error: '無効な役職です' }, 400);
+    }
+
+    await query(
+      'UPDATE users SET job_title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [job_title || null, userId]
+    );
+
+    return c.json({ success: true, message: '役職を更新しました' });
+  } catch (error) {
+    console.error('Update job_title error:', error);
+    return c.json({ success: false, error: '役職の更新に失敗しました' }, 500);
   }
 });
 
