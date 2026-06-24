@@ -942,6 +942,7 @@ const migrations = [
   {
     version: 39,
     name: 'create_daily_reports_table',
+
     up: `
       CREATE TABLE IF NOT EXISTS daily_reports (
         id            SERIAL PRIMARY KEY,
@@ -972,6 +973,19 @@ const migrations = [
     down: `
       DROP TABLE IF EXISTS daily_report_comments;
       DROP TABLE IF EXISTS daily_reports;
+    `
+  },
+  {
+    version: 40,
+    name: 'add_job_title_to_users',
+    up: `
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS job_title VARCHAR(50) DEFAULT NULL;
+
+      COMMENT ON COLUMN users.job_title IS '役職（マネージャー / 統括 / リーダー / クルー / 部署移動 / 契約解除）';
+    `,
+    down: `
+      ALTER TABLE users DROP COLUMN IF EXISTS job_title;
     `
   }
 ];
