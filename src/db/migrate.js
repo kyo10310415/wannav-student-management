@@ -938,6 +938,41 @@ const migrations = [
     down: `
       ALTER TABLE tutors DROP COLUMN IF EXISTS responsible_section;
     `
+  },
+  {
+    version: 39,
+    name: 'create_daily_reports_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS daily_reports (
+        id            SERIAL PRIMARY KEY,
+        tutor_id      INTEGER NOT NULL REFERENCES tutors(id) ON DELETE CASCADE,
+        report_date   DATE    NOT NULL,
+        content       TEXT    NOT NULL,
+        submitted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (tutor_id, report_date)
+      );
+
+      CREATE TABLE IF NOT EXISTS daily_report_comments (
+        id            SERIAL PRIMARY KEY,
+        report_id     INTEGER NOT NULL REFERENCES daily_reports(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content       TEXT    NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daily_reports_tutor_id    ON daily_reports(tutor_id);
+      CREATE INDEX IF NOT EXISTS idx_daily_reports_report_date ON daily_reports(report_date);
+      CREATE INDEX IF NOT EXISTS idx_daily_report_comments_report_id ON daily_report_comments(report_id);
+
+      COMMENT ON TABLE daily_reports         IS 'Tutor日報';
+      COMMENT ON TABLE daily_report_comments IS '日報コメント（返信）';
+    `,
+    down: `
+      DROP TABLE IF EXISTS daily_report_comments;
+      DROP TABLE IF EXISTS daily_reports;
+    `
   }
 ];
 

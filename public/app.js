@@ -24,9 +24,14 @@ let selectedTutorYear = new Date().getFullYear(); // Tutor満足度表示年
 let selectedTutorMonth = new Date().getMonth() + 1; // Tutor満足度表示月
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports'
+let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports', 'daily-reports'
 let schedules = []; // Tutor schedules data
 let pendingRequests = []; // Pending absence requests
+
+// Daily reports state
+let dailyReportTutors = [];       // アクティブTutor＋最新日報日
+let dailyReportHistory = null;    // 表示中の日報履歴 { tutorId, tutorName, reports, total, offset }
+let dailyReportViewTutorId = null;
 
 // Current authenticated tutor (for absence requests) - kept for backward compatibility
 let currentTutorEmail = null;
@@ -276,6 +281,9 @@ function renderHeader() {
             <div class="flex gap-2">
               <button id="nav-tutors" onclick="changePage('tutors')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
+              </button>
+              <button id="nav-daily-reports" onclick="changePage('daily-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'daily-reports' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+                <i class="fas fa-clipboard-list mr-2"></i>日報管理
               </button>
               ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
               <button id="nav-tutor-red-list" onclick="changePage('tutor-red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
@@ -719,6 +727,8 @@ async function renderApp() {
     await renderHandoverPage();
   } else if (currentPage === 'tutor-red-list') {
     await renderTutorRedListPage();
+  } else if (currentPage === 'daily-reports') {
+    await renderDailyReportsPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -16572,3 +16582,433 @@ async function deleteTutorRedListEntry(tutorId, tutorName) {
   }
 }
 
+
+// =============================================================================
+// 日報管理ページ
+// =============================================================================
+
+// ─── ページ描画 ───────────────────────────────────────────────────────────────
+async function renderDailyReportsPage() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('content').classList.add('hidden');
+
+  try {
+    const res = await axios.get('/api/daily-reports/tutors');
+    dailyReportTutors = res.data.success ? res.data.data : [];
+  } catch (e) {
+    console.error('[DailyReports] fetch tutors error:', e);
+    dailyReportTutors = [];
+  }
+
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  _renderDailyReportsContent();
+}
+
+function _renderDailyReportsContent() {
+  const container = document.getElementById('content');
+
+  // 今日の日付（JST）
+  const jstNow  = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = jstNow.toISOString().slice(0, 10);
+
+  // クルーは自分のTutorのみ
+  const isCrew = currentUser && currentUser.role === 'crew';
+  const displayTutors = isCrew
+    ? dailyReportTutors.filter(t => t.tutor_name === (currentUser.tutorName || currentUser.email))
+    : dailyReportTutors;
+
+  // 提出チェック（今日提出済みかどうか）
+  const todaySubmittedMap = {};
+  displayTutors.forEach(t => {
+    const ld = t.latest_report_date ? t.latest_report_date.slice(0, 10) : null;
+    todaySubmittedMap[t.tutor_id] = (ld === todayStr);
+  });
+
+  container.innerHTML = `
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-clipboard-list mr-2 text-purple-600"></i>日報管理
+        </h2>
+        <div class="text-sm text-gray-500">本日: ${todayStr.replace(/-/g, '/')}</div>
+      </div>
+
+      <!-- Tutor一覧テーブル -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor名</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">所属チーム</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">最新提出日</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">本日提出</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${displayTutors.length === 0 ? `
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Tutorが見つかりません</td></tr>
+            ` : displayTutors.map(t => {
+              const submitted = todaySubmittedMap[t.tutor_id];
+              const latestDate = t.latest_report_date
+                ? t.latest_report_date.slice(0, 10).replace(/-/g, '/')
+                : '-';
+              const canClick = !isCrew || t.tutor_name === (currentUser.tutorName || currentUser.email);
+              return `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm font-semibold">
+                    ${canClick
+                      ? `<button class="text-purple-600 hover:underline" onclick="openDailyReportHistory(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}')">
+                           ${t.tutor_name}
+                         </button>`
+                      : `<span class="text-gray-500">${t.tutor_name}</span>`
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-700">${t.team || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-center text-gray-700">${latestDate}</td>
+                  <td class="px-4 py-3 text-center">
+                    ${submitted
+                      ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i>提出済み</span>'
+                      : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i>未提出</span>'
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    <button onclick="openDailyReportModal(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}', '${todayStr}')"
+                            class="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition">
+                      <i class="fas fa-pen mr-1"></i>日報提出
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 日報提出モーダル -->
+    <div id="dailyReportModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+          <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-pen mr-2 text-purple-600"></i>日報提出</h3>
+          <button onclick="closeDailyReportModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <div class="px-6 py-5 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tutor名</label>
+            <div id="drModalTutorName" class="text-sm text-gray-800 font-semibold"></div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">日付 <span class="text-red-500">*</span></label>
+            <input id="drModalDate" type="date"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              今日の業務で意識したこと・振り返り <span class="text-red-500">*</span>
+            </label>
+            <textarea id="drModalContent" rows="6"
+                      placeholder="本日の業務で意識したこと、うまくいったこと、改善点などを記入してください..."
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"></textarea>
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t flex gap-3 justify-end">
+          <button onclick="closeDailyReportModal()"
+                  class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition">キャンセル</button>
+          <button id="drModalSubmitBtn" onclick="submitDailyReport()"
+                  class="px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition">
+            <i class="fas fa-paper-plane mr-1"></i>提出する
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 日報履歴モーダル -->
+    <div id="dailyReportHistoryModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+          <h3 id="drHistoryTitle" class="text-lg font-bold text-gray-800"></h3>
+          <button onclick="closeDailyReportHistory()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <div id="drHistoryBody" class="overflow-y-auto flex-1 px-6 py-4 space-y-4"></div>
+        <div id="drHistoryPager" class="px-6 py-3 border-t flex-shrink-0 flex justify-center gap-3"></div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── 日報提出モーダル ─────────────────────────────────────────────────────────
+let _drCurrentTutorId   = null;
+let _drCurrentTutorName = null;
+
+function openDailyReportModal(tutorId, tutorName, defaultDate) {
+  _drCurrentTutorId   = tutorId;
+  _drCurrentTutorName = tutorName;
+
+  document.getElementById('drModalTutorName').textContent = tutorName;
+  document.getElementById('drModalDate').value    = defaultDate || '';
+  document.getElementById('drModalContent').value = '';
+  document.getElementById('dailyReportModal').classList.remove('hidden');
+}
+
+function closeDailyReportModal() {
+  document.getElementById('dailyReportModal').classList.add('hidden');
+}
+
+async function submitDailyReport() {
+  const date    = document.getElementById('drModalDate').value.trim();
+  const content = document.getElementById('drModalContent').value.trim();
+
+  if (!date) {
+    showNotification('日付を選択してください', 'error');
+    return;
+  }
+  if (!content) {
+    showNotification('内容を入力してください', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('drModalSubmitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>提出中...';
+
+  try {
+    await axios.post('/api/daily-reports', {
+      tutor_id:    _drCurrentTutorId,
+      report_date: date,
+      content
+    });
+
+    closeDailyReportModal();
+    showNotification('日報を提出しました', 'success');
+    await renderDailyReportsPage(); // 一覧を更新
+  } catch (e) {
+    console.error('[DailyReports] submit error:', e);
+    showNotification(e.response?.data?.error || '提出に失敗しました', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>提出する';
+  }
+}
+
+// ─── 日報履歴モーダル ─────────────────────────────────────────────────────────
+const DR_PAGE_SIZE = 5;
+
+async function openDailyReportHistory(tutorId, tutorName) {
+  dailyReportViewTutorId = tutorId;
+  document.getElementById('drHistoryTitle').innerHTML =
+    `<i class="fas fa-history mr-2 text-purple-600"></i>${tutorName} の日報履歴`;
+  document.getElementById('dailyReportHistoryModal').classList.remove('hidden');
+  document.getElementById('drHistoryBody').innerHTML =
+    '<div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
+  await loadDailyReportHistory(tutorId, 0);
+}
+
+function closeDailyReportHistory() {
+  document.getElementById('dailyReportHistoryModal').classList.add('hidden');
+  dailyReportViewTutorId = null;
+  dailyReportHistory     = null;
+}
+
+async function loadDailyReportHistory(tutorId, offset) {
+  try {
+    const res = await axios.get(`/api/daily-reports/tutor/${tutorId}`, {
+      params: { limit: DR_PAGE_SIZE, offset }
+    });
+
+    if (!res.data.success) throw new Error(res.data.error);
+
+    dailyReportHistory = {
+      tutorId,
+      reports: res.data.data,
+      total:   res.data.total,
+      offset:  res.data.offset
+    };
+
+    _renderDailyReportHistoryBody();
+    _renderDailyReportHistoryPager();
+  } catch (e) {
+    console.error('[DailyReports] load history error:', e);
+    document.getElementById('drHistoryBody').innerHTML =
+      '<div class="text-center py-8 text-red-400">読み込みに失敗しました</div>';
+  }
+}
+
+function _renderDailyReportHistoryBody() {
+  const body    = document.getElementById('drHistoryBody');
+  const reports = dailyReportHistory?.reports || [];
+  const isAdminOrLeader = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader');
+
+  if (reports.length === 0) {
+    body.innerHTML = '<div class="text-center py-8 text-gray-400">日報がまだありません</div>';
+    return;
+  }
+
+  body.innerHTML = reports.map(r => {
+    const dateStr = r.report_date ? r.report_date.slice(0, 10).replace(/-/g, '/') : '-';
+    const submittedAt = r.submitted_at
+      ? new Date(r.submitted_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+      : '';
+
+    const commentsHtml = (r.comments || []).map(cm => {
+      const cmTime = cm.created_at
+        ? new Date(cm.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+        : '';
+      return `
+        <div class="flex gap-2 items-start group" id="drComment-${cm.id}">
+          <div class="flex-1 bg-blue-50 rounded-lg px-3 py-2 text-sm">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-semibold text-blue-800">${cm.commenter_name || cm.email || '-'}</span>
+              <span class="text-xs text-gray-400">${cmTime}</span>
+            </div>
+            <div class="text-gray-700 whitespace-pre-wrap">${escapeHtml(cm.content)}</div>
+          </div>
+          ${isAdminOrLeader ? `
+            <button onclick="deleteDailyReportComment(${cm.id}, ${r.id})"
+                    class="opacity-0 group-hover:opacity-100 transition text-red-400 hover:text-red-600 text-xs mt-1">
+              <i class="fas fa-trash"></i>
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="border border-gray-200 rounded-xl p-4 bg-gray-50" id="drReport-${r.id}">
+        <div class="flex items-start justify-between mb-2">
+          <div>
+            <span class="text-base font-bold text-gray-800">${dateStr}</span>
+            <span class="ml-2 text-xs text-gray-400">提出: ${submittedAt}</span>
+          </div>
+          ${isAdminOrLeader ? `
+            <button onclick="deleteDailyReport(${r.id})"
+                    class="text-red-400 hover:text-red-600 text-xs ml-2">
+              <i class="fas fa-trash mr-1"></i>削除
+            </button>
+          ` : ''}
+        </div>
+        <div class="text-sm text-gray-700 whitespace-pre-wrap mb-3 bg-white rounded-lg p-3 border border-gray-100">${escapeHtml(r.content)}</div>
+
+        <!-- コメント一覧 -->
+        <div class="space-y-2" id="drComments-${r.id}">
+          ${commentsHtml}
+        </div>
+
+        <!-- コメント入力 -->
+        <div class="mt-3 flex gap-2">
+          <textarea id="drCommentInput-${r.id}" rows="2" placeholder="コメントを入力..."
+                    class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"></textarea>
+          <button onclick="submitDailyReportComment(${r.id})"
+                  class="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition self-end">
+            <i class="fas fa-paper-plane mr-1"></i>送信
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function _renderDailyReportHistoryPager() {
+  const pager  = document.getElementById('drHistoryPager');
+  const { total, offset } = dailyReportHistory || { total: 0, offset: 0 };
+  const currentPageIdx = Math.floor(offset / DR_PAGE_SIZE);
+  const totalPages     = Math.ceil(total / DR_PAGE_SIZE);
+
+  if (totalPages <= 1) { pager.innerHTML = ''; return; }
+
+  pager.innerHTML = `
+    <button onclick="loadDailyReportHistory(${dailyReportViewTutorId}, ${Math.max(0, offset - DR_PAGE_SIZE)})"
+            ${currentPageIdx === 0 ? 'disabled' : ''}
+            class="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed">
+      <i class="fas fa-chevron-left"></i> 前
+    </button>
+    <span class="text-sm text-gray-500 self-center">${currentPageIdx + 1} / ${totalPages}</span>
+    <button onclick="loadDailyReportHistory(${dailyReportViewTutorId}, ${offset + DR_PAGE_SIZE})"
+            ${currentPageIdx >= totalPages - 1 ? 'disabled' : ''}
+            class="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed">
+      次 <i class="fas fa-chevron-right"></i>
+    </button>
+  `;
+}
+
+// ─── コメント投稿 ─────────────────────────────────────────────────────────────
+async function submitDailyReportComment(reportId) {
+  if (!currentUser) return;
+  const input   = document.getElementById(`drCommentInput-${reportId}`);
+  const content = input?.value?.trim();
+  if (!content) { showNotification('コメントを入力してください', 'error'); return; }
+
+  try {
+    const res = await axios.post(`/api/daily-reports/${reportId}/comments`, {
+      user_id: currentUser.id,
+      content
+    });
+    if (!res.data.success) throw new Error(res.data.error);
+
+    input.value = '';
+    // コメント欄を再追加
+    const cm     = res.data.data;
+    const cmTime = new Date(cm.created_at).toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+    });
+    const isAdminOrLeader = currentUser.role === 'admin' || currentUser.role === 'leader';
+    const cmHtml = `
+      <div class="flex gap-2 items-start group" id="drComment-${cm.id}">
+        <div class="flex-1 bg-blue-50 rounded-lg px-3 py-2 text-sm">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-semibold text-blue-800">${cm.commenter_name || '-'}</span>
+            <span class="text-xs text-gray-400">${cmTime}</span>
+          </div>
+          <div class="text-gray-700 whitespace-pre-wrap">${escapeHtml(cm.content)}</div>
+        </div>
+        ${isAdminOrLeader ? `
+          <button onclick="deleteDailyReportComment(${cm.id}, ${reportId})"
+                  class="opacity-0 group-hover:opacity-100 transition text-red-400 hover:text-red-600 text-xs mt-1">
+            <i class="fas fa-trash"></i>
+          </button>
+        ` : ''}
+      </div>
+    `;
+    const container = document.getElementById(`drComments-${reportId}`);
+    if (container) container.insertAdjacentHTML('beforeend', cmHtml);
+    showNotification('コメントを送信しました', 'success');
+  } catch (e) {
+    console.error('[DailyReports] comment error:', e);
+    showNotification(e.response?.data?.error || 'コメントの送信に失敗しました', 'error');
+  }
+}
+
+// ─── 日報削除 ─────────────────────────────────────────────────────────────────
+async function deleteDailyReport(reportId) {
+  if (!confirm('この日報を削除しますか？')) return;
+  try {
+    await axios.delete(`/api/daily-reports/${reportId}`);
+    document.getElementById(`drReport-${reportId}`)?.remove();
+    showNotification('削除しました', 'success');
+    // 件数を更新
+    if (dailyReportHistory) {
+      dailyReportHistory.total = Math.max(0, dailyReportHistory.total - 1);
+      _renderDailyReportHistoryPager();
+    }
+  } catch (e) {
+    console.error('[DailyReports] delete report error:', e);
+    showNotification('削除に失敗しました', 'error');
+  }
+}
+
+// ─── コメント削除 ─────────────────────────────────────────────────────────────
+async function deleteDailyReportComment(commentId, reportId) {
+  if (!confirm('このコメントを削除しますか？')) return;
+  try {
+    await axios.delete(`/api/daily-reports/comments/${commentId}`);
+    document.getElementById(`drComment-${commentId}`)?.remove();
+    showNotification('コメントを削除しました', 'success');
+  } catch (e) {
+    console.error('[DailyReports] delete comment error:', e);
+    showNotification('コメントの削除に失敗しました', 'error');
+  }
+}
+
+// ─── ユーティリティ（escapeHtml は既存実装を利用）
+// escapeHtml is already declared at line ~11209

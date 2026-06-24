@@ -36,6 +36,7 @@ import lessonReportRoutes from './routes/lessonReports.js';
 import redListRoutes from './routes/redList.js';
 import handoverRoutes from './routes/handover.js';
 import tutorRedListRoutes from './routes/tutorRedList.js';
+import dailyReportRoutes from './routes/dailyReports.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -45,6 +46,7 @@ import { checkStampRallyAchievements } from './services/stampRallyService.js';
 
 // Jobs
 import sendLessonReportReminder from './jobs/lessonReportReminder.js';
+import sendDailyReportReminder from './jobs/dailyReportReminder.js';
 import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotification.js';
 import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
@@ -92,6 +94,7 @@ app.route('/api/lesson-reports', lessonReportRoutes);
 app.route('/api/red-list', redListRoutes);
 app.route('/api/handover', handoverRoutes);
 app.route('/api/tutor-red-list', tutorRedListRoutes);
+app.route('/api/daily-reports', dailyReportRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
@@ -285,6 +288,21 @@ cron.schedule('59 23 * * 0', async () => {
     console.log('[Tutor Weekly Snapshot] Completed:', result);
   } catch (error) {
     console.error('[Tutor Weekly Snapshot] Error:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule daily report reminder (runs daily at 14:00 JST)
+// Checks yesterday's daily reports and notifies unsubmitted tutors who had lessons
+console.log('Daily report reminder: ENABLED (14:00 JST daily)');
+cron.schedule('0 14 * * *', async () => {
+  console.log('[DailyReportReminder] Running daily report reminder at 14:00 JST...');
+  try {
+    await sendDailyReportReminder();
+    console.log('[DailyReportReminder] Completed successfully');
+  } catch (error) {
+    console.error('[DailyReportReminder] Error:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
