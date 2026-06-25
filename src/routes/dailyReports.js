@@ -17,7 +17,11 @@ app.get('/tutors', async (c) => {
         t.status,
         t.job_type,
         u.job_title,
-        MAX(dr.report_date) AS latest_report_date
+        MAX(dr.report_date) AS latest_report_date,
+        BOOL_OR(dr.report_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date)
+          AS today_submitted,
+        BOOL_OR(dr.report_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 day')
+          AS yesterday_submitted
       FROM tutors t
       LEFT JOIN daily_reports dr ON dr.tutor_id = t.id
       LEFT JOIN users u ON LOWER(t.email) = LOWER(u.email)
