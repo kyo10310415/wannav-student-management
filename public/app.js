@@ -16697,11 +16697,12 @@ function _renderDailyReportsContent() {
     </div>
   ` : '';
 
-  // 提出チェック（今日提出済みかどうか）
+  // 提出チェック（APIから返却された today_submitted / yesterday_submitted フラグを使用）
   const todaySubmittedMap = {};
+  const yesterdaySubmittedMap = {};
   displayTutors.forEach(t => {
-    const ld = t.latest_report_date ? t.latest_report_date.slice(0, 10) : null;
-    todaySubmittedMap[t.tutor_id] = (ld === todayStr);
+    todaySubmittedMap[t.tutor_id]     = !!t.today_submitted;
+    yesterdaySubmittedMap[t.tutor_id] = !!t.yesterday_submitted;
   });
 
   container.innerHTML = `
@@ -16726,12 +16727,13 @@ function _renderDailyReportsContent() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">所属チーム</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">最新提出日</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">本日提出</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">前日提出</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             ${displayTutors.length === 0 ? `
-              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Tutorが見つかりません</td></tr>
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Tutorが見つかりません</td></tr>
             ` : displayTutors.map(t => {
               const submitted = todaySubmittedMap[t.tutor_id];
               const latestDate = t.latest_report_date
@@ -16752,6 +16754,12 @@ function _renderDailyReportsContent() {
                   <td class="px-4 py-3 text-sm text-center text-gray-700">${latestDate}</td>
                   <td class="px-4 py-3 text-center">
                     ${submitted
+                      ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i>提出済み</span>'
+                      : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i>未提出</span>'
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    ${yesterdaySubmittedMap[t.tutor_id]
                       ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i>提出済み</span>'
                       : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i>未提出</span>'
                     }
