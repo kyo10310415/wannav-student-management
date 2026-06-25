@@ -16697,13 +16697,87 @@ function _renderDailyReportsContent() {
     </div>
   ` : '';
 
-  // 提出チェック（APIから返却された today_submitted / yesterday_submitted フラグを使用）
-  const todaySubmittedMap = {};
-  const yesterdaySubmittedMap = {};
-  displayTutors.forEach(t => {
-    todaySubmittedMap[t.tutor_id]     = !!t.today_submitted;
-    yesterdaySubmittedMap[t.tutor_id] = !!t.yesterday_submitted;
+  // 前日の日付文字列（表示用）
+  const jstYesterday  = new Date(jstNow.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayStr  = jstYesterday.toISOString().slice(0, 10);
+
+  // ── チーム別集計 ────────────────────────────────────────────────
+  // 各Tutorの本日・前日ステータスを計算するヘルパー
+  // status: 'submitted' | 'unsubmitted' | 'no_lesson'
+  function getDayStatus(submitted, hasLesson) {
+    if (!hasLesson) return 'no_lesson';
+    return submitted ? 'submitted' : 'unsubmitted';
+  }
+
+  const teams = [...new Set(displayTutors.map(t => t.team || '未設定'))].sort();
+  const teamStats = teams.map(team => {
+    const members = displayTutors.filter(t => (t.team || '未設定') === team);
+    const todayCount     = { submitted: 0, unsubmitted: 0, no_lesson: 0 };
+    const yesterdayCount = { submitted: 0, unsubmitted: 0, no_lesson: 0 };
+    members.forEach(t => {
+      todayCount[getDayStatus(t.today_submitted, t.today_has_lesson)]++;
+      yesterdayCount[getDayStatus(t.yesterday_submitted, t.yesterday_has_lesson)]++;
+    });
+    return { team, todayCount, yesterdayCount, total: members.length };
   });
+
+  // 全体集計
+  const totalToday     = { submitted: 0, unsubmitted: 0, no_lesson: 0 };
+  const totalYesterday = { submitted: 0, unsubmitted: 0, no_lesson: 0 };
+  displayTutors.forEach(t => {
+    totalToday[getDayStatus(t.today_submitted, t.today_has_lesson)]++;
+    totalYesterday[getDayStatus(t.yesterday_submitted, t.yesterday_has_lesson)]++;
+  });
+
+  // 集計パネルHTML生成
+  function statBadge(label, count, colorClass) {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${colorClass}">${label} ${count}</span>`;
+  }
+  function teamStatRow(label, todayCnt, yesterdayCnt, total, isTotal) {
+    const rowBg = isTotal ? 'bg-purple-50 font-bold' : 'bg-white';
+    return `
+      <tr class="${rowBg} border-b border-gray-100">
+        <td class="px-3 py-2 text-sm ${isTotal ? 'text-purple-700 font-bold' : 'text-gray-700'} whitespace-nowrap">${label}<span class="ml-1 text-xs text-gray-400">(${total}名)</span></td>
+        <td class="px-3 py-2 text-center">
+          <div class="flex flex-wrap gap-1 justify-center">
+            ${statBadge('提出済', todayCnt.submitted, 'bg-green-100 text-green-700')}
+            ${statBadge('未提出', todayCnt.unsubmitted, 'bg-red-100 text-red-700')}
+            ${statBadge('レッスンなし', todayCnt.no_lesson, 'bg-gray-100 text-gray-500')}
+          </div>
+        </td>
+        <td class="px-3 py-2 text-center">
+          <div class="flex flex-wrap gap-1 justify-center">
+            ${statBadge('提出済', yesterdayCnt.submitted, 'bg-green-100 text-green-700')}
+            ${statBadge('未提出', yesterdayCnt.unsubmitted, 'bg-red-100 text-red-700')}
+            ${statBadge('レッスンなし', yesterdayCnt.no_lesson, 'bg-gray-100 text-gray-500')}
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  const teamStatsHtml = `
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+      <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <h3 class="text-sm font-bold text-gray-700"><i class="fas fa-chart-bar mr-2 text-purple-500"></i>チーム別集計</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-200">
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">チーム</th>
+              <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">本日 (${todayStr.replace(/-/g, '/')})</th>
+              <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">前日 (${yesterdayStr.replace(/-/g, '/')})</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${teamStatRow('合計', totalToday, totalYesterday, displayTutors.length, true)}
+            ${teamStats.map(s => teamStatRow(s.team, s.todayCount, s.yesterdayCount, s.total, false)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 
   container.innerHTML = `
     <div class="p-6">
@@ -16717,6 +16791,8 @@ function _renderDailyReportsContent() {
           <div class="text-sm text-gray-500">本日: ${todayStr.replace(/-/g, '/')}</div>
         </div>
       </div>
+
+      ${teamStatsHtml}
 
       <!-- Tutor一覧テーブル -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -16735,11 +16811,19 @@ function _renderDailyReportsContent() {
             ${displayTutors.length === 0 ? `
               <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Tutorが見つかりません</td></tr>
             ` : displayTutors.map(t => {
-              const submitted = todaySubmittedMap[t.tutor_id];
+              const todayStatus     = getDayStatus(t.today_submitted,     t.today_has_lesson);
+              const yesterdayStatus  = getDayStatus(t.yesterday_submitted,  t.yesterday_has_lesson);
               const latestDate = t.latest_report_date
                 ? t.latest_report_date.slice(0, 10).replace(/-/g, '/')
                 : '-';
               const canClick = !isCrew || t.tutor_name === (currentUser.tutorName || currentUser.email);
+
+              function dayBadge(status) {
+                if (status === 'submitted')   return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i>提出済み</span>';
+                if (status === 'unsubmitted') return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i>未提出</span>';
+                return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500"><i class="fas fa-minus mr-1"></i>レッスンなし</span>';
+              }
+
               return `
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-semibold">
@@ -16752,18 +16836,8 @@ function _renderDailyReportsContent() {
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-700">${t.team || '-'}</td>
                   <td class="px-4 py-3 text-sm text-center text-gray-700">${latestDate}</td>
-                  <td class="px-4 py-3 text-center">
-                    ${submitted
-                      ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i>提出済み</span>'
-                      : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i>未提出</span>'
-                    }
-                  </td>
-                  <td class="px-4 py-3 text-center">
-                    ${yesterdaySubmittedMap[t.tutor_id]
-                      ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-check mr-1"></i>提出済み</span>'
-                      : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-times mr-1"></i>未提出</span>'
-                    }
-                  </td>
+                  <td class="px-4 py-3 text-center">${dayBadge(todayStatus)}</td>
+                  <td class="px-4 py-3 text-center">${dayBadge(yesterdayStatus)}</td>
                   <td class="px-4 py-3 text-center">
                     <button onclick="openDailyReportModal(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}', '${todayStr}')"
                             class="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition">

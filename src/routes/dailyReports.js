@@ -21,14 +21,28 @@ app.get('/tutors', async (c) => {
         BOOL_OR(dr.report_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date)
           AS today_submitted,
         BOOL_OR(dr.report_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 day')
-          AS yesterday_submitted
+          AS yesterday_submitted,
+        -- 本日レッスンあり（lessons テーブル: homeroom_tutor → notion_name 結合）
+        EXISTS (
+          SELECT 1 FROM lessons l
+          JOIN students s ON l.student_id = s.student_id
+          WHERE s.homeroom_tutor = t.notion_name
+            AND l.lesson_date::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date
+        ) AS today_has_lesson,
+        -- 前日レッスンあり
+        EXISTS (
+          SELECT 1 FROM lessons l
+          JOIN students s ON l.student_id = s.student_id
+          WHERE s.homeroom_tutor = t.notion_name
+            AND l.lesson_date::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 day'
+        ) AS yesterday_has_lesson
       FROM tutors t
       LEFT JOIN daily_reports dr ON dr.tutor_id = t.id
       LEFT JOIN users u ON LOWER(t.email) = LOWER(u.email)
       WHERE t.status = 'アクティブ'
         AND t.job_type ILIKE '%tutor%'
         AND u.job_title = 'クルー'
-      GROUP BY t.id, t.tutor_name, t.team, t.status, t.job_type, u.job_title
+      GROUP BY t.id, t.tutor_name, t.team, t.status, t.job_type, u.job_title, t.notion_name
       ORDER BY t.team, t.tutor_name
     `);
     return c.json({ success: true, data: result.rows });
