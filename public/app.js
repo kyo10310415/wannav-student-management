@@ -7004,6 +7004,7 @@ async function renderUsersPage() {
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">ID</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">メールアドレス</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor名</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor番号</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">権限</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">役職</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Discord設定</th>
@@ -7018,6 +7019,7 @@ async function renderUsersPage() {
                   <td class="px-4 py-3 text-sm">${user.id}</td>
                   <td class="px-4 py-3 text-sm">${user.email}</td>
                   <td class="px-4 py-3 text-sm">${user.tutor_name || '-'}</td>
+                  <td class="px-4 py-3 text-sm font-mono text-gray-600">${user.tutor_number || '-'}</td>
                   <td class="px-4 py-3">
                     <select 
                       class="px-2 py-1 border rounded text-sm ${getRoleBadgeClass(user.role)}"
