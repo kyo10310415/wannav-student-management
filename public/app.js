@@ -16582,7 +16582,7 @@ function _renderTutorRedListCard(entry, c) {
     ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${entry.attendance_score}点</span>`
     : '';
   const skillScoreBadge = (skillTotal !== null && skillTotal !== undefined && skillTotal < 210)
-    ? `<span class="text-xs bg-purple-100 text-purple-700 rounded px-2 py-0.5">スキル低下 +3点</span>`
+    ? `<span class="text-xs bg-purple-100 text-purple-700 rounded px-2 py-0.5">熱量低下 +3点</span>`
     : '';
 
   return `
