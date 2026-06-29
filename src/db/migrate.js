@@ -999,6 +999,36 @@ const migrations = [
     down: `
       DELETE FROM system_settings WHERE setting_key = 'daily_report_reminder_enabled';
     `
+  },
+  {
+    version: 42,
+    name: 'create_withdrawal_requests_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS withdrawal_requests (
+        id SERIAL PRIMARY KEY,
+        student_id    VARCHAR(50)  NOT NULL,
+        student_name  VARCHAR(255) NOT NULL,
+        homeroom_tutor VARCHAR(255),
+        withdrawal_date DATE NOT NULL,
+        category      VARCHAR(50)  NOT NULL,
+        reason        TEXT,
+        notion_url    TEXT,
+        submitted_by  VARCHAR(255),
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_student_id ON withdrawal_requests(student_id);
+      CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_created_at ON withdrawal_requests(created_at);
+
+      -- テスト用生徒データ（学籍番号: 1111）
+      INSERT INTO students (student_id, name, homeroom_tutor, status, contract_plan)
+      VALUES ('1111', 'テスト生徒', 'テストTutor', 'アクティブ', 'レッスン中')
+      ON CONFLICT (student_id) DO NOTHING;
+    `,
+    down: `
+      DROP TABLE IF EXISTS withdrawal_requests;
+      DELETE FROM students WHERE student_id = '1111';
+    `
   }
 ];
 
