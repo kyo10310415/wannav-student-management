@@ -287,7 +287,7 @@ function renderHeader() {
               <button id="nav-daily-reports" onclick="changePage('daily-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'daily-reports' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-clipboard-list mr-2"></i>日報管理
               </button>
-              ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+              ${currentUser && currentUser.role === 'admin' ? `
               <button id="nav-tutor-red-list" onclick="changePage('tutor-red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-exclamation-triangle mr-2"></i>Tutorレッドリスト
               </button>
@@ -729,6 +729,12 @@ async function renderApp() {
   } else if (currentPage === 'handover') {
     await renderHandoverPage();
   } else if (currentPage === 'tutor-red-list') {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showNotification('このページは管理者のみアクセスできます', 'error');
+      currentPage = 'today';
+      await renderPage();
+      return;
+    }
     await renderTutorRedListPage();
   } else if (currentPage === 'daily-reports') {
     await renderDailyReportsPage();
