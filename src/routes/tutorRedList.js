@@ -124,11 +124,15 @@ app.get('/', async (c) => {
          total_score DESC`
     );
 
-    // 最新の満足度・助っ人依頼・出席率データを並列取得
-    const [helperStats, attendanceMap, satisfactionAll] = await Promise.all([
+    // スキルスコアシートID
+    const skillSheetId = process.env.TUTOR_SKILL_SHEET_ID || '1nP12NofNbRVI2tRBMUARjMzpbHgxHcFfNifpPy1fyyE';
+
+    // 最新の満足度・助っ人依頼・出席率・スキルスコアを並列取得
+    const [helperStats, attendanceMap, satisfactionAll, skillScoreMap] = await Promise.all([
       fetchHelperStats(year, month),
       fetchAttendanceStats(year, month),
       fetchSatisfactionAll(),
+      fetchTutorSkillScores(skillSheetId),
     ]);
 
     const selectedYM = `${year}/${month}`;
@@ -149,11 +153,17 @@ app.get('/', async (c) => {
       // 出席率（当月）
       const attendanceRate = attendanceMap[tutorName] ?? null;
 
+      // スキルスコア合計（G〜AJ列合計）
+      const skillTotalScore = skillScoreMap.has(entry.tutor_id)
+        ? skillScoreMap.get(entry.tutor_id)
+        : null;
+
       return {
         ...entry,
         current_satisfaction: satisfactionAvg,
         current_helper_request_count: helperRequestCount,
         current_attendance_rate: attendanceRate,
+        skill_total_score: skillTotalScore,
         year,
         month,
       };

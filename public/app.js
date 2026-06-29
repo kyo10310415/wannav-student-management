@@ -16566,12 +16566,23 @@ function _renderTutorRedListCard(entry, c) {
   const ao = escapeHtml(entry.assigned_to || '');
   const team = escapeHtml(entry.snapshot_team || entry.current_team || '未所属');
 
+  // スキルスコア（アンケート点数）
+  const skillTotal = entry.skill_total_score;
+  const skillStr   = skillTotal !== null && skillTotal !== undefined
+    ? `${Math.round(skillTotal)}点`
+    : '-';
+  const skillColor = skillTotal !== null && skillTotal !== undefined && skillTotal < 210
+    ? 'text-red-600 font-bold' : 'text-gray-700';
+
   // スコア内訳バッジ
   const helperScoreBadge = entry.helper_request_score > 0
     ? `<span class="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5">助っ人依頼 +${entry.helper_request_score}点</span>`
     : '';
   const attendanceScoreBadge = entry.attendance_score > 0
     ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${entry.attendance_score}点</span>`
+    : '';
+  const skillScoreBadge = (skillTotal !== null && skillTotal !== undefined && skillTotal < 210)
+    ? `<span class="text-xs bg-purple-100 text-purple-700 rounded px-2 py-0.5">スキル低下 +3点</span>`
     : '';
 
   return `
@@ -16586,6 +16597,7 @@ function _renderTutorRedListCard(entry, c) {
         <div class="flex flex-wrap gap-1 mb-2">
           ${helperScoreBadge}
           ${attendanceScoreBadge}
+          ${skillScoreBadge}
         </div>
         <div class="text-xs text-gray-400">
           <i class="fas fa-clock mr-1"></i>登録日時: ${registeredAt}
@@ -16608,6 +16620,11 @@ function _renderTutorRedListCard(entry, c) {
         <div class="text-center">
           <div class="text-xs text-gray-400 mb-1">助っ人依頼</div>
           <div class="text-lg font-bold ${helperColor}">${helperCount}回</div>
+        </div>
+        <!-- アンケート点数 -->
+        <div class="text-center">
+          <div class="text-xs text-gray-400 mb-1">アンケート点数</div>
+          <div class="text-lg font-bold ${skillColor}">${skillStr}</div>
         </div>
       </div>
 
