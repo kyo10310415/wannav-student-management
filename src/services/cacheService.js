@@ -528,6 +528,52 @@ export async function fetchExtensionResultsFromCache(spreadsheetId) {
 }
 
 /**
+ * Fetch tutor skill scores from a dedicated evaluation spreadsheet.
+ * Sheet structure (row 1 = header, data from row 2):
+ *   E列 (col index 4) : Tutor番号 (employee_id)
+ *   G列〜AJ列 (col index 6〜35) : 各評価項目の点数（数値 or 空）
+ *
+ * Returns a Map: employee_id (string) => total_score (number)
+ * Only rows whose total_score < 210 are meaningful, but we return all totals
+ * so the caller can apply the threshold itself.
+ */
+export async function fetchTutorSkillScores(spreadsheetId) {
+  try {
+    const sheets = getSheetsClient();
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'A2:AJ', // 全列取得（A=0 … AJ=35）
+    });
+
+    const rows = response.data.values || [];
+    console.log(`[TutorSkill] Fetched ${rows.length} rows from skill score spreadsheet`);
+
+    const scoreMap = new Map();
+
+    rows.forEach((row, idx) => {
+      const employeeId = (row[4] || '').toString().trim(); // E列 (index 4)
+      if (!employeeId) return;
+
+      // G列(index 6) 〜 AJ列(index 35) の合計
+      let total = 0;
+      for (let i = 6; i <= 35; i++) {
+        const val = parseFloat(row[i]);
+        if (!isNaN(val)) total += val;
+      }
+
+      scoreMap.set(employeeId, total);
+    });
+
+    console.log(`[TutorSkill] Score map built for ${scoreMap.size} tutors`);
+    return scoreMap;
+  } catch (error) {
+    console.error('[TutorSkill] Error fetching tutor skill scores:', error);
+    return new Map(); // エラー時は空 Map を返してフォールバック
+  }
+}
+
+/**
  * Get last sync time from meta sheet
  */
 export async function getCacheSyncTime(spreadsheetId) {

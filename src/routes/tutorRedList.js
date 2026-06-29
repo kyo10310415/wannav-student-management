@@ -9,6 +9,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import axios from 'axios';
+import { fetchTutorSkillScores } from '../services/cacheService.js';
 
 const app = new Hono();
 
@@ -18,14 +19,17 @@ const app = new Hono();
 /**
  * 助っ人依頼点数: 依頼回数 × 1点
  * MTG/研修/1on1 出席率70%以下: 3点
+ * スキルスコア210点未満: +3点
  */
-function calcScore({ helperRequestCount, attendanceRate }) {
+function calcScore({ helperRequestCount, attendanceRate, skillScoreLow }) {
   const helperScore     = helperRequestCount;  // 1回につき1点
   const attendanceScore = attendanceRate !== null && attendanceRate <= 70 ? 3 : 0;
+  const skillScore      = skillScoreLow ? 3 : 0;  // G〜AJ合計が210点未満なら+3点
   return {
     helperScore,
     attendanceScore,
-    total: helperScore + attendanceScore,
+    skillScore,
+    total: helperScore + attendanceScore + skillScore,
   };
 }
 
@@ -179,13 +183,19 @@ app.post('/recalc', async (c) => {
     const year  = parseInt(body.year  || now.getFullYear());
     const month = parseInt(body.month || now.getMonth() + 1);
 
+    // スキルスコアシートID（環境変数 or ハードコード）
+    const skillSheetId = process.env.TUTOR_SKILL_SHEET_ID || '1nP12NofNbRVI2tRBMUARjMzpbHgxHcFfNifpPy1fyyE';
+
     // 並列でデータ取得
-    const [tutorsResult, helperStats, attendanceMap, satisfactionAll] = await Promise.all([
+    const [tutorsResult, helperStats, attendanceMap, satisfactionAll, skillScoreMap] = await Promise.all([
       query(`SELECT * FROM tutors WHERE status = 'アクティブ' AND job_type ILIKE '%Tutor%'`),
       fetchHelperStats(year, month),
       fetchAttendanceStats(year, month),
       fetchSatisfactionAll(),
+      fetchTutorSkillScores(skillSheetId),
     ]);
+
+    console.log(`[TutorRedList] Skill score map loaded: ${skillScoreMap.size} entries`);
 
     const tutors = tutorsResult.rows;
     const selectedYM = `${year}/${month}`;
@@ -203,10 +213,15 @@ app.post('/recalc', async (c) => {
       // 出席率
       const attendanceRate = attendanceMap[tutorName] ?? null;
 
+      // スキルスコア（G〜AJ合計が210点未満なら skillScoreLow=true）
+      const skillTotal    = skillScoreMap.has(tutorId) ? skillScoreMap.get(tutorId) : null;
+      const skillScoreLow = skillTotal !== null && skillTotal < 210;
+
       // スコア計算
-      const { helperScore, attendanceScore, total } = calcScore({
+      const { helperScore, attendanceScore, skillScore, total } = calcScore({
         helperRequestCount,
         attendanceRate: attendanceRate ?? 100,
+        skillScoreLow,
       });
 
       const rank = calcRank(total);
@@ -215,6 +230,10 @@ app.post('/recalc', async (c) => {
       const tutorSatisfactionData = satisfactionAll[tutorName] || {};
       const monthData = tutorSatisfactionData[selectedYM];
       const satisfactionAvg = monthData ? (monthData.average * 10) : null;
+
+      if (skillTotal !== null) {
+        console.log(`[TutorRedList] ${tutorName}(${tutorId}): skillTotal=${skillTotal} skillScoreLow=${skillScoreLow} skillScore=${skillScore}`);
+      }
 
       if (rank) {
         // UPSERT
