@@ -24,6 +24,7 @@ let selectedTutorYear = new Date().getFullYear(); // Tutor満足度表示年
 let selectedTutorMonth = new Date().getMonth() + 1; // Tutor満足度表示月
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
+let studentsPageTab = 'students'; // 'students' | 'withdrawal' — 生徒管理ページの主タブ
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports', 'daily-reports'
 let schedules = []; // Tutor schedules data
 let pendingRequests = []; // Pending absence requests
@@ -697,6 +698,7 @@ async function renderApp() {
   if (currentPage === 'reservations') {
     renderReservationsPage();
   } else if (currentPage === 'students') {
+    studentsPageTab = 'students'; // 生徒一覧タブにリセット
     renderStudentsPage();
   } else if (currentPage === 'red-list') {
     await renderRedListPage();
@@ -1609,8 +1611,15 @@ function renderStudentsPage() {
         <button onclick="openWithdrawalModal()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
           <i class="fas fa-user-minus mr-2"></i>強制退会申請
         </button>
+        <button onclick="switchStudentsPageTab('withdrawal')" id="btn-studentsTab-withdrawal"
+          class="px-4 py-2 rounded-lg transition font-semibold ${studentsPageTab === 'withdrawal' ? 'bg-red-600 text-white' : 'bg-white border border-red-300 text-red-600 hover:bg-red-50'}">
+          <i class="fas fa-list mr-2"></i>退会申請一覧
+        </button>
       </div>
     </div>
+
+    <!-- ▼ 生徒一覧タブコンテンツ -->
+    <div id="studentsMainContent">
 
     <!-- Statistics (only Active students with レッスン中 or PROプラン) -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -2002,20 +2011,24 @@ function renderStudentsPage() {
       </div>
     </div>
 
-    <!-- 退会申請一覧 -->
-    <div class="bg-white rounded-lg shadow-md p-6 mt-6" id="withdrawalListSection">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-bold text-gray-800">
-          <i class="fas fa-user-minus mr-2 text-red-600"></i>退会申請一覧
-        </h2>
-        <button onclick="loadWithdrawalList()" class="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition">
-          <i class="fas fa-sync-alt mr-1"></i>更新
-        </button>
+    </div><!-- ▲ /studentsMainContent -->
+
+    <!-- ▼ 退会申請一覧タブコンテンツ -->
+    <div id="withdrawalTabContent" class="hidden">
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold text-gray-800">
+            <i class="fas fa-user-minus mr-2 text-red-600"></i>退会申請一覧
+          </h2>
+          <button onclick="loadWithdrawalList()" class="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition">
+            <i class="fas fa-sync-alt mr-1"></i>更新
+          </button>
+        </div>
+        <div id="withdrawalListContainer">
+          <div class="text-center text-gray-400 py-4 text-sm">読み込み中...</div>
+        </div>
       </div>
-      <div id="withdrawalListContainer">
-        <div class="text-center text-gray-400 py-4 text-sm">読み込み中...</div>
-      </div>
-    </div>
+    </div><!-- ▲ /withdrawalTabContent -->
 
     <!-- 強制退会申請モーダル -->
     <div id="withdrawalModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/50 p-4">
@@ -2107,8 +2120,8 @@ function renderStudentsPage() {
   // Load red list data asynchronously
   loadRedListData();
 
-  // Load withdrawal request list
-  loadWithdrawalList();
+  // 生徒ページ主タブを初期状態に適用
+  _applyStudentsPageTab();
 }
 
 // Load Wanami usage data for all visible students (batch mode with cache)
@@ -17502,5 +17515,44 @@ async function loadWithdrawalList() {
   } catch (e) {
     console.error('[Withdrawal] load list error:', e);
     container.innerHTML = '<div class="text-center text-red-400 py-4 text-sm">一覧の読み込みに失敗しました</div>';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 生徒管理ページ 主タブ切り替え（生徒一覧 / 退会申請一覧）
+// ════════════════════════════════════════════════════════════════
+
+function switchStudentsPageTab(tab) {
+  studentsPageTab = tab;
+  _applyStudentsPageTab();
+}
+
+function _applyStudentsPageTab() {
+  const mainEl       = document.getElementById('studentsMainContent');
+  const withdrawalEl = document.getElementById('withdrawalTabContent');
+  const tabBtn       = document.getElementById('btn-studentsTab-withdrawal');
+
+  if (!mainEl || !withdrawalEl) return;
+
+  const isWithdrawal = studentsPageTab === 'withdrawal';
+
+  // コンテンツ表示切り替え
+  mainEl.classList.toggle('hidden', isWithdrawal);
+  withdrawalEl.classList.toggle('hidden', !isWithdrawal);
+
+  // 「退会申請一覧」タブボタンのスタイル切り替え
+  if (tabBtn) {
+    if (isWithdrawal) {
+      tabBtn.classList.remove('bg-white', 'border', 'border-red-300', 'text-red-600', 'hover:bg-red-50');
+      tabBtn.classList.add('bg-red-600', 'text-white');
+    } else {
+      tabBtn.classList.remove('bg-red-600', 'text-white');
+      tabBtn.classList.add('bg-white', 'border', 'border-red-300', 'text-red-600', 'hover:bg-red-50');
+    }
+  }
+
+  // 退会申請タブを開いた時だけ一覧を読み込む
+  if (isWithdrawal) {
+    loadWithdrawalList();
   }
 }
