@@ -37,6 +37,7 @@ import redListRoutes from './routes/redList.js';
 import handoverRoutes from './routes/handover.js';
 import tutorRedListRoutes from './routes/tutorRedList.js';
 import dailyReportRoutes from './routes/dailyReports.js';
+import withdrawalRequestRoutes from './routes/withdrawalRequests.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -95,6 +96,7 @@ app.route('/api/red-list', redListRoutes);
 app.route('/api/handover', handoverRoutes);
 app.route('/api/tutor-red-list', tutorRedListRoutes);
 app.route('/api/daily-reports', dailyReportRoutes);
+app.route('/api/withdrawal-requests', withdrawalRequestRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
