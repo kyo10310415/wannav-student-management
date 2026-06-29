@@ -58,7 +58,8 @@ app.get('/', requireAdmin, async (c) => {
           u.discord_webhook_url,
           u.discord_user_id,
           u.job_title,
-          t.tutor_name as tutor_name
+          t.tutor_name as tutor_name,
+          t.employee_id as tutor_number
         FROM users u
         LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
         ORDER BY u.created_at DESC
@@ -75,7 +76,8 @@ app.get('/', requireAdmin, async (c) => {
           u.created_at, 
           u.last_login,
           u.job_title,
-          t.tutor_name as tutor_name
+          t.tutor_name as tutor_name,
+          t.employee_id as tutor_number
         FROM users u
         LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
         ORDER BY u.created_at DESC
