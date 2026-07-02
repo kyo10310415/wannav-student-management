@@ -36,20 +36,21 @@ export async function minutesAutoGenerate() {
   console.log(`[MinutesAutoGen] Start — today=${today}, yesterday=${yesterday}`);
 
   // ── 1. 今日・前日のレッスンがある生徒を取得 ──────────────────────────
-  // lessons テーブルの date カラムで絞り込む
+  // lessons.lesson_date は TIMESTAMP 型。DATE にキャストして比較する
+  // lessons.student_id は学籍番号文字列（students.student_id と同じ型）
   let lessonsResult;
   try {
     lessonsResult = await query(
       `SELECT DISTINCT
-              s.student_id,
-              s.name        AS student_name,
-              l.date        AS lesson_date
+              l.student_id,
+              s.name                              AS student_name,
+              l.lesson_date::date::text           AS lesson_date
          FROM lessons l
-         JOIN students s ON s.id = l.student_id
-        WHERE l.date IN ($1, $2)
-          AND s.student_id IS NOT NULL
-          AND s.student_id <> ''
-        ORDER BY l.date DESC, s.student_id`,
+         LEFT JOIN students s ON s.student_id = l.student_id
+        WHERE l.lesson_date::date IN ($1::date, $2::date)
+          AND l.student_id IS NOT NULL
+          AND l.student_id <> ''
+        ORDER BY lesson_date DESC, l.student_id`,
       [today, yesterday]
     );
   } catch (err) {
@@ -65,14 +66,19 @@ export async function minutesAutoGenerate() {
   console.log(`[MinutesAutoGen] ${candidates.length} lesson(s) found.`);
 
   // ── 2. 既に議事録が存在するものをスキップ ───────────────────────────
-  // (student_id, lesson_date) の組み合わせで既存チェック
-  const pairs = candidates.map(c => `('${c.student_id}','${c.lesson_date}')`).join(',');
   let existingResult;
   try {
+    // 対象の student_id 一覧と日付一覧で絞り込み、後でSetで照合
+    const studentIds = [...new Set(candidates.map(c => c.student_id))];
+    const dates      = [...new Set(candidates.map(c => c.lesson_date))];
+    const sidPlaceholders  = studentIds.map((_, i) => `$${i + 1}`).join(',');
+    const datePlaceholders = dates.map((_, i) => `$${studentIds.length + i + 1}`).join(',');
     existingResult = await query(
       `SELECT student_id, lesson_date::text
          FROM minutes
-        WHERE (student_id, lesson_date::text) IN (${pairs})`
+        WHERE student_id IN (${sidPlaceholders})
+          AND lesson_date::text IN (${datePlaceholders})`,
+      [...studentIds, ...dates]
     );
   } catch (err) {
     console.error('[MinutesAutoGen] Failed to query existing minutes:', err.message);
