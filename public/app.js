@@ -287,6 +287,14 @@ function renderHeader() {
               <button id="nav-daily-reports" onclick="changePage('daily-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'daily-reports' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-clipboard-list mr-2"></i>日報管理
               </button>
+              <button id="nav-minutes" onclick="changePage('minutes')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-teal-600' : 'bg-teal-600 text-white hover:bg-teal-700'}">
+                <i class="fas fa-file-alt mr-2"></i>議事録
+              </button>
+              ${currentUser && currentUser.role === 'admin' ? `
+              <button id="nav-lesson-contents" onclick="changePage('lesson-contents')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-contents' ? 'bg-white text-teal-600' : 'bg-teal-600 text-white hover:bg-teal-700'}">
+                <i class="fas fa-book-open mr-2"></i>レッスン内容管理
+              </button>
+              ` : ''}
               ${currentUser && currentUser.role === 'admin' ? `
               <button id="nav-tutor-red-list" onclick="changePage('tutor-red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-exclamation-triangle mr-2"></i>Tutorレッドリスト
@@ -738,6 +746,10 @@ async function renderApp() {
     await renderTutorRedListPage();
   } else if (currentPage === 'daily-reports') {
     await renderDailyReportsPage();
+  } else if (currentPage === 'minutes') {
+    await renderMinutesPage();
+  } else if (currentPage === 'lesson-contents') {
+    await renderLessonContentsPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -1103,6 +1115,7 @@ function renderStudentRows() {
             ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
             ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+            ${student.student_id ? `<button onclick="openMinutesForStudent('${student.student_id}', '${escapeHtml(student.name||'')}')" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
       </tr>
@@ -2389,6 +2402,7 @@ function renderStudentRowsSimple() {
               ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-sm"></i></span>'}
               ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-sm"></i></span>'}
               ${student.student_id ? `<button onclick="showStudentVQHistory('${student.student_id}')" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-sm"></i></span>'}
+              ${student.student_id ? `<button onclick="openMinutesForStudent('${student.student_id}', '${escapeHtml(student.name||'')}')" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-sm"></i></span>'}
             </div>
           </div>
         </div>
@@ -4210,6 +4224,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
             ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
             ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+            ${student.student_id ? `<button onclick="openMinutesForStudent('${student.student_id}', '${escapeHtml(student.name||'')}')" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
@@ -17579,5 +17594,541 @@ function _applyStudentsPageTab() {
   // 退会申請タブを開いた時だけ一覧を読み込む
   if (isWithdrawal) {
     loadWithdrawalList();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 議事録ページ（生徒別・日付降順一覧 + 生成ボタン）
+// ═══════════════════════════════════════════════════════════════
+
+let minutesCurrentStudentId   = null;
+let minutesCurrentStudentName = null;
+let minutesListCache          = [];
+let minutesTemplates          = [];
+
+/** 議事録ページを開く（生徒指定） */
+async function openMinutesForStudent(studentId, studentName) {
+  minutesCurrentStudentId   = studentId;
+  minutesCurrentStudentName = studentName;
+  await changePage('minutes');
+}
+
+async function renderMinutesPage() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="max-w-4xl mx-auto px-4 py-6">
+      <div class="flex items-center gap-3 mb-6">
+        <button onclick="changePage('students')" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-arrow-left text-lg"></i>
+        </button>
+        <h1 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-file-alt mr-2 text-teal-600"></i>議事録
+          ${minutesCurrentStudentName ? `<span class="text-lg text-gray-500 ml-2">— ${escapeHtml(minutesCurrentStudentName)}</span>` : ''}
+        </h1>
+      </div>
+
+      <!-- 生徒選択（直接アクセス時） -->
+      ${!minutesCurrentStudentId ? `
+      <div class="bg-white rounded-lg shadow p-4 mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">生徒を選択して議事録を表示</label>
+        <div class="flex gap-2">
+          <input id="minutes-student-input" type="text" placeholder="学籍番号または生徒名を入力"
+                 class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          <button onclick="minutesSearchStudent()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+            <i class="fas fa-search mr-1"></i>検索
+          </button>
+        </div>
+        <div id="minutes-student-results" class="mt-2"></div>
+      </div>
+      ` : ''}
+
+      <!-- 議事録生成パネル -->
+      ${minutesCurrentStudentId ? `
+      <div class="bg-white rounded-lg shadow p-4 mb-4">
+        <h2 class="font-semibold text-gray-700 mb-3"><i class="fas fa-magic mr-2 text-teal-500"></i>新しい議事録を生成</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">レッスン日</label>
+            <input id="minutes-gen-date" type="date" value="${getTodayJST()}"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">レッスン番号（任意）</label>
+            <input id="minutes-gen-number" type="number" min="1" placeholder="例: 5"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div class="flex items-end">
+            <button id="minutes-gen-btn" onclick="generateMinutes()" 
+                    class="w-full px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 flex items-center justify-center gap-2">
+              <i class="fas fa-robot"></i>AI生成
+            </button>
+          </div>
+        </div>
+        <div id="minutes-gen-status" class="mt-2 text-sm text-gray-500 hidden"></div>
+      </div>
+      ` : ''}
+
+      <!-- テンプレート設定リンク -->
+      <div class="flex justify-end mb-3">
+        <button onclick="showMinutesTemplateModal()" 
+                class="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1">
+          <i class="fas fa-cog"></i>テンプレート設定
+        </button>
+      </div>
+
+      <!-- 議事録一覧 -->
+      <div id="minutes-list-container">
+        <div class="text-center py-8 text-gray-400">
+          <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+          <p>読み込み中...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 議事録詳細モーダル -->
+    <div id="minutes-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+          <h3 class="text-lg font-bold text-gray-800" id="minutes-modal-title">議事録</h3>
+          <button onclick="closeMinutesModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto px-6 py-4">
+          <textarea id="minutes-modal-text" rows="24"
+                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-teal-400 resize-y"></textarea>
+        </div>
+        <div class="px-6 py-3 border-t flex gap-2 justify-end">
+          <button onclick="saveMinutesEdit()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+            <i class="fas fa-save mr-1"></i>保存
+          </button>
+          <button onclick="closeMinutesModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- テンプレートモーダル -->
+    <div id="minutes-template-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+          <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-cog mr-2 text-teal-600"></i>議事録テンプレート設定</h3>
+          <button onclick="closeMinutesTemplateModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto px-6 py-4">
+          <p class="text-xs text-gray-500 mb-3">
+            使用できるプレースホルダー：{{student_name}} {{student_id}} {{lesson_date}} {{lesson_number}} {{today_lesson_content}} {{next_lesson_content}} {{summary}} {{notes}}
+          </p>
+          <div id="minutes-template-editor">読み込み中...</div>
+        </div>
+        <div class="px-6 py-3 border-t flex gap-2 justify-end">
+          <button onclick="saveMinutesTemplate()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+            <i class="fas fa-save mr-1"></i>保存
+          </button>
+          <button onclick="closeMinutesTemplateModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (minutesCurrentStudentId) {
+    await loadMinutesList();
+  }
+}
+
+function getTodayJST() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().slice(0, 10);
+}
+
+async function loadMinutesList() {
+  const container = document.getElementById('minutes-list-container');
+  if (!container || !minutesCurrentStudentId) return;
+  try {
+    const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    minutesListCache = res.data.data || [];
+    renderMinutesList();
+  } catch (err) {
+    container.innerHTML = `<p class="text-red-500 text-sm p-4">読み込み失敗: ${err.message}</p>`;
+  }
+}
+
+function renderMinutesList() {
+  const container = document.getElementById('minutes-list-container');
+  if (!container) return;
+  if (minutesListCache.length === 0) {
+    container.innerHTML = `<div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+      <i class="fas fa-file-alt text-4xl mb-2"></i><p>議事録がありません</p></div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="bg-white rounded-lg shadow divide-y">
+      ${minutesListCache.map(m => `
+        <div class="px-5 py-4 flex items-center gap-4 hover:bg-gray-50 cursor-pointer" onclick="openMinutesDetail(${m.id})">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-gray-800">${escapeHtml(m.lesson_date || '')}</span>
+              ${m.lesson_number ? `<span class="text-xs bg-teal-100 text-teal-700 rounded px-2 py-0.5">${m.lesson_number}回目</span>` : ''}
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5 truncate">${escapeHtml(m.drive_file_name || '')}</p>
+            <p class="text-sm text-gray-600 mt-1 line-clamp-2">${escapeHtml((m.preview || '').replace(/\n/g, ' '))}</p>
+          </div>
+          <div class="flex gap-2 flex-shrink-0">
+            <button onclick="event.stopPropagation(); openMinutesDetail(${m.id})"
+                    class="px-3 py-1.5 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">
+              <i class="fas fa-eye mr-1"></i>表示
+            </button>
+            <button onclick="event.stopPropagation(); deleteMinutes(${m.id})"
+                    class="px-3 py-1.5 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+let minutesEditingId = null;
+
+async function openMinutesDetail(id) {
+  try {
+    const res  = await axios.get(`/api/minutes/detail/${id}`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    const m = res.data.data;
+    minutesEditingId = id;
+    document.getElementById('minutes-modal-title').textContent =
+      `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${m.lesson_number}回目)` : ''}`;
+    document.getElementById('minutes-modal-text').value = m.generated_text || '';
+    document.getElementById('minutes-detail-modal').classList.remove('hidden');
+  } catch (err) {
+    showNotification('議事録の読み込みに失敗しました', 'error');
+  }
+}
+
+function closeMinutesModal() {
+  document.getElementById('minutes-detail-modal').classList.add('hidden');
+  minutesEditingId = null;
+}
+
+async function saveMinutesEdit() {
+  if (!minutesEditingId) return;
+  const text = document.getElementById('minutes-modal-text').value;
+  try {
+    await axios.put(`/api/minutes/${minutesEditingId}`, { generated_text: text }, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    showNotification('議事録を保存しました', 'success');
+    closeMinutesModal();
+    await loadMinutesList();
+  } catch (err) {
+    showNotification('保存に失敗しました: ' + err.message, 'error');
+  }
+}
+
+async function generateMinutes() {
+  const dateEl   = document.getElementById('minutes-gen-date');
+  const numberEl = document.getElementById('minutes-gen-number');
+  const btn      = document.getElementById('minutes-gen-btn');
+  const status   = document.getElementById('minutes-gen-status');
+  if (!dateEl || !minutesCurrentStudentId) return;
+
+  const lessonDate   = dateEl.value;
+  const lessonNumber = numberEl.value ? parseInt(numberEl.value) : null;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>生成中...';
+  status.textContent = 'Google Driveから文字起こしを取得中...';
+  status.classList.remove('hidden');
+
+  try {
+    const res = await axios.post('/api/minutes/generate', {
+      studentId:    minutesCurrentStudentId,
+      studentName:  minutesCurrentStudentName,
+      lessonDate,
+      lessonNumber,
+    }, { headers: { Authorization: `Bearer ${authToken}` }, timeout: 120000 });
+
+    showNotification('議事録を生成しました', 'success');
+    status.classList.add('hidden');
+    await loadMinutesList();
+    // 生成後すぐに詳細を開く
+    openMinutesDetail(res.data.data.id);
+  } catch (err) {
+    const msg = err.response?.data?.error || err.message;
+    showNotification('生成失敗: ' + msg, 'error');
+    status.textContent = 'エラー: ' + msg;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-robot"></i>AI生成';
+  }
+}
+
+async function deleteMinutes(id) {
+  if (!confirm('この議事録を削除しますか？')) return;
+  try {
+    await axios.delete(`/api/minutes/${id}`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    showNotification('削除しました', 'success');
+    await loadMinutesList();
+  } catch (err) {
+    showNotification('削除に失敗しました', 'error');
+  }
+}
+
+// ── テンプレートモーダル ─────────────────────────────────────
+
+async function showMinutesTemplateModal() {
+  document.getElementById('minutes-template-modal').classList.remove('hidden');
+  const editor = document.getElementById('minutes-template-editor');
+  editor.innerHTML = '<p class="text-gray-400 text-sm">読み込み中...</p>';
+  try {
+    const res = await axios.get('/api/minutes/templates', {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    minutesTemplates = res.data.data || [];
+    if (minutesTemplates.length === 0) {
+      editor.innerHTML = '<p class="text-red-500 text-sm">テンプレートが見つかりません</p>';
+      return;
+    }
+    const t = minutesTemplates[0];
+    editor.innerHTML = `
+      <input type="hidden" id="tmpl-id" value="${t.id}">
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">テンプレート名</label>
+        <input id="tmpl-name" type="text" value="${escapeHtml(t.name || '')}"
+               class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">テンプレート本文</label>
+        <textarea id="tmpl-text" rows="18"
+                  class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-teal-400 resize-y">${escapeHtml(t.template_text || '')}</textarea>
+      </div>`;
+  } catch (err) {
+    editor.innerHTML = `<p class="text-red-500 text-sm">読み込み失敗: ${err.message}</p>`;
+  }
+}
+
+function closeMinutesTemplateModal() {
+  document.getElementById('minutes-template-modal').classList.add('hidden');
+}
+
+async function saveMinutesTemplate() {
+  const id   = document.getElementById('tmpl-id')?.value;
+  const name = document.getElementById('tmpl-name')?.value;
+  const text = document.getElementById('tmpl-text')?.value;
+  if (!id || text == null) return;
+  try {
+    await axios.put(`/api/minutes/templates/${id}`, { name, template_text: text }, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    showNotification('テンプレートを保存しました', 'success');
+    closeMinutesTemplateModal();
+  } catch (err) {
+    showNotification('保存に失敗しました: ' + err.message, 'error');
+  }
+}
+
+async function minutesSearchStudent() {
+  const q = document.getElementById('minutes-student-input')?.value?.trim();
+  if (!q) return;
+  const results = document.getElementById('minutes-student-results');
+  results.innerHTML = '<p class="text-xs text-gray-400">検索中...</p>';
+  // キャッシュから検索
+  const matched = (students || []).filter(s =>
+    s.student_id === q || (s.name || '').includes(q)
+  ).slice(0, 10);
+  if (matched.length === 0) {
+    results.innerHTML = '<p class="text-xs text-red-500">該当する生徒が見つかりません</p>';
+    return;
+  }
+  results.innerHTML = `<div class="flex flex-wrap gap-2 mt-1">${matched.map(s => `
+    <button onclick="minutesCurrentStudentId='${s.student_id}'; minutesCurrentStudentName='${escapeHtml(s.name||'')}'; renderMinutesPage()"
+            class="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs hover:bg-teal-200">
+      ${escapeHtml(s.name || s.student_id)} (${s.student_id})
+    </button>`).join('')}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// レッスン内容管理ページ（管理者のみ）
+// ═══════════════════════════════════════════════════════════════
+
+let lessonContentsCache = [];
+
+async function renderLessonContentsPage() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="max-w-3xl mx-auto px-4 py-6">
+      <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-book-open mr-2 text-teal-600"></i>レッスン内容管理
+        </h1>
+        <button onclick="showAddLessonContentForm()"
+                class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700">
+          <i class="fas fa-plus mr-1"></i>追加
+        </button>
+      </div>
+
+      <!-- 追加フォーム（初期非表示） -->
+      <div id="lc-add-form" class="bg-white rounded-lg shadow p-4 mb-4 hidden">
+        <h2 class="font-semibold text-gray-700 mb-3">新規レッスン内容追加</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">レッスン番号 <span class="text-red-500">*</span></label>
+            <input id="lc-new-number" type="number" min="1" placeholder="例: 1"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div class="md:col-span-3">
+            <label class="block text-xs text-gray-500 mb-1">タイトル</label>
+            <input id="lc-new-title" type="text" placeholder="例: 基本ポーズ練習"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="block text-xs text-gray-500 mb-1">内容詳細</label>
+          <textarea id="lc-new-content" rows="4" placeholder="このレッスンで行う内容の詳細..."
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 resize-y"></textarea>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button onclick="addLessonContent()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+            <i class="fas fa-save mr-1"></i>保存
+          </button>
+          <button onclick="document.getElementById('lc-add-form').classList.add('hidden')"
+                  class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">キャンセル</button>
+        </div>
+      </div>
+
+      <!-- 一覧 -->
+      <div id="lc-list-container">
+        <div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-2xl"></i></div>
+      </div>
+    </div>
+  `;
+  await loadLessonContents();
+}
+
+function showAddLessonContentForm() {
+  document.getElementById('lc-add-form').classList.remove('hidden');
+  document.getElementById('lc-new-number').focus();
+}
+
+async function loadLessonContents() {
+  const container = document.getElementById('lc-list-container');
+  try {
+    const res = await axios.get('/api/lesson-contents', {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    lessonContentsCache = res.data.data || [];
+    renderLessonContentsList();
+  } catch (err) {
+    if (container) container.innerHTML = `<p class="text-red-500 text-sm p-4">読み込み失敗: ${err.message}</p>`;
+  }
+}
+
+function renderLessonContentsList() {
+  const container = document.getElementById('lc-list-container');
+  if (!container) return;
+  if (lessonContentsCache.length === 0) {
+    container.innerHTML = `<div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+      <i class="fas fa-book-open text-4xl mb-2"></i><p>レッスン内容が登録されていません</p></div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="bg-white rounded-lg shadow divide-y">
+      ${lessonContentsCache.map(lc => `
+        <div class="px-5 py-4" id="lc-row-${lc.lesson_number}">
+          <div class="flex items-start gap-3">
+            <span class="flex-shrink-0 w-10 h-10 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center font-bold text-sm">
+              ${lc.lesson_number}
+            </span>
+            <div class="flex-1 min-w-0">
+              <div id="lc-view-${lc.lesson_number}">
+                <p class="font-semibold text-gray-800">${escapeHtml(lc.title || `レッスン${lc.lesson_number}`)}</p>
+                <p class="text-sm text-gray-600 mt-1 whitespace-pre-wrap">${escapeHtml(lc.content || '')}</p>
+              </div>
+              <div id="lc-edit-${lc.lesson_number}" class="hidden">
+                <input id="lc-edit-title-${lc.lesson_number}" type="text" value="${escapeHtml(lc.title || '')}"
+                       class="w-full border rounded px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-teal-400">
+                <textarea id="lc-edit-content-${lc.lesson_number}" rows="4"
+                          class="w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-teal-400 resize-y">${escapeHtml(lc.content || '')}</textarea>
+                <div class="flex gap-2 mt-2">
+                  <button onclick="saveLessonContent(${lc.lesson_number})"
+                          class="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">保存</button>
+                  <button onclick="cancelEditLessonContent(${lc.lesson_number})"
+                          class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">キャンセル</button>
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-1 flex-shrink-0">
+              <button onclick="editLessonContent(${lc.lesson_number})"
+                      class="p-1.5 text-gray-400 hover:text-teal-600" title="編集">
+                <i class="fas fa-edit text-sm"></i>
+              </button>
+              <button onclick="deleteLessonContent(${lc.lesson_number})"
+                      class="p-1.5 text-gray-400 hover:text-red-600" title="削除">
+                <i class="fas fa-trash text-sm"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function editLessonContent(num) {
+  document.getElementById(`lc-view-${num}`).classList.add('hidden');
+  document.getElementById(`lc-edit-${num}`).classList.remove('hidden');
+}
+
+function cancelEditLessonContent(num) {
+  document.getElementById(`lc-view-${num}`).classList.remove('hidden');
+  document.getElementById(`lc-edit-${num}`).classList.add('hidden');
+}
+
+async function saveLessonContent(num) {
+  const title   = document.getElementById(`lc-edit-title-${num}`)?.value;
+  const content = document.getElementById(`lc-edit-content-${num}`)?.value;
+  try {
+    await axios.put(`/api/lesson-contents/${num}`, { title, content }, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    showNotification('保存しました', 'success');
+    await loadLessonContents();
+  } catch (err) {
+    showNotification('保存に失敗しました', 'error');
+  }
+}
+
+async function addLessonContent() {
+  const num     = parseInt(document.getElementById('lc-new-number')?.value);
+  const title   = document.getElementById('lc-new-title')?.value;
+  const content = document.getElementById('lc-new-content')?.value;
+  if (!num) { showNotification('レッスン番号を入力してください', 'error'); return; }
+  try {
+    await axios.post('/api/lesson-contents', { lesson_number: num, title, content }, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    showNotification('追加しました', 'success');
+    document.getElementById('lc-add-form').classList.add('hidden');
+    document.getElementById('lc-new-number').value  = '';
+    document.getElementById('lc-new-title').value   = '';
+    document.getElementById('lc-new-content').value = '';
+    await loadLessonContents();
+  } catch (err) {
+    showNotification('追加に失敗しました: ' + err.message, 'error');
+  }
+}
+
+async function deleteLessonContent(num) {
+  if (!confirm(`レッスン${num}の内容を削除しますか？`)) return;
+  try {
+    await axios.delete(`/api/lesson-contents/${num}`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    showNotification('削除しました', 'success');
+    await loadLessonContents();
+  } catch (err) {
+    showNotification('削除に失敗しました', 'error');
   }
 }

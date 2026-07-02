@@ -1029,6 +1029,82 @@ const migrations = [
       DROP TABLE IF EXISTS withdrawal_requests;
       DELETE FROM students WHERE student_id = '1111';
     `
+  },
+  {
+    version: 43,
+    name: 'create_minutes_lesson_contents_tables',
+    up: `
+      -- 議事録テンプレートテーブル
+      CREATE TABLE IF NOT EXISTS minutes_templates (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL DEFAULT 'デフォルトテンプレート',
+        template_text TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- デフォルトテンプレートを1件挿入
+      INSERT INTO minutes_templates (name, template_text)
+      VALUES (
+        'デフォルトテンプレート',
+        '# レッスン議事録
+
+## 生徒情報
+- 生徒名: {{student_name}}
+- 学籍番号: {{student_id}}
+- レッスン日: {{lesson_date}}
+- レッスン番号: {{lesson_number}}回目
+
+## 今回のレッスン内容
+{{today_lesson_content}}
+
+## 今日の成果・振り返り
+{{summary}}
+
+## 次回レッスン予定
+{{next_lesson_content}}
+
+## その他メモ
+{{notes}}'
+      )
+      ON CONFLICT DO NOTHING;
+
+      -- レッスン内容マスターテーブル（レッスン番号順に管理）
+      CREATE TABLE IF NOT EXISTS lesson_contents (
+        id SERIAL PRIMARY KEY,
+        lesson_number INTEGER NOT NULL UNIQUE,
+        title VARCHAR(255) NOT NULL DEFAULT '',
+        content TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_lesson_contents_lesson_number ON lesson_contents(lesson_number);
+
+      -- 議事録テーブル
+      CREATE TABLE IF NOT EXISTS minutes (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) NOT NULL,
+        student_name VARCHAR(255),
+        lesson_date DATE NOT NULL,
+        lesson_number INTEGER,
+        drive_file_id VARCHAR(255),
+        drive_file_name TEXT,
+        transcript TEXT,
+        generated_text TEXT,
+        template_id INTEGER REFERENCES minutes_templates(id) ON DELETE SET NULL,
+        created_by VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_minutes_student_id ON minutes(student_id);
+      CREATE INDEX IF NOT EXISTS idx_minutes_lesson_date ON minutes(lesson_date DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_minutes_student_date ON minutes(student_id, lesson_date);
+    `,
+    down: `
+      DROP TABLE IF EXISTS minutes;
+      DROP TABLE IF EXISTS lesson_contents;
+      DROP TABLE IF EXISTS minutes_templates;
+    `
   }
 ];
 
