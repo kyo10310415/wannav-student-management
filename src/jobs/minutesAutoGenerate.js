@@ -108,7 +108,18 @@ export async function minutesAutoGenerate() {
     console.warn('[MinutesAutoGen] Could not fetch template, using default:', err.message);
   }
 
-  // ── 4. 各生徒について生成 ────────────────────────────────────────────
+  // ── 4. lesson_contents を全件取得しておく（番号→内容のMap） ─────────
+  const lessonContentsMap = new Map(); // key: lesson_number(int), value: content(string)
+  try {
+    const lcRes = await query('SELECT lesson_number, title, content FROM lesson_contents ORDER BY lesson_number ASC');
+    for (const row of lcRes.rows) {
+      lessonContentsMap.set(row.lesson_number, { title: row.title, content: row.content });
+    }
+  } catch (err) {
+    console.warn('[MinutesAutoGen] Could not fetch lesson_contents:', err.message);
+  }
+
+  // ── 5. 各生徒について生成 ────────────────────────────────────────────
   let successCount = 0;
   let skipCount    = 0;
   let errorCount   = 0;
@@ -126,15 +137,46 @@ export async function minutesAutoGenerate() {
         continue;
       }
 
-      // レッスン番号は自動生成時には不明なので null
+      // lesson_reports から当日のレッスン番号を取得
+      let lessonNumber  = null;
+      let todayContent  = '';
+      let nextContent   = '';
+      try {
+        const lrRes = await query(
+          `SELECT lesson_number FROM lesson_reports
+            WHERE student_id = $1
+              AND lesson_date::date = $2::date
+            ORDER BY reported_at DESC
+            LIMIT 1`,
+          [student_id, lesson_date]
+        );
+        if (lrRes.rows.length > 0) {
+          const rawNum = lrRes.rows[0].lesson_number;
+          // "1"〜"28" など数値文字列。PROプランは null 扱い
+          const parsed = parseInt(rawNum, 10);
+          if (!isNaN(parsed)) {
+            lessonNumber = parsed;
+            // lesson_contents から今回・次回の内容を取得
+            const todayRow = lessonContentsMap.get(lessonNumber);
+            const nextRow  = lessonContentsMap.get(lessonNumber + 1);
+            todayContent = todayRow ? `${todayRow.title}\n${todayRow.content}`.trim() : '';
+            nextContent  = nextRow  ? `${nextRow.title}\n${nextRow.content}`.trim() : '';
+          }
+        }
+      } catch (err) {
+        console.warn(`${tag} Could not fetch lesson_number from lesson_reports:`, err.message);
+      }
+
+      console.log(`${tag} lessonNumber=${lessonNumber}, todayContent=${todayContent ? '有り' : '無し'}, nextContent=${nextContent ? '有り' : '無し'}`);
+
       const generatedText = await buildMinutesText({
         templateText: template.template_text,
         studentName:  student_name || student_id,
         studentId:    student_id,
         lessonDate:   lesson_date,
-        lessonNumber: null,
-        todayContent: '',
-        nextContent:  '',
+        lessonNumber,
+        todayContent,
+        nextContent,
         transcript:   driveResult.transcript,
       });
 
