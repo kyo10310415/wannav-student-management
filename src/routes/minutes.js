@@ -58,6 +58,32 @@ app.put('/templates/:id', async (c) => {
 
 // ─── 議事録一覧 ────────────────────────────────────────────────
 
+/** 全生徒の議事録一覧（生徒名・日付降順） */
+app.get('/all', async (c) => {
+  try {
+    const limit  = parseInt(c.req.query('limit')  || '100', 10);
+    const offset = parseInt(c.req.query('offset') || '0',   10);
+    const result = await query(
+      `SELECT id, student_id, student_name, lesson_date, lesson_number,
+              drive_file_name, created_at, updated_at,
+              LEFT(generated_text, 200) AS preview
+         FROM minutes
+        ORDER BY lesson_date DESC, student_id ASC
+        LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    const countRes = await query('SELECT COUNT(*) AS total FROM minutes');
+    return c.json({
+      success: true,
+      data:    result.rows,
+      total:   parseInt(countRes.rows[0].total, 10),
+    });
+  } catch (err) {
+    console.error('[Minutes] GET /all error:', err);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 /** 生徒の議事録一覧（日付降順） */
 app.get('/list/:studentId', async (c) => {
   try {

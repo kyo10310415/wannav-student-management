@@ -189,7 +189,7 @@ function renderHeader() {
 
   // Build minutes button (admin or leader)
   const minutesButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-    <button id="nav-minutes" onclick="changePage('minutes')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-minutes" onclick="minutesCurrentStudentId=null; minutesCurrentStudentName=null; changePage('minutes')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-file-alt mr-2"></i>議事録
     </button>
   ` : '';
@@ -17626,31 +17626,46 @@ async function renderMinutesPage() {
   content.innerHTML = `
     <div class="max-w-4xl mx-auto px-4 py-6">
       <div class="flex items-center gap-3 mb-6">
-        <button onclick="changePage('students')" class="text-gray-500 hover:text-gray-700">
-          <i class="fas fa-arrow-left text-lg"></i>
-        </button>
+        ${minutesCurrentStudentId
+          ? `<button onclick="minutesCurrentStudentId=null; minutesCurrentStudentName=null; renderMinutesPage()" class="text-gray-500 hover:text-gray-700">
+               <i class="fas fa-arrow-left text-lg"></i>
+             </button>`
+          : `<button onclick="changePage('students')" class="text-gray-500 hover:text-gray-700">
+               <i class="fas fa-arrow-left text-lg"></i>
+             </button>`
+        }
         <h1 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-file-alt mr-2 text-teal-600"></i>議事録
-          ${minutesCurrentStudentName ? `<span class="text-lg text-gray-500 ml-2">— ${escapeHtml(minutesCurrentStudentName)}</span>` : ''}
+          ${minutesCurrentStudentName
+            ? `<span class="text-lg text-gray-500 ml-2">— ${escapeHtml(minutesCurrentStudentName)}様</span>`
+            : ''}
         </h1>
       </div>
 
-      <!-- 生徒選択（直接アクセス時） -->
-      ${!minutesCurrentStudentId ? `
+      <!-- 生徒絞り込み検索（常に表示） -->
       <div class="bg-white rounded-lg shadow p-4 mb-4">
-        <label class="block text-sm font-semibold text-gray-700 mb-2">生徒を選択して議事録を表示</label>
+        <label class="block text-sm font-semibold text-gray-700 mb-2">
+          ${minutesCurrentStudentId ? '別の生徒に切り替え' : '生徒を絞り込んで表示'}
+        </label>
         <div class="flex gap-2">
-          <input id="minutes-student-input" type="text" placeholder="学籍番号または生徒名を入力"
+          <input id="minutes-student-input" type="text"
+                 placeholder="学籍番号または生徒名を入力"
                  class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
-          <button onclick="minutesSearchStudent()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+          <button onclick="minutesSearchStudent()"
+                  class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-search mr-1"></i>検索
           </button>
+          ${minutesCurrentStudentId
+            ? `<button onclick="minutesCurrentStudentId=null; minutesCurrentStudentName=null; renderMinutesPage()"
+                       class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">
+                 <i class="fas fa-times mr-1"></i>全件表示
+               </button>`
+            : ''}
         </div>
         <div id="minutes-student-results" class="mt-2"></div>
       </div>
-      ` : ''}
 
-      <!-- 議事録生成パネル -->
+      <!-- 議事録生成パネル（生徒選択時のみ） -->
       ${minutesCurrentStudentId ? `
       <div class="bg-white rounded-lg shadow p-4 mb-4">
         <h2 class="font-semibold text-gray-700 mb-3"><i class="fas fa-magic mr-2 text-teal-500"></i>新しい議事録を生成</h2>
@@ -17666,7 +17681,7 @@ async function renderMinutesPage() {
                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
           </div>
           <div class="flex items-end">
-            <button id="minutes-gen-btn" onclick="generateMinutes()" 
+            <button id="minutes-gen-btn" onclick="generateMinutes()"
                     class="w-full px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 flex items-center justify-center gap-2">
               <i class="fas fa-robot"></i>AI生成
             </button>
@@ -17678,7 +17693,7 @@ async function renderMinutesPage() {
 
       <!-- テンプレート設定リンク -->
       <div class="flex justify-end mb-3">
-        <button onclick="showMinutesTemplateModal()" 
+        <button onclick="showMinutesTemplateModal()"
                 class="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1">
           <i class="fas fa-cog"></i>テンプレート設定
         </button>
@@ -17686,16 +17701,10 @@ async function renderMinutesPage() {
 
       <!-- 議事録一覧 -->
       <div id="minutes-list-container">
-        ${minutesCurrentStudentId
-          ? `<div class="text-center py-8 text-gray-400">
-               <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
-               <p>読み込み中...</p>
-             </div>`
-          : `<div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
-               <i class="fas fa-user-circle text-4xl mb-2"></i>
-               <p>生徒を選択すると議事録一覧が表示されます</p>
-             </div>`
-        }
+        <div class="text-center py-8 text-gray-400">
+          <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+          <p>読み込み中...</p>
+        </div>
       </div>
     </div>
 
@@ -17742,9 +17751,8 @@ async function renderMinutesPage() {
     </div>
   `;
 
-  if (minutesCurrentStudentId) {
-    await loadMinutesList();
-  }
+  // 生徒指定あり・なし問わず一覧をロード
+  await loadMinutesList();
 }
 
 function getTodayJST() {
@@ -17756,16 +17764,20 @@ function getTodayJST() {
 async function loadMinutesList() {
   const container = document.getElementById('minutes-list-container');
   if (!container) return;
-  if (!minutesCurrentStudentId) {
-    container.innerHTML = `<div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
-      <i class="fas fa-user-circle text-4xl mb-2"></i><p>生徒を選択すると議事録一覧が表示されます</p></div>`;
-    return;
-  }
   try {
-    const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
-    minutesListCache = res.data.data || [];
+    if (minutesCurrentStudentId) {
+      // 特定生徒の議事録一覧
+      const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      minutesListCache = res.data.data || [];
+    } else {
+      // 全生徒の議事録一覧
+      const res = await axios.get('/api/minutes/all', {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      minutesListCache = res.data.data || [];
+    }
     renderMinutesList();
   } catch (err) {
     container.innerHTML = `<p class="text-red-500 text-sm p-4">読み込み失敗: ${err.message}</p>`;
@@ -17780,12 +17792,20 @@ function renderMinutesList() {
       <i class="fas fa-file-alt text-4xl mb-2"></i><p>議事録がありません</p></div>`;
     return;
   }
+  const showStudentName = !minutesCurrentStudentId; // 全件表示時は生徒名を表示
   container.innerHTML = `
     <div class="bg-white rounded-lg shadow divide-y">
       ${minutesListCache.map(m => `
         <div class="px-5 py-4 flex items-center gap-4 hover:bg-gray-50 cursor-pointer" onclick="openMinutesDetail(${m.id})">
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              ${showStudentName && m.student_name
+                ? `<button onclick="event.stopPropagation(); minutesCurrentStudentId='${m.student_id}'; minutesCurrentStudentName='${escapeHtml(m.student_name||'')}'; renderMinutesPage()"
+                          class="font-semibold text-teal-700 hover:text-teal-900 hover:underline text-sm">
+                     ${escapeHtml(m.student_name)}様
+                   </button>
+                   <span class="text-gray-300">|</span>`
+                : ''}
               <span class="font-semibold text-gray-800">${escapeHtml(m.lesson_date || '')}</span>
               ${m.lesson_number ? `<span class="text-xs bg-teal-100 text-teal-700 rounded px-2 py-0.5">${m.lesson_number}回目</span>` : ''}
             </div>
