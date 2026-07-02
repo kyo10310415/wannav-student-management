@@ -186,6 +186,20 @@ function renderHeader() {
       <i class="fas fa-trophy mr-2"></i>特典送付済み
     </button>
   ` : '';
+
+  // Build minutes button (admin or leader)
+  const minutesButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+    <button id="nav-minutes" onclick="changePage('minutes')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+      <i class="fas fa-file-alt mr-2"></i>議事録
+    </button>
+  ` : '';
+
+  // Build lesson contents button (admin only)
+  const lessonContentsButton = currentUser && currentUser.role === 'admin' ? `
+    <button id="nav-lesson-contents" onclick="changePage('lesson-contents')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-contents' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+      <i class="fas fa-book-open mr-2"></i>レッスン内容管理
+    </button>
+  ` : '';
   
   console.log('renderHeader - userManagementButton:', userManagementButton ? 'yes' : 'no');
   console.log('renderHeader - databaseManagementButton:', databaseManagementButton ? 'yes' : 'no');
@@ -287,14 +301,6 @@ function renderHeader() {
               <button id="nav-daily-reports" onclick="changePage('daily-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'daily-reports' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-clipboard-list mr-2"></i>日報管理
               </button>
-              <button id="nav-minutes" onclick="changePage('minutes')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-teal-600' : 'bg-teal-600 text-white hover:bg-teal-700'}">
-                <i class="fas fa-file-alt mr-2"></i>議事録
-              </button>
-              ${currentUser && currentUser.role === 'admin' ? `
-              <button id="nav-lesson-contents" onclick="changePage('lesson-contents')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-contents' ? 'bg-white text-teal-600' : 'bg-teal-600 text-white hover:bg-teal-700'}">
-                <i class="fas fa-book-open mr-2"></i>レッスン内容管理
-              </button>
-              ` : ''}
               ${currentUser && currentUser.role === 'admin' ? `
               <button id="nav-tutor-red-list" onclick="changePage('tutor-red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-exclamation-triangle mr-2"></i>Tutorレッドリスト
@@ -305,12 +311,14 @@ function renderHeader() {
               </button>
             </div>
             
-            ${userManagementButton || databaseManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton ? `
+            ${userManagementButton || databaseManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton || minutesButton || lessonContentsButton ? `
               <!-- Divider -->
               <div class="w-px bg-white/30"></div>
               
               <!-- Admin Section (Orange) -->
               <div class="flex gap-2">
+                ${minutesButton}
+                ${lessonContentsButton}
                 ${vqDiagnosisButton}
                 ${lessonReportsButton}
                 ${rouletteWinnersButton}
@@ -12198,7 +12206,7 @@ async function submitLessonReport(studentId, lessonDate, tutorName) {
       tutor_name: tutorName || null
     }, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        'Authorization': `Bearer ${sessionToken}`
       }
     });
     
@@ -17744,7 +17752,7 @@ async function loadMinutesList() {
   if (!container || !minutesCurrentStudentId) return;
   try {
     const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     minutesListCache = res.data.data || [];
     renderMinutesList();
@@ -17793,7 +17801,7 @@ let minutesEditingId = null;
 async function openMinutesDetail(id) {
   try {
     const res  = await axios.get(`/api/minutes/detail/${id}`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     const m = res.data.data;
     minutesEditingId = id;
@@ -17816,7 +17824,7 @@ async function saveMinutesEdit() {
   const text = document.getElementById('minutes-modal-text').value;
   try {
     await axios.put(`/api/minutes/${minutesEditingId}`, { generated_text: text }, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('議事録を保存しました', 'success');
     closeMinutesModal();
@@ -17847,7 +17855,7 @@ async function generateMinutes() {
       studentName:  minutesCurrentStudentName,
       lessonDate,
       lessonNumber,
-    }, { headers: { Authorization: `Bearer ${authToken}` }, timeout: 120000 });
+    }, { headers: { Authorization: `Bearer ${sessionToken}` }, timeout: 120000 });
 
     showNotification('議事録を生成しました', 'success');
     status.classList.add('hidden');
@@ -17868,7 +17876,7 @@ async function deleteMinutes(id) {
   if (!confirm('この議事録を削除しますか？')) return;
   try {
     await axios.delete(`/api/minutes/${id}`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('削除しました', 'success');
     await loadMinutesList();
@@ -17885,7 +17893,7 @@ async function showMinutesTemplateModal() {
   editor.innerHTML = '<p class="text-gray-400 text-sm">読み込み中...</p>';
   try {
     const res = await axios.get('/api/minutes/templates', {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     minutesTemplates = res.data.data || [];
     if (minutesTemplates.length === 0) {
@@ -17921,7 +17929,7 @@ async function saveMinutesTemplate() {
   if (!id || text == null) return;
   try {
     await axios.put(`/api/minutes/templates/${id}`, { name, template_text: text }, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('テンプレートを保存しました', 'success');
     closeMinutesTemplateModal();
@@ -18017,7 +18025,7 @@ async function loadLessonContents() {
   const container = document.getElementById('lc-list-container');
   try {
     const res = await axios.get('/api/lesson-contents', {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     lessonContentsCache = res.data.data || [];
     renderLessonContentsList();
@@ -18091,7 +18099,7 @@ async function saveLessonContent(num) {
   const content = document.getElementById(`lc-edit-content-${num}`)?.value;
   try {
     await axios.put(`/api/lesson-contents/${num}`, { title, content }, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('保存しました', 'success');
     await loadLessonContents();
@@ -18107,7 +18115,7 @@ async function addLessonContent() {
   if (!num) { showNotification('レッスン番号を入力してください', 'error'); return; }
   try {
     await axios.post('/api/lesson-contents', { lesson_number: num, title, content }, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('追加しました', 'success');
     document.getElementById('lc-add-form').classList.add('hidden');
@@ -18124,7 +18132,7 @@ async function deleteLessonContent(num) {
   if (!confirm(`レッスン${num}の内容を削除しますか？`)) return;
   try {
     await axios.delete(`/api/lesson-contents/${num}`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('削除しました', 'success');
     await loadLessonContents();
