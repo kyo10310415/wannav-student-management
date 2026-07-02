@@ -55,6 +55,7 @@ import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
 import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
 import { weeklyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
+import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 
 const app = new Hono();
 
@@ -309,6 +310,20 @@ cron.schedule('0 14 * * *', async () => {
     console.log('[DailyReportReminder] Completed successfully');
   } catch (error) {
     console.error('[DailyReportReminder] Error:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule minutes auto-generation (runs every hour)
+// Generates minutes for today's/yesterday's lessons that don't have minutes yet
+console.log('Minutes auto-generation: ENABLED (checks every hour)');
+cron.schedule('0 * * * *', async () => {
+  console.log('[MinutesAutoGen] Running hourly minutes auto-generation...');
+  try {
+    await minutesAutoGenerate();
+  } catch (error) {
+    console.error('[MinutesAutoGen] Error:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
