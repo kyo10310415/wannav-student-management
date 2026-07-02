@@ -200,7 +200,7 @@ export async function minutesAutoGenerate() {
           student_id,
           student_name || student_id,
           lesson_date,
-          null,           // lesson_number
+          lessonNumber,   // lesson_reports から取得した値（null の場合もある）
           driveResult.fileId,
           driveResult.fileName,
           driveResult.transcript,

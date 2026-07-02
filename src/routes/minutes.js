@@ -125,41 +125,64 @@ app.post('/generate', async (c) => {
       }, 404);
     }
 
-    // 2. レッスン内容取得（今回・次回）
-    let todayContent = '';
-    let nextContent  = '';
-    if (lessonNumber != null) {
-      const todayRow = await query(
-        'SELECT content FROM lesson_contents WHERE lesson_number = $1',
-        [lessonNumber]
-      );
-      const nextRow = await query(
-        'SELECT content FROM lesson_contents WHERE lesson_number = $1',
-        [lessonNumber + 1]
-      );
-      todayContent = todayRow.rows[0]?.content || '';
-      nextContent  = nextRow.rows[0]?.content  || '';
+    // 2. レッスン番号を確定（未指定の場合は lesson_reports から自動取得）
+    let resolvedLessonNumber = lessonNumber ?? null;
+    if (resolvedLessonNumber == null) {
+      try {
+        const lrRes = await query(
+          `SELECT lesson_number FROM lesson_reports
+            WHERE student_id = $1
+              AND lesson_date::date = $2::date
+            ORDER BY reported_at DESC
+            LIMIT 1`,
+          [studentId, lessonDate]
+        );
+        if (lrRes.rows.length > 0) {
+          const parsed = parseInt(lrRes.rows[0].lesson_number, 10);
+          if (!isNaN(parsed)) resolvedLessonNumber = parsed;
+        }
+      } catch (err) {
+        console.warn(`[Minutes] Could not fetch lesson_number from lesson_reports:`, err.message);
+      }
     }
 
-    // 3. テンプレート取得
+    // 3. レッスン内容取得（今回・次回）— lesson_contents から title + content を結合
+    let todayContent = '';
+    let nextContent  = '';
+    if (resolvedLessonNumber != null) {
+      const todayRow = await query(
+        'SELECT title, content FROM lesson_contents WHERE lesson_number = $1',
+        [resolvedLessonNumber]
+      );
+      const nextRow = await query(
+        'SELECT title, content FROM lesson_contents WHERE lesson_number = $1',
+        [resolvedLessonNumber + 1]
+      );
+      const tr = todayRow.rows[0];
+      const nr = nextRow.rows[0];
+      todayContent = tr ? `${tr.title}\n${tr.content}`.trim() : '';
+      nextContent  = nr ? `${nr.title}\n${nr.content}`.trim() : '';
+    }
+
+    // 4. テンプレート取得
     const tmplId  = templateId || 1;
     const tmplRes = await query('SELECT * FROM minutes_templates WHERE id = $1', [tmplId]);
     const template = tmplRes.rows[0] || { template_text: '{{summary}}\n\n{{notes}}' };
 
-    // 4. AI で議事録生成
-    console.log(`[Minutes] Generating minutes with AI...`);
+    // 5. AI で議事録生成
+    console.log(`[Minutes] Generating minutes with AI... (lessonNumber=${resolvedLessonNumber})`);
     const generatedText = await buildMinutesText({
       templateText: template.template_text,
       studentName:  studentName || studentId,
       studentId,
       lessonDate,
-      lessonNumber: lessonNumber ?? null,
+      lessonNumber: resolvedLessonNumber,
       todayContent,
       nextContent,
       transcript:   driveResult.transcript,
     });
 
-    // 5. UPSERT
+    // 6. UPSERT
     const upsertResult = await query(
       `INSERT INTO minutes
           (student_id, student_name, lesson_date, lesson_number,
@@ -181,7 +204,7 @@ app.post('/generate', async (c) => {
         studentId,
         studentName || studentId,
         lessonDate,
-        lessonNumber ?? null,
+        resolvedLessonNumber,
         driveResult.fileId,
         driveResult.fileName,
         driveResult.transcript,
