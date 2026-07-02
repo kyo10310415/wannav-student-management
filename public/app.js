@@ -17686,10 +17686,16 @@ async function renderMinutesPage() {
 
       <!-- 議事録一覧 -->
       <div id="minutes-list-container">
-        <div class="text-center py-8 text-gray-400">
-          <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
-          <p>読み込み中...</p>
-        </div>
+        ${minutesCurrentStudentId
+          ? `<div class="text-center py-8 text-gray-400">
+               <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+               <p>読み込み中...</p>
+             </div>`
+          : `<div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+               <i class="fas fa-user-circle text-4xl mb-2"></i>
+               <p>生徒を選択すると議事録一覧が表示されます</p>
+             </div>`
+        }
       </div>
     </div>
 
@@ -17749,7 +17755,12 @@ function getTodayJST() {
 
 async function loadMinutesList() {
   const container = document.getElementById('minutes-list-container');
-  if (!container || !minutesCurrentStudentId) return;
+  if (!container) return;
+  if (!minutesCurrentStudentId) {
+    container.innerHTML = `<div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+      <i class="fas fa-user-circle text-4xl mb-2"></i><p>生徒を選択すると議事録一覧が表示されます</p></div>`;
+    return;
+  }
   try {
     const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
       headers: { Authorization: `Bearer ${sessionToken}` }
