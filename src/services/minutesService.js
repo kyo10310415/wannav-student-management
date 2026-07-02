@@ -41,16 +41,19 @@ export function applyTemplate(templateText, vars) {
 export async function generateMinutesContent(transcript, studentName, todayContent, nextContent) {
   const client = getOpenAIClient();
 
+  // 敬称を「様」に統一
+  const studentNameSama = studentName ? `${studentName}様` : '生徒様';
+
   const systemPrompt = `あなたはVTuberスクールのレッスン議事録を作成するアシスタントです。
 レッスンの文字起こしテキストをもとに、議事録に必要な情報を抽出・整理してください。
 以下の2点を日本語で出力してください：
-1. summary（今日の成果・振り返り）: レッスンで学んだこと、実践したこと、生徒の状況を簡潔に3〜5点でまとめてください
-2. notes（その他メモ）: 特記事項、次回への申し送り、懸念事項などがあれば記載してください。なければ「なし」と記載してください
+1. summary（今日の成果・振り返り）: レッスンで学んだこと、実践したこと、生徒の状況を簡潔に3〜5点の箇条書きでまとめてください。生徒への敬称は必ず「様」を使ってください（例: 鈴木様）。
+2. notes（その他メモ）: 特記事項、次回への申し送り、懸念事項などがあれば記載してください。なければ「なし」と記載してください。
 
 必ずJSON形式で出力してください:
 {"summary": "...", "notes": "..."}`;
 
-  const userPrompt = `【生徒名】${studentName}
+  const userPrompt = `【生徒名】${studentNameSama}
 【今回のレッスン内容】${todayContent || '（未設定）'}
 【次回のレッスン内容】${nextContent || '（未設定）'}
 
@@ -111,10 +114,10 @@ export async function buildMinutesText(params) {
 
   // テンプレートに流し込む
   return applyTemplate(templateText, {
-    student_name:         studentName  || '',
+    student_name:         studentName  ? `${studentName}様` : '',
     student_id:           studentId    || '',
     lesson_date:          lessonDate   || '',
-    lesson_number:        lessonNumber != null ? String(lessonNumber) : '?',
+    lesson_number:        lessonNumber != null ? String(lessonNumber) : '（未確認）',
     today_lesson_content: todayContent || '（未設定）',
     next_lesson_content:  nextContent  || '（未設定）',
     summary,
