@@ -57,6 +57,7 @@ let scheduleTab = 'confirmed'; // confirmed (受理済み) or pending (申請中
 let columnFilters = {}; // { columnName: selectedValue }
 let sortColumn = null; // Current sort column name
 let sortDirection = 'asc'; // 'asc' or 'desc'
+let studentSearchQuery = ''; // 生徒名・学籍番号の横断検索ワード
 
 // Debug flag for lesson reports (can be toggled in console)
 window.debugLessonReport = false;
@@ -848,6 +849,23 @@ function renderReservationsPage() {
           <i class="fas fa-hand-paper mr-2"></i>助っ人Tutor依頼
         </button>
       </div>
+
+      <!-- 生徒検索 -->
+      <div class="mt-3 flex gap-2 items-center">
+        <div class="relative flex-1 max-w-sm">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+          <input id="student-search-reservations" type="text"
+                 placeholder="生徒名・学籍番号で検索..."
+                 value="${escapeHtml(studentSearchQuery)}"
+                 oninput="studentSearchQuery=this.value; renderStudentTable()"
+                 class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        ${studentSearchQuery ? `
+        <button onclick="studentSearchQuery=''; document.getElementById('student-search-reservations').value=''; renderStudentTable()"
+                class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-1">
+          <i class="fas fa-times"></i>クリア
+        </button>` : ''}
+      </div>
     </div>
 
     <!-- Statistics (only Active students with レッスン中 or PROプラン) -->
@@ -908,7 +926,7 @@ function renderReservationsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
+          <tbody id="student-table-body" class="bg-white divide-y divide-gray-200">
             ${renderStudentRows()}
           </tbody>
         </table>
@@ -1261,6 +1279,15 @@ function getFilteredStudents() {
     }
   }
   
+  // 生徒名・学籍番号の横断検索（予約管理・生徒管理ページ共通）
+  if (studentSearchQuery.trim()) {
+    const q = studentSearchQuery.trim().toLowerCase();
+    filtered = filtered.filter(s =>
+      (s.name         && s.name.toLowerCase().includes(q)) ||
+      (s.student_id   && s.student_id.toLowerCase().includes(q))
+    );
+  }
+
   return filtered;
 }
 
@@ -1643,6 +1670,23 @@ function renderStudentsPage() {
           <i class="fas fa-list mr-2"></i>退会申請一覧
         </button>
       </div>
+
+      <!-- 生徒検索 -->
+      <div class="mt-3 flex gap-2 items-center">
+        <div class="relative flex-1 max-w-sm">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+          <input id="student-search-students" type="text"
+                 placeholder="生徒名・学籍番号で検索..."
+                 value="${escapeHtml(studentSearchQuery)}"
+                 oninput="studentSearchQuery=this.value; renderStudentsCards()"
+                 class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        ${studentSearchQuery ? `
+        <button onclick="studentSearchQuery=''; renderStudentsPage()"
+                class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-1">
+          <i class="fas fa-times"></i>クリア
+        </button>` : ''}
+      </div>
     </div>
 
     <!-- ▼ 生徒一覧タブコンテンツ -->
@@ -1775,7 +1819,7 @@ function renderStudentsPage() {
       </div>
       
       <!-- Student Cards Container -->
-      <div class="space-y-2">
+      <div id="students-cards-container" class="space-y-2">
         ${renderStudentRowsSimple()}
       </div>
       
@@ -4386,7 +4430,31 @@ function clearAllFilters() {
   columnFilters = {};
   sortColumn = null;
   sortDirection = 'asc';
+  studentSearchQuery = '';
   renderApp();
+}
+
+/**
+ * 予約管理ページの生徒テーブルbodyだけを再描画する（API呼び出しなし）
+ * 検索欄の入力時に呼ばれる
+ */
+function renderStudentTable() {
+  const tbody = document.getElementById('student-table-body');
+  if (!tbody) {
+    // tbodyが見つからない場合（まだページが描画されていない）は何もしない
+    return;
+  }
+  tbody.innerHTML = renderStudentRows();
+}
+
+/**
+ * 生徒管理ページのカード一覧部分だけを再描画する（API呼び出しなし）
+ * 検索欄の入力時に呼ばれる
+ */
+function renderStudentsCards() {
+  const container = document.getElementById('students-cards-container');
+  if (!container) return;
+  container.innerHTML = renderStudentRowsSimple();
 }
 
 // Filter options based on search input
