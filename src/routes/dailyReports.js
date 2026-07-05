@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
+import axios from 'axios';
 
 const app = new Hono();
 
@@ -216,7 +217,7 @@ app.delete('/:id', async (c) => {
 
 // ─────────────────────────────────────────────
 // POST /api/daily-reports/:id/comments
-// コメント投稿
+// コメント投稿 → Tutor の Discord に通知
 // Body: { user_id, content }
 // ─────────────────────────────────────────────
 app.post('/:id/comments', async (c) => {
@@ -245,19 +246,103 @@ app.post('/:id/comments', async (c) => {
     `, [user_id]);
 
     const user = userResult.rows[0] || {};
-    return c.json({
-      success: true,
-      data: {
-        ...commentRow,
-        commenter_name: user.commenter_name || '',
-        commenter_role: user.role || ''
-      }
+    const responseData = {
+      ...commentRow,
+      commenter_name: user.commenter_name || '',
+      commenter_role: user.role || ''
+    };
+
+    // ─── Discord 通知（非同期・エラーでもレスポンスは返す） ────────────────
+    sendCommentDiscordNotification({
+      reportId:      id,
+      commenterId:   user_id,
+      commenterName: user.commenter_name || '',
+      commentText:   content.trim(),
+    }).catch(err => {
+      console.error('[DailyReports] Discord notification error (non-fatal):', err.message);
     });
+
+    return c.json({ success: true, data: responseData });
   } catch (error) {
     console.error('[DailyReports] POST /:id/comments error:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });
+
+/**
+ * コメント投稿時に日報のTutorへDiscord通知を送る
+ * - コメント投稿者 = 日報のTutor本人 の場合は送らない
+ */
+async function sendCommentDiscordNotification({ reportId, commenterId, commenterName, commentText }) {
+  // 1. 日報情報 + Tutor の Discord 設定を取得
+  const reportResult = await query(`
+    SELECT
+      dr.id,
+      dr.report_date,
+      dr.tutor_id,
+      t.tutor_name,
+      t.team,
+      u.id          AS tutor_user_id,
+      u.discord_webhook_url,
+      u.discord_user_id
+    FROM daily_reports dr
+    JOIN tutors t ON t.id = dr.tutor_id
+    LEFT JOIN users u ON LOWER(u.email) = LOWER(t.email)
+    WHERE dr.id = $1
+  `, [reportId]);
+
+  if (reportResult.rows.length === 0) {
+    console.warn(`[DailyReports] Discord notify: report ${reportId} not found`);
+    return;
+  }
+
+  const report = reportResult.rows[0];
+
+  // 2. Discord Webhook が未設定なら送らない
+  if (!report.discord_webhook_url) {
+    console.log(`[DailyReports] Discord notify: ${report.tutor_name} has no webhook — skip`);
+    return;
+  }
+
+  // 3. 投稿者 = Tutor 本人なら送らない（自己コメント）
+  if (String(report.tutor_user_id) === String(commenterId)) {
+    console.log(`[DailyReports] Discord notify: self-comment by ${report.tutor_name} — skip`);
+    return;
+  }
+
+  // 4. 日付フォーマット
+  const dateStr = report.report_date
+    ? new Date(report.report_date).toLocaleDateString('ja-JP', {
+        timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric'
+      })
+    : String(report.report_date);
+
+  // 5. Discord Embed 送信
+  const mention = report.discord_user_id ? `<@${report.discord_user_id}> ` : '';
+  const embed = {
+    title:       '💬 日報にコメントが届きました',
+    description: `**${report.tutor_name}** さんの ${dateStr} の日報に、**${commenterName}** さんからコメントがあります。`,
+    color:       0x3B82F6, // blue-500
+    fields: [
+      {
+        name:   '📝 コメント内容',
+        value:  commentText.length > 500 ? commentText.slice(0, 500) + '…' : commentText,
+        inline: false
+      },
+      { name: '📅 日報の日付',  value: dateStr,           inline: true },
+      { name: '👤 コメント者',  value: commenterName,     inline: true },
+    ],
+    footer:    { text: '日報管理ページから確認できます' },
+    timestamp: new Date().toISOString()
+  };
+
+  await axios.post(report.discord_webhook_url, {
+    content: mention.trim() || undefined,
+    embeds:  [embed]
+  });
+
+  console.log(`[DailyReports] Discord notify sent to ${report.tutor_name} for report ${reportId}`);
+}
 
 // ─────────────────────────────────────────────
 // DELETE /api/daily-reports/comments/:commentId
