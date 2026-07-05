@@ -3,67 +3,79 @@ import { fetchSatisfactionFromCache } from '../services/cacheService.js';
 import { google } from 'googleapis';
 
 /**
- * 毎週日曜日23:59 JSTにTutorの満足度スナップショットを保存するジョブ
+ * Tutorスナップショットジョブ
  *
- * 保存するデータ:
- *   - アクティブ生徒数 (その時点の実値)
- *   - アンケート回答数
- *   - 満足度平均 (0-10スケール)
- *   - 満足度 (0-100スケール)
- *   - 回収率 (%)
- *   - 満足度スコア (満足度×回収率/100)
+ * 週次: 毎週日曜日 23:59 JST — weeklyTutorSnapshot()
+ * 月次: 毎月末日   23:30 JST — monthlyTutorSnapshot()
  *
- * ※ この値は「先週日曜日時点の数値」として前週比較に使用するため、
- *   後から生徒数が変わっても変化しない確定値として保存する。
+ * 書き出し先（シート名固定・1シート蓄積）:
+ *   週次 → 「週次スナップショット」
+ *   月次 → 「月次スナップショット」
  *
- * あわせてスプレッドシートにも書き出す:
- *   シート名: "週次スナップショット"
- *   A列: Tutor名 (3行ごとにセル結合)
- *   B列: 項目名 (満足度 / 回収率 / 満足度スコア の繰り返し)
- *   C列以降: スナップショット日付ごとに蓄積
- *     1行目がヘッダー (Tutor名 / 項目 / MM/DD / MM/DD ...)
+ * レイアウト:
+ *   1行目: Tutor名 | 項目 | MM/DD or YYYY/M | ...
+ *   以降: TutorA | 満足度 | 値 | ...
+ *         (結合)  | 回収率 | 値 | ...
+ *         (結合)  | 満足度スコア | 値 | ...
+ *   末尾: 全体 | 満足度（加重） | 値 | ...
+ *         (結合) | 回収率（平均） | 値 | ...
+ *         (結合) | 満足度スコア | 値 | ...
  */
-export async function weeklyTutorSnapshot() {
-  try {
-    console.log('[Tutor Weekly Snapshot] Starting weekly snapshot...');
 
-    // --- JST現在時刻 ---
+// ─── 公開エントリポイント ─────────────────────────────────────────────────────
+
+/** 週次スナップショット（毎週日曜 23:59 JST） */
+export async function weeklyTutorSnapshot() {
+  return _runSnapshot({ isMonthly: false });
+}
+
+/** 月次スナップショット（毎月末日 23:30 JST） */
+export async function monthlyTutorSnapshot() {
+  return _runSnapshot({ isMonthly: true });
+}
+
+// ─── 共通実装 ─────────────────────────────────────────────────────────────────
+
+async function _runSnapshot({ isMonthly }) {
+  const label = isMonthly ? 'Monthly' : 'Weekly';
+  try {
+    console.log(`[Tutor ${label} Snapshot] Starting...`);
+
+    // JST現在時刻
     const now = new Date();
     const jstOffset = 9 * 60;
-    const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
+    const jst = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
 
-    // スナップショット日付（今日の日付）
-    const snapshotYear  = jstTime.getFullYear();
-    const snapshotMonth = jstTime.getMonth() + 1;
-    const snapshotDay   = jstTime.getDate();
+    const snapshotYear  = jst.getFullYear();
+    const snapshotMonth = jst.getMonth() + 1;
+    const snapshotDay   = jst.getDate();
     const snapshotDate  = `${snapshotYear}-${String(snapshotMonth).padStart(2, '0')}-${String(snapshotDay).padStart(2, '0')}`;
 
-    // ヘッダー用の短い日付表示 (例: 5/18)
-    const snapshotLabel = `${snapshotMonth}/${snapshotDay}`;
+    // 列ヘッダーラベル
+    // 週次: "5/18"  月次: "2026/7"
+    const snapshotLabel = isMonthly
+      ? `${snapshotYear}/${snapshotMonth}`
+      : `${snapshotMonth}/${snapshotDay}`;
 
-    // 対象年月 YYYY/M
     const yearMonth = `${snapshotYear}/${snapshotMonth}`;
 
-    console.log(`[Tutor Weekly Snapshot] snapshot_date=${snapshotDate}, year_month=${yearMonth}`);
+    console.log(`[Tutor ${label} Snapshot] date=${snapshotDate}, label=${snapshotLabel}`);
 
-    // --- 満足度データ取得 ---
+    // 満足度データ取得
     const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     const satisfactionRaw = await fetchSatisfactionFromCache(cacheSpreadsheetId);
 
-    // tutorName -> yearMonth -> { average, count }
+    // tutorName -> yearMonth -> { scores[] }
     const satisfactionByTutor = {};
     satisfactionRaw.forEach(record => {
-      const tName  = record.tutor_name;
-      const ym     = record.year_month;
-      const score  = parseFloat(record.satisfaction_score);
+      const tName = record.tutor_name;
+      const ym    = record.year_month;
+      const score = parseFloat(record.satisfaction_score);
       if (!tName || !ym || isNaN(score)) return;
-      if (!satisfactionByTutor[tName]) satisfactionByTutor[tName] = {};
-      if (!satisfactionByTutor[tName][ym])
-        satisfactionByTutor[tName][ym] = { scores: [] };
+      if (!satisfactionByTutor[tName])        satisfactionByTutor[tName] = {};
+      if (!satisfactionByTutor[tName][ym])    satisfactionByTutor[tName][ym] = { scores: [] };
       satisfactionByTutor[tName][ym].scores.push(score);
     });
-
-    // 平均を計算してキャッシュ
     for (const tName in satisfactionByTutor) {
       for (const ym in satisfactionByTutor[tName]) {
         const d = satisfactionByTutor[tName][ym];
@@ -72,7 +84,7 @@ export async function weeklyTutorSnapshot() {
       }
     }
 
-    // --- アクティブTutor取得 ---
+    // アクティブTutor
     const tutorsResult = await query(`
       SELECT * FROM tutors
       WHERE status = 'アクティブ'
@@ -82,18 +94,15 @@ export async function weeklyTutorSnapshot() {
     `);
     const tutors = tutorsResult.rows;
 
-    // --- アクティブ生徒数 ---
+    // 生徒
     const studentsResult = await query(
       `SELECT homeroom_tutor, status, contract_plan FROM students`
     );
     const students = studentsResult.rows;
 
-    // --- 各TutorのDB保存 & スプレッドシート用データ収集 ---
-    let savedCount = 0;
-    let skippedCount = 0;
-
-    // スプレッドシート用: tutor_name -> { satisfactionValue, collectionRate, satisfactionScore }
-    const sheetData = [];
+    // ─── 各Tutorのデータ計算 ─────────────────────────────────────────────
+    let savedCount = 0, skippedCount = 0;
+    const sheetData = []; // { tutorName, satisfactionValue, collectionRate, satisfactionScore }
 
     for (const tutor of tutors) {
       const activeStudentCount = students.filter(s =>
@@ -103,65 +112,50 @@ export async function weeklyTutorSnapshot() {
         s.contract_plan !== '在籍プラン'
       ).length;
 
-      const tutorSatData = satisfactionByTutor[tutor.tutor_name] || {};
-      const monthData    = tutorSatData[yearMonth];
+      const monthData = (satisfactionByTutor[tutor.tutor_name] || {})[yearMonth];
 
       const satisfactionCount = monthData ? monthData.count : 0;
       const satisfactionAvg   = monthData ? monthData.average : null;
 
-      // 満足度 (0-100スケール)
-      const satisfactionValue = satisfactionAvg !== null
-        ? satisfactionAvg * 10
+      const satisfactionValue = satisfactionAvg !== null ? satisfactionAvg * 10 : null;
+      const collectionRate    = activeStudentCount > 0
+        ? (satisfactionCount / activeStudentCount) * 100
+        : null;
+      const satisfactionScore = satisfactionValue !== null && collectionRate !== null
+        ? satisfactionValue * collectionRate / 100
         : null;
 
-      // 回収率 (%)
-      let collectionRate = null;
-      if (activeStudentCount > 0) {
-        collectionRate = (satisfactionCount / activeStudentCount) * 100;
+      // 週次のみDBに保存
+      if (!isMonthly) {
+        try {
+          await query(`
+            INSERT INTO tutor_weekly_snapshots
+              (snapshot_date, tutor_notion_name, year_month,
+               active_student_count, satisfaction_count, satisfaction_avg,
+               satisfaction_value, collection_rate, satisfaction_score)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            ON CONFLICT (snapshot_date, tutor_notion_name)
+            DO UPDATE SET
+              year_month           = EXCLUDED.year_month,
+              active_student_count = EXCLUDED.active_student_count,
+              satisfaction_count   = EXCLUDED.satisfaction_count,
+              satisfaction_avg     = EXCLUDED.satisfaction_avg,
+              satisfaction_value   = EXCLUDED.satisfaction_value,
+              collection_rate      = EXCLUDED.collection_rate,
+              satisfaction_score   = EXCLUDED.satisfaction_score,
+              created_at           = EXCLUDED.created_at
+          `, [
+            snapshotDate, tutor.notion_name, yearMonth,
+            activeStudentCount, satisfactionCount, satisfactionAvg,
+            satisfactionValue, collectionRate, satisfactionScore
+          ]);
+          savedCount++;
+        } catch (err) {
+          console.error(`[Tutor ${label} Snapshot] DB error for ${tutor.notion_name}:`, err.message);
+          skippedCount++;
+        }
       }
 
-      // 満足度スコア
-      let satisfactionScore = null;
-      if (satisfactionValue !== null && collectionRate !== null) {
-        satisfactionScore = satisfactionValue * collectionRate / 100;
-      }
-
-      // DB保存
-      try {
-        await query(`
-          INSERT INTO tutor_weekly_snapshots
-            (snapshot_date, tutor_notion_name, year_month,
-             active_student_count, satisfaction_count, satisfaction_avg,
-             satisfaction_value, collection_rate, satisfaction_score)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-          ON CONFLICT (snapshot_date, tutor_notion_name)
-          DO UPDATE SET
-            year_month           = EXCLUDED.year_month,
-            active_student_count = EXCLUDED.active_student_count,
-            satisfaction_count   = EXCLUDED.satisfaction_count,
-            satisfaction_avg     = EXCLUDED.satisfaction_avg,
-            satisfaction_value   = EXCLUDED.satisfaction_value,
-            collection_rate      = EXCLUDED.collection_rate,
-            satisfaction_score   = EXCLUDED.satisfaction_score,
-            created_at           = EXCLUDED.created_at
-        `, [
-          snapshotDate,
-          tutor.notion_name,
-          yearMonth,
-          activeStudentCount,
-          satisfactionCount,
-          satisfactionAvg,
-          satisfactionValue,
-          collectionRate,
-          satisfactionScore
-        ]);
-        savedCount++;
-      } catch (err) {
-        console.error(`[Tutor Weekly Snapshot] Error saving ${tutor.notion_name}:`, err.message);
-        skippedCount++;
-      }
-
-      // スプレッドシート用データ収集
       sheetData.push({
         tutorName:         tutor.tutor_name,
         satisfactionValue: satisfactionValue !== null ? parseFloat(satisfactionValue.toFixed(2)) : '',
@@ -170,14 +164,56 @@ export async function weeklyTutorSnapshot() {
       });
     }
 
-    console.log(`[Tutor Weekly Snapshot] DB done. saved=${savedCount}, skipped=${skippedCount}`);
+    // ─── 全体集計行 ───────────────────────────────────────────────────────
+    // 有効なTutorのみ（satisfactionValueが数値のもの）を対象に加重平均
+    const validData = sheetData.filter(d => d.satisfactionValue !== '');
+    let overallSatisfactionValue = '';
+    let overallCollectionRate    = '';
+    let overallSatisfactionScore = '';
 
-    // --- スプレッドシートへの書き出し ---
-    const sheetResult = await exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, snapshotYear);
+    if (validData.length > 0) {
+      overallSatisfactionValue = parseFloat(
+        (validData.reduce((s, d) => s + d.satisfactionValue, 0) / validData.length).toFixed(2)
+      );
+      const validRate = sheetData.filter(d => d.collectionRate !== '');
+      if (validRate.length > 0) {
+        overallCollectionRate = parseFloat(
+          (validRate.reduce((s, d) => s + d.collectionRate, 0) / validRate.length).toFixed(2)
+        );
+      }
+      const validScore = sheetData.filter(d => d.satisfactionScore !== '');
+      if (validScore.length > 0) {
+        overallSatisfactionScore = parseFloat(
+          (validScore.reduce((s, d) => s + d.satisfactionScore, 0) / validScore.length).toFixed(2)
+        );
+      }
+    }
+
+    // 全体行をsheetDataの末尾に追加
+    const sheetDataWithOverall = [
+      ...sheetData,
+      {
+        tutorName:         '全体',
+        satisfactionValue: overallSatisfactionValue,
+        collectionRate:    overallCollectionRate,
+        satisfactionScore: overallSatisfactionScore,
+      }
+    ];
+
+    if (!isMonthly) {
+      console.log(`[Tutor ${label} Snapshot] DB done. saved=${savedCount}, skipped=${skippedCount}`);
+    }
+
+    // ─── スプレッドシートへの書き出し ─────────────────────────────────────
+    const sheetName = isMonthly ? '月次スナップショット' : '週次スナップショット';
+    const sheetResult = await exportSnapshotToSheet(
+      sheetDataWithOverall, snapshotDate, snapshotLabel, sheetName
+    );
+
     if (sheetResult.success) {
-      console.log(`[Tutor Weekly Snapshot] Sheet export done: ${sheetResult.spreadsheetUrl}`);
+      console.log(`[Tutor ${label} Snapshot] Sheet export done: ${sheetResult.spreadsheetUrl}`);
     } else {
-      console.warn(`[Tutor Weekly Snapshot] Sheet export failed: ${sheetResult.error}`);
+      console.warn(`[Tutor ${label} Snapshot] Sheet export failed: ${sheetResult.error}`);
     }
 
     return {
@@ -189,35 +225,35 @@ export async function weeklyTutorSnapshot() {
     };
 
   } catch (error) {
-    console.error('[Tutor Weekly Snapshot] Fatal error:', error);
+    console.error(`[Tutor ${label} Snapshot] Fatal error:`, error);
     return { success: false, error: error.message };
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// スプレッドシートへの書き出し
+// スプレッドシートへの書き出し（シート名固定・1シート蓄積）
 //
-// シート名: "週次スナップショット_YYYY"  (例: 週次スナップショット_2025)
+// sheetName: "週次スナップショット" or "月次スナップショット"
 //
 // レイアウト:
-//   行1 (ヘッダー): Tutor名 | 項目 | 5/4 | 5/11 | 5/18 | ...
-//   行2: TutorA    | 満足度  | 値   | 値    | 値
-//   行3: (結合)    | 回収率  | 値   | 値    | 値
-//   行4: (結合)    | 満足度スコア | 値 | 値  | 値
-//   行5: TutorB    | 満足度  | ...
+//   行1 (ヘッダー): Tutor名 | 項目 | 5/4 | 5/11 | ... (週次) or 2026/6 | ...（月次）
+//   行2: TutorA    | 満足度       | 値   | ...
+//   行3: (結合)    | 回収率       | 値   | ...
+//   行4: (結合)    | 満足度スコア  | 値   | ...
 //   ...
+//   末尾3行: 全体 | 満足度 / 回収率 / 満足度スコア
 //
-// 初回: シートを新規作成してヘッダー行 + 全Tutor行を書き込む
-// 2回目以降: 既存シートの最終列の次に新しい日付列を追加する
+// 初回: シートを新規作成してヘッダー + 全データを書き込む
+// 以降: 最終列の右に新しい日付列を追加する
 // ─────────────────────────────────────────────────────────────────────────────
-async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, snapshotYear) {
+async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sheetName) {
   try {
     if (!process.env.GOOGLE_CREDENTIALS_JSON) {
-      console.warn('[Snapshot Sheet] GOOGLE_CREDENTIALS_JSON not set, skipping sheet export');
+      console.warn('[Snapshot Sheet] GOOGLE_CREDENTIALS_JSON not set, skipping');
       return { success: false, error: 'GOOGLE_CREDENTIALS_JSON not configured' };
     }
 
-    // --- Google認証 ---
+    // Google認証
     const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
     let credentials;
     try {
@@ -238,20 +274,16 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
     const spreadsheetId = process.env.TUTOR_SATISFACTION_SHEET_ID
       || '1qlvFeFXYaA4Ul6R93qa7CiT4fdJHbrppUiI1tNl7bxg';
 
-    const sheetName = `週次スナップショット_${snapshotYear}`;
-
-    // --- シートが存在するか確認 ---
+    // シート存在確認
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
     const existingSheet = meta.data.sheets.find(s => s.properties.title === sheetName);
 
-    // Tutor数
-    const tutorCount = sheetData.length;
-    // データ行数 = Tutor数 × 3行
+    const tutorCount  = sheetData.length;               // 全体行を含む
     const dataRowCount = tutorCount * 3;
 
     if (!existingSheet) {
-      // ── 初回: シート新規作成 ──────────────────────────────────────
-      console.log(`[Snapshot Sheet] Creating new sheet: ${sheetName}`);
+      // ── 初回: シート新規作成 ──────────────────────────────────────────
+      console.log(`[Snapshot Sheet] Creating new sheet: "${sheetName}"`);
 
       const addRes = await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
@@ -261,8 +293,8 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
               properties: {
                 title: sheetName,
                 gridProperties: {
-                  rowCount: dataRowCount + 10,
-                  columnCount: 50,
+                  rowCount:    dataRowCount + 10,
+                  columnCount: 60,
                 },
               },
             },
@@ -271,17 +303,15 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
       });
       const newSheetId = addRes.data.replies[0].addSheet.properties.sheetId;
 
-      // ヘッダー行 + データ行を構築
+      // 書き込み内容を構築
       const headerRow = ['Tutor名', '項目', snapshotLabel];
       const rows = [headerRow];
-
       for (const d of sheetData) {
         rows.push([d.tutorName, '満足度',     d.satisfactionValue]);
         rows.push(['',          '回収率',      d.collectionRate]);
         rows.push(['',          '満足度スコア', d.satisfactionScore]);
       }
 
-      // データ書き込み
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `'${sheetName}'!A1`,
@@ -289,7 +319,7 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
         resource: { values: rows },
       });
 
-      // フォーマット: 1行目凍結 + A列凍結 + Tutor名結合
+      // フォーマット: 1行・2列凍結 + Tutor名セル結合
       const formatRequests = [
         {
           updateSheetProperties: {
@@ -302,15 +332,14 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
         },
       ];
 
-      // Tutor名セル結合 (3行ごと、2列目以降はすでに空)
       for (let i = 0; i < tutorCount; i++) {
-        const startRow = 1 + i * 3; // 0-indexed (ヘッダーの次)
+        const startRow = 1 + i * 3;
         formatRequests.push({
           mergeCells: {
             range: {
               sheetId: newSheetId,
-              startRowIndex: startRow,
-              endRowIndex:   startRow + 3,
+              startRowIndex:    startRow,
+              endRowIndex:      startRow + 3,
               startColumnIndex: 0,
               endColumnIndex:   1,
             },
@@ -325,32 +354,32 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
       });
 
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-      console.log(`[Snapshot Sheet] Created and written: ${spreadsheetUrl}`);
+      console.log(`[Snapshot Sheet] Created "${sheetName}": ${spreadsheetUrl}`);
       return { success: true, spreadsheetUrl };
 
     } else {
-      // ── 2回目以降: 既存シートに列を追加 ─────────────────────────
+      // ── 2回目以降: 右端に列追加 ──────────────────────────────────────
       const sheetId = existingSheet.properties.sheetId;
 
-      // 現在のヘッダー行を読んで次の列番号を確認
+      // ヘッダー行取得
       const headerRes = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `'${sheetName}'!1:1`,
       });
-      const headerRow = (headerRes.data.values || [[]])[0] || [];
-      const nextColIndex = headerRow.length; // 0-indexed → 列インデックス
-      const nextColLetter = columnIndexToLetter(nextColIndex);
+      const headerRow   = (headerRes.data.values || [[]])[0] || [];
+      const nextColIdx  = headerRow.length;
+      const nextColLetter = columnIndexToLetter(nextColIdx);
 
-      // 既にこの日付のデータがあればスキップ
+      // 同じラベルが既に存在するならスキップ
       if (headerRow.includes(snapshotLabel)) {
-        console.log(`[Snapshot Sheet] ${snapshotLabel} already exists in header, skipping`);
+        console.log(`[Snapshot Sheet] "${snapshotLabel}" already exists in "${sheetName}", skipping`);
         return {
           success: true,
           spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
         };
       }
 
-      // ヘッダーに日付を追記
+      // ヘッダーに日付追記
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `'${sheetName}'!${nextColLetter}1`,
@@ -358,47 +387,31 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
         resource: { values: [[snapshotLabel]] },
       });
 
-      // 既存のA列のTutor名の並び順を読み取り、sheetDataと照合して値を並べる
+      // A列のTutor名リストを取得（結合セルは先頭行にのみ値あり）
       const tutorColRes = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `'${sheetName}'!A2:A${dataRowCount + 1}`,
       });
       const tutorColValues = (tutorColRes.data.values || []).map(r => r[0] || '');
 
-      // sheetData をマップ化 (tutorName -> { satisfactionValue, collectionRate, satisfactionScore })
+      // sheetData をマップ化
       const dataMap = {};
       for (const d of sheetData) {
         dataMap[d.tutorName] = d;
       }
 
-      // 既存シートの行順に合わせてデータを構築
-      // 3行単位でTutor名が入っている行 (行インデックス 0, 3, 6, ...) がTutor名行
+      // 既存シートの行順にデータを並べる
       const newColValues = [];
+      let currentTutorName = '';
       for (let row = 0; row < tutorColValues.length; row++) {
-        const tutorName = tutorColValues[row]; // 結合されていない行は空文字
-        const groupIdx  = Math.floor(row / 3); // 何番目のTutorか (0-indexed)
-        const itemIdx   = row % 3;             // 0=満足度, 1=回収率, 2=満足度スコア
-
-        // 結合セルはAPIでは先頭行にしか値が入らない → groupIdx行目のTutor名で特定
-        // 先頭行 (itemIdx===0) のときだけTutor名が読める
-        // tutorColValues全体を先頭行だけ取り出してgroupIdxでマッピング
-        // ※ セル結合があるため空文字行は同じTutor名として扱う
-        // => まずgroup先頭のTutor名を別途取得する
-        if (itemIdx === 0) {
-          // このgroupのTutor名はtutorColValues[row]
-          const d = dataMap[tutorName] || {};
-          newColValues.push([d.satisfactionValue !== undefined ? d.satisfactionValue : '']);
-        } else if (itemIdx === 1) {
-          // 前のgroupのTutor名を使う (同じgroupなのでrow-1がTutor名行)
-          const headTutorName = tutorColValues[row - 1];
-          const d = dataMap[headTutorName] || {};
-          newColValues.push([d.collectionRate !== undefined ? d.collectionRate : '']);
-        } else {
-          // itemIdx === 2
-          const headTutorName = tutorColValues[row - 2];
-          const d = dataMap[headTutorName] || {};
-          newColValues.push([d.satisfactionScore !== undefined ? d.satisfactionScore : '']);
+        const itemIdx = row % 3;
+        if (itemIdx === 0 && tutorColValues[row]) {
+          currentTutorName = tutorColValues[row];
         }
+        const d = dataMap[currentTutorName] || {};
+        if (itemIdx === 0)      newColValues.push([d.satisfactionValue !== undefined ? d.satisfactionValue : '']);
+        else if (itemIdx === 1) newColValues.push([d.collectionRate    !== undefined ? d.collectionRate    : '']);
+        else                    newColValues.push([d.satisfactionScore !== undefined ? d.satisfactionScore : '']);
       }
 
       if (newColValues.length > 0) {
@@ -410,13 +423,57 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, sna
         });
       }
 
+      // シートの行数が足りない場合（新しいTutorが増えた場合）に末尾を追記
+      const existingRowCount = tutorColValues.length;
+      if (dataRowCount > existingRowCount) {
+        const extraStart = existingRowCount + 2; // 1-indexed (ヘッダー + 既存データの次)
+        const extraRows  = [];
+        for (let i = existingRowCount / 3; i < tutorCount; i++) {
+          const d = sheetData[i];
+          extraRows.push([d.tutorName, '満足度',     d.satisfactionValue]);
+          extraRows.push(['',          '回収率',      d.collectionRate]);
+          extraRows.push(['',          '満足度スコア', d.satisfactionScore]);
+        }
+        if (extraRows.length > 0) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `'${sheetName}'!A${extraStart}`,
+            valueInputOption: 'USER_ENTERED',
+            resource: { values: extraRows },
+          });
+          // 新規追加Tutorのセル結合
+          const mergeRequests = [];
+          for (let i = existingRowCount / 3; i < tutorCount; i++) {
+            const startRow = 1 + i * 3;
+            mergeRequests.push({
+              mergeCells: {
+                range: {
+                  sheetId,
+                  startRowIndex:    startRow,
+                  endRowIndex:      startRow + 3,
+                  startColumnIndex: 0,
+                  endColumnIndex:   1,
+                },
+                mergeType: 'MERGE_ALL',
+              },
+            });
+          }
+          if (mergeRequests.length > 0) {
+            await sheets.spreadsheets.batchUpdate({
+              spreadsheetId,
+              resource: { requests: mergeRequests },
+            });
+          }
+        }
+      }
+
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-      console.log(`[Snapshot Sheet] Appended column ${nextColLetter} (${snapshotLabel}): ${spreadsheetUrl}`);
+      console.log(`[Snapshot Sheet] Appended col ${nextColLetter} ("${snapshotLabel}") to "${sheetName}": ${spreadsheetUrl}`);
       return { success: true, spreadsheetUrl };
     }
 
   } catch (error) {
-    console.error('[Snapshot Sheet] Error exporting to sheet:', error);
+    console.error('[Snapshot Sheet] Error:', error);
     return { success: false, error: error.message };
   }
 }
