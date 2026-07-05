@@ -54,7 +54,7 @@ import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotificati
 import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
 import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
-import { weeklyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
+import { weeklyTutorSnapshot, monthlyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 
 const app = new Hono();
@@ -295,6 +295,24 @@ cron.schedule('59 23 * * 0', async () => {
     console.log('[Tutor Weekly Snapshot] Completed:', result);
   } catch (error) {
     console.error('[Tutor Weekly Snapshot] Error:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule monthly tutor snapshot (last day of each month at 23:30 JST)
+console.log('Monthly tutor snapshot: ENABLED (last day of month at 23:30 JST)');
+cron.schedule('30 23 28-31 * *', async () => {
+  // 末日判定: 翌日が1日 = 今日が末日
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (tomorrow.getDate() !== 1) return;
+  console.log('[Tutor Monthly Snapshot] Running monthly snapshot at 23:30 JST...');
+  try {
+    const result = await monthlyTutorSnapshot();
+    console.log('[Tutor Monthly Snapshot] Completed:', result);
+  } catch (error) {
+    console.error('[Tutor Monthly Snapshot] Error:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
