@@ -6,7 +6,7 @@ const app = new Hono();
 
 // ─────────────────────────────────────────────
 // GET /api/daily-reports/tutors
-// アクティブTutor一覧＋最新日報提出日（役職=クルーのみ）
+// アクティブTutor一覧＋最新日報提出日（役職問わず全員）
 // ─────────────────────────────────────────────
 app.get('/tutors', async (c) => {
   try {
@@ -42,7 +42,6 @@ app.get('/tutors', async (c) => {
       LEFT JOIN users u ON LOWER(t.email) = LOWER(u.email)
       WHERE t.status = 'アクティブ'
         AND t.job_type ILIKE '%tutor%'
-        AND u.job_title = 'クルー'
       GROUP BY t.id, t.tutor_name, t.team, t.status, t.job_type, u.job_title, t.notion_name
       ORDER BY t.team, t.tutor_name
     `);
