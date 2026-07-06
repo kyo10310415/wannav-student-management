@@ -60,13 +60,15 @@ function extractLessonSummary(title, content) {
  *   - today_lesson_summary : 今回のレッスン内容（簡潔な要点）
  *   - next_lesson_summary  : 次回レッスン予定（簡潔な要点）
  *   - summary              : 今日の成果・振り返り（箇条書き3〜5点）
+ *   - youtube_feedback     : YouTubeの配信に関するフィードバック・アドバイス
+ *   - x_feedback           : X（旧Twitter）の運用に関するフィードバック・アドバイス
  *   - notes                : その他メモ
  *
  * @param {string} transcript       文字起こしテキスト
  * @param {string} studentName      生徒名（敬称なし）
  * @param {string} todayRawContent  lesson_contents の生テキスト（今回）
  * @param {string} nextRawContent   lesson_contents の生テキスト（次回）
- * @returns {{ today_lesson_summary, next_lesson_summary, summary, notes }}
+ * @returns {{ today_lesson_summary, next_lesson_summary, summary, youtube_feedback, x_feedback, notes }}
  */
 export async function generateMinutesContent(
   transcript,
@@ -78,7 +80,7 @@ export async function generateMinutesContent(
   const studentNameSama = studentName ? `${studentName}様` : '生徒様';
 
   const systemPrompt = `あなたはVTuberスクールのレッスン議事録を作成するアシスタントです。
-レッスンの文字起こしと、レッスンマスターの情報をもとに、以下の4つを日本語で出力してください。
+レッスンの文字起こしと、レッスンマスターの情報をもとに、以下の6つを日本語で出力してください。
 
 1. today_lesson_summary（今回のレッスン内容）:
    レッスンマスターの「今回のレッスン内容」をもとに、実際にレッスンで扱った内容を
@@ -93,12 +95,25 @@ export async function generateMinutesContent(
 3. summary（今日の成果・振り返り）:
    レッスンで学んだこと・実践したこと・生徒の状況を3〜5点の箇条書きでまとめてください。
    生徒への敬称は必ず「様」を使ってください（例: 田中様）。
+   YouTubeやXに関する個別フィードバックはここには含めず、4・5に記載してください。
 
-4. notes（その他メモ）:
-   特記事項・次回への申し送り・懸念事項があれば記載してください。なければ「なし」。
+4. youtube_feedback（YouTubeフィードバック）:
+   文字起こしの中でYouTubeの配信・動画・チャンネル運営に関して講師が行ったフィードバックや
+   アドバイスをすべて箇条書きで抽出してください。
+   具体的な指摘内容・改善点・良かった点などを漏らさず記載してください。
+   該当する発言が文字起こしにない場合は「なし」と記載してください。
+
+5. x_feedback（X/Twitterフィードバック）:
+   文字起こしの中でX（旧Twitter）の投稿・運用・企画に関して講師が行ったフィードバックや
+   アドバイスをすべて箇条書きで抽出してください。
+   具体的な指摘内容・改善点・良かった点などを漏らさず記載してください。
+   該当する発言が文字起こしにない場合は「なし」と記載してください。
+
+6. notes（その他メモ）:
+   YouTube・X以外の特記事項・次回への申し送り・懸念事項があれば記載してください。なければ「なし」。
 
 必ずJSON形式で出力してください:
-{"today_lesson_summary": "...", "next_lesson_summary": "...", "summary": "...", "notes": "..."}`;
+{"today_lesson_summary": "...", "next_lesson_summary": "...", "summary": "...", "youtube_feedback": "...", "x_feedback": "...", "notes": "..."}`;
 
   const userPrompt = `【生徒名】${studentNameSama}
 
@@ -120,7 +135,7 @@ ${transcript.slice(0, 8000)}`;
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3,
-      max_tokens: 1200,
+      max_tokens: 1800,
     });
 
     const raw    = response.choices[0].message.content || '{}';
@@ -129,6 +144,8 @@ ${transcript.slice(0, 8000)}`;
       today_lesson_summary: parsed.today_lesson_summary || '',
       next_lesson_summary:  parsed.next_lesson_summary  || '',
       summary:              parsed.summary               || '',
+      youtube_feedback:     parsed.youtube_feedback      || 'なし',
+      x_feedback:           parsed.x_feedback            || 'なし',
       notes:                parsed.notes                 || '',
     };
   } catch (err) {
@@ -162,6 +179,8 @@ export async function buildMinutesText(params) {
     today_lesson_summary,
     next_lesson_summary,
     summary,
+    youtube_feedback,
+    x_feedback,
     notes,
   } = await generateMinutesContent(
     transcript,
@@ -179,6 +198,8 @@ export async function buildMinutesText(params) {
     today_lesson_content: today_lesson_summary || extractLessonSummary('', todayContent),
     next_lesson_content:  next_lesson_summary  || extractLessonSummary('', nextContent),
     summary,
+    youtube_feedback,
+    x_feedback,
     notes,
   });
 }
