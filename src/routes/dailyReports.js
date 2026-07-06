@@ -42,6 +42,7 @@ app.get('/tutors', async (c) => {
       LEFT JOIN users u ON LOWER(t.email) = LOWER(u.email)
       WHERE t.status = 'アクティブ'
         AND t.job_type ILIKE '%tutor%'
+        AND (u.job_title IS NOT NULL AND u.job_title NOT IN ('部署移動', '契約解除', '統括', 'マネージャー', '未設定'))
       GROUP BY t.id, t.tutor_name, t.team, t.status, t.job_type, u.job_title, t.notion_name
       ORDER BY t.team, t.tutor_name
     `);
