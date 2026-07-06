@@ -113,10 +113,27 @@ async function findMemoFilesForDate(drive, folderId, targetDateStr) {
 }
 
 /**
+ * tabs 配列（ネスト含む）をフラットに展開するヘルパー
+ * Google Docs のタブは childTabs でネストしている場合がある
+ */
+function flattenTabs(tabs) {
+  const result = [];
+  function walk(list) {
+    for (const t of (list || [])) {
+      result.push(t);
+      if (t.childTabs?.length) walk(t.childTabs);
+    }
+  }
+  walk(tabs);
+  return result;
+}
+
+/**
  * Google Docs ファイルから「文字起こし」タブのテキストを取得
  *
  * Google Docs の "タブ" は documentTabs API (2024〜) で取得。
- * タブが存在しない場合は本文全体を返す。
+ * ネスト（childTabs）を再帰的に展開して「文字起こし」タブを探す。
+ * タブが存在しない／見つからない場合は本文全体を返す。
  */
 async function getTranscriptFromDoc(docs, fileId) {
   // documentTabs を含むフルドキュメントを取得
@@ -133,19 +150,33 @@ async function getTranscriptFromDoc(docs, fileId) {
     docData = res.data;
   }
 
-  // タブが存在する場合
-  const tabs = docData.tabs || [];
-  if (tabs.length > 0) {
-    // "文字起こし" という名前のタブを優先
-    const transcriptTab = tabs.find(t =>
+  // タブが存在する場合（ネスト含めてフラット展開して探す）
+  const rawTabs = docData.tabs || [];
+  if (rawTabs.length > 0) {
+    const allTabs = flattenTabs(rawTabs);
+
+    console.log(`[Drive] Document tabs found: ${allTabs.map(t => `"${t.tabProperties?.title || '(無題)'}"`).join(', ')}`);
+
+    // 「文字起こし」という名前のタブを優先
+    const transcriptTab = allTabs.find(t =>
       (t.tabProperties?.title || '').includes('文字起こし')
     );
-    const targetTab = transcriptTab || tabs[tabs.length - 1]; // 末尾タブをフォールバック
-    const body = targetTab?.documentTab?.body;
+
+    if (transcriptTab) {
+      console.log(`[Drive] Using tab: "${transcriptTab.tabProperties?.title}"`);
+      const body = transcriptTab.documentTab?.body;
+      if (body) return extractTextFromBody(body);
+    }
+
+    // 「文字起こし」タブが見つからない場合は末尾タブ（フォールバック）
+    console.warn(`[Drive] "文字起こし" tab not found, falling back to last tab`);
+    const lastTab = allTabs[allTabs.length - 1];
+    const body = lastTab?.documentTab?.body;
     if (body) return extractTextFromBody(body);
   }
 
   // タブがない場合はドキュメント本文を使用
+  console.warn(`[Drive] No tabs found, using document body`);
   const body = docData.body;
   if (body) return extractTextFromBody(body);
 
