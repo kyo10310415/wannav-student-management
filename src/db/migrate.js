@@ -1135,6 +1135,42 @@ const migrations = [
        WHERE id = 1;
     `,
     down: ``
+  },
+  {
+    version: 45,
+    name: 'add_platform_feedback_to_minutes_template',
+    up: `
+      UPDATE minutes_templates
+         SET template_text =
+'# レッスン議事録
+
+## 生徒情報
+- 生徒名: {{student_name}}
+- 学籍番号: {{student_id}}
+- レッスン日: {{lesson_date}}
+- レッスン番号: {{lesson_number}}回目
+
+## 今回のレッスン内容
+{{today_lesson_content}}
+
+## 今日の成果・振り返り
+{{summary}}
+
+## YouTubeフィードバック
+{{youtube_feedback}}
+
+## X（Twitter）フィードバック
+{{x_feedback}}
+
+## 次回レッスン予定
+{{next_lesson_content}}
+
+## その他メモ
+{{notes}}',
+             updated_at = NOW()
+       WHERE id = 1;
+    `,
+    down: ``
   }
 ];
 
