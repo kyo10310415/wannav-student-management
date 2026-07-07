@@ -8971,6 +8971,7 @@ function updateBroadcastTargetInfo() {
     purple: 'bg-purple-100 text-purple-800 border border-purple-300',
     orange: 'bg-orange-100 text-orange-800 border border-orange-300',
     gray:   'bg-gray-100 text-gray-600 border border-gray-200',
+    yellow: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
     red:    'bg-red-100 text-red-700 border border-red-300 line-through',
   };
 
