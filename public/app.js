@@ -8711,6 +8711,7 @@ async function renderBroadcastPage() {
                 <option value="アクティブ">アクティブ生徒のみ</option>
                 <option value="レッスン中">レッスン中（永久会員・在籍プラン除く）</option>
                 <option value="永久会員">永久会員（アクティブ且つ契約状況：永久会員）</option>
+                <option value="エントリープラン">エントリープラン（アクティブ or レッスン準備中 且つ契約プラン：エントリープラン）</option>
                 <option value="レッスン準備中">レッスン準備中</option>
                 <option value="休会">休会中</option>
               </select>
@@ -8962,6 +8963,16 @@ function updateBroadcastTargetInfo() {
         { label: '契約プラン', badges: [{ text: '（指定なし・全プラン対象）', color: 'gray' }] },
       ],
       note: null,
+    },
+    'エントリープラン': {
+      rows: [
+        { label: 'ステータス', badges: [
+          { text: 'アクティブ', color: 'green' },
+          { text: 'レッスン準備中', color: 'blue' },
+        ]},
+        { label: '契約プラン', badges: [{ text: 'エントリープラン', color: 'yellow' }] },
+      ],
+      note: '※ アクティブまたはレッスン準備中 かつ 契約プランがエントリープランの生徒',
     },
   };
 
