@@ -50,6 +50,13 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
       params.push('アクティブ');
       whereConditions.push(`s.contract_plan = $${params.length + 1}`);
       params.push('永久会員');
+    } else if (targetStatus === 'エントリープラン') {
+      // エントリープラン: (アクティブ OR レッスン準備中) AND contract_plan = 'エントリープラン'
+      whereConditions.push(`s.status IN ($${params.length + 1}, $${params.length + 2})`);
+      params.push('アクティブ');
+      params.push('レッスン準備中');
+      whereConditions.push(`s.contract_plan = $${params.length + 1}`);
+      params.push('エントリープラン');
     } else {
       whereConditions.push(`s.status = $${params.length + 1}`);
       params.push(targetStatus);
