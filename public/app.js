@@ -16297,7 +16297,7 @@ function _getNewAssignFiltered() {
 function _renderNewAssignRows() {
   const data = _getNewAssignFiltered();
   if (data.length === 0) {
-    return `<tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">
+    return `<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400">
       <i class="fas fa-inbox text-3xl mb-2"></i><p>対象生徒がいません</p>
     </td></tr>`;
   }
@@ -16351,6 +16351,7 @@ function _renderNewAssignRows() {
         <td class="px-4 py-3 font-semibold text-orange-700 text-sm whitespace-nowrap">${escapeHtml(lessonStartDisplay)}</td>
         <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_id || '-')}</td>
         <td class="px-4 py-3 font-medium text-gray-800">${escapeHtml(s.name || '-')}</td>
+        <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">${escapeHtml(s.contract_plan || '-')}</td>
         <td class="px-4 py-3 text-center">
           ${isPro
             ? '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">Pro</span>'
