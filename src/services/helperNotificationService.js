@@ -63,7 +63,7 @@ export async function notifyHelperRequestCreated(request) {
         },
         {
           name: 'レッスン進捗',
-          value: `${request.lesson_progress}回`,
+          value: request.lesson_progress != null ? `${request.lesson_progress}回` : 'Proプラン',
           inline: true
         },
         {

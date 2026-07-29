@@ -5040,7 +5040,9 @@ async function submitHelperRequest() {
     notion_url: notionUrl,
     requesting_tutor_id: requestingTutor.employee_id,
     requesting_tutor_name: requestingTutor.tutor_name,
-    lesson_progress: student.lesson_progress || 0,
+    lesson_progress: (student.lesson_progress === 'Proプラン' || student.contract_plan === 'PROプラン')
+      ? null
+      : (parseInt(student.lesson_progress, 10) || 0),
     reason: helperRequestData.reason,
     notes: helperRequestData.notes || null,
     deadline: deadlineISO
