@@ -586,52 +586,82 @@ async function loadTodayLessonDates() {
     
     const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${month}`);
     
-    // Group dates by student_id
+    // キャッシュをリセットして今月データを入れ直す
     lessonDates = {};
-    res.data.data.forEach(lesson => {
-      if (!lessonDates[lesson.student_id]) {
-        lessonDates[lesson.student_id] = [];
-      }
-      
-      // Parse UTC date from database
-      const utcDate = new Date(lesson.lesson_date);
-      
-      // Format as JST date string (YYYY/MM/DD)
-      // Note: Database stores JST times as UTC, so we need to extract the date part
-      const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
-      const [yearStr, monthStr, dayStr] = dateStr.split('-');
-      
-      // Extract time from lesson_date (stored as JST in UTC format) or use lesson_time from sheet
-      let timeStr;
-      if (lesson.lesson_time) {
-        // Use time from spreadsheet (J column)
-        timeStr = lesson.lesson_time;
-      } else {
-        // Fallback: extract from lesson_date
-        const timePart = lesson.lesson_date.split('T')[1]?.split('.')[0] || '00:00:00';
-        const [hourStr, minuteStr] = timePart.split(':');
-        const hour = parseInt(hourStr);
-        const minute = parseInt(minuteStr);
-        timeStr = `${hour}:${minute.toString().padStart(2, '0')}`;
-      }
-      
+    _loadedLessonMonths.clear();
+    _mergeLessonDataIntoCache(res.data.data);
+    _loadedLessonMonths.add(`${year}-${month}`);
+    
+    console.log(`Loaded ${Object.keys(lessonDates).length} students' lesson dates for today's page`);
+  } catch (error) {
+    console.error('Error loading today lesson dates:', error);
+  }
+}
+
+// 指定した年月のレッスンデータを lessonDates キャッシュに追記する
+// （既にロード済みの月はAPIを叩かない）
+const _loadedLessonMonths = new Set();
+async function _loadLessonMonthIfNeeded(year, month) {
+  const key = `${year}-${month}`;
+  if (_loadedLessonMonths.has(key)) return;
+  try {
+    const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${month}`);
+    _mergeLessonDataIntoCache(res.data.data);
+    _loadedLessonMonths.add(key);
+    console.log(`Loaded lesson dates for ${year}/${month} (cross-month navigation)`);
+  } catch (error) {
+    console.error(`Error loading lesson dates for ${year}/${month}:`, error);
+  }
+}
+
+// APIレスポンスのレッスン配列を lessonDates に追記するヘルパー
+function _mergeLessonDataIntoCache(lessons) {
+  lessons.forEach(lesson => {
+    if (!lessonDates[lesson.student_id]) {
+      lessonDates[lesson.student_id] = [];
+    }
+    
+    // Parse UTC date from database
+    const utcDate = new Date(lesson.lesson_date);
+    
+    // Format as JST date string
+    // Note: Database stores JST times as UTC, so we need to extract the date part
+    const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
+    const [yearStr, monthStr, dayStr] = dateStr.split('-');
+    
+    // Extract time from lesson_date (stored as JST in UTC format) or use lesson_time from sheet
+    let timeStr;
+    if (lesson.lesson_time) {
+      // Use time from spreadsheet (J column)
+      timeStr = lesson.lesson_time;
+    } else {
+      // Fallback: extract from lesson_date
+      const timePart = lesson.lesson_date.split('T')[1]?.split('.')[0] || '00:00:00';
+      const [hourStr, minuteStr] = timePart.split(':');
+      const hour = parseInt(hourStr);
+      const minute = parseInt(minuteStr);
+      timeStr = `${hour}:${minute.toString().padStart(2, '0')}`;
+    }
+    
+    // 重複追加を防ぐ（同じ lesson_date が既にキャッシュにあればスキップ）
+    const alreadyExists = lessonDates[lesson.student_id].some(
+      d => d.formatted === `${parseInt(monthStr)}/${parseInt(dayStr)}`
+        && d.time === timeStr
+    );
+    if (!alreadyExists) {
       lessonDates[lesson.student_id].push({
         date: utcDate,
         formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`,
         time: timeStr,
         meet_link: lesson.meet_link || null
       });
-    });
-    
-    // Sort dates
-    Object.keys(lessonDates).forEach(studentId => {
-      lessonDates[studentId].sort((a, b) => a.date - b.date);
-    });
-    
-    console.log(`Loaded ${Object.keys(lessonDates).length} students' lesson dates for today's page`);
-  } catch (error) {
-    console.error('Error loading today lesson dates:', error);
-  }
+    }
+  });
+  
+  // Sort dates for all students
+  Object.keys(lessonDates).forEach(studentId => {
+    lessonDates[studentId].sort((a, b) => a.date - b.date);
+  });
 }
 
 // Count how many lessons this student has in current month
@@ -3977,17 +4007,26 @@ let currentLessonDate = new Date();
 async function renderTodayLessonsPage() {
   const content = document.getElementById('content');
   
-  // Load today's lesson dates (always loads current month)
+  // Load today's lesson dates (current month)
   await loadTodayLessonDates();
   
   // Get display date (can be today, yesterday, or tomorrow)
   const displayDate = new Date(currentLessonDate);
   
+  // 月をまたいだ場合（例：8/1 → 前日 7/31）、表示月のデータを追加でロードする
+  const today = new Date();
+  const displayYear  = displayDate.getFullYear();
+  const displayMonth = displayDate.getMonth() + 1;
+  const todayYear    = today.getFullYear();
+  const todayMonth   = today.getMonth() + 1;
+  if (displayYear !== todayYear || displayMonth !== todayMonth) {
+    await _loadLessonMonthIfNeeded(displayYear, displayMonth);
+  }
+
   // Load lesson report status for display date
   const displayDateStr = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')}`;
   await loadLessonReportStatus(displayDateStr);
   const displayDay = displayDate.getDate();
-  const displayMonth = displayDate.getMonth() + 1;
   
   console.log(`Display date: ${displayMonth}/${displayDay}`);
   console.log('Total students:', students.length);
@@ -4017,7 +4056,6 @@ async function renderTodayLessonsPage() {
     console.log('Day students count (after filter):', dayStudents.length);
   }
   
-  const today = new Date();
   const isToday = displayDate.toDateString() === today.toDateString();
   const dateLabel = isToday ? '今日のレッスン' : 'レッスン一覧';
 
