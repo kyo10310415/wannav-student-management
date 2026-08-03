@@ -2921,7 +2921,11 @@ function renderTutorStatistics() {
   let overallTotalStudents = 0;   // 全アクティブ生徒数合計（回収率加重平均用）
   let overallSatisfactionScore = 0;
   let overallValidCount = 0;
-  
+
+  // 前月以前の表示かどうか（回収率の分母をスナップショット値にするか判定）
+  const todayForStats = new Date();
+  const isCurrentMonthStats = (selectedTutorYear === todayForStats.getFullYear() && selectedTutorMonth === (todayForStats.getMonth() + 1));
+
   allActiveTutors.forEach(tutor => {
     // Skip きょうへい先生 from satisfaction statistics
     if (tutor.tutor_name === 'きょうへい先生') {
@@ -2937,16 +2941,22 @@ function renderTutorStatistics() {
     
     const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
     const currentMonthData = tutorSatisfactionData[selectedYearMonth];
+
+    // 前月以前の表示時はスナップショットの生徒数を分母に使用
+    const snapForStats = tutorWeeklySnapshotData[tutor.notion_name] || null;
+    const baseStudentCountStats = (!isCurrentMonthStats && snapForStats && snapForStats.active_student_count > 0)
+      ? snapForStats.active_student_count
+      : activeStudentCount;
     
-    if (currentMonthData && activeStudentCount > 0) {
+    if (currentMonthData && baseStudentCountStats > 0) {
       const satisfactionValue = currentMonthData.average * 10;
       const satisfactionCount = currentMonthData.count;
-      const collectionRateValue = (satisfactionCount / activeStudentCount * 100);
+      const collectionRateValue = (satisfactionCount / baseStudentCountStats * 100);
       const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
       
       overallSatisfaction += satisfactionValue;
-      overallTotalAnswers  += satisfactionCount;      // 回答数を累積
-      overallTotalStudents += activeStudentCount;     // 生徒数を累積
+      overallTotalAnswers  += satisfactionCount;          // 回答数を累積
+      overallTotalStudents += baseStudentCountStats;      // 生徒数を累積
       overallSatisfactionScore += satisfactionScoreValue;
       overallValidCount++;
     }
@@ -3003,16 +3013,22 @@ function renderTutorStatistics() {
       
       const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
       const currentMonthData = tutorSatisfactionData[selectedYearMonth];
+
+      // 前月以前の表示時はスナップショットの生徒数を分母に使用
+      const snapForTeam = tutorWeeklySnapshotData[tutor.notion_name] || null;
+      const baseStudentCountTeam = (!isCurrentMonthStats && snapForTeam && snapForTeam.active_student_count > 0)
+        ? snapForTeam.active_student_count
+        : activeStudentCount;
       
-      if (currentMonthData && activeStudentCount > 0) {
+      if (currentMonthData && baseStudentCountTeam > 0) {
         const satisfactionValue = currentMonthData.average * 10;
         const satisfactionCount = currentMonthData.count;
-        const collectionRateValue = (satisfactionCount / activeStudentCount * 100);
+        const collectionRateValue = (satisfactionCount / baseStudentCountTeam * 100);
         const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
         
         teamSatisfaction += satisfactionValue;
-        teamTotalAnswers  += satisfactionCount;      // 回答数を累積
-        teamTotalStudents += activeStudentCount;     // 生徒数を累積
+        teamTotalAnswers  += satisfactionCount;           // 回答数を累積
+        teamTotalStudents += baseStudentCountTeam;        // 生徒数を累積
         teamSatisfactionScore += satisfactionScoreValue;
         teamValidCount++;
       }
@@ -3220,6 +3236,18 @@ function renderTutorRows() {
     const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
     const currentMonthData = tutorSatisfactionData[selectedYearMonth];
     
+    // ── 前週スナップショット取得 ────────────────────────────────────
+    const prevSnap = tutorWeeklySnapshotData[tutor.notion_name] || null;
+
+    // 回収率計算に使う生徒数
+    // 今月以外の表示時は選択月のスナップショットの生徒数を使用する
+    // （現在の生徒数で前月の回収率を計算すると異動の影響を受けるため）
+    const today = new Date();
+    const isCurrentMonth = (selectedTutorYear === today.getFullYear() && selectedTutorMonth === (today.getMonth() + 1));
+    const baseStudentCount = (!isCurrentMonth && prevSnap && prevSnap.active_student_count > 0)
+      ? prevSnap.active_student_count
+      : activeStudentCount;
+
     // レッスン満足度 (平均 × 10、100がMAX、小数第2位まで)
     let satisfactionAverage = '-';
     let satisfactionValue = 0;
@@ -3234,18 +3262,19 @@ function renderTutorRows() {
     }
     const satisfactionCount = currentMonthData ? currentMonthData.count : 0;
     
-    // 回収率 (アクティブ生徒数 / 表示月の満足度件数 × 100)
+    // 回収率 (表示月の分母生徒数 / 表示月の満足度件数 × 100)
+    // 今月: 現在のアクティブ生徒数 / 前月以前: スナップショットの生徒数
     let collectionRate = '-';
     let collectionRateValue = 0;
     let collectionRateColor = 'text-green-600'; // デフォルト色
-    if (!isKyoheiSensei && activeStudentCount > 0 && satisfactionCount > 0) {
-      collectionRateValue = (satisfactionCount / activeStudentCount * 100);
+    if (!isKyoheiSensei && baseStudentCount > 0 && satisfactionCount > 0) {
+      collectionRateValue = (satisfactionCount / baseStudentCount * 100);
       collectionRate = `${collectionRateValue.toFixed(2)}%`;
       // 50未満は赤文字
       if (collectionRateValue < 50) {
         collectionRateColor = 'text-red-600';
       }
-    } else if (!isKyoheiSensei && activeStudentCount > 0 && satisfactionCount === 0) {
+    } else if (!isKyoheiSensei && baseStudentCount > 0 && satisfactionCount === 0) {
       collectionRate = '0.00%';
       collectionRateColor = 'text-red-600'; // 0%は赤文字
     }
@@ -3300,9 +3329,6 @@ function renderTutorRows() {
     
     // わなみさん使用回数（担当生徒の合計）
     const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${tutor.notion_name}">...</span>`;
-    
-    // ── 前週スナップショット取得 ────────────────────────────────────
-    const prevSnap = tutorWeeklySnapshotData[tutor.notion_name] || null;
     
     // 前週との差分バッジ生成ヘルパー
     // delta: 数値差分, suffix: 単位文字列, higherIsBetter: true=増加が緑/減少が赤
@@ -3720,8 +3746,9 @@ async function exportTutorSatisfactionToSheet() {
 // Show satisfaction modal for a tutor
 function showSatisfactionModal(tutorName) {
   const tutorSatisfactionData = satisfactionData[tutorName] || {};
-  const currentYearMonth = `${currentMonth.getFullYear()}/${currentMonth.getMonth() + 1}`;
-  const currentMonthData = tutorSatisfactionData[currentYearMonth];
+  // 表示中の選択月を使用（currentMonthではなくselectedTutorYear/Monthを参照）
+  const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
+  const currentMonthData = tutorSatisfactionData[selectedYearMonth];
   
   if (!currentMonthData) {
     alert('表示月の満足度データがありません');
@@ -3742,6 +3769,15 @@ function showSatisfactionModal(tutorName) {
     s.contract_plan !== '永久会員' &&
     s.contract_plan !== '在籍プラン'
   ).length;
+
+  // 選択月が今月かどうか判定（回収率の分母をスナップショット値にするか）
+  const todayForModal = new Date();
+  const isCurrentMonthModal = (selectedTutorYear === todayForModal.getFullYear() && selectedTutorMonth === (todayForModal.getMonth() + 1));
+  const snapForModal = tutorWeeklySnapshotData[tutor.notion_name] || null;
+  // 選択月の分母生徒数：前月以前はスナップショット値、今月は現在値
+  const baseStudentCountModal = (!isCurrentMonthModal && snapForModal && snapForModal.active_student_count > 0)
+    ? snapForModal.active_student_count
+    : activeStudentCount;
   
   // Build reasons list, separated by score
   const highScoreReasons = currentMonthData.reasons.filter(r => r.score >= 9);
@@ -3793,13 +3829,17 @@ function showSatisfactionModal(tutorName) {
   `;
   
   // Build historical chart data (all months with data)
+  // グラフ内の過去月ごとの回収率は、各月について現在値（activeStudentCount）で計算
+  // ※ 過去月分のスナップショットは未取得のためフォールバックとして現在値を使用
   const months = Object.keys(tutorSatisfactionData).sort();
   const chartData = months.map(m => {
     const data = tutorSatisfactionData[m];
     // レッスン満足度: 平均 × 10 (0-10 → 0-100)
     const satisfactionValue = data.average * 10;
-    // 回収率: 件数 ÷ アクティブ生徒数 × 100
-    const collectionRate = activeStudentCount > 0 ? (data.count / activeStudentCount * 100) : 0;
+    // 回収率: 選択月はbaseStudentCountModalを使用、それ以外は現在の生徒数でフォールバック
+    const isSelectedMonth = (m === selectedYearMonth);
+    const denomForChart = isSelectedMonth ? baseStudentCountModal : activeStudentCount;
+    const collectionRate = denomForChart > 0 ? (data.count / denomForChart * 100) : 0;
     // 満足度スコア: レッスン満足度 × 回収率(数値) / 100
     const satisfactionScore = satisfactionValue * collectionRate / 100;
     
@@ -3818,9 +3858,9 @@ function showSatisfactionModal(tutorName) {
   const chartCounts = chartData.map(d => d.count);
   const chartScores = chartData.map(d => d.satisfactionScore);
   
-  // Calculate current month values
+  // Calculate current month values (baseStudentCountModal を使用)
   const currentSatisfactionValue = currentMonthData.average * 10; // 0-100スケール
-  const currentCollectionRate = activeStudentCount > 0 ? (currentMonthData.count / activeStudentCount * 100) : 0;
+  const currentCollectionRate = baseStudentCountModal > 0 ? (currentMonthData.count / baseStudentCountModal * 100) : 0;
   const currentSatisfactionScore = currentSatisfactionValue * currentCollectionRate / 100;
   
   // Color coding for modal summary
@@ -3845,7 +3885,12 @@ function showSatisfactionModal(tutorName) {
           
           <!-- Current month summary -->
           <div class="bg-purple-50 rounded-lg p-4 mb-6">
-            <h4 class="font-semibold text-gray-800 mb-2">表示月 (${currentYearMonth.replace('/', '年')}月)</h4>
+            <h4 class="font-semibold text-gray-800 mb-2">表示月 (${selectedYearMonth.replace('/', '年')}月)
+              ${!isCurrentMonthModal && snapForModal && snapForModal.active_student_count > 0
+                ? `<span class="ml-2 text-xs font-normal text-gray-500">※ 分母：スナップショット時点の生徒数 ${snapForModal.active_student_count}名</span>`
+                : `<span class="ml-2 text-xs font-normal text-gray-500">分母：現在のアクティブ生徒数 ${activeStudentCount}名</span>`
+              }
+            </h4>
             <div class="grid grid-cols-4 gap-4">
               <div>
                 <div class="text-sm text-gray-600">レッスン満足度</div>
