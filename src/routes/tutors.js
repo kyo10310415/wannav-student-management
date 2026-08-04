@@ -106,6 +106,9 @@ app.get('/sync', async (c) => {
     console.log(`Cache has ${cacheEmployeeIds.length} valid employee IDs`);
     
     // Upsert tutors into database
+    // ⚠️ 重要: responsible_section / student_capacity は手動入力値のため
+    //   DO UPDATE SET に含めない（同期で上書きしない）
+    //   monthly_available_hours もキャッシュにないため上書きしない
     let successCount = 0;
     let errorCount = 0;
 
@@ -113,8 +116,8 @@ app.get('/sync', async (c) => {
       try {
         await query(
           `INSERT INTO tutors 
-            (employee_id, name, tutor_name, email, team, notion_name, job_type, status, monthly_available_hours, notion_page_id, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+            (employee_id, name, tutor_name, email, team, notion_name, job_type, status, notion_page_id, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
           ON CONFLICT (employee_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -124,9 +127,11 @@ app.get('/sync', async (c) => {
             notion_name = EXCLUDED.notion_name,
             job_type = EXCLUDED.job_type,
             status = EXCLUDED.status,
-            monthly_available_hours = EXCLUDED.monthly_available_hours,
             notion_page_id = EXCLUDED.notion_page_id,
-            updated_at = CURRENT_TIMESTAMP`,
+            updated_at = CURRENT_TIMESTAMP
+            -- responsible_section: 手動入力値のため同期で上書きしない
+            -- student_capacity: 手動入力値のため同期で上書きしない
+            -- monthly_available_hours: キャッシュにないため同期で上書きしない`,
           [
             tutor.employee_id,
             tutor.name,
@@ -136,7 +141,6 @@ app.get('/sync', async (c) => {
             tutor.notion_name,
             tutor.job_type,
             tutor.status,
-            null, // monthly_available_hours not in cache
             tutor.notion_page_id
           ]
         );
@@ -148,6 +152,8 @@ app.get('/sync', async (c) => {
     }
     
     // Find and delete tutors that are in DB but not in cache
+    // ⚠️ 安全策: キャッシュが少数しか返さなかった場合（部分取得エラー）に
+    //   大量削除が起きないよう、削除数が全体の20%を超える場合はスキップ
     let deletedCount = 0;
     try {
       // Get all tutors from database
@@ -158,16 +164,23 @@ app.get('/sync', async (c) => {
       const toDelete = dbEmployeeIds.filter(id => !cacheEmployeeIds.includes(id));
       
       if (toDelete.length > 0) {
-        console.log(`Found ${toDelete.length} tutors to delete: ${toDelete.join(', ')}`);
-        
-        // Delete these tutors
-        for (const employeeId of toDelete) {
-          try {
-            await query('DELETE FROM tutors WHERE employee_id = $1', [employeeId]);
-            deletedCount++;
-            console.log(`✅ Deleted tutor: ${employeeId}`);
-          } catch (deleteError) {
-            console.error(`❌ Error deleting tutor ${employeeId}:`, deleteError.message);
+        // 安全チェック: 削除対象がDB全体の20%を超える場合は異常とみなしてスキップ
+        const deletionRatio = toDelete.length / dbEmployeeIds.length;
+        if (deletionRatio > 0.2) {
+          console.warn(`⚠️ 削除対象が全体の${Math.round(deletionRatio * 100)}%（${toDelete.length}/${dbEmployeeIds.length}人）のため、キャッシュ異常とみなして削除をスキップします`);
+          console.warn(`⚠️ 削除対象: ${toDelete.join(', ')}`);
+        } else {
+          console.log(`Found ${toDelete.length} tutors to delete: ${toDelete.join(', ')}`);
+          
+          // Delete these tutors
+          for (const employeeId of toDelete) {
+            try {
+              await query('DELETE FROM tutors WHERE employee_id = $1', [employeeId]);
+              deletedCount++;
+              console.log(`✅ Deleted tutor: ${employeeId}`);
+            } catch (deleteError) {
+              console.error(`❌ Error deleting tutor ${employeeId}:`, deleteError.message);
+            }
           }
         }
       } else {
