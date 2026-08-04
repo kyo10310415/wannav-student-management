@@ -1210,6 +1210,29 @@ const migrations = [
        WHERE id = 1;
     `,
     down: ``
+  },
+  {
+    version: 47,
+    name: 'protect_daily_reports_from_tutor_delete',
+    up: `
+      -- daily_reports の tutor_id FK を ON DELETE CASCADE → ON DELETE RESTRICT に変更
+      -- 理由: tutors を DELETE すると日報が CASCADE で消えてしまうため
+      --       キャッシュ同期でTutorが誤削除された際に日報まで消える問題を防ぐ
+      ALTER TABLE daily_reports
+        DROP CONSTRAINT IF EXISTS daily_reports_tutor_id_fkey;
+
+      ALTER TABLE daily_reports
+        ADD CONSTRAINT daily_reports_tutor_id_fkey
+          FOREIGN KEY (tutor_id) REFERENCES tutors(id) ON DELETE RESTRICT;
+    `,
+    down: `
+      ALTER TABLE daily_reports
+        DROP CONSTRAINT IF EXISTS daily_reports_tutor_id_fkey;
+
+      ALTER TABLE daily_reports
+        ADD CONSTRAINT daily_reports_tutor_id_fkey
+          FOREIGN KEY (tutor_id) REFERENCES tutors(id) ON DELETE CASCADE;
+    `
   }
 ];
 
