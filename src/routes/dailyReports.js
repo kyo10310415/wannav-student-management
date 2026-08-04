@@ -18,24 +18,27 @@ app.get('/tutors', async (c) => {
         t.status,
         t.job_type,
         u.job_title,
-        MAX(dr.report_date) AS latest_report_date,
+        TO_CHAR(MAX(dr.report_date), 'YYYY-MM-DD') AS latest_report_date,
         BOOL_OR(dr.report_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date)
           AS today_submitted,
         BOOL_OR(dr.report_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 day')
           AS yesterday_submitted,
         -- 本日レッスンあり（lessons テーブル: homeroom_tutor → notion_name 結合）
+        -- lesson_date は TIMESTAMP型（タイムゾーンなし）のため AT TIME ZONE で JST 変換してから比較
         EXISTS (
           SELECT 1 FROM lessons l
           JOIN students s ON l.student_id = s.student_id
           WHERE s.homeroom_tutor = t.notion_name
-            AND l.lesson_date::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date
+            AND (l.lesson_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')::date
+                = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date
         ) AS today_has_lesson,
         -- 前日レッスンあり
         EXISTS (
           SELECT 1 FROM lessons l
           JOIN students s ON l.student_id = s.student_id
           WHERE s.homeroom_tutor = t.notion_name
-            AND l.lesson_date::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 day'
+            AND (l.lesson_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')::date
+                = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Tokyo')::date - INTERVAL '1 day'
         ) AS yesterday_has_lesson
       FROM tutors t
       LEFT JOIN daily_reports dr ON dr.tutor_id = t.id
@@ -106,7 +109,7 @@ app.get('/tutor/:tutorId', async (c) => {
       SELECT
         dr.id,
         dr.tutor_id,
-        dr.report_date,
+        TO_CHAR(dr.report_date, 'YYYY-MM-DD') AS report_date,
         dr.content,
         dr.submitted_at,
         dr.created_at,

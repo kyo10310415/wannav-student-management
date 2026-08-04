@@ -16985,9 +16985,8 @@ async function renderDailyReportsPage() {
 function _renderDailyReportsContent() {
   const container = document.getElementById('content');
 
-  // 今日の日付（JST）
-  const jstNow  = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-  const todayStr = jstNow.toISOString().slice(0, 10);
+  // 今日の日付（JST）- Intl.DateTimeFormat を使って正確に取得
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
 
   // クルーは自分のTutorのみ
   const isCrew          = currentUser && currentUser.role === 'crew';
@@ -17016,9 +17015,10 @@ function _renderDailyReportsContent() {
     </div>
   ` : '';
 
-  // 前日の日付文字列（表示用）
-  const jstYesterday  = new Date(jstNow.getTime() - 24 * 60 * 60 * 1000);
-  const yesterdayStr  = jstYesterday.toISOString().slice(0, 10);
+  // 前日の日付文字列（表示用）- JSTで正確に1日前を算出
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  const jstTodayMs = new Date(Date.UTC(ty, tm - 1, td)).getTime(); // UTC midnight of JST-today
+  const yesterdayStr = new Date(jstTodayMs - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // ── チーム別集計 ────────────────────────────────────────────────
   // 各Tutorの本日・前日ステータスを計算するヘルパー
@@ -17158,7 +17158,7 @@ function _renderDailyReportsContent() {
                   <td class="px-4 py-3 text-center">${dayBadge(todayStatus)}</td>
                   <td class="px-4 py-3 text-center">${dayBadge(yesterdayStatus)}</td>
                   <td class="px-4 py-3 text-center">
-                    <button onclick="openDailyReportModal(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}', '${todayStr}')"
+                    <button onclick="openDailyReportModal(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}', null)"
                             class="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition">
                       <i class="fas fa-pen mr-1"></i>日報提出
                     </button>
@@ -17184,13 +17184,15 @@ function _renderDailyReportsContent() {
             <div id="drModalTutorName" class="text-sm text-gray-800 font-semibold"></div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">日付 <span class="text-red-500">*</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">日付 <span class="text-red-500">*</span></label>
+            <!-- 日付クイック選択ボタン -->
+            <div id="drDateQuickBtns" class="flex gap-2 mb-2"></div>
             <input id="drModalDate" type="date"
                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">
-              今日の業務で意識したこと・振り返り <span class="text-red-500">*</span>
+              業務で意識したこと・振り返り <span class="text-red-500">*</span>
             </label>
             <textarea id="drModalContent" rows="6"
                       placeholder="本日の業務で意識したこと、うまくいったこと、改善点などを記入してください..."
@@ -17230,10 +17232,47 @@ function openDailyReportModal(tutorId, tutorName, defaultDate) {
   _drCurrentTutorId   = tutorId;
   _drCurrentTutorName = tutorName;
 
+  // JST の今日・前日を正確に計算
+  const todayJst     = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+  const [ty, tm, td] = todayJst.split('-').map(Number);
+  const yesterdayJst = new Date(Date.UTC(ty, tm - 1, td) - 24 * 60 * 60 * 1000)
+                         .toISOString().slice(0, 10);
+
+  // クイック選択ボタンを生成
+  const quickBtns = document.getElementById('drDateQuickBtns');
+  if (quickBtns) {
+    quickBtns.innerHTML = `
+      <button type="button"
+        onclick="document.getElementById('drModalDate').value='${todayJst}'; _drHighlightDateBtn(this);"
+        class="dr-date-quick-btn flex-1 py-1.5 text-xs font-semibold border rounded-lg transition
+               bg-purple-600 text-white border-purple-600"
+        data-date="${todayJst}">
+        今日 (${todayJst.replace(/-/g, '/')})
+      </button>
+      <button type="button"
+        onclick="document.getElementById('drModalDate').value='${yesterdayJst}'; _drHighlightDateBtn(this);"
+        class="dr-date-quick-btn flex-1 py-1.5 text-xs font-semibold border rounded-lg transition
+               bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+        data-date="${yesterdayJst}">
+        前日 (${yesterdayJst.replace(/-/g, '/')})
+      </button>
+    `;
+  }
+
   document.getElementById('drModalTutorName').textContent = tutorName;
-  document.getElementById('drModalDate').value    = defaultDate || '';
+  // デフォルトは今日（JST）
+  document.getElementById('drModalDate').value    = defaultDate || todayJst;
   document.getElementById('drModalContent').value = '';
   document.getElementById('dailyReportModal').classList.remove('hidden');
+}
+
+function _drHighlightDateBtn(clickedBtn) {
+  document.querySelectorAll('.dr-date-quick-btn').forEach(btn => {
+    btn.className = btn.className
+      .replace('bg-purple-600 text-white border-purple-600', 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50');
+  });
+  clickedBtn.className = clickedBtn.className
+    .replace('bg-white text-gray-600 border-gray-300 hover:bg-gray-50', 'bg-purple-600 text-white border-purple-600');
 }
 
 function closeDailyReportModal() {
