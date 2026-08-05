@@ -51,7 +51,7 @@ app.post('/', async (c) => {
 /** 更新（レッスン番号で指定） */
 app.put('/:number', async (c) => {
   try {
-    const num  = parseInt(c.req.param('number'));
+    const num  = c.req.param('number');  // TEXT型なのでparseInt不要
     const { title, content } = await c.req.json();
     const result = await query(
       `UPDATE lesson_contents
@@ -74,7 +74,7 @@ app.put('/:number', async (c) => {
 /** 削除 */
 app.delete('/:number', async (c) => {
   try {
-    const num = parseInt(c.req.param('number'));
+    const num = c.req.param('number');  // TEXT型なのでparseInt不要
     await query('DELETE FROM lesson_contents WHERE lesson_number = $1', [num]);
     return c.json({ success: true, message: '削除しました' });
   } catch (err) {
