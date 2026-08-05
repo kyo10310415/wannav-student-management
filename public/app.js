@@ -195,8 +195,8 @@ function renderHeader() {
     </button>
   ` : '';
 
-  // Build lesson contents button (admin only)
-  const lessonContentsButton = currentUser && currentUser.role === 'admin' ? `
+  // Build lesson contents button (leader or above)
+  const lessonContentsButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <button id="nav-lesson-contents" onclick="changePage('lesson-contents')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-contents' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-book-open mr-2"></i>レッスン内容管理
     </button>
@@ -788,6 +788,11 @@ async function renderApp() {
   } else if (currentPage === 'minutes') {
     await renderMinutesPage();
   } else if (currentPage === 'lesson-contents') {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+      currentPage = 'today';
+      await renderTodayLessonsPage();
+      return;
+    }
     await renderLessonContentsPage();
   } else {
     // Default to today's lessons
@@ -18220,7 +18225,7 @@ async function renderLessonContentsPage() {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs text-gray-500 mb-1">レッスン番号 <span class="text-red-500">*</span></label>
-            <input id="lc-new-number" type="number" min="1" placeholder="例: 1"
+            <input id="lc-new-number" type="text" placeholder="例: 1, Pro_動画_1"
                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
           </div>
           <div class="md:col-span-3">
@@ -18345,7 +18350,7 @@ async function saveLessonContent(num) {
 }
 
 async function addLessonContent() {
-  const num     = parseInt(document.getElementById('lc-new-number')?.value);
+  const num     = document.getElementById('lc-new-number')?.value?.trim();
   const title   = document.getElementById('lc-new-title')?.value;
   const content = document.getElementById('lc-new-content')?.value;
   if (!num) { showNotification('レッスン番号を入力してください', 'error'); return; }

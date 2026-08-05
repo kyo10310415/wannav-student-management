@@ -1233,6 +1233,26 @@ const migrations = [
         ADD CONSTRAINT daily_reports_tutor_id_fkey
           FOREIGN KEY (tutor_id) REFERENCES tutors(id) ON DELETE CASCADE;
     `
+  },
+  {
+    version: 48,
+    name: 'change_lesson_number_to_text',
+    up: `
+      -- lesson_contents.lesson_number を INTEGER → TEXT に変更
+      -- 理由: 「Pro_動画_1」などの文字列レッスン番号を入力できるようにする
+      ALTER TABLE lesson_contents
+        ALTER COLUMN lesson_number TYPE TEXT USING lesson_number::TEXT;
+
+      -- minutes.lesson_number も同様に TEXT に変更
+      ALTER TABLE minutes
+        ALTER COLUMN lesson_number TYPE TEXT USING lesson_number::TEXT;
+    `,
+    down: `
+      ALTER TABLE lesson_contents
+        ALTER COLUMN lesson_number TYPE INTEGER USING lesson_number::INTEGER;
+      ALTER TABLE minutes
+        ALTER COLUMN lesson_number TYPE INTEGER USING lesson_number::INTEGER;
+    `
   }
 ];
 
