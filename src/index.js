@@ -125,6 +125,29 @@ app.get('/', (c) => {
   `);
 });
 
+// Schedule students & tutors sync (runs every hour)
+// Keeps homeroom_tutor and other student/tutor data up-to-date with Notion cache
+console.log('Students & Tutors auto-sync: ENABLED (runs every hour)');
+cron.schedule('0 * * * *', async () => {
+  console.log('Running students & tutors auto-sync...');
+  try {
+    const [studentsRes, tutorsRes] = await Promise.all([
+      fetch(`http://localhost:${port}/api/students/sync`),
+      fetch(`http://localhost:${port}/api/tutors/sync`)
+    ]);
+    const [studentsResult, tutorsResult] = await Promise.all([
+      studentsRes.json(),
+      tutorsRes.json()
+    ]);
+    console.log(`Students sync: ${studentsResult.message || studentsResult.error}`);
+    console.log(`Tutors sync: ${tutorsResult.message || tutorsResult.error}`);
+  } catch (error) {
+    console.error('Error in students & tutors auto-sync:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
 // Schedule daily reminders (runs at 17:00 JST every day)
 // With timezone: 'Asia/Tokyo', cron expression is interpreted in JST
 // Can be disabled by setting DISCORD_REMINDERS_ENABLED=false
