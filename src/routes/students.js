@@ -278,7 +278,7 @@ app.get('/sync', async (c) => {
             student.x_account_id || null
           ]
         );
-        successCount++;\
+        successCount++;
       } catch (error) {
         console.error(`Error inserting student ${student.student_id}:`, error.message);
         errorCount++;
