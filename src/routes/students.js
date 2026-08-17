@@ -278,19 +278,52 @@ app.get('/sync', async (c) => {
             student.x_account_id || null
           ]
         );
-        successCount++;
+        successCount++;\
       } catch (error) {
         console.error(`Error inserting student ${student.student_id}:`, error.message);
         errorCount++;
       }
     }
-    
+
+    // スプレッドシートに存在しない生徒をDBから削除
+    // ⚠️ 安全策: 削除対象がDB全体の20%を超える場合はキャッシュ異常とみなしてスキップ
+    let deletedCount = 0;
+    try {
+      const cacheStudentIds = validStudents.map(s => s.student_id);
+      const dbStudentsResult = await query('SELECT student_id FROM students');
+      const dbStudentIds = dbStudentsResult.rows.map(r => r.student_id);
+      const toDelete = dbStudentIds.filter(id => !cacheStudentIds.includes(id));
+
+      if (toDelete.length > 0) {
+        const deletionRatio = toDelete.length / dbStudentIds.length;
+        if (deletionRatio > 0.2) {
+          console.warn(`⚠️ 削除対象が全体の${Math.round(deletionRatio * 100)}%（${toDelete.length}/${dbStudentIds.length}人）のため、キャッシュ異常とみなして削除をスキップします`);
+        } else {
+          console.log(`Found ${toDelete.length} students to delete: ${toDelete.join(', ')}`);
+          for (const studentId of toDelete) {
+            try {
+              await query('DELETE FROM students WHERE student_id = $1', [studentId]);
+              deletedCount++;
+              console.log(`✅ Deleted student: ${studentId}`);
+            } catch (deleteError) {
+              console.error(`❌ Error deleting student ${studentId}:`, deleteError.message);
+            }
+          }
+        }
+      } else {
+        console.log('No students to delete');
+      }
+    } catch (deleteCheckError) {
+      console.error('Error checking for students to delete:', deleteCheckError.message);
+    }
+
     return c.json({
       success: true,
-      message: `Synced ${successCount} students from cache (${errorCount} errors, ${skippedStudents.length} skipped)`,
+      message: `Synced ${successCount} students from cache (${errorCount} errors, ${skippedStudents.length} skipped, ${deletedCount} deleted)`,
       count: successCount,
       errors: errorCount,
       skipped: skippedStudents.length,
+      deleted: deletedCount,
       lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {
