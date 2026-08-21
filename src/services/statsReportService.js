@@ -1,6 +1,13 @@
 import axios from 'axios';
 import { query } from '../db/connection.js';
 import { fetchAllWanamiUsageCounts } from './sheetsService.js';
+import { getCompletedStudentIdsForMonth } from './lessonCompletionService.js';
+import {
+  calculateSatisfactionMetrics,
+  getJstDateParts,
+  getSatisfactionDenominator,
+  isLessonCompletionFilterActive
+} from './tutorSatisfactionService.js';
 
 /**
  * Send daily statistics report to Discord
@@ -76,35 +83,50 @@ export async function sendDailyStatsReport() {
     
     // 4. Fetch Wanami usage counts
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    const jstNow = getJstDateParts(now);
+    const year = jstNow.year;
+    const month = jstNow.month;
     const wanamiUsageCounts = await fetchAllWanamiUsageCounts(year, month);
     console.log(`[Stats Report] Found Wanami usage data for ${Object.keys(wanamiUsageCounts).length} students`);
     
     // 5. Calculate current month key
     const currentYearMonth = `${year}/${month}`;
+
+    let completedStudentIds = null;
+    if (isLessonCompletionFilterActive(year, month, now)) {
+      try {
+        const completion = await getCompletedStudentIdsForMonth(
+          `${year}-${String(month).padStart(2, '0')}`
+        );
+        completedStudentIds = new Set(completion.completedStudentIds);
+      } catch (error) {
+        console.error('[Stats Report] Lesson completion filter unavailable:', error.message);
+      }
+    }
     
     // 6. Calculate statistics by tutor
     const tutorStats = tutors.map(tutor => {
       // Get tutor's students
       const tutorStudents = students.filter(s => s.homeroom_tutor === tutor.notion_name);
       const activeStudentCount = tutorStudents.length;
+      const satisfactionDenominator = getSatisfactionDenominator({
+        students,
+        tutor,
+        year,
+        month,
+        completedStudentIds,
+        referenceDate: now
+      });
       
       // Get satisfaction data
       const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
       const currentMonthData = tutorSatisfactionData[currentYearMonth];
       
-      let satisfactionValue = 0;
-      let satisfactionCount = 0;
-      let collectionRateValue = 0;
-      let satisfactionScoreValue = 0;
-      
-      if (currentMonthData && activeStudentCount > 0) {
-        satisfactionValue = currentMonthData.average * 10; // 0-10 → 0-100
-        satisfactionCount = currentMonthData.count;
-        collectionRateValue = (satisfactionCount / activeStudentCount * 100);
-        satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
-      }
+      const metrics = calculateSatisfactionMetrics(currentMonthData, satisfactionDenominator);
+      const satisfactionValue = metrics.satisfactionValue || 0;
+      const satisfactionCount = metrics.satisfactionCount;
+      const collectionRateValue = metrics.collectionRate || 0;
+      const satisfactionScoreValue = metrics.satisfactionScore || 0;
       
       // Calculate Wanami usage for tutor's students
       let wanamiTotal = 0;

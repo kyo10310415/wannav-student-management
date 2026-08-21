@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchTutors } from '../services/notionService.js';
 import { fetchTutorsFromCache, fetchSatisfactionFromCache, getCacheSyncTime } from '../services/cacheService.js';
+import { aggregateSatisfactionByTutorMonth } from '../services/tutorSatisfactionService.js';
 import { weeklyTutorSnapshot } from '../jobs/tutorWeeklySnapshot.js';
 
 const app = new Hono();
@@ -346,56 +347,7 @@ app.get('/satisfaction/all', async (c) => {
       return c.json({ success: true, data: {}, cache_error: true, cache_error_message: error.message });
     }
     
-    // Group by tutor and month, calculate averages
-    const tutorMonthlyData = {};
-    
-    satisfactionData.forEach(record => {
-      const tutorName = record.tutor_name;
-      const yearMonth = record.year_month; // YYYY/M format
-      const score = parseFloat(record.satisfaction_score);
-      
-      if (!tutorName || !yearMonth || isNaN(score)) return;
-      
-      if (!tutorMonthlyData[tutorName]) {
-        tutorMonthlyData[tutorName] = {};
-      }
-      
-      if (!tutorMonthlyData[tutorName][yearMonth]) {
-        tutorMonthlyData[tutorName][yearMonth] = {
-          scores: [],
-          reasons: [],
-          studentNames: []
-        };
-      }
-      
-      tutorMonthlyData[tutorName][yearMonth].scores.push(score);
-      if (record.reason) {
-        tutorMonthlyData[tutorName][yearMonth].reasons.push({
-          studentName: record.student_name,
-          reason: record.reason,
-          score: score
-        });
-      }
-      if (record.student_name) {
-        tutorMonthlyData[tutorName][yearMonth].studentNames.push(record.student_name);
-      }
-    });
-    
-    // Calculate averages
-    const result = {};
-    for (const tutorName in tutorMonthlyData) {
-      result[tutorName] = {};
-      for (const yearMonth in tutorMonthlyData[tutorName]) {
-        const data = tutorMonthlyData[tutorName][yearMonth];
-        const average = data.scores.reduce((a, b) => a + b, 0) / data.scores.length;
-        result[tutorName][yearMonth] = {
-          average: average, // 丸めない、そのまま保存
-          count: data.scores.length,
-          reasons: data.reasons,
-          studentNames: data.studentNames
-        };
-      }
-    }
+    const result = aggregateSatisfactionByTutorMonth(satisfactionData);
     
     return c.json({
       success: true,
