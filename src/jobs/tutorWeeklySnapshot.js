@@ -1,5 +1,12 @@
 import { query } from '../db/connection.js';
 import { fetchSatisfactionFromCache } from '../services/cacheService.js';
+import { getCompletedStudentIdsForMonth } from '../services/lessonCompletionService.js';
+import {
+  aggregateSatisfactionByTutorMonth,
+  calculateSatisfactionMetrics,
+  getSatisfactionDenominator,
+  isLessonCompletionFilterActive
+} from '../services/tutorSatisfactionService.js';
 import { google } from 'googleapis';
 
 /**
@@ -17,8 +24,8 @@ import { google } from 'googleapis';
  *   以降: TutorA | 満足度 | 値 | ...
  *         (結合)  | 回収率 | 値 | ...
  *         (結合)  | 満足度スコア | 値 | ...
- *   末尾: 全体 | 満足度（加重） | 値 | ...
- *         (結合) | 回収率（平均） | 値 | ...
+ *   末尾: 全体 | 満足度（平均） | 値 | ...
+ *         (結合) | 回収率（回答数・分母数による加重） | 値 | ...
  *         (結合) | 満足度スコア | 値 | ...
  */
 
@@ -65,24 +72,7 @@ async function _runSnapshot({ isMonthly }) {
     const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     const satisfactionRaw = await fetchSatisfactionFromCache(cacheSpreadsheetId);
 
-    // tutorName -> yearMonth -> { scores[] }
-    const satisfactionByTutor = {};
-    satisfactionRaw.forEach(record => {
-      const tName = record.tutor_name;
-      const ym    = record.year_month;
-      const score = parseFloat(record.satisfaction_score);
-      if (!tName || !ym || isNaN(score)) return;
-      if (!satisfactionByTutor[tName])        satisfactionByTutor[tName] = {};
-      if (!satisfactionByTutor[tName][ym])    satisfactionByTutor[tName][ym] = { scores: [] };
-      satisfactionByTutor[tName][ym].scores.push(score);
-    });
-    for (const tName in satisfactionByTutor) {
-      for (const ym in satisfactionByTutor[tName]) {
-        const d = satisfactionByTutor[tName][ym];
-        d.average = d.scores.reduce((a, b) => a + b, 0) / d.scores.length;
-        d.count   = d.scores.length;
-      }
-    }
+    const satisfactionByTutor = aggregateSatisfactionByTutorMonth(satisfactionRaw);
 
     // アクティブTutor
     const tutorsResult = await query(`
@@ -96,34 +86,44 @@ async function _runSnapshot({ isMonthly }) {
 
     // 生徒
     const studentsResult = await query(
-      `SELECT homeroom_tutor, status, contract_plan FROM students`
+      `SELECT student_id, homeroom_tutor, status, contract_plan FROM students`
     );
     const students = studentsResult.rows;
+
+    let completedStudentIds = null;
+    if (isLessonCompletionFilterActive(snapshotYear, snapshotMonth, now)) {
+      try {
+        const completion = await getCompletedStudentIdsForMonth(
+          `${snapshotYear}-${String(snapshotMonth).padStart(2, '0')}`
+        );
+        completedStudentIds = new Set(completion.completedStudentIds);
+      } catch (error) {
+        console.error(`[Tutor ${label} Snapshot] Lesson completion filter unavailable:`, error.message);
+      }
+    }
 
     // ─── 各Tutorのデータ計算 ─────────────────────────────────────────────
     let savedCount = 0, skippedCount = 0;
     const sheetData = []; // { tutorName, satisfactionValue, collectionRate, satisfactionScore }
 
     for (const tutor of tutors) {
-      const activeStudentCount = students.filter(s =>
-        s.homeroom_tutor === tutor.notion_name &&
-        s.status === 'アクティブ' &&
-        s.contract_plan !== '永久会員' &&
-        s.contract_plan !== '在籍プラン'
-      ).length;
+      const satisfactionDenominator = getSatisfactionDenominator({
+        students,
+        tutor,
+        year: snapshotYear,
+        month: snapshotMonth,
+        completedStudentIds,
+        referenceDate: now
+      });
 
       const monthData = (satisfactionByTutor[tutor.tutor_name] || {})[yearMonth];
-
-      const satisfactionCount = monthData ? monthData.count : 0;
-      const satisfactionAvg   = monthData ? monthData.average : null;
-
-      const satisfactionValue = satisfactionAvg !== null ? satisfactionAvg * 10 : null;
-      const collectionRate    = activeStudentCount > 0
-        ? (satisfactionCount / activeStudentCount) * 100
-        : null;
-      const satisfactionScore = satisfactionValue !== null && collectionRate !== null
-        ? satisfactionValue * collectionRate / 100
-        : null;
+      const satisfactionAvg = monthData ? monthData.average : null;
+      const {
+        satisfactionValue,
+        satisfactionCount,
+        collectionRate,
+        satisfactionScore
+      } = calculateSatisfactionMetrics(monthData, satisfactionDenominator);
 
       // 週次のみDBに保存
       if (!isMonthly) {
@@ -146,7 +146,7 @@ async function _runSnapshot({ isMonthly }) {
               created_at           = EXCLUDED.created_at
           `, [
             snapshotDate, tutor.notion_name, yearMonth,
-            activeStudentCount, satisfactionCount, satisfactionAvg,
+            satisfactionDenominator, satisfactionCount, satisfactionAvg,
             satisfactionValue, collectionRate, satisfactionScore
           ]);
           savedCount++;
@@ -161,12 +161,16 @@ async function _runSnapshot({ isMonthly }) {
         satisfactionValue: satisfactionValue !== null ? parseFloat(satisfactionValue.toFixed(2)) : '',
         collectionRate:    collectionRate    !== null ? parseFloat(collectionRate.toFixed(2))    : '',
         satisfactionScore: satisfactionScore !== null ? parseFloat(satisfactionScore.toFixed(2)) : '',
+        satisfactionCount,
+        satisfactionDenominator,
       });
     }
 
     // ─── 全体集計行 ───────────────────────────────────────────────────────
-    // 有効なTutorのみ（satisfactionValueが数値のもの）を対象に加重平均
-    const validData = sheetData.filter(d => d.satisfactionValue !== '');
+    // 画面と同様、満足度データと有効な分母があるTutorだけを集計対象にする
+    const validData = sheetData.filter(d =>
+      d.satisfactionValue !== '' && d.satisfactionDenominator > 0
+    );
     let overallSatisfactionValue = '';
     let overallCollectionRate    = '';
     let overallSatisfactionScore = '';
@@ -175,13 +179,14 @@ async function _runSnapshot({ isMonthly }) {
       overallSatisfactionValue = parseFloat(
         (validData.reduce((s, d) => s + d.satisfactionValue, 0) / validData.length).toFixed(2)
       );
-      const validRate = sheetData.filter(d => d.collectionRate !== '');
-      if (validRate.length > 0) {
+      const totalAnswers = validData.reduce((sum, data) => sum + data.satisfactionCount, 0);
+      const totalDenominator = validData.reduce((sum, data) => sum + data.satisfactionDenominator, 0);
+      if (totalDenominator > 0) {
         overallCollectionRate = parseFloat(
-          (validRate.reduce((s, d) => s + d.collectionRate, 0) / validRate.length).toFixed(2)
+          (totalAnswers / totalDenominator * 100).toFixed(2)
         );
       }
-      const validScore = sheetData.filter(d => d.satisfactionScore !== '');
+      const validScore = validData.filter(d => d.satisfactionScore !== '');
       if (validScore.length > 0) {
         overallSatisfactionScore = parseFloat(
           (validScore.reduce((s, d) => s + d.satisfactionScore, 0) / validScore.length).toFixed(2)

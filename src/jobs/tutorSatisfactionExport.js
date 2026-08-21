@@ -1,5 +1,12 @@
 import { query } from '../db/connection.js';
 import { fetchSatisfactionFromCache } from '../services/cacheService.js';
+import { getCompletedStudentIdsForMonth } from '../services/lessonCompletionService.js';
+import {
+  aggregateSatisfactionByTutorMonth,
+  calculateSatisfactionMetrics,
+  getSatisfactionDenominator,
+  isLessonCompletionFilterActive
+} from '../services/tutorSatisfactionService.js';
 import { google } from 'googleapis';
 
 /**
@@ -23,12 +30,13 @@ export async function monthlyTutorSatisfactionExport() {
     
     // 1. Fetch satisfaction data from cache
     const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
-    const satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
+    const satisfactionRecords = await fetchSatisfactionFromCache(cacheSpreadsheetId);
     
-    if (!satisfactionData || Object.keys(satisfactionData).length === 0) {
+    if (!satisfactionRecords || satisfactionRecords.length === 0) {
       console.log('[Tutor Satisfaction Export] No satisfaction data found');
       return { success: false, error: 'No satisfaction data' };
     }
+    const satisfactionData = aggregateSatisfactionByTutorMonth(satisfactionRecords);
     
     // 2. Fetch students for active student count calculation
     const studentsResult = await query('SELECT * FROM students');
@@ -45,6 +53,18 @@ export async function monthlyTutorSatisfactionExport() {
     const tutors = tutorsResult.rows;
     
     console.log(`[Tutor Satisfaction Export] Found ${tutors.length} active tutors`);
+
+    let completedStudentIds = null;
+    if (isLessonCompletionFilterActive(currentYear, currentMonth, now)) {
+      try {
+        const completion = await getCompletedStudentIdsForMonth(
+          `${currentYear}-${String(currentMonth).padStart(2, '0')}`
+        );
+        completedStudentIds = new Set(completion.completedStudentIds);
+      } catch (error) {
+        console.error('[Tutor Satisfaction Export] Lesson completion filter unavailable:', error.message);
+      }
+    }
     
     // 4. Prepare data for the current month
     const rows = [];
@@ -63,29 +83,31 @@ export async function monthlyTutorSatisfactionExport() {
         return;
       }
       
-      // Calculate active student count
-      const activeStudentCount = students.filter(s => 
-        s.homeroom_tutor === tutor.notion_name &&
-        s.status === 'アクティブ' &&
-        s.contract_plan !== '永久会員' &&
-        s.contract_plan !== '在籍プラン'
-      ).length;
+      const activeStudentCount = getSatisfactionDenominator({
+        students,
+        tutor,
+        year: currentYear,
+        month: currentMonth,
+        completedStudentIds,
+        referenceDate: now
+      });
+      const metrics = calculateSatisfactionMetrics(monthData, activeStudentCount);
       
       // Row 1: レッスン満足度
-      const satisfactionValue = monthData.average.toFixed(2);
+      const satisfactionValueNumber = metrics.satisfactionValue;
+      const satisfactionValue = satisfactionValueNumber.toFixed(2);
       rows.push([tutorName, 'レッスン満足度', satisfactionValue]);
       
       // Row 2: 回収率
-      const collectionRate = activeStudentCount > 0 
-        ? ((monthData.count / activeStudentCount) * 100).toFixed(2)
-        : '0.00';
+      const collectionRate = metrics.collectionRate !== null
+        ? metrics.collectionRate.toFixed(2)
+        : '-';
       rows.push(['', '回収率', collectionRate]);
       
       // Row 3: 満足度スコア
-      const collectionRateNum = activeStudentCount > 0 
-        ? (monthData.count / activeStudentCount) * 100
-        : 0;
-      const satisfactionScore = (monthData.average * collectionRateNum / 100).toFixed(2);
+      const satisfactionScore = metrics.satisfactionScore !== null && metrics.satisfactionScore > 0
+        ? metrics.satisfactionScore.toFixed(2)
+        : '-';
       rows.push(['', '満足度スコア', satisfactionScore]);
     });
     
