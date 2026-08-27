@@ -3397,6 +3397,14 @@ function renderTutorRows() {
         title="満足度詳細を表示">
         <i class="fas fa-chart-line"></i>
       </button>` : '';
+
+    const lessonQualityButton = `
+      <button
+        onclick="showTutorMinutesQualityModal('${tutor.employee_id}')"
+        class="ml-2 px-2 py-1 text-xs bg-cyan-100 text-cyan-700 rounded hover:bg-cyan-200 whitespace-nowrap"
+        title="表示月のレッスン品質評価を表示">
+        <i class="fas fa-clipboard-check mr-1"></i>品質評価
+      </button>`;
     
     // レッスン進捗ステータス
     const progressStatus = getTutorLessonProgressStatus(tutor.notion_name);
@@ -3480,7 +3488,9 @@ function renderTutorRows() {
     return `
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${tutor.tutor_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+          <div class="flex items-center">${tutor.tutor_name || '-'}${lessonQualityButton}</div>
+        </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <select
@@ -3526,6 +3536,158 @@ function renderTutorRows() {
       </tr>
     `;
   }).join('');
+}
+
+async function showTutorMinutesQualityModal(employeeId) {
+  const tutor = tutors.find(item => item.employee_id === employeeId);
+  document.getElementById('tutor-minutes-quality-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'tutor-minutes-quality-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+  modal.innerHTML = `
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between px-6 py-4 border-b">
+        <div>
+          <h3 class="text-lg font-bold text-gray-800">
+            <i class="fas fa-clipboard-check mr-2 text-cyan-600"></i>レッスン品質評価
+          </h3>
+          <p class="text-sm text-gray-500 mt-1">${escapeHtml(tutor?.tutor_name || employeeId)}・${selectedTutorYear}年${selectedTutorMonth}月</p>
+        </div>
+        <button onclick="closeTutorMinutesQualityModal()" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div id="tutor-minutes-quality-content" class="flex-1 overflow-y-auto px-6 py-5">
+        <div class="py-16 text-center text-gray-400">
+          <i class="fas fa-spinner fa-spin text-3xl mb-3"></i><p>評価結果を読み込み中...</p>
+        </div>
+      </div>
+      <div class="px-6 py-3 border-t flex justify-end">
+        <button onclick="closeTutorMinutesQualityModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeTutorMinutesQualityModal();
+  });
+  document.body.appendChild(modal);
+
+  try {
+    const response = await axios.get(
+      `${API_BASE}/api/tutors/quality/monthly/${encodeURIComponent(employeeId)}/${selectedTutorYear}/${selectedTutorMonth}`,
+      { headers: { Authorization: `Bearer ${sessionToken}` } }
+    );
+    renderTutorMinutesQualityModal(response.data.data);
+  } catch (error) {
+    const container = document.getElementById('tutor-minutes-quality-content');
+    if (container) {
+      container.innerHTML = `<div class="py-12 text-center text-red-500">
+        <i class="fas fa-exclamation-circle text-3xl mb-3"></i>
+        <p>評価結果の取得に失敗しました。</p>
+        <p class="text-xs mt-1">${escapeHtml(error.response?.data?.error || error.message)}</p>
+      </div>`;
+    }
+  }
+}
+
+function closeTutorMinutesQualityModal() {
+  document.getElementById('tutor-minutes-quality-modal')?.remove();
+}
+
+function renderTutorMinutesQualityModal(data) {
+  const container = document.getElementById('tutor-minutes-quality-content');
+  if (!container) return;
+
+  const achievedMetricCount = (data.metrics || []).filter(metric => metric.targetAchieved === true).length;
+  const evaluatedMetricCount = (data.metrics || []).filter(metric => metric.rate !== null).length;
+
+  container.innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+      <div class="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+        <div class="text-xs text-gray-500">議事録数</div>
+        <div class="text-2xl font-bold text-cyan-700 mt-1">${data.totalMinutes}件</div>
+      </div>
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="text-xs text-gray-500">AI評価済み</div>
+        <div class="text-2xl font-bold text-blue-700 mt-1">${data.evaluatedMinutes}件</div>
+        ${data.missingEvaluationMinutes > 0 ? `<div class="text-xs text-orange-600 mt-1">未評価 ${data.missingEvaluationMinutes}件</div>` : ''}
+      </div>
+      <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div class="text-xs text-gray-500">目標達成指標</div>
+        <div class="text-2xl font-bold text-green-700 mt-1">${achievedMetricCount}/${evaluatedMetricCount || 0}</div>
+      </div>
+    </div>
+
+    ${data.evaluatedMinutes === 0 ? `
+      <div class="py-10 text-center text-gray-400 border rounded-lg">
+        <i class="fas fa-clipboard-check text-4xl mb-3"></i>
+        <p>この月にはAI評価済みの議事録がありません。</p>
+        <p class="text-xs mt-1">新規生成または再生成された議事録から集計されます。</p>
+      </div>` : `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ${(data.metrics || []).map(metric => {
+          const hasRate = metric.rate !== null;
+          const rateText = hasRate ? `${metric.rate.toFixed(2)}%` : '-';
+          const achieved = metric.targetAchieved === true;
+          const statusClass = !hasRate
+            ? 'bg-gray-100 text-gray-600'
+            : achieved
+              ? 'bg-green-100 text-green-700'
+              : 'bg-red-100 text-red-700';
+          const statusLabel = !hasRate ? '対象なし' : achieved ? '目標達成' : '目標未達';
+          const rateColor = !hasRate ? 'text-gray-500' : achieved ? 'text-green-700' : 'text-red-700';
+          return `
+            <div class="border rounded-lg p-4">
+              <div class="flex items-start justify-between gap-3">
+                <a href="${metric.asanaUrl}" target="_blank" rel="noopener noreferrer"
+                   class="font-semibold text-gray-800 hover:text-blue-700 hover:underline">
+                  ${escapeHtml(metric.monthlyLabel)}
+                  <i class="fas fa-external-link-alt text-xs ml-1"></i>
+                </a>
+                <span class="px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusClass}">${statusLabel}</span>
+              </div>
+              <div class="flex items-end justify-between mt-4">
+                <div class="text-3xl font-bold ${rateColor}">${rateText}</div>
+                <div class="text-right text-xs text-gray-500">
+                  <div>目標 ${metric.targetRate}%以上</div>
+                  <div>${metric.metCount}/${metric.applicableCount}件</div>
+                  ${metric.notApplicableCount > 0 ? `<div>対象外 ${metric.notApplicableCount}件</div>` : ''}
+                </div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+
+      <details class="mt-6 border rounded-lg">
+        <summary class="cursor-pointer px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50">
+          レッスン別の評価結果（${data.lessons.length}件）
+        </summary>
+        <div class="overflow-x-auto border-t">
+          <table class="min-w-full text-xs">
+            <thead class="bg-gray-50 text-gray-500">
+              <tr>
+                <th class="px-3 py-2 text-left whitespace-nowrap">レッスン日</th>
+                <th class="px-3 py-2 text-left whitespace-nowrap">生徒名</th>
+                ${minutesQualityMetricDefinitions.map(definition => `<th class="px-3 py-2 text-center min-w-[90px]">${definition.label}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              ${data.lessons.map(lesson => `
+                <tr>
+                  <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(lesson.lesson_date || '')}</td>
+                  <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(lesson.student_name || lesson.student_id || '')}</td>
+                  ${minutesQualityMetricDefinitions.map(definition => {
+                    const metric = lesson.quality_evaluation?.metrics?.[definition.key];
+                    if (!metric) return '<td class="px-3 py-2 text-center text-gray-300">-</td>';
+                    const display = getMinutesQualityStatusDisplay(metric.status);
+                    return `<td class="px-3 py-2 text-center"><span class="inline-flex items-center gap-1 px-2 py-1 rounded-full ${display.badge}" title="${escapeHtml(metric.evidence || '')}"><i class="fas ${display.icon}"></i>${display.label}</span></td>`;
+                  }).join('')}
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </details>`}
+  `;
 }
 
 // Trigger weekly snapshot manually (admin debug)
@@ -17924,6 +18086,16 @@ let minutesCurrentStudentId   = null;
 let minutesCurrentStudentName = null;
 let minutesListCache          = [];
 let minutesTemplates          = [];
+let minutesCurrentDetail      = null;
+
+const minutesQualityMetricDefinitions = [
+  { key: 'opening_anxiety_check', label: 'レッスン冒頭の不安確認', monthlyLabel: 'レッスン冒頭の不安確認実施率', targetRate: 90, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515425' },
+  { key: 'anxiety_content_record', label: '不安内容の記録', monthlyLabel: '不安内容の記録率', targetRate: 90, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515426' },
+  { key: 'previous_anxiety_followup', label: '前回の不安の確認', monthlyLabel: 'レッスンでの前回不安確認率', targetRate: 80, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515427' },
+  { key: 'specific_praise', label: '具体的称賛', monthlyLabel: '具体的称賛の実施率', targetRate: 90, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515428' },
+  { key: 'next_small_goal_setting', label: '次回レッスンまでの小目標設定', monthlyLabel: '次回小目標設定率', targetRate: 95, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515429' },
+  { key: 'previous_small_goal_review', label: '前回決めた小目標の確認', monthlyLabel: 'レッスンでの小目標振り返り率', targetRate: 85, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515430' }
+];
 
 /** 議事録ページを開く（生徒指定） */
 async function openMinutesForStudent(studentId, studentName) {
@@ -18026,12 +18198,25 @@ async function renderMinutesPage() {
           <h3 class="text-lg font-bold text-gray-800" id="minutes-modal-title">議事録</h3>
           <button onclick="closeMinutesModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
         </div>
+        <div class="flex border-b px-6 pt-3 gap-2">
+          <button id="minutes-detail-tab-text" onclick="switchMinutesDetailTab('text')"
+                  class="px-4 py-2 text-sm font-semibold border-b-2 border-teal-600 text-teal-700">
+            <i class="fas fa-file-alt mr-1"></i>議事録本文
+          </button>
+          <button id="minutes-detail-tab-quality" onclick="switchMinutesDetailTab('quality')"
+                  class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+            <i class="fas fa-clipboard-check mr-1"></i>品質評価
+          </button>
+        </div>
         <div class="flex-1 overflow-y-auto px-6 py-4">
-          <textarea id="minutes-modal-text" rows="24"
-                    class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-teal-400 resize-y"></textarea>
+          <div id="minutes-detail-panel-text">
+            <textarea id="minutes-modal-text" rows="24"
+                      class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-teal-400 resize-y"></textarea>
+          </div>
+          <div id="minutes-detail-panel-quality" class="hidden"></div>
         </div>
         <div class="px-6 py-3 border-t flex gap-2 justify-end">
-          <button onclick="saveMinutesEdit()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+          <button id="minutes-modal-save-btn" onclick="saveMinutesEdit()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-save mr-1"></i>保存
           </button>
           <button onclick="closeMinutesModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
@@ -18147,9 +18332,12 @@ async function openMinutesDetail(id) {
     });
     const m = res.data.data;
     minutesEditingId = id;
+    minutesCurrentDetail = m;
     document.getElementById('minutes-modal-title').textContent =
       `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${m.lesson_number}回目)` : ''}`;
     document.getElementById('minutes-modal-text').value = m.generated_text || '';
+    renderMinutesQualityEvaluation(m.quality_evaluation);
+    switchMinutesDetailTab('text');
     document.getElementById('minutes-detail-modal').classList.remove('hidden');
   } catch (err) {
     showNotification('議事録の読み込みに失敗しました', 'error');
@@ -18159,6 +18347,84 @@ async function openMinutesDetail(id) {
 function closeMinutesModal() {
   document.getElementById('minutes-detail-modal').classList.add('hidden');
   minutesEditingId = null;
+  minutesCurrentDetail = null;
+}
+
+function switchMinutesDetailTab(tab) {
+  const isQuality = tab === 'quality';
+  document.getElementById('minutes-detail-panel-text')?.classList.toggle('hidden', isQuality);
+  document.getElementById('minutes-detail-panel-quality')?.classList.toggle('hidden', !isQuality);
+  document.getElementById('minutes-modal-save-btn')?.classList.toggle('hidden', isQuality);
+
+  const textTab = document.getElementById('minutes-detail-tab-text');
+  const qualityTab = document.getElementById('minutes-detail-tab-quality');
+  if (textTab && qualityTab) {
+    textTab.className = `px-4 py-2 text-sm font-semibold border-b-2 ${isQuality ? 'border-transparent text-gray-500 hover:text-gray-700' : 'border-teal-600 text-teal-700'}`;
+    qualityTab.className = `px-4 py-2 text-sm font-semibold border-b-2 ${isQuality ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`;
+  }
+}
+
+function parseMinutesQualityEvaluation(evaluation) {
+  if (!evaluation) return null;
+  if (typeof evaluation === 'string') {
+    try {
+      return JSON.parse(evaluation);
+    } catch (error) {
+      return null;
+    }
+  }
+  return evaluation;
+}
+
+function getMinutesQualityStatusDisplay(status) {
+  if (status === 'met') {
+    return { label: '達成', icon: 'fa-check-circle', badge: 'bg-green-100 text-green-700', border: 'border-green-200' };
+  }
+  if (status === 'not_applicable') {
+    return { label: '対象外', icon: 'fa-minus-circle', badge: 'bg-gray-100 text-gray-600', border: 'border-gray-200' };
+  }
+  return { label: '未達成', icon: 'fa-times-circle', badge: 'bg-red-100 text-red-700', border: 'border-red-200' };
+}
+
+function renderMinutesQualityEvaluation(rawEvaluation) {
+  const container = document.getElementById('minutes-detail-panel-quality');
+  if (!container) return;
+  const evaluation = parseMinutesQualityEvaluation(rawEvaluation);
+
+  if (!evaluation?.metrics) {
+    container.innerHTML = `
+      <div class="py-12 text-center text-gray-400">
+        <i class="fas fa-clipboard-check text-4xl mb-3"></i>
+        <p>この議事録には品質評価データがありません。</p>
+        <p class="text-xs mt-1">機能追加前の議事録は、再生成すると評価されます。</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+      <i class="fas fa-info-circle mr-1"></i>
+      AIが文字起こしと前回議事録を根拠に評価した結果です。
+    </div>
+    <div class="space-y-3">
+      ${minutesQualityMetricDefinitions.map(definition => {
+        const metric = evaluation.metrics[definition.key] || { status: 'not_met' };
+        const display = getMinutesQualityStatusDisplay(metric.status);
+        return `
+          <div class="border ${display.border} rounded-lg p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="font-semibold text-gray-800">${definition.label}</div>
+              <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${display.badge}">
+                <i class="fas ${display.icon}"></i>${display.label}
+              </span>
+            </div>
+            ${metric.value ? `<div class="mt-3 text-sm"><span class="font-semibold text-gray-600">記録内容：</span>${escapeHtml(metric.value)}</div>` : ''}
+            <div class="mt-2 text-sm text-gray-600">
+              <span class="font-semibold">判断根拠：</span>${escapeHtml(metric.evidence || '明確な根拠なし')}
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
 }
 
 async function saveMinutesEdit() {
