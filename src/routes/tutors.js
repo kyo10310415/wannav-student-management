@@ -3,6 +3,10 @@ import { query } from '../db/connection.js';
 import { fetchTutors } from '../services/notionService.js';
 import { fetchTutorsFromCache, fetchSatisfactionFromCache, getCacheSyncTime } from '../services/cacheService.js';
 import { aggregateSatisfactionByTutorMonth } from '../services/tutorSatisfactionService.js';
+import {
+  aggregateMinutesQualityEvaluations,
+  normalizeMinutesQualityEvaluation
+} from '../services/minutesQualityService.js';
 import { weeklyTutorSnapshot } from '../jobs/tutorWeeklySnapshot.js';
 
 const app = new Hono();
@@ -206,6 +210,95 @@ app.get('/sync', async (c) => {
       success: false,
       error: error.message
     }, 500);
+  }
+});
+
+/**
+ * GET /api/tutors/quality/monthly/:employeeId/:year/:month
+ * Tutorごとの議事録品質評価を月次集計する。
+ */
+app.get('/quality/monthly/:employeeId/:year/:month', async (c) => {
+  try {
+    const employeeId = c.req.param('employeeId');
+    const yearParam = c.req.param('year');
+    const monthParam = c.req.param('month');
+    const year = Number(yearParam);
+    const month = Number(monthParam);
+
+    if (
+      !employeeId ||
+      !/^\d{4}$/.test(yearParam) ||
+      !/^\d{1,2}$/.test(monthParam) ||
+      !Number.isInteger(year) ||
+      year < 2000 ||
+      year > 2100 ||
+      !Number.isInteger(month) ||
+      month < 1 ||
+      month > 12
+    ) {
+      return c.json({ success: false, error: 'Invalid tutor or year/month' }, 400);
+    }
+
+    const tutorResult = await query(
+      `SELECT employee_id, tutor_name, notion_name, name, email
+         FROM tutors
+        WHERE employee_id = $1`,
+      [employeeId]
+    );
+    if (tutorResult.rows.length === 0) {
+      return c.json({ success: false, error: 'Tutor not found' }, 404);
+    }
+
+    const tutor = tutorResult.rows[0];
+    const tutorIdentifiers = [...new Set([
+      tutor.tutor_name,
+      tutor.notion_name,
+      tutor.name,
+      tutor.email
+    ].filter(Boolean))];
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const nextYear = month === 12 ? year + 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+    const minutesResult = await query(
+      `SELECT id, student_id, student_name, lesson_date::text AS lesson_date,
+              tutor_name, tutor_employee_id, quality_evaluation
+         FROM minutes
+        WHERE lesson_date >= $1::date
+          AND lesson_date < $2::date
+          AND (
+            tutor_employee_id = $3
+            OR (tutor_employee_id IS NULL AND tutor_name = ANY($4::text[]))
+          )
+        ORDER BY lesson_date DESC, student_name ASC`,
+      [startDate, endDate, employeeId, tutorIdentifiers]
+    );
+
+    const summary = aggregateMinutesQualityEvaluations(minutesResult.rows);
+    const lessons = minutesResult.rows.map(row => ({
+      ...row,
+      quality_evaluation: row.quality_evaluation
+        ? normalizeMinutesQualityEvaluation(row.quality_evaluation)
+        : null
+    }));
+
+    return c.json({
+      success: true,
+      data: {
+        tutor: {
+          employeeId: tutor.employee_id,
+          tutorName: tutor.tutor_name || tutor.name || tutor.notion_name
+        },
+        year,
+        month,
+        ...summary,
+        lessons
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching monthly tutor quality:', error);
+    return c.json({ success: false, error: error.message }, 500);
   }
 });
 

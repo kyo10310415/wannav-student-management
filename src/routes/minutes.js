@@ -14,7 +14,11 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchTranscript } from '../services/driveService.js';
-import { buildMinutesText } from '../services/minutesService.js';
+import { buildMinutesResult } from '../services/minutesService.js';
+import {
+  getPreviousMinutesContext,
+  resolveMinutesTutor
+} from '../services/minutesContextService.js';
 
 const app = new Hono();
 
@@ -197,7 +201,11 @@ app.post('/generate', async (c) => {
 
     // 5. AI で議事録生成
     console.log(`[Minutes] Generating minutes with AI... (lessonNumber=${resolvedLessonNumber})`);
-    const generatedText = await buildMinutesText({
+    const [previousMinutesContext, resolvedTutor] = await Promise.all([
+      getPreviousMinutesContext(studentId, lessonDate),
+      resolveMinutesTutor(studentId, lessonDate)
+    ]);
+    const { generatedText, qualityEvaluation } = await buildMinutesResult({
       templateText: template.template_text,
       studentName:  studentName || studentId,
       studentId,
@@ -206,6 +214,7 @@ app.post('/generate', async (c) => {
       todayContent,
       nextContent,
       transcript:   driveResult.transcript,
+      previousMinutesContext,
     });
 
     // 6. UPSERT
@@ -213,8 +222,8 @@ app.post('/generate', async (c) => {
       `INSERT INTO minutes
           (student_id, student_name, lesson_date, lesson_number,
            drive_file_id, drive_file_name, transcript, generated_text,
-           template_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW())
+           template_id, tutor_name, tutor_employee_id, quality_evaluation, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
        ON CONFLICT (student_id, lesson_date)
        DO UPDATE SET
            student_name   = EXCLUDED.student_name,
@@ -224,6 +233,9 @@ app.post('/generate', async (c) => {
            transcript     = EXCLUDED.transcript,
            generated_text = EXCLUDED.generated_text,
            template_id    = EXCLUDED.template_id,
+           tutor_name     = EXCLUDED.tutor_name,
+           tutor_employee_id = EXCLUDED.tutor_employee_id,
+           quality_evaluation = EXCLUDED.quality_evaluation,
            updated_at     = NOW()
        RETURNING *`,
       [
@@ -236,6 +248,9 @@ app.post('/generate', async (c) => {
         driveResult.transcript,
         generatedText,
         tmplId,
+        resolvedTutor.tutorName,
+        resolvedTutor.tutorEmployeeId,
+        JSON.stringify(qualityEvaluation),
       ]
     );
 

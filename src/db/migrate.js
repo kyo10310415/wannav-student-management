@@ -1253,6 +1253,87 @@ const migrations = [
       ALTER TABLE minutes
         ALTER COLUMN lesson_number TYPE INTEGER USING lesson_number::INTEGER;
     `
+  },
+  {
+    version: 49,
+    name: 'add_quality_evaluation_to_minutes',
+    up: `
+      ALTER TABLE minutes
+        ADD COLUMN IF NOT EXISTS tutor_name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS tutor_employee_id VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS quality_evaluation JSONB;
+
+      COMMENT ON COLUMN minutes.tutor_name IS 'レッスン実施Tutor名（レッスン報告、予約、担任の順で解決）';
+      COMMENT ON COLUMN minutes.tutor_employee_id IS 'レッスン実施Tutorの従業員ID';
+      COMMENT ON COLUMN minutes.quality_evaluation IS 'AIによるレッスン品質6項目の評価結果';
+
+      -- 既存議事録はTutor名だけ可能な範囲で補完する。品質評価は再生成されたものから保存する。
+      UPDATE minutes m
+         SET tutor_name = COALESCE(
+           (
+             SELECT NULLIF(TRIM(lr.tutor_name), '')
+               FROM lesson_reports lr
+              WHERE lr.student_id = m.student_id
+                AND lr.lesson_date::date = m.lesson_date
+              ORDER BY lr.reported_at DESC
+              LIMIT 1
+           ),
+           (
+             SELECT NULLIF(TRIM(l.tutor_name), '')
+               FROM lessons l
+              WHERE l.student_id = m.student_id
+                AND l.lesson_date::date = m.lesson_date
+              ORDER BY l.updated_at DESC
+              LIMIT 1
+           ),
+           (
+             SELECT NULLIF(TRIM(t.tutor_name), '')
+               FROM students s
+               LEFT JOIN tutors t ON t.notion_name = s.homeroom_tutor
+              WHERE s.student_id = m.student_id
+              LIMIT 1
+           ),
+           (
+             SELECT NULLIF(TRIM(s.homeroom_tutor), '')
+               FROM students s
+              WHERE s.student_id = m.student_id
+              LIMIT 1
+           )
+         )
+       WHERE tutor_name IS NULL OR TRIM(tutor_name) = '';
+
+      UPDATE minutes m
+         SET tutor_employee_id = (
+               SELECT t.employee_id
+                 FROM tutors t
+                WHERE m.tutor_name = ANY(ARRAY[t.tutor_name, t.notion_name, t.name, t.email])
+                ORDER BY CASE WHEN t.tutor_name = m.tutor_name THEN 0 ELSE 1 END
+                LIMIT 1
+             ),
+             tutor_name = COALESCE(
+               (
+                 SELECT t.tutor_name
+                   FROM tutors t
+                  WHERE m.tutor_name = ANY(ARRAY[t.tutor_name, t.notion_name, t.name, t.email])
+                  ORDER BY CASE WHEN t.tutor_name = m.tutor_name THEN 0 ELSE 1 END
+                  LIMIT 1
+               ),
+               m.tutor_name
+             )
+       WHERE m.tutor_name IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_minutes_tutor_date
+        ON minutes(tutor_employee_id, lesson_date DESC);
+      CREATE INDEX IF NOT EXISTS idx_minutes_quality_evaluation
+        ON minutes USING GIN(quality_evaluation);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_minutes_quality_evaluation;
+      DROP INDEX IF EXISTS idx_minutes_tutor_date;
+      ALTER TABLE minutes DROP COLUMN IF EXISTS quality_evaluation;
+      ALTER TABLE minutes DROP COLUMN IF EXISTS tutor_employee_id;
+      ALTER TABLE minutes DROP COLUMN IF EXISTS tutor_name;
+    `
   }
 ];
 

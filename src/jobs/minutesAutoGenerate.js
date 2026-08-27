@@ -2,17 +2,21 @@
  * 議事録 自動生成ジョブ
  *
  * 1時間に1回実行。
- * 処理対象: 今日のレッスン（JST）に該当し、まだ議事録が存在しない生徒
+ * 処理対象: 今日・前日のレッスン（JST）に該当し、品質評価済み議事録が存在しない生徒
  *
  * フロー:
  * 1. lessons テーブルから「今日・前日」のレッスンを持つ student_id 一覧を取得
- * 2. minutes テーブルで同日の議事録が既に存在する student_id を除外（スキップ）
- * 3. 残った生徒について fetchTranscript → buildMinutesText → DB UPSERT
+ * 2. minutes テーブルで同日の品質評価済み議事録が存在する student_id を除外
+ * 3. 残った生徒について fetchTranscript → buildMinutesResult → DB UPSERT
  */
 
 import { query } from '../db/connection.js';
 import { fetchTranscript } from '../services/driveService.js';
-import { buildMinutesText } from '../services/minutesService.js';
+import { buildMinutesResult } from '../services/minutesService.js';
+import {
+  getPreviousMinutesContext,
+  resolveMinutesTutor
+} from '../services/minutesContextService.js';
 
 // JST の今日の日付を YYYY-MM-DD で返す
 function getTodayJST() {
@@ -65,7 +69,7 @@ export async function minutesAutoGenerate() {
   }
   console.log(`[MinutesAutoGen] ${candidates.length} lesson(s) found.`);
 
-  // ── 2. 既に議事録が存在するものをスキップ ───────────────────────────
+  // ── 2. 既に品質評価済みの議事録が存在するものをスキップ ────────────
   let existingResult;
   try {
     // 対象の student_id 一覧と日付一覧で絞り込み、後でSetで照合
@@ -77,7 +81,8 @@ export async function minutesAutoGenerate() {
       `SELECT student_id, lesson_date::text
          FROM minutes
         WHERE student_id IN (${sidPlaceholders})
-          AND lesson_date::text IN (${datePlaceholders})`,
+          AND lesson_date::text IN (${datePlaceholders})
+          AND quality_evaluation IS NOT NULL`,
       [...studentIds, ...dates]
     );
   } catch (err) {
@@ -169,7 +174,11 @@ export async function minutesAutoGenerate() {
 
       console.log(`${tag} lessonNumber=${lessonNumber}, todayContent=${todayContent ? '有り' : '無し'}, nextContent=${nextContent ? '有り' : '無し'}`);
 
-      const generatedText = await buildMinutesText({
+      const [previousMinutesContext, resolvedTutor] = await Promise.all([
+        getPreviousMinutesContext(student_id, lesson_date),
+        resolveMinutesTutor(student_id, lesson_date)
+      ]);
+      const { generatedText, qualityEvaluation } = await buildMinutesResult({
         templateText: template.template_text,
         studentName:  student_name || student_id,
         studentId:    student_id,
@@ -178,6 +187,7 @@ export async function minutesAutoGenerate() {
         todayContent,
         nextContent,
         transcript:   driveResult.transcript,
+        previousMinutesContext,
       });
 
       // UPSERT（同一 student_id × lesson_date は上書き）
@@ -185,8 +195,8 @@ export async function minutesAutoGenerate() {
         `INSERT INTO minutes
             (student_id, student_name, lesson_date, lesson_number,
              drive_file_id, drive_file_name, transcript, generated_text,
-             template_id, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW())
+             template_id, tutor_name, tutor_employee_id, quality_evaluation, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
          ON CONFLICT (student_id, lesson_date)
          DO UPDATE SET
              student_name    = EXCLUDED.student_name,
@@ -195,6 +205,9 @@ export async function minutesAutoGenerate() {
              transcript      = EXCLUDED.transcript,
              generated_text  = EXCLUDED.generated_text,
              template_id     = EXCLUDED.template_id,
+             tutor_name      = EXCLUDED.tutor_name,
+             tutor_employee_id = EXCLUDED.tutor_employee_id,
+             quality_evaluation = EXCLUDED.quality_evaluation,
              updated_at      = NOW()`,
         [
           student_id,
@@ -206,6 +219,9 @@ export async function minutesAutoGenerate() {
           driveResult.transcript,
           generatedText,
           template.id,
+          resolvedTutor.tutorName,
+          resolvedTutor.tutorEmployeeId,
+          JSON.stringify(qualityEvaluation),
         ]
       );
 

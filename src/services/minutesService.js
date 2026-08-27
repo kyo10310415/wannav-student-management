@@ -4,6 +4,10 @@
  */
 
 import OpenAI from 'openai';
+import {
+  buildTranscriptPromptText,
+  normalizeMinutesQualityEvaluation
+} from './minutesQualityService.js';
 
 let _client = null;
 
@@ -53,6 +57,24 @@ function extractLessonSummary(title, content) {
   return title || '';
 }
 
+function buildPreviousMinutesPrompt(previousMinutesContext) {
+  if (!previousMinutesContext) return '（前回議事録なし。前回項目は対象外として評価）';
+
+  const evaluation = previousMinutesContext.quality_evaluation
+    ? JSON.stringify(previousMinutesContext.quality_evaluation)
+    : '（前回の品質評価なし）';
+  // 不安情報は本文前半、小目標は末尾に置かれることが多いため両端を残す。
+  const generatedText = buildTranscriptPromptText(
+    previousMinutesContext.generated_text,
+    5000
+  );
+
+  return `前回日: ${previousMinutesContext.lesson_date || '不明'}
+前回品質評価: ${evaluation}
+前回議事録:
+${generatedText || '（本文なし）'}`;
+}
+
 /**
  * OpenAI で文字起こしから議事録の各フィールドを生成する
  *
@@ -64,18 +86,21 @@ function extractLessonSummary(title, content) {
  *   - x_feedback           : X（旧Twitter）の運用に関するフィードバック・アドバイス
  *   - next_action          : ネクストアクション・ミッション（次回までの課題・行動）
  *   - notes                : その他メモ
+ *   - lesson_quality_evaluation : レッスン品質6項目の達成状況・根拠
  *
  * @param {string} transcript       文字起こしテキスト
  * @param {string} studentName      生徒名（敬称なし）
  * @param {string} todayRawContent  lesson_contents の生テキスト（今回）
  * @param {string} nextRawContent   lesson_contents の生テキスト（次回）
- * @returns {{ today_lesson_summary, next_lesson_summary, summary, youtube_feedback, x_feedback, next_action, notes }}
+ * @param {object|null} previousMinutesContext 直前の議事録・品質評価
+ * @returns {{ today_lesson_summary, next_lesson_summary, summary, youtube_feedback, x_feedback, next_action, notes, lesson_quality_evaluation }}
  */
 export async function generateMinutesContent(
   transcript,
   studentName,
   todayRawContent,
   nextRawContent,
+  previousMinutesContext = null,
 ) {
   const client = getOpenAIClient();
   const studentNameSama = studentName ? `${studentName}様` : '生徒様';
@@ -84,7 +109,7 @@ export async function generateMinutesContent(
 文体は「〜しました」「〜を行いました」「〜についてアドバイスしました」のような、講師が書いたナチュラルな文章にしてください。
 第三者視点（「〜様は〜しました」のみ）ではなく、講師目線で生徒とのやり取りや指導内容を書いてください。
 
-レッスンの文字起こしと、レッスンマスターの情報をもとに、以下の7つを日本語で出力してください。
+レッスンの文字起こしと、レッスンマスター・前回議事録の情報をもとに、以下の8つを日本語で出力してください。
 
 【重要】箇条書きが必要な項目は、各項目を「\\n・」（改行＋中点）で区切って出力してください。カンマ（,）で区切らないでください。
 【重要】各箇条書き項目は「端的な一言」ではなく、背景・理由・具体的なやり取りを含めた2〜3文程度の自然な文章で書いてください。
@@ -136,8 +161,42 @@ export async function generateMinutesContent(
    YouTube・X・ネクストアクション以外の特記事項・次回への申し送り・懸念事項があれば記載してください。なければ「なし」。
    複数ある場合は改行＋「・」で区切ってください（カンマ区切りは禁止）。
 
+8. lesson_quality_evaluation（レッスン品質評価）:
+   次の6項目を、文字起こしに実際に現れる発言だけを根拠に厳格に評価してください。
+   推測で「実施」としないでください。各項目は status・evidence・value を返してください。
+   status は必ず "met"（達成）、"not_met"（未達成）、"not_applicable"（対象外）のいずれかです。
+   evidence は判断根拠となる短い発言または要約、value は記録すべき不安内容・小目標などを記載してください。
+
+   - opening_anxiety_check:
+     レッスン冒頭（挨拶・導入直後）に、Tutorが生徒の現在の不安・懸念・困りごとを明示的に確認したか。
+     単なる「元気ですか」「調子はどうですか」だけではなく、不安や困りごとを答えられる問いかけを達成条件とします。
+     この項目では "not_applicable" を使わないでください。
+
+   - anxiety_content_record:
+     冒頭の確認で判明した不安内容を具体的に記録できるか。「特になし」という回答も明確なら達成です。
+     value に不安内容または「特になし」を記載してください。不安確認自体がなければ未達成です。
+     この項目では "not_applicable" を使わないでください。
+
+   - previous_anxiety_followup:
+     前回議事録に不安内容がある場合、レッスン冒頭でその後の変化・解消状況を具体的に確認したか。
+     前回議事録がない、または前回に確認対象の不安がない場合だけ対象外にしてください。
+
+   - specific_praise:
+     Tutorが、生徒の具体的な行動・工夫・成果を特定し、何が良かったかを伝えて称賛したか。
+     根拠のない「すごい」「いいですね」などの一般的な相づちだけでは未達成です。
+     この項目では "not_applicable" を使わないでください。
+
+   - next_small_goal_setting:
+     次回レッスンまでに行う、具体的で実行可能な小目標をTutorと生徒が設定したか。
+     value に小目標を記載してください。曖昧な努力目標だけでは未達成です。
+     この項目では "not_applicable" を使わないでください。
+
+   - previous_small_goal_review:
+     前回議事録に小目標がある場合、レッスン冒頭で達成状況・実施結果を振り返ったか。
+     前回議事録がない、または前回に小目標がない場合だけ対象外にしてください。
+
 必ずJSON形式で出力してください:
-{"today_lesson_summary": "...", "next_lesson_summary": "...", "summary": "...", "youtube_feedback": "...", "x_feedback": "...", "next_action": "...", "notes": "..."}`;
+{"today_lesson_summary":"...","next_lesson_summary":"...","summary":"...","youtube_feedback":"...","x_feedback":"...","next_action":"...","notes":"...","lesson_quality_evaluation":{"opening_anxiety_check":{"status":"met|not_met","evidence":"...","value":"..."},"anxiety_content_record":{"status":"met|not_met","evidence":"...","value":"..."},"previous_anxiety_followup":{"status":"met|not_met|not_applicable","evidence":"...","value":"..."},"specific_praise":{"status":"met|not_met","evidence":"...","value":"..."},"next_small_goal_setting":{"status":"met|not_met","evidence":"...","value":"..."},"previous_small_goal_review":{"status":"met|not_met|not_applicable","evidence":"...","value":"..."}}}`;
 
   const userPrompt = `【生徒名】${studentNameSama}
 
@@ -147,8 +206,11 @@ ${todayRawContent || '（情報なし）'}
 【次回のレッスンマスター情報（参考）】
 ${nextRawContent || '（情報なし）'}
 
+【前回議事録・前回品質評価】
+${buildPreviousMinutesPrompt(previousMinutesContext)}
+
 【文字起こし】
-${transcript.slice(0, 8000)}`;
+${buildTranscriptPromptText(transcript)}`;
 
   try {
     const response = await client.chat.completions.create({
@@ -159,7 +221,7 @@ ${transcript.slice(0, 8000)}`;
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3,
-      max_tokens: 2400,
+      max_tokens: 3600,
     });
 
     const raw    = response.choices[0].message.content || '{}';
@@ -172,6 +234,9 @@ ${transcript.slice(0, 8000)}`;
       x_feedback:           parsed.x_feedback            || 'なし',
       next_action:          parsed.next_action           || 'なし',
       notes:                parsed.notes                 || '',
+      lesson_quality_evaluation: normalizeMinutesQualityEvaluation(
+        parsed.lesson_quality_evaluation
+      ),
     };
   } catch (err) {
     console.error('[MinutesService] OpenAI error:', err.message);
@@ -185,9 +250,9 @@ ${transcript.slice(0, 8000)}`;
  * @param {object} params
  *   templateText, studentName, studentId, lessonDate, lessonNumber,
  *   todayContent, nextContent, transcript
- * @returns {string} 完成した議事録テキスト
+ * @returns {{ generatedText: string, qualityEvaluation: object }} 完成した議事録と品質評価
  */
-export async function buildMinutesText(params) {
+export async function buildMinutesResult(params) {
   const {
     templateText,
     studentName,
@@ -197,6 +262,7 @@ export async function buildMinutesText(params) {
     todayContent,   // lesson_contents の生テキスト（今回）
     nextContent,    // lesson_contents の生テキスト（次回）
     transcript,
+    previousMinutesContext = null,
   } = params;
 
   // AI で全フィールドを生成（生テキストをそのまま渡す）
@@ -208,15 +274,17 @@ export async function buildMinutesText(params) {
     x_feedback,
     next_action,
     notes,
+    lesson_quality_evaluation,
   } = await generateMinutesContent(
     transcript,
     studentName,
     todayContent,
     nextContent,
+    previousMinutesContext,
   );
 
   // テンプレートに流し込む
-  return applyTemplate(templateText, {
+  const generatedText = applyTemplate(templateText, {
     student_name:         studentName  ? `${studentName}様` : '',
     student_id:           studentId    || '',
     lesson_date:          lessonDate   || '',
@@ -229,4 +297,15 @@ export async function buildMinutesText(params) {
     next_action,
     notes,
   });
+
+  return {
+    generatedText,
+    qualityEvaluation: lesson_quality_evaluation
+  };
+}
+
+/** 従来の呼び出しとの互換用。 */
+export async function buildMinutesText(params) {
+  const result = await buildMinutesResult(params);
+  return result.generatedText;
 }
