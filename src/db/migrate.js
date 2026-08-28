@@ -1334,6 +1334,122 @@ const migrations = [
       ALTER TABLE minutes DROP COLUMN IF EXISTS tutor_employee_id;
       ALTER TABLE minutes DROP COLUMN IF EXISTS tutor_name;
     `
+  },
+  {
+    version: 50,
+    name: 'normalize_minutes_lesson_references',
+    up: `
+      -- 旧一括登録で「3,Pro_『伸び』_2」のように壊れたキーだけを、
+      -- 本文中のコース名・Lesson番号から正規化する。正式な Pro_... キーは維持する。
+      WITH source_rows AS (
+        SELECT id,
+               COALESCE(content, '') || E'\n' || COALESCE(title, '') AS source_text
+          FROM lesson_contents
+         WHERE lesson_number LIKE '%,Pro_%'
+      ), normalized AS (
+        SELECT id,
+               CASE
+                 WHEN source_text LIKE '%収益の最大化%' THEN 'Pro_収益'
+                 WHEN source_text LIKE '%V体質化%' THEN 'Pro_V体質化'
+                 WHEN source_text LIKE '%企業案件獲得術%' THEN 'Pro_案件'
+                 WHEN source_text LIKE '%バズコンテンツ量産術%' THEN 'Pro_バズ'
+                 WHEN source_text LIKE '%動画編集コース（アドバンス編）%' THEN 'Pro_動画アド'
+                 WHEN source_text LIKE '%動画編集コース（標準編）%' THEN 'Pro_動画'
+                 WHEN source_text LIKE '%YouTube活動「伸び」%'
+                   OR source_text LIKE '%YouTube活動『伸び』%' THEN 'Pro_伸び'
+                 ELSE NULL
+               END AS prefix,
+               substring(source_text FROM 'Lesson[[:space:]]*([0-9]+)') AS lesson_no,
+               substring(source_text FROM 'Lesson[[:space:]]*[0-9]+([A-E])') AS variant
+          FROM source_rows
+      ), resolved AS (
+        SELECT id,
+               prefix || '_' || lesson_no ||
+                 CASE
+                   WHEN variant IS NULL OR variant = '' OR variant = 'A' THEN ''
+                   ELSE '_' || variant
+                 END AS canonical_key
+          FROM normalized
+         WHERE prefix IS NOT NULL
+           AND lesson_no IS NOT NULL
+      )
+      UPDATE lesson_contents lc
+         SET lesson_number = resolved.canonical_key,
+             updated_at = NOW()
+        FROM resolved
+       WHERE lc.id = resolved.id
+         AND lc.lesson_number IS DISTINCT FROM resolved.canonical_key;
+
+      -- 「回目」をテンプレート側に固定せず、通常/PROで表示を切り替えられるようにする。
+      UPDATE minutes_templates
+         SET template_text = REPLACE(
+               template_text,
+               '{{lesson_number}}回目',
+               '{{lesson_number_display}}'
+             ),
+             updated_at = NOW()
+       WHERE template_text LIKE '%{{lesson_number}}回目%';
+
+      -- 既存議事録の番号を現在のレッスン報告から補完する。
+      WITH report_keys AS (
+        SELECT student_id,
+               lesson_date,
+               CASE
+                 WHEN lesson_number ~ '^[0-9]+$'
+                   THEN (lesson_number::integer)::text
+                 WHEN lesson_number = 'PROプラン' THEN
+                   CASE
+                     WHEN pro_curriculum LIKE '%収益の最大化%' THEN 'Pro_収益_'
+                     WHEN pro_curriculum LIKE '%V体質化%' THEN 'Pro_V体質化_'
+                     WHEN pro_curriculum LIKE '%企業案件獲得術%' THEN 'Pro_案件_'
+                     WHEN pro_curriculum LIKE '%バズコンテンツ量産術%' THEN 'Pro_バズ_'
+                     WHEN pro_curriculum LIKE '%動画編集コース（アドバンス編）%' THEN 'Pro_動画アド_'
+                     WHEN pro_curriculum LIKE '%動画編集コース（標準編）%' THEN 'Pro_動画_'
+                     WHEN pro_curriculum LIKE '%YouTube活動「伸び」%'
+                       OR pro_curriculum LIKE '%YouTube活動『伸び』%' THEN 'Pro_伸び_'
+                     ELSE NULL
+                   END || NULLIF(TRIM(pro_text_number), '')
+                 ELSE NULL
+               END AS canonical_key
+          FROM lesson_reports
+      ), resolved_reports AS (
+        SELECT student_id,
+               lesson_date,
+               canonical_key,
+               CASE
+                 WHEN canonical_key ~ '^[0-9]+$' THEN canonical_key || '回目'
+                 ELSE canonical_key
+               END AS lesson_label
+          FROM report_keys
+         WHERE canonical_key IS NOT NULL
+      )
+      UPDATE minutes m
+         SET lesson_number = resolved_reports.canonical_key,
+             generated_text = CASE
+               WHEN m.generated_text LIKE '%- レッスン番号: （未確認）回目%'
+                 THEN REPLACE(
+                   m.generated_text,
+                   '- レッスン番号: （未確認）回目',
+                   '- レッスン番号: ' || resolved_reports.lesson_label
+                 )
+               ELSE m.generated_text
+             END,
+             updated_at = NOW()
+        FROM resolved_reports
+       WHERE m.student_id = resolved_reports.student_id
+         AND m.lesson_date = resolved_reports.lesson_date
+         AND m.lesson_number IS DISTINCT FROM resolved_reports.canonical_key;
+    `,
+    down: `
+      UPDATE minutes_templates
+         SET template_text = REPLACE(
+               template_text,
+               '{{lesson_number_display}}',
+               '{{lesson_number}}回目'
+             ),
+             updated_at = NOW()
+       WHERE template_text LIKE '%{{lesson_number_display}}%';
+    `
   }
 ];
 

@@ -83,15 +83,28 @@ function cleanText(value, maxLength = 1000) {
 }
 
 /**
- * 冒頭と終盤の両方を評価できるよう、長い文字起こしは先頭・末尾を残す。
+ * 通常のレッスンは全文を渡す。上限を超える場合も先頭偏重にせず、
+ * 冒頭・中盤・終盤から等間隔に原文を抽出する。
  */
-export function buildTranscriptPromptText(transcript, maxCharacters = 12000) {
+export function buildTranscriptPromptText(transcript, maxCharacters = 48000, chunkCount = 6) {
   const text = String(transcript || '');
-  if (text.length <= maxCharacters) return text;
+  const safeMaxCharacters = Math.max(2, Math.floor(Number(maxCharacters) || 48000));
+  if (text.length <= safeMaxCharacters) return text;
 
-  const firstLength = Math.floor(maxCharacters * 2 / 3);
-  const lastLength = maxCharacters - firstLength;
-  return `${text.slice(0, firstLength)}\n\n（中略）\n\n${text.slice(-lastLength)}`;
+  const safeChunkCount = Math.min(
+    safeMaxCharacters,
+    Math.max(2, Math.floor(Number(chunkCount) || 6))
+  );
+  const chunkLength = Math.floor(safeMaxCharacters / safeChunkCount);
+  const maxStart = text.length - chunkLength;
+  const chunks = [];
+
+  for (let index = 0; index < safeChunkCount; index++) {
+    const start = Math.round(index * maxStart / (safeChunkCount - 1));
+    chunks.push(text.slice(start, start + chunkLength));
+  }
+
+  return chunks.join('\n\n（中略：文字起こしを全体から等間隔で抽出）\n\n');
 }
 
 export function normalizeMinutesQualityEvaluation(rawEvaluation) {

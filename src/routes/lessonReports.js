@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
+import {
+  formatLessonLabel,
+  resolveLessonReference
+} from '../services/lessonReferenceService.js';
 
 const app = new Hono();
 
@@ -74,6 +78,29 @@ app.post('/', async (c) => {
         tutor_name || null
       ]
     );
+
+    // 議事録が報告より先に生成されていた場合も、番号を即時に補完する。
+    const lessonReference = resolveLessonReference(result.rows[0]);
+    if (lesson_result === '実施済み' && lessonReference) {
+      const lessonLabel = formatLessonLabel(lessonReference.lessonKey);
+      await query(
+        `UPDATE minutes
+            SET lesson_number = $1,
+                generated_text = CASE
+                  WHEN generated_text LIKE '%- レッスン番号: （未確認）回目%'
+                    THEN REPLACE(
+                      generated_text,
+                      '- レッスン番号: （未確認）回目',
+                      '- レッスン番号: ' || $2
+                    )
+                  ELSE generated_text
+                END,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE student_id = $3
+            AND lesson_date = $4::date`,
+        [lessonReference.lessonKey, lessonLabel, student_id, lesson_date]
+      );
+    }
 
     console.log(`✅ レッスン報告保存: ${student_id} - ${lesson_date} - ${lesson_result}`);
 

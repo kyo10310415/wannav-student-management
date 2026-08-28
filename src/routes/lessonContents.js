@@ -10,6 +10,10 @@
 
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
+import {
+  deriveLessonContentKey,
+  resolveLessonReference
+} from '../services/lessonReferenceService.js';
 
 const app = new Hono();
 
@@ -33,13 +37,22 @@ app.post('/', async (c) => {
     if (lesson_number == null) {
       return c.json({ success: false, error: 'lesson_number は必須です' }, 400);
     }
+    const lessonKey = String(lesson_number).includes(',')
+      ? deriveLessonContentKey({ lesson_number, title, content })
+      : resolveLessonReference({ lesson_number })?.lessonKey;
+    if (!lessonKey) {
+      return c.json({
+        success: false,
+        error: 'lesson_number は数値または Pro_コース_番号 の形式で入力してください'
+      }, 400);
+    }
     const result = await query(
       `INSERT INTO lesson_contents (lesson_number, title, content)
        VALUES ($1, $2, $3)
        ON CONFLICT (lesson_number)
        DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.content, updated_at = NOW()
        RETURNING *`,
-      [lesson_number, title || '', content || '']
+      [lessonKey, title || '', content || '']
     );
     return c.json({ success: true, data: result.rows[0] });
   } catch (err) {
@@ -93,12 +106,16 @@ app.post('/bulk', async (c) => {
     let count = 0;
     for (const item of items) {
       if (item.lesson_number == null) continue;
+      const lessonKey = String(item.lesson_number).includes(',')
+        ? deriveLessonContentKey(item)
+        : resolveLessonReference({ lesson_number: item.lesson_number })?.lessonKey;
+      if (!lessonKey) continue;
       await query(
         `INSERT INTO lesson_contents (lesson_number, title, content)
          VALUES ($1, $2, $3)
          ON CONFLICT (lesson_number)
          DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.content, updated_at = NOW()`,
-        [item.lesson_number, item.title || '', item.content || '']
+        [lessonKey, item.title || '', item.content || '']
       );
       count++;
     }

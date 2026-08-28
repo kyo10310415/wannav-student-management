@@ -8,6 +8,7 @@ import {
   buildTranscriptPromptText,
   normalizeMinutesQualityEvaluation
 } from './minutesQualityService.js';
+import { formatLessonLabel } from './lessonReferenceService.js';
 
 let _client = null;
 
@@ -259,6 +260,7 @@ export async function buildMinutesResult(params) {
     studentId,
     lessonDate,
     lessonNumber,
+    lessonLabel = null,
     todayContent,   // lesson_contents の生テキスト（今回）
     nextContent,    // lesson_contents の生テキスト（次回）
     transcript,
@@ -289,6 +291,7 @@ export async function buildMinutesResult(params) {
     student_id:           studentId    || '',
     lesson_date:          lessonDate   || '',
     lesson_number:        lessonNumber != null ? String(lessonNumber) : '（未確認）',
+    lesson_number_display: lessonLabel || formatLessonLabel(lessonNumber),
     today_lesson_content: today_lesson_summary || extractLessonSummary('', todayContent),
     next_lesson_content:  next_lesson_summary  || extractLessonSummary('', nextContent),
     summary,

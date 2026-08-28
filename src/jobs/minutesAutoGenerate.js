@@ -2,10 +2,10 @@
  * 議事録 自動生成ジョブ
  *
  * 1時間に1回実行。
- * 処理対象: 今日・前日のレッスン（JST）に該当し、品質評価済み議事録が存在しない生徒
+ * 処理対象: 直近7日間（JST）に実施済み報告があり、品質評価済み議事録が存在しない生徒
  *
  * フロー:
- * 1. lessons テーブルから「今日・前日」のレッスンを持つ student_id 一覧を取得
+ * 1. lessons・lesson_reports から直近7日間の実施済みレッスンを取得
  * 2. minutes テーブルで同日の品質評価済み議事録が存在する student_id を除外
  * 3. 残った生徒について fetchTranscript → buildMinutesResult → DB UPSERT
  */
@@ -17,6 +17,11 @@ import {
   getPreviousMinutesContext,
   resolveMinutesTutor
 } from '../services/minutesContextService.js';
+import {
+  buildLessonContentIndex,
+  getLessonContent,
+  resolveLessonReference
+} from '../services/lessonReferenceService.js';
 
 // JST の今日の日付を YYYY-MM-DD で返す
 function getTodayJST() {
@@ -25,21 +30,21 @@ function getTodayJST() {
   return jst.toISOString().slice(0, 10);
 }
 
-// JST の前日の日付を YYYY-MM-DD で返す
-function getYesterdayJST() {
+// JST の指定日数前の日付を YYYY-MM-DD で返す
+function getDateDaysAgoJST(daysAgo) {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  jst.setDate(jst.getDate() - 1);
+  jst.setUTCDate(jst.getUTCDate() - daysAgo);
   return jst.toISOString().slice(0, 10);
 }
 
 export async function minutesAutoGenerate() {
   const today     = getTodayJST();
-  const yesterday = getYesterdayJST();
+  const recentStart = getDateDaysAgoJST(7);
 
-  console.log(`[MinutesAutoGen] Start — today=${today}, yesterday=${yesterday}`);
+  console.log(`[MinutesAutoGen] Start — range=${recentStart}..${today}`);
 
-  // ── 1. 今日・前日のレッスンがある生徒を取得 ──────────────────────────
+  // ── 1. 直近7日間に実施済み報告がある生徒を取得 ──────────────────────
   // lessons.lesson_date は TIMESTAMP 型。DATE にキャストして比較する
   // lessons.student_id は学籍番号文字列（students.student_id と同じ型）
   let lessonsResult;
@@ -48,14 +53,21 @@ export async function minutesAutoGenerate() {
       `SELECT DISTINCT
               l.student_id,
               s.name                              AS student_name,
-              l.lesson_date::date::text           AS lesson_date
+              l.lesson_date::date::text           AS lesson_date,
+              lr.lesson_number,
+              lr.pro_curriculum,
+              lr.pro_text_number
          FROM lessons l
          LEFT JOIN students s ON s.student_id = l.student_id
-        WHERE l.lesson_date::date IN ($1::date, $2::date)
+         JOIN lesson_reports lr
+           ON lr.student_id = l.student_id
+          AND lr.lesson_date = l.lesson_date::date
+          AND lr.lesson_result = '実施済み'
+        WHERE l.lesson_date::date BETWEEN $1::date AND $2::date
           AND l.student_id IS NOT NULL
           AND l.student_id <> ''
         ORDER BY lesson_date DESC, l.student_id`,
-      [today, yesterday]
+      [recentStart, today]
     );
   } catch (err) {
     console.error('[MinutesAutoGen] Failed to query lessons:', err.message);
@@ -64,7 +76,7 @@ export async function minutesAutoGenerate() {
 
   const candidates = lessonsResult.rows;
   if (candidates.length === 0) {
-    console.log('[MinutesAutoGen] No lessons found for today/yesterday. Skipping.');
+    console.log('[MinutesAutoGen] No completed lessons found in the recent range. Skipping.');
     return;
   }
   console.log(`[MinutesAutoGen] ${candidates.length} lesson(s) found.`);
@@ -114,12 +126,10 @@ export async function minutesAutoGenerate() {
   }
 
   // ── 4. lesson_contents を全件取得しておく（番号→内容のMap） ─────────
-  const lessonContentsMap = new Map(); // key: lesson_number(int), value: content(string)
+  let lessonContentsIndex = new Map();
   try {
     const lcRes = await query('SELECT lesson_number, title, content FROM lesson_contents ORDER BY lesson_number ASC');
-    for (const row of lcRes.rows) {
-      lessonContentsMap.set(row.lesson_number, { title: row.title, content: row.content });
-    }
+    lessonContentsIndex = buildLessonContentIndex(lcRes.rows);
   } catch (err) {
     console.warn('[MinutesAutoGen] Could not fetch lesson_contents:', err.message);
   }
@@ -130,10 +140,28 @@ export async function minutesAutoGenerate() {
   let errorCount   = 0;
 
   for (const target of targets) {
-    const { student_id, student_name, lesson_date } = target;
+    const {
+      student_id,
+      student_name,
+      lesson_date,
+      lesson_number,
+      pro_curriculum,
+      pro_text_number
+    } = target;
     const tag = `[MinutesAutoGen][${student_id}][${lesson_date}]`;
 
     try {
+      const lessonReference = resolveLessonReference({
+        lesson_number,
+        pro_curriculum,
+        pro_text_number
+      });
+      if (!lessonReference) {
+        console.warn(`${tag} Could not resolve lesson reference — skip.`);
+        skipCount++;
+        continue;
+      }
+
       // Drive から文字起こし取得
       const driveResult = await fetchTranscript(student_id, lesson_date);
       if (!driveResult || !driveResult.transcript) {
@@ -142,37 +170,12 @@ export async function minutesAutoGenerate() {
         continue;
       }
 
-      // lesson_reports から当日のレッスン番号を取得
-      let lessonNumber  = null;
-      let todayContent  = '';
-      let nextContent   = '';
-      try {
-        const lrRes = await query(
-          `SELECT lesson_number FROM lesson_reports
-            WHERE student_id = $1
-              AND lesson_date::date = $2::date
-            ORDER BY reported_at DESC
-            LIMIT 1`,
-          [student_id, lesson_date]
-        );
-        if (lrRes.rows.length > 0) {
-          const rawNum = lrRes.rows[0].lesson_number;
-          // "1"〜"28" など数値文字列。PROプランは null 扱い
-          const parsed = parseInt(rawNum, 10);
-          if (!isNaN(parsed)) {
-            lessonNumber = parsed;
-            // lesson_contents から今回・次回の内容を取得
-            const todayRow = lessonContentsMap.get(lessonNumber);
-            const nextRow  = lessonContentsMap.get(lessonNumber + 1);
-            todayContent = todayRow ? `${todayRow.title}\n${todayRow.content}`.trim() : '';
-            nextContent  = nextRow  ? `${nextRow.title}\n${nextRow.content}`.trim() : '';
-          }
-        }
-      } catch (err) {
-        console.warn(`${tag} Could not fetch lesson_number from lesson_reports:`, err.message);
-      }
+      const todayRow = getLessonContent(lessonContentsIndex, lessonReference.lessonKey);
+      const nextRow = getLessonContent(lessonContentsIndex, lessonReference.nextLessonKey);
+      const todayContent = todayRow ? `${todayRow.title}\n${todayRow.content}`.trim() : '';
+      const nextContent = nextRow ? `${nextRow.title}\n${nextRow.content}`.trim() : '';
 
-      console.log(`${tag} lessonNumber=${lessonNumber}, todayContent=${todayContent ? '有り' : '無し'}, nextContent=${nextContent ? '有り' : '無し'}`);
+      console.log(`${tag} lessonKey=${lessonReference.lessonKey}, todayContent=${todayContent ? '有り' : '無し'}, nextContent=${nextContent ? '有り' : '無し'}`);
 
       const [previousMinutesContext, resolvedTutor] = await Promise.all([
         getPreviousMinutesContext(student_id, lesson_date),
@@ -183,7 +186,8 @@ export async function minutesAutoGenerate() {
         studentName:  student_name || student_id,
         studentId:    student_id,
         lessonDate:   lesson_date,
-        lessonNumber,
+        lessonNumber: lessonReference.lessonKey,
+        lessonLabel:  lessonReference.lessonLabel,
         todayContent,
         nextContent,
         transcript:   driveResult.transcript,
@@ -200,6 +204,7 @@ export async function minutesAutoGenerate() {
          ON CONFLICT (student_id, lesson_date)
          DO UPDATE SET
              student_name    = EXCLUDED.student_name,
+             lesson_number   = EXCLUDED.lesson_number,
              drive_file_id   = EXCLUDED.drive_file_id,
              drive_file_name = EXCLUDED.drive_file_name,
              transcript      = EXCLUDED.transcript,
@@ -213,7 +218,7 @@ export async function minutesAutoGenerate() {
           student_id,
           student_name || student_id,
           lesson_date,
-          lessonNumber,   // lesson_reports から取得した値（null の場合もある）
+          lessonReference.lessonKey,
           driveResult.fileId,
           driveResult.fileName,
           driveResult.transcript,
