@@ -18097,6 +18097,12 @@ const minutesQualityMetricDefinitions = [
   { key: 'previous_small_goal_review', label: '前回決めた小目標の確認', monthlyLabel: 'レッスンでの小目標振り返り率', targetRate: 85, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515430' }
 ];
 
+function formatMinutesLessonNumber(lessonNumber) {
+  if (!lessonNumber) return '';
+  const value = String(lessonNumber);
+  return /^\d+$/.test(value) ? `${value}回目` : value;
+}
+
 /** 議事録ページを開く（生徒指定） */
 async function openMinutesForStudent(studentId, studentName) {
   minutesCurrentStudentId   = studentId;
@@ -18160,7 +18166,7 @@ async function renderMinutesPage() {
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">レッスン番号（任意）</label>
-            <input id="minutes-gen-number" type="number" min="1" placeholder="例: 5"
+            <input id="minutes-gen-number" type="text" placeholder="例: 5 / Pro_バズ_1"
                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
           </div>
           <div class="flex items-end">
@@ -18233,7 +18239,7 @@ async function renderMinutesPage() {
         </div>
         <div class="flex-1 overflow-y-auto px-6 py-4">
           <p class="text-xs text-gray-500 mb-3">
-            使用できるプレースホルダー：{{student_name}} {{student_id}} {{lesson_date}} {{lesson_number}} {{today_lesson_content}} {{next_lesson_content}} {{summary}} {{notes}}
+            使用できるプレースホルダー：{{student_name}} {{student_id}} {{lesson_date}} {{lesson_number}} {{lesson_number_display}} {{today_lesson_content}} {{next_lesson_content}} {{summary}} {{notes}}
           </p>
           <div id="minutes-template-editor">読み込み中...</div>
         </div>
@@ -18303,7 +18309,7 @@ function renderMinutesList() {
                    <span class="text-gray-300">|</span>`
                 : ''}
               <span class="font-semibold text-gray-800">${escapeHtml(m.lesson_date || '')}</span>
-              ${m.lesson_number ? `<span class="text-xs bg-teal-100 text-teal-700 rounded px-2 py-0.5">${m.lesson_number}回目</span>` : ''}
+              ${m.lesson_number ? `<span class="text-xs bg-teal-100 text-teal-700 rounded px-2 py-0.5">${escapeHtml(formatMinutesLessonNumber(m.lesson_number))}</span>` : ''}
             </div>
             <p class="text-xs text-gray-400 mt-0.5 truncate">${escapeHtml(m.drive_file_name || '')}</p>
             <p class="text-sm text-gray-600 mt-1 line-clamp-2">${escapeHtml((m.preview || '').replace(/\n/g, ' '))}</p>
@@ -18334,7 +18340,7 @@ async function openMinutesDetail(id) {
     minutesEditingId = id;
     minutesCurrentDetail = m;
     document.getElementById('minutes-modal-title').textContent =
-      `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${m.lesson_number}回目)` : ''}`;
+      `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${formatMinutesLessonNumber(m.lesson_number)})` : ''}`;
     document.getElementById('minutes-modal-text').value = m.generated_text || '';
     renderMinutesQualityEvaluation(m.quality_evaluation);
     switchMinutesDetailTab('text');
@@ -18450,7 +18456,7 @@ async function generateMinutes() {
   if (!dateEl || !minutesCurrentStudentId) return;
 
   const lessonDate   = dateEl.value;
-  const lessonNumber = numberEl.value ? parseInt(numberEl.value) : null;
+  const lessonNumber = numberEl.value?.trim() || null;
 
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>生成中...';
@@ -18652,43 +18658,45 @@ function renderLessonContentsList() {
   }
   container.innerHTML = `
     <div class="bg-white rounded-lg shadow divide-y">
-      ${lessonContentsCache.map(lc => `
-        <div class="px-5 py-4" id="lc-row-${lc.lesson_number}">
+      ${lessonContentsCache.map(lc => {
+        const lessonNumber = escapeHtml(String(lc.lesson_number));
+        return `
+        <div class="px-5 py-4" id="lc-row-${lessonNumber}">
           <div class="flex items-start gap-3">
             <span class="flex-shrink-0 w-10 h-10 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center font-bold text-sm">
-              ${lc.lesson_number}
+              ${lessonNumber}
             </span>
             <div class="flex-1 min-w-0">
-              <div id="lc-view-${lc.lesson_number}">
+              <div id="lc-view-${lessonNumber}">
                 <p class="font-semibold text-gray-800">${escapeHtml(lc.title || `レッスン${lc.lesson_number}`)}</p>
                 <p class="text-sm text-gray-600 mt-1 whitespace-pre-wrap">${escapeHtml(lc.content || '')}</p>
               </div>
-              <div id="lc-edit-${lc.lesson_number}" class="hidden">
-                <input id="lc-edit-title-${lc.lesson_number}" type="text" value="${escapeHtml(lc.title || '')}"
+              <div id="lc-edit-${lessonNumber}" class="hidden">
+                <input id="lc-edit-title-${lessonNumber}" type="text" value="${escapeHtml(lc.title || '')}"
                        class="w-full border rounded px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-teal-400">
-                <textarea id="lc-edit-content-${lc.lesson_number}" rows="4"
+                <textarea id="lc-edit-content-${lessonNumber}" rows="4"
                           class="w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-teal-400 resize-y">${escapeHtml(lc.content || '')}</textarea>
                 <div class="flex gap-2 mt-2">
-                  <button onclick="saveLessonContent(${lc.lesson_number})"
+                  <button data-lesson-number="${lessonNumber}" onclick="saveLessonContent(this.dataset.lessonNumber)"
                           class="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">保存</button>
-                  <button onclick="cancelEditLessonContent(${lc.lesson_number})"
+                  <button data-lesson-number="${lessonNumber}" onclick="cancelEditLessonContent(this.dataset.lessonNumber)"
                           class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">キャンセル</button>
                 </div>
               </div>
             </div>
             <div class="flex gap-1 flex-shrink-0">
-              <button onclick="editLessonContent(${lc.lesson_number})"
+              <button data-lesson-number="${lessonNumber}" onclick="editLessonContent(this.dataset.lessonNumber)"
                       class="p-1.5 text-gray-400 hover:text-teal-600" title="編集">
                 <i class="fas fa-edit text-sm"></i>
               </button>
-              <button onclick="deleteLessonContent(${lc.lesson_number})"
+              <button data-lesson-number="${lessonNumber}" onclick="deleteLessonContent(this.dataset.lessonNumber)"
                       class="p-1.5 text-gray-400 hover:text-red-600" title="削除">
                 <i class="fas fa-trash text-sm"></i>
               </button>
             </div>
           </div>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -18706,7 +18714,7 @@ async function saveLessonContent(num) {
   const title   = document.getElementById(`lc-edit-title-${num}`)?.value;
   const content = document.getElementById(`lc-edit-content-${num}`)?.value;
   try {
-    await axios.put(`/api/lesson-contents/${num}`, { title, content }, {
+    await axios.put(`/api/lesson-contents/${encodeURIComponent(num)}`, { title, content }, {
       headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('保存しました', 'success');
@@ -18739,7 +18747,7 @@ async function addLessonContent() {
 async function deleteLessonContent(num) {
   if (!confirm(`レッスン${num}の内容を削除しますか？`)) return;
   try {
-    await axios.delete(`/api/lesson-contents/${num}`, {
+    await axios.delete(`/api/lesson-contents/${encodeURIComponent(num)}`, {
       headers: { Authorization: `Bearer ${sessionToken}` }
     });
     showNotification('削除しました', 'success');

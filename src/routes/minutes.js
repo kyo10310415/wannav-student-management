@@ -19,6 +19,11 @@ import {
   getPreviousMinutesContext,
   resolveMinutesTutor
 } from '../services/minutesContextService.js';
+import {
+  buildLessonContentIndex,
+  getLessonContent,
+  resolveLessonReference
+} from '../services/lessonReferenceService.js';
 
 const app = new Hono();
 
@@ -145,7 +150,37 @@ app.post('/generate', async (c) => {
       return c.json({ success: false, error: 'studentId と lessonDate は必須です' }, 400);
     }
 
-    // 1. Drive から文字起こし取得
+    // 1. 通常・PRO共通のレッスン識別子を確定
+    let lessonReference = lessonNumber != null
+      ? resolveLessonReference({ lesson_number: lessonNumber })
+      : null;
+    if (!lessonReference) {
+      try {
+        const lrRes = await query(
+          `SELECT lesson_number, pro_curriculum, pro_text_number
+             FROM lesson_reports
+            WHERE student_id = $1
+              AND lesson_date::date = $2::date
+            ORDER BY reported_at DESC
+            LIMIT 1`,
+          [studentId, lessonDate]
+        );
+        if (lrRes.rows.length > 0) {
+          lessonReference = resolveLessonReference(lrRes.rows[0]);
+        }
+      } catch (err) {
+        console.warn(`[Minutes] Could not fetch lesson_number from lesson_reports:`, err.message);
+      }
+    }
+
+    if (!lessonReference) {
+      return c.json({
+        success: false,
+        error: 'レッスン番号を解決できません。先にレッスン報告を登録するか、レッスン識別子を入力してください。'
+      }, 409);
+    }
+
+    // 2. Drive から文字起こし取得
     console.log(`[Minutes] Fetching transcript for ${studentId} on ${lessonDate}...`);
     const driveResult = await fetchTranscript(studentId, lessonDate);
     if (!driveResult || !driveResult.transcript) {
@@ -155,44 +190,15 @@ app.post('/generate', async (c) => {
       }, 404);
     }
 
-    // 2. レッスン番号を確定（未指定の場合は lesson_reports から自動取得）
-    let resolvedLessonNumber = lessonNumber ?? null;
-    if (resolvedLessonNumber == null) {
-      try {
-        const lrRes = await query(
-          `SELECT lesson_number FROM lesson_reports
-            WHERE student_id = $1
-              AND lesson_date::date = $2::date
-            ORDER BY reported_at DESC
-            LIMIT 1`,
-          [studentId, lessonDate]
-        );
-        if (lrRes.rows.length > 0) {
-          const parsed = parseInt(lrRes.rows[0].lesson_number, 10);
-          if (!isNaN(parsed)) resolvedLessonNumber = parsed;
-        }
-      } catch (err) {
-        console.warn(`[Minutes] Could not fetch lesson_number from lesson_reports:`, err.message);
-      }
-    }
-
-    // 3. レッスン内容取得（今回・次回）— lesson_contents から title + content を結合
-    let todayContent = '';
-    let nextContent  = '';
-    if (resolvedLessonNumber != null) {
-      const todayRow = await query(
-        'SELECT title, content FROM lesson_contents WHERE lesson_number = $1',
-        [resolvedLessonNumber]
-      );
-      const nextRow = await query(
-        'SELECT title, content FROM lesson_contents WHERE lesson_number = $1',
-        [resolvedLessonNumber + 1]
-      );
-      const tr = todayRow.rows[0];
-      const nr = nextRow.rows[0];
-      todayContent = tr ? `${tr.title}\n${tr.content}`.trim() : '';
-      nextContent  = nr ? `${nr.title}\n${nr.content}`.trim() : '';
-    }
+    // 3. 本文から正規化したキーで今回・次回のマスターを取得
+    const lessonContentsResult = await query(
+      'SELECT lesson_number, title, content FROM lesson_contents ORDER BY lesson_number ASC'
+    );
+    const lessonContentsIndex = buildLessonContentIndex(lessonContentsResult.rows);
+    const todayRow = getLessonContent(lessonContentsIndex, lessonReference.lessonKey);
+    const nextRow = getLessonContent(lessonContentsIndex, lessonReference.nextLessonKey);
+    const todayContent = todayRow ? `${todayRow.title}\n${todayRow.content}`.trim() : '';
+    const nextContent = nextRow ? `${nextRow.title}\n${nextRow.content}`.trim() : '';
 
     // 4. テンプレート取得
     const tmplId  = templateId || 1;
@@ -200,7 +206,7 @@ app.post('/generate', async (c) => {
     const template = tmplRes.rows[0] || { template_text: '{{summary}}\n\n{{notes}}' };
 
     // 5. AI で議事録生成
-    console.log(`[Minutes] Generating minutes with AI... (lessonNumber=${resolvedLessonNumber})`);
+    console.log(`[Minutes] Generating minutes with AI... (lessonKey=${lessonReference.lessonKey})`);
     const [previousMinutesContext, resolvedTutor] = await Promise.all([
       getPreviousMinutesContext(studentId, lessonDate),
       resolveMinutesTutor(studentId, lessonDate)
@@ -210,7 +216,8 @@ app.post('/generate', async (c) => {
       studentName:  studentName || studentId,
       studentId,
       lessonDate,
-      lessonNumber: resolvedLessonNumber,
+      lessonNumber: lessonReference.lessonKey,
+      lessonLabel:  lessonReference.lessonLabel,
       todayContent,
       nextContent,
       transcript:   driveResult.transcript,
@@ -242,7 +249,7 @@ app.post('/generate', async (c) => {
         studentId,
         studentName || studentId,
         lessonDate,
-        resolvedLessonNumber,
+        lessonReference.lessonKey,
         driveResult.fileId,
         driveResult.fileName,
         driveResult.transcript,

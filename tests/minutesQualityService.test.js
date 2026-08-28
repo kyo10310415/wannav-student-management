@@ -75,11 +75,22 @@ test('aggregates monthly rates and excludes not_applicable lessons from the deno
   assert.ok(Math.abs(openingAnxiety.rate - (200 / 3)) < 1e-10);
 });
 
-test('keeps both the opening and ending of a long transcript', () => {
-  const transcript = `OPENING-${'a'.repeat(100)}-${'b'.repeat(100)}-ENDING`;
-  const promptText = buildTranscriptPromptText(transcript, 80);
+test('keeps a transcript in full when it is within the expanded limit', () => {
+  const transcript = `OPENING-${'a'.repeat(100)}-MIDDLE-${'b'.repeat(100)}-ENDING`;
+  const promptText = buildTranscriptPromptText(transcript, 1000);
 
-  assert.match(promptText, /^OPENING-/);
-  assert.match(promptText, /-ENDING$/);
+  assert.equal(promptText, transcript);
+});
+
+test('samples long transcripts evenly instead of favoring the opening', () => {
+  const transcript = `${'A'.repeat(100)}${'B'.repeat(100)}${'C'.repeat(100)}${'D'.repeat(100)}${'E'.repeat(100)}${'F'.repeat(100)}`;
+  const promptText = buildTranscriptPromptText(transcript, 120, 6);
+
+  assert.match(promptText, /^A/);
+  assert.match(promptText, /B{10}/);
+  assert.match(promptText, /C{10}/);
+  assert.match(promptText, /D{10}/);
+  assert.match(promptText, /E{10}/);
+  assert.match(promptText, /F$/);
   assert.match(promptText, /中略/);
 });
