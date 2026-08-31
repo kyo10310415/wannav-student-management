@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 
 import {
   aggregateSatisfactionByTutorMonth,
+  calculateSatisfactionMetricVariants,
   calculateSatisfactionMetrics,
+  getLegacySatisfactionDenominator,
   getSatisfactionDenominator,
   isLessonCompletionFilterActive
 } from '../src/services/tutorSatisfactionService.js';
@@ -74,4 +76,53 @@ test('uses the same 0-100 calculation as the Tutor management screen', () => {
   assert.equal(metrics.satisfactionValue, 90);
   assert.equal(metrics.collectionRate, 50);
   assert.equal(metrics.satisfactionScore, 45);
+});
+
+test('creates both legacy and lesson-adjusted snapshot metrics after the cutoff', () => {
+  const tutor = { notion_name: 'TutorNotion' };
+  const students = [
+    { student_id: 'S-1', homeroom_tutor: 'TutorNotion', status: 'アクティブ', contract_plan: '通常' },
+    { student_id: 'S-2', homeroom_tutor: 'TutorNotion', status: 'アクティブ', contract_plan: 'PROプラン' }
+  ];
+
+  assert.equal(getLegacySatisfactionDenominator({ students, tutor }), 2);
+
+  const variants = calculateSatisfactionMetricVariants({
+    monthData: { average: 9, count: 1 },
+    students,
+    tutor,
+    year: 2026,
+    month: 8,
+    completedStudentIds: new Set(['S-1']),
+    referenceDate: new Date('2026-08-25T15:00:00Z')
+  });
+
+  assert.equal(variants.legacy.denominator, 2);
+  assert.equal(variants.legacy.collectionRate, 50);
+  assert.equal(variants.legacy.satisfactionScore, 45);
+  assert.equal(variants.lessonAdjusted.denominator, 1);
+  assert.equal(variants.lessonAdjusted.collectionRate, 100);
+  assert.equal(variants.lessonAdjusted.satisfactionScore, 90);
+});
+
+test('lesson-adjusted snapshot denominator includes students after a late lesson', () => {
+  const tutor = { notion_name: 'TutorNotion' };
+  const students = [
+    { student_id: 'S-1', homeroom_tutor: 'TutorNotion', status: 'アクティブ', contract_plan: '通常' },
+    { student_id: 'S-2', homeroom_tutor: 'TutorNotion', status: 'アクティブ', contract_plan: 'PROプラン' }
+  ];
+
+  const variants = calculateSatisfactionMetricVariants({
+    monthData: { average: 8, count: 1 },
+    students,
+    tutor,
+    year: 2026,
+    month: 8,
+    completedStudentIds: new Set(['S-1', 'S-2']),
+    referenceDate: new Date('2026-08-26T15:00:00Z')
+  });
+
+  assert.equal(variants.legacy.denominator, 2);
+  assert.equal(variants.lessonAdjusted.denominator, 2);
+  assert.equal(variants.legacy.collectionRate, variants.lessonAdjusted.collectionRate);
 });

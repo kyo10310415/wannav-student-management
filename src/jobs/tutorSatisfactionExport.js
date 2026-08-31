@@ -3,87 +3,99 @@ import { fetchSatisfactionFromCache } from '../services/cacheService.js';
 import { getCompletedStudentIdsForMonth } from '../services/lessonCompletionService.js';
 import {
   aggregateSatisfactionByTutorMonth,
-  calculateSatisfactionMetrics,
-  getSatisfactionDenominator,
+  calculateSatisfactionMetricVariants,
   isLessonCompletionFilterActive
 } from '../services/tutorSatisfactionService.js';
 import { google } from 'googleapis';
 
+export const MONTHLY_SATISFACTION_SHEET_NAMES = Object.freeze({
+  legacy: 'Tutor満足度',
+  lessonAdjusted: 'Tutor満足度（レッスン実施考慮）'
+});
+
 /**
- * Monthly tutor satisfaction export job
- * Runs on the last day of each month at 23:00 JST to export current month's satisfaction data
+ * Monthly tutor satisfaction export job.
+ * Runs on the last day of each month at 23:00 JST.
+ *
+ * Existing sheet: legacy denominator (all eligible active students)
+ * New sheet: lesson-adjusted denominator introduced by 6de382f
  */
 export async function monthlyTutorSatisfactionExport() {
   try {
     console.log('[Tutor Satisfaction Export] Starting monthly satisfaction export...');
-    
+
     const now = new Date();
-    const jstOffset = 9 * 60; // JST is UTC+9
+    const jstOffset = 9 * 60;
     const jstTime = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
-    
-    // Calculate current month (not previous month)
     const currentYear = jstTime.getFullYear();
     const currentMonth = jstTime.getMonth() + 1;
     const currentYearMonth = `${currentYear}/${currentMonth}`;
-    
-    console.log(`[Tutor Satisfaction Export] Exporting data for ${currentYearMonth} (current month)`);
-    
-    // 1. Fetch satisfaction data from cache
+
+    console.log(`[Tutor Satisfaction Export] Exporting data for ${currentYearMonth}`);
+
     const cacheSpreadsheetId = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     const satisfactionRecords = await fetchSatisfactionFromCache(cacheSpreadsheetId);
-    
     if (!satisfactionRecords || satisfactionRecords.length === 0) {
       console.log('[Tutor Satisfaction Export] No satisfaction data found');
       return { success: false, error: 'No satisfaction data' };
     }
     const satisfactionData = aggregateSatisfactionByTutorMonth(satisfactionRecords);
-    
-    // 2. Fetch students for active student count calculation
-    const studentsResult = await query('SELECT * FROM students');
+
+    const studentsResult = await query(
+      'SELECT student_id, homeroom_tutor, status, contract_plan FROM students'
+    );
     const students = studentsResult.rows;
-    
-    // 3. Fetch active tutors (case-insensitive check for job_type)
+
     const tutorsResult = await query(`
-      SELECT * FROM tutors 
-      WHERE status = 'アクティブ' 
+      SELECT * FROM tutors
+      WHERE status = 'アクティブ'
         AND LOWER(job_type) LIKE '%tutor%'
         AND tutor_name != 'きょうへい先生'
       ORDER BY tutor_name ASC
     `);
     const tutors = tutorsResult.rows;
-    
     console.log(`[Tutor Satisfaction Export] Found ${tutors.length} active tutors`);
 
+    const completionFilterActive = isLessonCompletionFilterActive(
+      currentYear,
+      currentMonth,
+      now
+    );
     let completedStudentIds = null;
-    if (isLessonCompletionFilterActive(currentYear, currentMonth, now)) {
+    let lessonAdjustedCalculationAvailable = true;
+    if (completionFilterActive) {
       try {
         const completion = await getCompletedStudentIdsForMonth(
           `${currentYear}-${String(currentMonth).padStart(2, '0')}`
         );
         completedStudentIds = new Set(completion.completedStudentIds);
       } catch (error) {
-        console.error('[Tutor Satisfaction Export] Lesson completion filter unavailable:', error.message);
+        lessonAdjustedCalculationAvailable = false;
+        console.error(
+          '[Tutor Satisfaction Export] Lesson completion filter unavailable:',
+          error.message
+        );
       }
     }
-    
-    // 4. Prepare data for the current month
-    const rows = [];
-    
-    tutors.forEach(tutor => {
+
+    const legacyRows = [];
+    const lessonAdjustedRows = [];
+
+    for (const tutor of tutors) {
       const tutorName = tutor.tutor_name;
-      const tutorSatisfactionData = satisfactionData[tutorName] || {};
-      const monthData = tutorSatisfactionData[currentYearMonth];
-      
+      const monthData = (satisfactionData[tutorName] || {})[currentYearMonth];
+
       if (!monthData) {
-        console.log(`[Tutor Satisfaction Export] No data for ${tutorName} in ${currentYearMonth}`);
-        // Still add empty rows for this tutor to maintain structure
-        rows.push([tutorName, 'レッスン満足度', '']);
-        rows.push(['', '回収率', '']);
-        rows.push(['', '満足度スコア', '']);
-        return;
+        console.log(
+          `[Tutor Satisfaction Export] No data for ${tutorName} in ${currentYearMonth}`
+        );
+        legacyRows.push(...emptyTutorRows(tutorName));
+        lessonAdjustedRows.push(...emptyTutorRows(tutorName));
+        continue;
       }
-      
-      const activeStudentCount = getSatisfactionDenominator({
+
+      const variants = calculateSatisfactionMetricVariants({
+        monthData,
         students,
         tutor,
         year: currentYear,
@@ -91,76 +103,149 @@ export async function monthlyTutorSatisfactionExport() {
         completedStudentIds,
         referenceDate: now
       });
-      const metrics = calculateSatisfactionMetrics(monthData, activeStudentCount);
-      
-      // Row 1: レッスン満足度
-      const satisfactionValueNumber = metrics.satisfactionValue;
-      const satisfactionValue = satisfactionValueNumber.toFixed(2);
-      rows.push([tutorName, 'レッスン満足度', satisfactionValue]);
-      
-      // Row 2: 回収率
-      const collectionRate = metrics.collectionRate !== null
-        ? metrics.collectionRate.toFixed(2)
-        : '-';
-      rows.push(['', '回収率', collectionRate]);
-      
-      // Row 3: 満足度スコア
-      const satisfactionScore = metrics.satisfactionScore !== null && metrics.satisfactionScore > 0
-        ? metrics.satisfactionScore.toFixed(2)
-        : '-';
-      rows.push(['', '満足度スコア', satisfactionScore]);
-    });
-    
-    if (rows.length === 0) {
+
+      legacyRows.push(...metricsToTutorRows(tutorName, variants.legacy));
+      lessonAdjustedRows.push(
+        ...metricsToTutorRows(tutorName, variants.lessonAdjusted)
+      );
+    }
+
+    if (legacyRows.length === 0) {
       console.log('[Tutor Satisfaction Export] No data to export');
       return { success: false, error: 'No data to export' };
     }
-    
-    // 5. Export to Google Spreadsheet
-    const sheets = google.sheets('v4');
-    
-    if (!process.env.GOOGLE_CREDENTIALS_JSON) {
-      console.error('[Tutor Satisfaction Export] GOOGLE_CREDENTIALS_JSON not set');
-      return { success: false, error: 'GOOGLE_CREDENTIALS_JSON not configured' };
+
+    const sheetContext = await createSheetContext();
+    if (!sheetContext.success) return sheetContext;
+
+    const legacyResult = await exportMonthlyRowsToSheet({
+      ...sheetContext,
+      sheetName: MONTHLY_SATISFACTION_SHEET_NAMES.legacy,
+      yearMonth: currentYearMonth,
+      rows: legacyRows
+    });
+    const lessonAdjustedResult = lessonAdjustedCalculationAvailable
+      ? await exportMonthlyRowsToSheet({
+        ...sheetContext,
+        sheetName: MONTHLY_SATISFACTION_SHEET_NAMES.lessonAdjusted,
+        yearMonth: currentYearMonth,
+        rows: lessonAdjustedRows
+      })
+      : {
+        success: false,
+        error: 'Lesson completion data unavailable; adjusted snapshot was not written'
+      };
+
+    const success = legacyResult.success && lessonAdjustedResult.success;
+    if (success) {
+      console.log(
+        `[Tutor Satisfaction Export] Both sheet exports complete: ${legacyResult.spreadsheetUrl}`
+      );
+    } else {
+      console.warn('[Tutor Satisfaction Export] One or more sheet exports failed:', {
+        legacy: legacyResult.error || null,
+        lessonAdjusted: lessonAdjustedResult.error || null
+      });
     }
-    
-    const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
-    let credentials;
-    
-    // Try to parse as base64 first, then as plain JSON
-    try {
-      if (credString.startsWith('{')) {
-        credentials = JSON.parse(credString);
-      } else {
-        credentials = JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
+
+    return {
+      success,
+      spreadsheetUrl: legacyResult.spreadsheetUrl
+        || lessonAdjustedResult.spreadsheetUrl
+        || null,
+      sheetName: MONTHLY_SATISFACTION_SHEET_NAMES.legacy,
+      lessonAdjustedSheetName: MONTHLY_SATISFACTION_SHEET_NAMES.lessonAdjusted,
+      month: currentYearMonth,
+      tutorCount: tutors.length,
+      sheets: {
+        legacy: {
+          name: MONTHLY_SATISFACTION_SHEET_NAMES.legacy,
+          ...legacyResult
+        },
+        lessonAdjusted: {
+          name: MONTHLY_SATISFACTION_SHEET_NAMES.lessonAdjusted,
+          ...lessonAdjustedResult
+        }
       }
-    } catch (parseError) {
-      console.error('[Tutor Satisfaction Export] Failed to parse credentials:', parseError.message);
-      return { success: false, error: 'Invalid credentials format' };
-    }
-    
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    
-    const authClient = await auth.getClient();
-    const spreadsheetId = process.env.TUTOR_SATISFACTION_SHEET_ID || '1qlvFeFXYaA4Ul6R93qa7CiT4fdJHbrppUiI1tNl7bxg';
-    const sheetName = 'Tutor満足度';
-    
-    // Check if sheet exists
-    const spreadsheetMetadata = await sheets.spreadsheets.get({
-      auth: authClient,
-      spreadsheetId
-    });
-    
+    };
+  } catch (error) {
+    console.error('[Tutor Satisfaction Export] Error during monthly export:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function emptyTutorRows(tutorName) {
+  return [
+    [tutorName, 'レッスン満足度', ''],
+    ['', '回収率', ''],
+    ['', '満足度スコア', '']
+  ];
+}
+
+function metricsToTutorRows(tutorName, metrics) {
+  return [
+    [tutorName, 'レッスン満足度', metrics.satisfactionValue.toFixed(2)],
+    [
+      '',
+      '回収率',
+      metrics.collectionRate !== null ? metrics.collectionRate.toFixed(2) : '-'
+    ],
+    [
+      '',
+      '満足度スコア',
+      metrics.satisfactionScore !== null && metrics.satisfactionScore > 0
+        ? metrics.satisfactionScore.toFixed(2)
+        : '-'
+    ]
+  ];
+}
+
+async function createSheetContext() {
+  if (!process.env.GOOGLE_CREDENTIALS_JSON) {
+    console.error('[Tutor Satisfaction Export] GOOGLE_CREDENTIALS_JSON not set');
+    return { success: false, error: 'GOOGLE_CREDENTIALS_JSON not configured' };
+  }
+
+  const credString = process.env.GOOGLE_CREDENTIALS_JSON.trim();
+  let credentials;
+  try {
+    credentials = credString.startsWith('{')
+      ? JSON.parse(credString)
+      : JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
+  } catch (error) {
+    console.error('[Tutor Satisfaction Export] Failed to parse credentials:', error.message);
+    return { success: false, error: 'Invalid credentials format' };
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+  });
+  const authClient = await auth.getClient();
+  return {
+    success: true,
+    sheets: google.sheets({ version: 'v4', auth: authClient }),
+    spreadsheetId: process.env.TUTOR_SATISFACTION_SHEET_ID
+      || '1qlvFeFXYaA4Ul6R93qa7CiT4fdJHbrppUiI1tNl7bxg'
+  };
+}
+
+async function exportMonthlyRowsToSheet({
+  sheets,
+  spreadsheetId,
+  sheetName,
+  yearMonth,
+  rows
+}) {
+  try {
+    const spreadsheetMetadata = await sheets.spreadsheets.get({ spreadsheetId });
+    const existingSheet = spreadsheetMetadata.data.sheets.find(
+      sheet => sheet.properties.title === sheetName
+    );
     let sheetId;
-    const existingSheet = spreadsheetMetadata.data.sheets.find(s => s.properties.title === sheetName);
-    
+
     if (!existingSheet) {
-      // Create new sheet if it doesn't exist
       const addSheetResponse = await sheets.spreadsheets.batchUpdate({
-        auth: authClient,
         spreadsheetId,
         resource: {
           requests: [{
@@ -176,54 +261,24 @@ export async function monthlyTutorSatisfactionExport() {
           }]
         }
       });
-      
       sheetId = addSheetResponse.data.replies[0].addSheet.properties.sheetId;
-      
-      // Write initial data (header + all rows)
-      const headerRow = ['Tutor名', '項目', currentYearMonth];
-      const allRows = [headerRow, ...rows];
-      
+
+      const allRows = [['Tutor名', '項目', yearMonth], ...rows];
       await sheets.spreadsheets.values.update({
-        auth: authClient,
         spreadsheetId,
-        range: `${sheetName}!A1`,
+        range: `'${sheetName}'!A1`,
         valueInputOption: 'USER_ENTERED',
-        resource: {
-          values: allRows
-        }
+        resource: { values: allRows }
       });
-      
-      // Apply initial formatting
-      await sheets.spreadsheets.batchUpdate({
-        auth: authClient,
-        spreadsheetId,
-        resource: {
-          requests: [
-            {
-              updateSheetProperties: {
-                properties: {
-                  sheetId,
-                  gridProperties: {
-                    frozenRowCount: 1,
-                    frozenColumnCount: 2
-                  }
-                },
-                fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount'
-              }
-            }
-          ]
-        }
-      });
-      
-      // Merge cells for tutor names
+
       const mergeRequests = [];
-      for (let i = 1; i < allRows.length; i += 3) {
+      for (let rowIndex = 1; rowIndex < allRows.length; rowIndex += 3) {
         mergeRequests.push({
           mergeCells: {
             range: {
               sheetId,
-              startRowIndex: i,
-              endRowIndex: Math.min(i + 3, allRows.length),
+              startRowIndex: rowIndex,
+              endRowIndex: Math.min(rowIndex + 3, allRows.length),
               startColumnIndex: 0,
               endColumnIndex: 1
             },
@@ -231,114 +286,93 @@ export async function monthlyTutorSatisfactionExport() {
           }
         });
       }
-      
-      if (mergeRequests.length > 0) {
-        await sheets.spreadsheets.batchUpdate({
-          auth: authClient,
-          spreadsheetId,
-          resource: {
-            requests: mergeRequests
-          }
-        });
-      }
-      
-      console.log(`[Tutor Satisfaction Export] Created new sheet ${sheetName} with initial data for ${currentYearMonth}`);
-    } else {
-      // Sheet exists, append new month's data
-      sheetId = existingSheet.properties.sheetId;
-      
-      // Read existing data to find the next column
-      const existingData = await sheets.spreadsheets.values.get({
-        auth: authClient,
+      await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
-        range: `${sheetName}!A1:ZZ1`
-      });
-      
-      const headerRow = existingData.data.values ? existingData.data.values[0] : [];
-      const nextColumnIndex = headerRow.length;
-      const nextColumnLetter = getColumnLetter(nextColumnIndex);
-      
-      // Check if the new month already exists
-      if (headerRow.includes(currentYearMonth)) {
-        console.log(`[Tutor Satisfaction Export] Month ${currentYearMonth} already exists in sheet, skipping`);
-        return { success: true, message: `Month ${currentYearMonth} already exists` };
-      }
-      
-      // Append new month header
-      await sheets.spreadsheets.values.update({
-        auth: authClient,
-        spreadsheetId,
-        range: `${sheetName}!${nextColumnLetter}1`,
-        valueInputOption: 'USER_ENTERED',
         resource: {
-          values: [[currentYearMonth]]
+          requests: [
+            {
+              updateSheetProperties: {
+                properties: {
+                  sheetId,
+                  gridProperties: { frozenRowCount: 1, frozenColumnCount: 2 }
+                },
+                fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount'
+              }
+            },
+            ...mergeRequests
+          ]
         }
       });
-      
-      // Read existing tutor names from column A
-      const existingTutorData = await sheets.spreadsheets.values.get({
-        auth: authClient,
+      console.log(`[Tutor Satisfaction Export] Created ${sheetName} for ${yearMonth}`);
+    } else {
+      sheetId = existingSheet.properties.sheetId;
+      const headerResponse = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `${sheetName}!A2:B1000`
+        range: `'${sheetName}'!A1:ZZ1`
       });
-      
-      const existingRows = existingTutorData.data.values || [];
-      
-      // Match tutors and append data
+      const headerRow = headerResponse.data.values?.[0] || [];
+      if (headerRow.includes(yearMonth)) {
+        console.log(
+          `[Tutor Satisfaction Export] ${yearMonth} already exists in ${sheetName}, skipping`
+        );
+        return {
+          success: true,
+          skipped: true,
+          spreadsheetUrl: spreadsheetUrl(spreadsheetId, sheetId)
+        };
+      }
+
+      const nextColumnLetter = getColumnLetter(headerRow.length);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetName}'!${nextColumnLetter}1`,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [[yearMonth]] }
+      });
+
+      const existingTutorResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetName}'!A2:B1000`
+      });
+      const existingRows = existingTutorResponse.data.values || [];
       const updateData = [];
-      
-      for (let i = 0; i < existingRows.length; i += 3) {
-        const tutorName = existingRows[i] ? existingRows[i][0] : '';
-        
-        // Find matching data for this tutor
-        const tutorRowIndex = rows.findIndex(r => r[0] === tutorName);
-        
+      for (let index = 0; index < existingRows.length; index += 3) {
+        const tutorName = existingRows[index]?.[0] || '';
+        const tutorRowIndex = rows.findIndex(row => row[0] === tutorName);
         if (tutorRowIndex >= 0) {
-          // Found matching tutor, add their 3 values
-          updateData.push([rows[tutorRowIndex][2]]);       // レッスン満足度
-          updateData.push([rows[tutorRowIndex + 1][2]]);   // 回収率
-          updateData.push([rows[tutorRowIndex + 2][2]]);   // 満足度スコア
+          updateData.push([rows[tutorRowIndex][2]]);
+          updateData.push([rows[tutorRowIndex + 1][2]]);
+          updateData.push([rows[tutorRowIndex + 2][2]]);
         } else {
-          // No data for this tutor, add empty cells
-          updateData.push(['']);
-          updateData.push(['']);
-          updateData.push(['']);
+          updateData.push([''], [''], ['']);
         }
       }
-      
+
       if (updateData.length > 0) {
         await sheets.spreadsheets.values.update({
-          auth: authClient,
           spreadsheetId,
-          range: `${sheetName}!${nextColumnLetter}2`,
+          range: `'${sheetName}'!${nextColumnLetter}2`,
           valueInputOption: 'USER_ENTERED',
-          resource: {
-            values: updateData
-          }
+          resource: { values: updateData }
         });
       }
-      
-      console.log(`[Tutor Satisfaction Export] Appended new month ${currentYearMonth} to ${sheetName}`);
+      console.log(`[Tutor Satisfaction Export] Appended ${yearMonth} to ${sheetName}`);
     }
-    
-    const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`;
-    
-    console.log(`[Tutor Satisfaction Export] Export complete: ${spreadsheetUrl}`);
-    
+
     return {
       success: true,
-      spreadsheetUrl,
-      sheetName,
-      month: currentYearMonth,
-      tutorCount: tutors.length
+      spreadsheetUrl: spreadsheetUrl(spreadsheetId, sheetId)
     };
   } catch (error) {
-    console.error('[Tutor Satisfaction Export] Error during monthly export:', error);
+    console.error(`[Tutor Satisfaction Export] Failed to export ${sheetName}:`, error);
     return { success: false, error: error.message };
   }
 }
 
-// Helper function to convert column index to letter (0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, ...)
+function spreadsheetUrl(spreadsheetId, sheetId) {
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`;
+}
+
 function getColumnLetter(index) {
   let letter = '';
   while (index >= 0) {

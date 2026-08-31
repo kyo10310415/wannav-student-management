@@ -97,6 +97,14 @@ export function getActiveStudentsForTutor(students, tutor) {
   );
 }
 
+/**
+ * 25日判定を導入する前の回収率分母。
+ * レッスン実施有無に関係なく、対象となるアクティブ生徒をすべて数える。
+ */
+export function getLegacySatisfactionDenominator({ students, tutor }) {
+  return getActiveStudentsForTutor(students, tutor).length;
+}
+
 export function getSatisfactionDenominator({
   students,
   tutor,
@@ -140,5 +148,40 @@ export function calculateSatisfactionMetrics(monthData, denominator) {
     satisfactionCount,
     collectionRate,
     satisfactionScore
+  };
+}
+
+/**
+ * 同じ満足度データから旧計算・レッスン実施考慮の両方を生成する。
+ * スナップショットでは既存シートに legacy、新規シートに lessonAdjusted を保存する。
+ */
+export function calculateSatisfactionMetricVariants({
+  monthData,
+  students,
+  tutor,
+  year,
+  month,
+  completedStudentIds = null,
+  referenceDate = new Date()
+}) {
+  const legacyDenominator = getLegacySatisfactionDenominator({ students, tutor });
+  const lessonAdjustedDenominator = getSatisfactionDenominator({
+    students,
+    tutor,
+    year,
+    month,
+    completedStudentIds,
+    referenceDate
+  });
+
+  return {
+    legacy: {
+      denominator: legacyDenominator,
+      ...calculateSatisfactionMetrics(monthData, legacyDenominator)
+    },
+    lessonAdjusted: {
+      denominator: lessonAdjustedDenominator,
+      ...calculateSatisfactionMetrics(monthData, lessonAdjustedDenominator)
+    }
   };
 }
