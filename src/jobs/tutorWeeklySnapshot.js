@@ -3,8 +3,7 @@ import { fetchSatisfactionFromCache } from '../services/cacheService.js';
 import { getCompletedStudentIdsForMonth } from '../services/lessonCompletionService.js';
 import {
   aggregateSatisfactionByTutorMonth,
-  calculateSatisfactionMetrics,
-  getSatisfactionDenominator,
+  calculateSatisfactionMetricVariants,
   isLessonCompletionFilterActive
 } from '../services/tutorSatisfactionService.js';
 import { google } from 'googleapis';
@@ -16,8 +15,8 @@ import { google } from 'googleapis';
  * 月次: 毎月末日   23:30 JST — monthlyTutorSnapshot()
  *
  * 書き出し先（シート名固定・1シート蓄積）:
- *   週次 → 「週次スナップショット」
- *   月次 → 「月次スナップショット」
+ *   旧計算（アクティブ生徒全員） → 既存の週次・月次シート
+ *   新計算（26日以降はレッスン実施者のみ） → 「（レッスン実施考慮）」シート
  *
  * レイアウト:
  *   1行目: Tutor名 | 項目 | MM/DD or YYYY/M | ...
@@ -28,6 +27,17 @@ import { google } from 'googleapis';
  *         (結合) | 回収率（回答数・分母数による加重） | 値 | ...
  *         (結合) | 満足度スコア | 値 | ...
  */
+
+export const SNAPSHOT_SHEET_NAMES = Object.freeze({
+  weekly: Object.freeze({
+    legacy: '週次スナップショット',
+    lessonAdjusted: '週次スナップショット（レッスン実施考慮）'
+  }),
+  monthly: Object.freeze({
+    legacy: '月次スナップショット',
+    lessonAdjusted: '月次スナップショット（レッスン実施考慮）'
+  })
+});
 
 // ─── 公開エントリポイント ─────────────────────────────────────────────────────
 
@@ -90,24 +100,35 @@ async function _runSnapshot({ isMonthly }) {
     );
     const students = studentsResult.rows;
 
+    const completionFilterActive = isLessonCompletionFilterActive(
+      snapshotYear,
+      snapshotMonth,
+      now
+    );
     let completedStudentIds = null;
-    if (isLessonCompletionFilterActive(snapshotYear, snapshotMonth, now)) {
+    let lessonAdjustedCalculationAvailable = true;
+    if (completionFilterActive) {
       try {
         const completion = await getCompletedStudentIdsForMonth(
           `${snapshotYear}-${String(snapshotMonth).padStart(2, '0')}`
         );
         completedStudentIds = new Set(completion.completedStudentIds);
       } catch (error) {
+        lessonAdjustedCalculationAvailable = false;
         console.error(`[Tutor ${label} Snapshot] Lesson completion filter unavailable:`, error.message);
       }
     }
 
     // ─── 各Tutorのデータ計算 ─────────────────────────────────────────────
     let savedCount = 0, skippedCount = 0;
-    const sheetData = []; // { tutorName, satisfactionValue, collectionRate, satisfactionScore }
+    const legacySheetData = [];
+    const lessonAdjustedSheetData = [];
 
     for (const tutor of tutors) {
-      const satisfactionDenominator = getSatisfactionDenominator({
+      const monthData = (satisfactionByTutor[tutor.tutor_name] || {})[yearMonth];
+      const satisfactionAvg = monthData ? monthData.average : null;
+      const variants = calculateSatisfactionMetricVariants({
+        monthData,
         students,
         tutor,
         year: snapshotYear,
@@ -115,18 +136,10 @@ async function _runSnapshot({ isMonthly }) {
         completedStudentIds,
         referenceDate: now
       });
+      const adjustedMetrics = variants.lessonAdjusted;
 
-      const monthData = (satisfactionByTutor[tutor.tutor_name] || {})[yearMonth];
-      const satisfactionAvg = monthData ? monthData.average : null;
-      const {
-        satisfactionValue,
-        satisfactionCount,
-        collectionRate,
-        satisfactionScore
-      } = calculateSatisfactionMetrics(monthData, satisfactionDenominator);
-
-      // 週次のみDBに保存
-      if (!isMonthly) {
+      // 週次DBはTutor管理画面で使用するため、現行のレッスン実施考慮計算を保存する
+      if (!isMonthly && lessonAdjustedCalculationAvailable) {
         try {
           await query(`
             INSERT INTO tutor_weekly_snapshots
@@ -146,87 +159,82 @@ async function _runSnapshot({ isMonthly }) {
               created_at           = EXCLUDED.created_at
           `, [
             snapshotDate, tutor.notion_name, yearMonth,
-            satisfactionDenominator, satisfactionCount, satisfactionAvg,
-            satisfactionValue, collectionRate, satisfactionScore
+            adjustedMetrics.denominator, adjustedMetrics.satisfactionCount, satisfactionAvg,
+            adjustedMetrics.satisfactionValue, adjustedMetrics.collectionRate,
+            adjustedMetrics.satisfactionScore
           ]);
           savedCount++;
         } catch (err) {
           console.error(`[Tutor ${label} Snapshot] DB error for ${tutor.notion_name}:`, err.message);
           skippedCount++;
         }
+      } else if (!isMonthly) {
+        skippedCount++;
       }
 
-      sheetData.push({
-        tutorName:         tutor.tutor_name,
-        satisfactionValue: satisfactionValue !== null ? parseFloat(satisfactionValue.toFixed(2)) : '',
-        collectionRate:    collectionRate    !== null ? parseFloat(collectionRate.toFixed(2))    : '',
-        satisfactionScore: satisfactionScore !== null ? parseFloat(satisfactionScore.toFixed(2)) : '',
-        satisfactionCount,
-        satisfactionDenominator,
-      });
-    }
-
-    // ─── 全体集計行 ───────────────────────────────────────────────────────
-    // 画面と同様、満足度データと有効な分母があるTutorだけを集計対象にする
-    const validData = sheetData.filter(d =>
-      d.satisfactionValue !== '' && d.satisfactionDenominator > 0
-    );
-    let overallSatisfactionValue = '';
-    let overallCollectionRate    = '';
-    let overallSatisfactionScore = '';
-
-    if (validData.length > 0) {
-      overallSatisfactionValue = parseFloat(
-        (validData.reduce((s, d) => s + d.satisfactionValue, 0) / validData.length).toFixed(2)
+      legacySheetData.push(toSnapshotSheetData(tutor.tutor_name, variants.legacy));
+      lessonAdjustedSheetData.push(
+        toSnapshotSheetData(tutor.tutor_name, variants.lessonAdjusted)
       );
-      const totalAnswers = validData.reduce((sum, data) => sum + data.satisfactionCount, 0);
-      const totalDenominator = validData.reduce((sum, data) => sum + data.satisfactionDenominator, 0);
-      if (totalDenominator > 0) {
-        overallCollectionRate = parseFloat(
-          (totalAnswers / totalDenominator * 100).toFixed(2)
-        );
-      }
-      const validScore = validData.filter(d => d.satisfactionScore !== '');
-      if (validScore.length > 0) {
-        overallSatisfactionScore = parseFloat(
-          (validScore.reduce((s, d) => s + d.satisfactionScore, 0) / validScore.length).toFixed(2)
-        );
-      }
     }
 
-    // 全体行をsheetDataの末尾に追加
-    const sheetDataWithOverall = [
-      ...sheetData,
-      {
-        tutorName:         '全体',
-        satisfactionValue: overallSatisfactionValue,
-        collectionRate:    overallCollectionRate,
-        satisfactionScore: overallSatisfactionScore,
-      }
-    ];
+    const legacySheetDataWithOverall = appendOverallSnapshotData(legacySheetData);
+    const lessonAdjustedSheetDataWithOverall = appendOverallSnapshotData(
+      lessonAdjustedSheetData
+    );
 
     if (!isMonthly) {
       console.log(`[Tutor ${label} Snapshot] DB done. saved=${savedCount}, skipped=${skippedCount}`);
     }
 
     // ─── スプレッドシートへの書き出し ─────────────────────────────────────
-    const sheetName = isMonthly ? '月次スナップショット' : '週次スナップショット';
-    const sheetResult = await exportSnapshotToSheet(
-      sheetDataWithOverall, snapshotDate, snapshotLabel, sheetName
+    const sheetNames = isMonthly
+      ? SNAPSHOT_SHEET_NAMES.monthly
+      : SNAPSHOT_SHEET_NAMES.weekly;
+    const legacySheetResult = await exportSnapshotToSheet(
+      legacySheetDataWithOverall,
+      snapshotDate,
+      snapshotLabel,
+      sheetNames.legacy
     );
+    const lessonAdjustedSheetResult = lessonAdjustedCalculationAvailable
+      ? await exportSnapshotToSheet(
+        lessonAdjustedSheetDataWithOverall,
+        snapshotDate,
+        snapshotLabel,
+        sheetNames.lessonAdjusted
+      )
+      : {
+        success: false,
+        error: 'Lesson completion data unavailable; adjusted snapshot was not written'
+      };
 
-    if (sheetResult.success) {
-      console.log(`[Tutor ${label} Snapshot] Sheet export done: ${sheetResult.spreadsheetUrl}`);
+    if (legacySheetResult.success && lessonAdjustedSheetResult.success) {
+      console.log(
+        `[Tutor ${label} Snapshot] Both sheet exports done: ${legacySheetResult.spreadsheetUrl}`
+      );
     } else {
-      console.warn(`[Tutor ${label} Snapshot] Sheet export failed: ${sheetResult.error}`);
+      console.warn(`[Tutor ${label} Snapshot] Sheet export failed:`, {
+        legacy: legacySheetResult.error || null,
+        lessonAdjusted: lessonAdjustedSheetResult.error || null
+      });
     }
 
     return {
-      success: true,
+      success: legacySheetResult.success && lessonAdjustedSheetResult.success,
       savedCount,
       skippedCount,
       snapshotDate,
-      sheetUrl: sheetResult.spreadsheetUrl || null,
+      sheetUrl: legacySheetResult.spreadsheetUrl
+        || lessonAdjustedSheetResult.spreadsheetUrl
+        || null,
+      sheets: {
+        legacy: { name: sheetNames.legacy, ...legacySheetResult },
+        lessonAdjusted: {
+          name: sheetNames.lessonAdjusted,
+          ...lessonAdjustedSheetResult
+        }
+      }
     };
 
   } catch (error) {
@@ -235,10 +243,71 @@ async function _runSnapshot({ isMonthly }) {
   }
 }
 
+function toSnapshotSheetData(tutorName, metrics) {
+  return {
+    tutorName,
+    satisfactionValue: metrics.satisfactionValue !== null
+      ? parseFloat(metrics.satisfactionValue.toFixed(2))
+      : '',
+    collectionRate: metrics.collectionRate !== null
+      ? parseFloat(metrics.collectionRate.toFixed(2))
+      : '',
+    satisfactionScore: metrics.satisfactionScore !== null
+      ? parseFloat(metrics.satisfactionScore.toFixed(2))
+      : '',
+    satisfactionCount: metrics.satisfactionCount,
+    satisfactionDenominator: metrics.denominator
+  };
+}
+
+export function appendOverallSnapshotData(sheetData) {
+  const validData = sheetData.filter(data =>
+    data.satisfactionValue !== '' && data.satisfactionDenominator > 0
+  );
+  let satisfactionValue = '';
+  let collectionRate = '';
+  let satisfactionScore = '';
+
+  if (validData.length > 0) {
+    satisfactionValue = parseFloat(
+      (validData.reduce((sum, data) => sum + data.satisfactionValue, 0)
+        / validData.length).toFixed(2)
+    );
+    const totalAnswers = validData.reduce(
+      (sum, data) => sum + data.satisfactionCount,
+      0
+    );
+    const totalDenominator = validData.reduce(
+      (sum, data) => sum + data.satisfactionDenominator,
+      0
+    );
+    if (totalDenominator > 0) {
+      collectionRate = parseFloat((totalAnswers / totalDenominator * 100).toFixed(2));
+    }
+    const validScores = validData.filter(data => data.satisfactionScore !== '');
+    if (validScores.length > 0) {
+      satisfactionScore = parseFloat(
+        (validScores.reduce((sum, data) => sum + data.satisfactionScore, 0)
+          / validScores.length).toFixed(2)
+      );
+    }
+  }
+
+  return [
+    ...sheetData,
+    {
+      tutorName: '全体',
+      satisfactionValue,
+      collectionRate,
+      satisfactionScore
+    }
+  ];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // スプレッドシートへの書き出し（シート名固定・1シート蓄積）
 //
-// sheetName: "週次スナップショット" or "月次スナップショット"
+// sheetName: 週次・月次それぞれの旧計算またはレッスン実施考慮シート
 //
 // レイアウト:
 //   行1 (ヘッダー): Tutor名 | 項目 | 5/4 | 5/11 | ... (週次) or 2026/6 | ...（月次）
