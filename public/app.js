@@ -25,7 +25,6 @@ let selectedTutorYear = new Date().getFullYear(); // Tutor満足度表示年
 let selectedTutorMonth = new Date().getMonth() + 1; // Tutor満足度表示月
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
-let studentsPageTab = 'students'; // 'students' | 'withdrawal' — 生徒管理ページの主タブ
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports', 'daily-reports'
 let schedules = []; // Tutor schedules data
 let pendingRequests = []; // Pending absence requests
@@ -843,7 +842,6 @@ async function renderApp() {
   if (currentPage === 'reservations') {
     renderReservationsPage();
   } else if (currentPage === 'students') {
-    studentsPageTab = 'students'; // 生徒一覧タブにリセット
     renderStudentsPage();
   } else if (currentPage === 'red-list') {
     await renderRedListPage();
@@ -1795,13 +1793,6 @@ function renderStudentsPage() {
         <button onclick="clearAllFilters()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" id="clear-filters-btn">
           <i class="fas fa-times-circle mr-2"></i>フィルター・ソートをクリア
         </button>
-        <button onclick="openWithdrawalModal()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-          <i class="fas fa-user-minus mr-2"></i>強制退会申請
-        </button>
-        <button onclick="switchStudentsPageTab('withdrawal')" id="btn-studentsTab-withdrawal"
-          class="px-4 py-2 rounded-lg transition font-semibold ${studentsPageTab === 'withdrawal' ? 'bg-red-600 text-white' : 'bg-white border border-red-300 text-red-600 hover:bg-red-50'}">
-          <i class="fas fa-list mr-2"></i>退会申請一覧
-        </button>
       </div>
 
       <!-- 生徒検索 -->
@@ -1822,7 +1813,7 @@ function renderStudentsPage() {
       </div>
     </div>
 
-    <!-- ▼ 生徒一覧タブコンテンツ -->
+    <!-- 生徒一覧コンテンツ -->
     <div id="studentsMainContent">
 
     <!-- Statistics (only Active students with レッスン中 or PROプラン) -->
@@ -2215,95 +2206,7 @@ function renderStudentsPage() {
       </div>
     </div>
 
-    </div><!-- ▲ /studentsMainContent -->
-
-    <!-- ▼ 退会申請一覧タブコンテンツ -->
-    <div id="withdrawalTabContent" class="hidden">
-      <div class="bg-white rounded-lg shadow-md p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-bold text-gray-800">
-            <i class="fas fa-user-minus mr-2 text-red-600"></i>退会申請一覧
-          </h2>
-          <button onclick="loadWithdrawalList()" class="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition">
-            <i class="fas fa-sync-alt mr-1"></i>更新
-          </button>
-        </div>
-        <div id="withdrawalListContainer">
-          <div class="text-center text-gray-400 py-4 text-sm">読み込み中...</div>
-        </div>
-      </div>
-    </div><!-- ▲ /withdrawalTabContent -->
-
-    <!-- 強制退会申請モーダル -->
-    <div id="withdrawalModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/50 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white z-10">
-          <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-user-minus mr-2 text-red-600"></i>退会申請</h3>
-          <button onclick="closeWithdrawalModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <div class="px-6 py-5 space-y-4">
-          <!-- 学籍番号 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              学籍番号 <span class="text-red-500">*</span>
-              <span class="ml-2 text-xs text-gray-400 font-normal">※半角入力</span>
-            </label>
-            <div class="flex gap-2">
-              <input id="wrStudentId" type="text" placeholder="例: 12345"
-                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                oninput="onWithdrawalStudentIdInput(this.value)" />
-              <button onclick="lookupWithdrawalStudent()" class="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 transition">
-                <i class="fas fa-search"></i>
-              </button>
-            </div>
-            <div id="wrStudentError" class="text-xs text-red-500 mt-1 hidden"></div>
-          </div>
-          <!-- 生徒名 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">生徒名</label>
-            <input id="wrStudentName" type="text" readonly
-              class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700" placeholder="学籍番号入力後に自動入力" />
-          </div>
-          <!-- 担任Tutor -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">担任Tutor</label>
-            <input id="wrTutorName" type="text" readonly
-              class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700" placeholder="学籍番号入力後に自動入力" />
-          </div>
-          <!-- 退会日 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">退会日 <span class="text-red-500">*</span></label>
-            <input id="wrWithdrawalDate" type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent" />
-          </div>
-          <!-- 区分 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">区分 <span class="text-red-500">*</span></label>
-            <select id="wrCategory"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent">
-              <option value="">選択してください</option>
-              <option value="強制退会">強制退会</option>
-              <option value="途中退会">途中退会</option>
-            </select>
-          </div>
-          <!-- 理由 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">理由</label>
-            <textarea id="wrReason" rows="4" placeholder="退会理由を入力してください..."
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"></textarea>
-          </div>
-        </div>
-        <div class="px-6 py-4 border-t flex gap-3 justify-end">
-          <button onclick="closeWithdrawalModal()" class="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition">
-            キャンセル
-          </button>
-          <button id="wrSubmitBtn" onclick="submitWithdrawalRequest()"
-            class="px-5 py-2 text-sm bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
-            <i class="fas fa-paper-plane mr-1"></i>申請・通知する
-          </button>
-        </div>
-      </div>
-    </div>
+    </div><!-- /studentsMainContent -->
   `;
   
   // Set tutor filter and add event listener
@@ -2323,9 +2226,6 @@ function renderStudentsPage() {
   
   // Load red list data asynchronously
   loadRedListData();
-
-  // 生徒ページ主タブを初期状態に適用
-  _applyStudentsPageTab();
 }
 
 // Load Wanami usage data for all visible students (batch mode with cache)
@@ -17829,252 +17729,6 @@ async function toggleDailyReportReminder() {
   } catch (e) {
     console.error('[DailyReports] toggle reminder error:', e);
     showNotification('設定の更新に失敗しました', 'error');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// 退会申請機能
-// ════════════════════════════════════════════════════════════════
-
-// 退会申請モーダル内の内部状態
-let _wrDiscordUserId  = null;
-let _wrNotionUrl      = null;
-let _wrLookupTimer    = null;
-
-// ─── モーダル開閉 ────────────────────────────────────────────────
-function openWithdrawalModal() {
-  _wrDiscordUserId = null;
-  _wrNotionUrl     = null;
-
-  const modal = document.getElementById('withdrawalModal');
-  if (!modal) return;
-
-  // フィールドリセット
-  ['wrStudentId','wrStudentName','wrTutorName','wrReason'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const dateEl = document.getElementById('wrWithdrawalDate');
-  if (dateEl) {
-    const jst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-    dateEl.value = jst.toISOString().slice(0, 10);
-  }
-  const catEl = document.getElementById('wrCategory');
-  if (catEl) catEl.value = '';
-  const errEl = document.getElementById('wrStudentError');
-  if (errEl) errEl.classList.add('hidden');
-
-  modal.classList.remove('hidden');
-}
-
-function closeWithdrawalModal() {
-  const modal = document.getElementById('withdrawalModal');
-  if (modal) modal.classList.add('hidden');
-}
-
-// ─── 学籍番号入力 → 0.6秒デバウンスで自動検索 ──────────────────
-function onWithdrawalStudentIdInput(value) {
-  clearTimeout(_wrLookupTimer);
-  if (!value.trim()) {
-    clearWithdrawalStudentFields();
-    return;
-  }
-  _wrLookupTimer = setTimeout(() => lookupWithdrawalStudent(), 600);
-}
-
-function clearWithdrawalStudentFields() {
-  ['wrStudentName','wrTutorName'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  _wrDiscordUserId = null;
-  _wrNotionUrl     = null;
-  const errEl = document.getElementById('wrStudentError');
-  if (errEl) errEl.classList.add('hidden');
-}
-
-// ─── 生徒情報検索 ────────────────────────────────────────────────
-async function lookupWithdrawalStudent() {
-  const studentId = document.getElementById('wrStudentId')?.value.trim();
-  if (!studentId) return;
-
-  const errEl = document.getElementById('wrStudentError');
-  try {
-    const res = await axios.get(`/api/withdrawal-requests/student/${encodeURIComponent(studentId)}`);
-    if (!res.data.success) throw new Error(res.data.error || '取得失敗');
-
-    const d = res.data.data;
-    document.getElementById('wrStudentName').value = d.name        || '';
-    document.getElementById('wrTutorName').value   = d.homeroom_tutor || '（未設定）';
-    _wrDiscordUserId = d.discord_user_id || null;
-    _wrNotionUrl     = d.notion_url      || null;
-
-    if (errEl) errEl.classList.add('hidden');
-  } catch (e) {
-    document.getElementById('wrStudentName').value = '';
-    document.getElementById('wrTutorName').value   = '';
-    _wrDiscordUserId = null;
-    _wrNotionUrl     = null;
-    if (errEl) {
-      errEl.textContent = e.response?.data?.error || '生徒が見つかりません';
-      errEl.classList.remove('hidden');
-    }
-  }
-}
-
-// ─── 申請送信 ────────────────────────────────────────────────────
-async function submitWithdrawalRequest() {
-  const studentId      = document.getElementById('wrStudentId')?.value.trim();
-  const studentName    = document.getElementById('wrStudentName')?.value.trim();
-  const tutorName      = document.getElementById('wrTutorName')?.value.trim();
-  const withdrawalDate = document.getElementById('wrWithdrawalDate')?.value;
-  const category       = document.getElementById('wrCategory')?.value;
-  const reason         = document.getElementById('wrReason')?.value.trim();
-
-  // バリデーション
-  if (!studentId)      return showNotification('学籍番号を入力してください', 'error');
-  if (!studentName)    return showNotification('生徒名が取得できていません（学籍番号を確認してください）', 'error');
-  if (!withdrawalDate) return showNotification('退会日を選択してください', 'error');
-  if (!category)       return showNotification('区分を選択してください', 'error');
-
-  const btn = document.getElementById('wrSubmitBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>送信中...';
-  }
-
-  try {
-    const res = await axios.post('/api/withdrawal-requests', {
-      student_id:      studentId,
-      student_name:    studentName,
-      homeroom_tutor:  tutorName || null,
-      withdrawal_date: withdrawalDate,
-      category,
-      reason:          reason || null,
-      notion_url:      _wrNotionUrl || null,
-      discord_user_id: _wrDiscordUserId || null,
-      submitted_by:    currentUser?.email || null,
-    });
-
-    if (!res.data.success) throw new Error(res.data.error);
-
-    showNotification('退会申請を登録し、Discordへ通知しました', 'success');
-    closeWithdrawalModal();
-    loadWithdrawalList();
-  } catch (e) {
-    console.error('[Withdrawal] submit error:', e);
-    showNotification(e.response?.data?.error || '申請の送信に失敗しました', 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>申請・通知する';
-    }
-  }
-}
-
-// ─── 退会申請一覧を読み込む ──────────────────────────────────────
-async function loadWithdrawalList() {
-  const container = document.getElementById('withdrawalListContainer');
-  if (!container) return;
-  container.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm"><i class="fas fa-spinner fa-spin mr-1"></i>読み込み中...</div>';
-
-  try {
-    const res = await axios.get('/api/withdrawal-requests');
-    const list = res.data.success ? res.data.data : [];
-
-    if (list.length === 0) {
-      container.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">退会申請はまだありません</div>';
-      return;
-    }
-
-    container.innerHTML = `
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 text-sm">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">申請日時</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">学籍番号</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">生徒名</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担任Tutor</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">退会日</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">区分</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">理由</th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notion</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-100">
-            ${list.map(r => {
-              const createdAt = r.created_at
-                ? new Date(r.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
-                : '-';
-              const wDate = r.withdrawal_date
-                ? String(r.withdrawal_date).slice(0, 10).replace(/-/g, '/')
-                : '-';
-              const categoryBadge = r.category === '強制退会'
-                ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">強制退会</span>'
-                : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">途中退会</span>';
-              const notionLink = r.notion_url
-                ? `<a href="${r.notion_url}" target="_blank" class="text-blue-600 hover:underline text-xs"><i class="fas fa-external-link-alt mr-1"></i>開く</a>`
-                : '<span class="text-gray-400 text-xs">-</span>';
-              return `
-                <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${createdAt}</td>
-                  <td class="px-3 py-2 font-mono text-xs">${r.student_id}</td>
-                  <td class="px-3 py-2 font-semibold text-gray-800">${r.student_name}</td>
-                  <td class="px-3 py-2 text-gray-700">${r.homeroom_tutor || '-'}</td>
-                  <td class="px-3 py-2 whitespace-nowrap">${wDate}</td>
-                  <td class="px-3 py-2">${categoryBadge}</td>
-                  <td class="px-3 py-2 text-gray-600 max-w-xs truncate" title="${(r.reason || '').replace(/"/g, '&quot;')}">${r.reason || '-'}</td>
-                  <td class="px-3 py-2">${notionLink}</td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  } catch (e) {
-    console.error('[Withdrawal] load list error:', e);
-    container.innerHTML = '<div class="text-center text-red-400 py-4 text-sm">一覧の読み込みに失敗しました</div>';
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// 生徒管理ページ 主タブ切り替え（生徒一覧 / 退会申請一覧）
-// ════════════════════════════════════════════════════════════════
-
-function switchStudentsPageTab(tab) {
-  studentsPageTab = tab;
-  _applyStudentsPageTab();
-}
-
-function _applyStudentsPageTab() {
-  const mainEl       = document.getElementById('studentsMainContent');
-  const withdrawalEl = document.getElementById('withdrawalTabContent');
-  const tabBtn       = document.getElementById('btn-studentsTab-withdrawal');
-
-  if (!mainEl || !withdrawalEl) return;
-
-  const isWithdrawal = studentsPageTab === 'withdrawal';
-
-  // コンテンツ表示切り替え
-  mainEl.classList.toggle('hidden', isWithdrawal);
-  withdrawalEl.classList.toggle('hidden', !isWithdrawal);
-
-  // 「退会申請一覧」タブボタンのスタイル切り替え
-  if (tabBtn) {
-    if (isWithdrawal) {
-      tabBtn.classList.remove('bg-white', 'border', 'border-red-300', 'text-red-600', 'hover:bg-red-50');
-      tabBtn.classList.add('bg-red-600', 'text-white');
-    } else {
-      tabBtn.classList.remove('bg-red-600', 'text-white');
-      tabBtn.classList.add('bg-white', 'border', 'border-red-300', 'text-red-600', 'hover:bg-red-50');
-    }
-  }
-
-  // 退会申請タブを開いた時だけ一覧を読み込む
-  if (isWithdrawal) {
-    loadWithdrawalList();
   }
 }
 
