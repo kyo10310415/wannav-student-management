@@ -1450,6 +1450,17 @@ const migrations = [
              updated_at = NOW()
        WHERE template_text LIKE '%{{lesson_number_display}}%';
     `
+  },
+  {
+    version: 51,
+    name: 'add_student_text_type',
+    up: `
+      ALTER TABLE students
+        ADD COLUMN IF NOT EXISTS text_type VARCHAR(10) NOT NULL DEFAULT '旧';
+    `,
+    down: `
+      ALTER TABLE students DROP COLUMN IF EXISTS text_type;
+    `
   }
 ];
 

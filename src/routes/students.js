@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchStudents } from '../services/notionService.js';
 import { fetchStudentsFromCache, fetchProgressFromCache, getCacheSyncTime, getSpreadsheetMetadata } from '../services/cacheService.js';
-import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts, fetchSuspensionMonthsMap } from '../services/sheetsService.js';
+import { fetchWanamiUsageCount, fetchWanamiUsageHistory, fetchAllWanamiUsageCounts, fetchSuspensionMonthsMap, fetchStudentTextTypeMap } from '../services/sheetsService.js';
+import { normalizeStudentTextTypeStudentId } from '../services/studentTextTypeService.js';
 import { fetchLessonStartDates, calculateContinuedMonths } from '../services/externalDbService.js';
 import { calculateStudentLessonStats } from '../services/lessonReportService.js';
 
@@ -58,6 +59,7 @@ app.get('/', async (c) => {
       
       return {
         ...student,
+        text_type: student.text_type === '新' ? '新' : '旧',
         pro_plan_continued_months: calculateProPlanMonths(student.pro_plan_start_date),
         // レッスン報告から取得したデータで上書き
         lesson_progress: stats.lesson_progress || student.lesson_progress,
@@ -160,6 +162,17 @@ app.get('/sync', async (c) => {
     // Fetch suspension months map
     const suspensionMonthsMap = await fetchSuspensionMonthsMap();
     console.log(`Loaded suspension data for ${Object.keys(suspensionMonthsMap).length} students`);
+
+    // Fetch text types from the student source sheet. If this source is temporarily
+    // unavailable, existing DB values are preserved by the upsert below.
+    let studentTextTypeMap = new Map();
+    let studentTextTypeSourceAvailable = false;
+    try {
+      studentTextTypeMap = await fetchStudentTextTypeMap();
+      studentTextTypeSourceAvailable = true;
+    } catch (error) {
+      console.warn('Warning: Could not fetch student text types:', error.message);
+    }
     
     // Get lesson statistics from lesson reports (優先使用)
     let lessonStats = {};
@@ -207,6 +220,11 @@ app.get('/sync', async (c) => {
         if (suspensionMonths > 0) {
           continuedMonths = Math.max(0, continuedMonths - suspensionMonths);
         }
+
+        const normalizedStudentId = normalizeStudentTextTypeStudentId(student.student_id);
+        const textType = studentTextTypeSourceAvailable
+          ? (studentTextTypeMap.get(normalizedStudentId) || '旧')
+          : null;
         
         await query(
           `INSERT INTO students 
@@ -217,8 +235,8 @@ app.get('/sync', async (c) => {
              result_absence, result_late, result_mission, result_payment,
              result_active_listening, result_understanding, result_overall,
              absence_count, lesson_start_date, continued_months, suspension_months, 
-             youtube_channel_id, x_account_id, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, CURRENT_TIMESTAMP)
+             youtube_channel_id, x_account_id, text_type, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, COALESCE($28, '旧'), CURRENT_TIMESTAMP)
           ON CONFLICT (student_id) 
           DO UPDATE SET
             name = EXCLUDED.name,
@@ -247,6 +265,7 @@ app.get('/sync', async (c) => {
             suspension_months = EXCLUDED.suspension_months,
             youtube_channel_id = EXCLUDED.youtube_channel_id,
             x_account_id = EXCLUDED.x_account_id,
+            text_type = COALESCE($28, students.text_type),
             updated_at = CURRENT_TIMESTAMP`,
           [
             student.student_id,
@@ -275,7 +294,8 @@ app.get('/sync', async (c) => {
             continuedMonths,
             suspensionMonths,
             student.youtube_channel_id || null,
-            student.x_account_id || null
+            student.x_account_id || null,
+            textType
           ]
         );
         successCount++;
