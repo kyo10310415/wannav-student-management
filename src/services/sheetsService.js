@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { buildStudentTextTypeMap } from './studentTextTypeService.js';
 
 let sheets;
 
@@ -43,6 +44,45 @@ export function getSheets() {
   }
 
   return sheets;
+}
+
+const STUDENT_INFO_SPREADSHEET_ID = process.env.STUDENT_INFO_SPREADSHEET_ID
+  || '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM';
+const STUDENT_INFO_SHEET_NAME = '❶RAW_生徒様情報';
+
+/**
+ * Fetch the text type assigned to each student from the source student sheet.
+ * Column B is the student ID and column AP contains the campaign marker.
+ * @returns {Promise<Map<string, '新'|'旧'>>}
+ */
+export async function fetchStudentTextTypeMap() {
+  try {
+    const sheets = getSheets();
+    const quotedSheetName = `'${STUDENT_INFO_SHEET_NAME.replace(/'/g, "''")}'`;
+    const response = await sheets.spreadsheets.values.batchGet({
+      spreadsheetId: STUDENT_INFO_SPREADSHEET_ID,
+      majorDimension: 'ROWS',
+      ranges: [
+        `${quotedSheetName}!B2:B`,
+        `${quotedSheetName}!AP2:AP`
+      ]
+    });
+
+    const valueRanges = response.data.valueRanges || [];
+    const studentIdRows = valueRanges[0]?.values || [];
+    const campaignRows = valueRanges[1]?.values || [];
+    if (studentIdRows.length === 0) {
+      throw new Error('Student source sheet returned no student IDs');
+    }
+
+    const textTypeMap = buildStudentTextTypeMap(studentIdRows, campaignRows);
+
+    console.log(`[Student Text Type] Loaded ${textTypeMap.size} student mappings`);
+    return textTypeMap;
+  } catch (error) {
+    console.error('[Student Text Type] Error fetching source data:', error);
+    throw error;
+  }
 }
 
 /**

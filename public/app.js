@@ -109,6 +109,19 @@ function formatXUrl(xId) {
   return `https://x.com/${xId}`;
 }
 
+function getStudentTextType(textType) {
+  return textType === '新' ? '新' : '旧';
+}
+
+function renderStudentTextTypeBadge(textType) {
+  const normalizedType = getStudentTextType(textType);
+  const colorClass = normalizedType === '新'
+    ? 'bg-blue-100 text-blue-700'
+    : 'bg-gray-100 text-gray-600';
+
+  return `<span class="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded-full text-xs font-bold ${colorClass}">${normalizedType}</span>`;
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
   // Verify session
@@ -1048,6 +1061,7 @@ function renderReservationsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">契約プラン</th>
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="max-width: 100px;">キャラ名</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">テキスト種別</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">お支払い</th>
@@ -1174,7 +1188,7 @@ function renderStudentRows() {
   if (filteredStudents.length === 0) {
     return `
       <tr>
-        <td colspan="12" class="px-6 py-4 text-center text-gray-500">
+        <td colspan="13" class="px-6 py-4 text-center text-gray-500">
           該当する生徒が見つかりません
         </td>
       </tr>
@@ -1249,6 +1263,7 @@ function renderStudentRows() {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">${renderStudentTextTypeBadge(student.text_type)}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${paymentStatus}</td>
@@ -2450,7 +2465,7 @@ function renderStudentRowsSimple() {
       <!-- Student Card (Compact layout) -->
       <div class="bg-white border border-gray-200 rounded-lg p-2 mb-2 hover:shadow-md transition">
         <!-- Row 1: Basic Info -->
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-2 pb-2 border-b border-gray-100">
+        <div class="grid grid-cols-2 md:grid-cols-7 gap-2 mb-2 pb-2 border-b border-gray-100">
           <!-- Student ID & Name -->
           <div class="col-span-2 md:col-span-2">
             <div class="text-xs text-gray-500">学籍番号 / 生徒名</div>
@@ -2469,6 +2484,12 @@ function renderStudentRowsSimple() {
           <div>
             <div class="text-xs text-gray-500">キャラ名</div>
             <div class="text-xs text-gray-700 truncate" title="${student.character_name || '-'}">${student.character_name || '-'}</div>
+          </div>
+
+          <!-- Text Type -->
+          <div>
+            <div class="text-xs text-gray-500">テキスト種別</div>
+            <div class="mt-0.5">${renderStudentTextTypeBadge(student.text_type)}</div>
           </div>
           
           <!-- Tutor -->
@@ -4354,6 +4375,7 @@ async function renderTodayLessonsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担任Tutor</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">時間</th>
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">キャラ名</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">テキスト種別</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン進捗</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">継続月数</th>
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
@@ -4454,7 +4476,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
   if (dayStudents.length === 0) {
     return `
       <tr>
-        <td colspan="12" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="13" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-calendar-times text-4xl mb-2"></i>
           <p>この日のレッスンはありません</p>
         </td>
@@ -4513,6 +4535,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${lessonTime || '-'}</td>
         <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">${renderStudentTextTypeBadge(student.text_type)}</td>
         <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
         <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
