@@ -15872,7 +15872,8 @@ let handoverSortDirection = 'asc';
 // 新規割り振りタブ用
 let handoverActiveTab = 'handover';   // 'handover' | 'new'
 let newAssignStudents = [];
-let newAssignNextMonth = '';
+let newAssignMonth = 'next';          // 'current' | 'next'
+let newAssignTargetMonth = '';
 let newAssignFilterAssigned = 'all';
 let newAssignFilterHandover = 'all';
 let newAssignSortColumn = 'lesson_start_date';
@@ -15951,6 +15952,7 @@ async function renderHandoverPage() {
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       }),
       axios.get(`${API_BASE}/api/handover/new-assignments`, {
+        params: { month: newAssignMonth },
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       })
     ]);
@@ -15958,7 +15960,7 @@ async function renderHandoverPage() {
     handoverStudents     = studentsRes.data.data    || [];
     handoverTutorSidebar = sidebarRes.data.data     || [];
     newAssignStudents    = newAssignRes.data.data    || [];
-    newAssignNextMonth   = newAssignRes.data.next_month || '';
+    newAssignTargetMonth = newAssignRes.data.target_month || newAssignRes.data.next_month || '';
 
   } catch (e) {
     console.error('[Handover] Error loading data:', e);
@@ -16044,7 +16046,17 @@ function _renderHandoverLayout() {
 
           <!-- Filters (新規割り振りタブ) -->
           <div id="handover-filters-new" class="${handoverActiveTab === 'new' ? '' : 'hidden'}">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                  <i class="fas fa-calendar-alt mr-1"></i>対象開始月
+                </label>
+                <select id="new-assign-month" onchange="newAssignChangeMonth(this.value)"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
+                  <option value="current" ${newAssignMonth === 'current' ? 'selected' : ''}>今月</option>
+                  <option value="next" ${newAssignMonth === 'next' ? 'selected' : ''}>来月</option>
+                </select>
+              </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
@@ -16365,7 +16377,7 @@ function _handoverCountLabel() {
 function _newAssignCountLabel() {
   const filtered = _getNewAssignFiltered().length;
   const total    = newAssignStudents.length;
-  const monthLabel = newAssignNextMonth ? ` (${newAssignNextMonth} 開始予定)` : '';
+  const monthLabel = newAssignTargetMonth ? ` (${newAssignTargetMonth} 開始予定)` : '';
   return `表示中: <strong>${filtered}</strong> / 全 <strong>${total}</strong> 件${monthLabel}`;
 }
 
@@ -16496,6 +16508,45 @@ function _refreshHandoverTable() {
 }
 
 // ── Filter & sort handlers (新規割り振りタブ) ──
+
+async function newAssignChangeMonth(month) {
+  if (!['current', 'next'].includes(month) || month === newAssignMonth) return;
+
+  const select = document.getElementById('new-assign-month');
+  const tbody = document.getElementById('new-assign-table-body');
+  if (select) select.disabled = true;
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400">
+      <i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...
+    </td></tr>`;
+  }
+
+  try {
+    const res = await axios.get(`${API_BASE}/api/handover/new-assignments`, {
+      params: { month },
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+
+    if (!res.data.success) {
+      throw new Error(res.data.error || 'データの読み込みに失敗しました');
+    }
+
+    newAssignMonth = month;
+    newAssignStudents = res.data.data || [];
+    newAssignTargetMonth = res.data.target_month || res.data.next_month || '';
+    newAssignFilterAssigned = 'all';
+    newAssignFilterHandover = 'all';
+    _renderHandoverLayout();
+  } catch (error) {
+    console.error('[Handover] Error changing new-assignment month:', error);
+    if (select) {
+      select.value = newAssignMonth;
+      select.disabled = false;
+    }
+    _refreshNewAssignTable();
+    showNotification(error.response?.data?.error || error.message || 'データの読み込みに失敗しました', 'error');
+  }
+}
 
 function newAssignApplyFilter() {
   newAssignFilterAssigned = document.getElementById('new-assign-filter-assigned').value;
