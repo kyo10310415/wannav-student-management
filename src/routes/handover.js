@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { google } from 'googleapis';
+import { getNewAssignmentMonthWindow, isValidNewAssignmentMonth } from '../services/handoverMonthService.js';
 
 const app = new Hono();
 
@@ -262,19 +263,21 @@ app.get('/tutor-sidebar', async (c) => {
 /**
  * GET /api/handover/new-assignments
  * 新規割り振り対象生徒一覧
- * ステータス = 'レッスン準備中' かつ lesson_start_date が翌月
- * lesson_start_date は 'yyyy/mm/dd' 形式で保存されている
+ * ステータス = 'レッスン準備中' かつ lesson_start_date が指定月
+ * month=current: 今月、month=next: 来月（デフォルト）
  */
 app.get('/new-assignments', async (c) => {
   try {
-    // JST で翌月の年・月を計算
+    const selectedMonth = c.req.query('month') || 'next';
+    if (!isValidNewAssignmentMonth(selectedMonth)) {
+      return c.json({ success: false, error: 'month must be current or next' }, 400);
+    }
+
+    const targetMonth = getNewAssignmentMonthWindow(selectedMonth);
+
+    // JST で今月の残りレッス数を計算
     const now = new Date();
     const jst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-    const nextMonth = new Date(jst.getFullYear(), jst.getMonth() + 1, 1);
-    const nextYear  = nextMonth.getFullYear();
-    const nextMon   = nextMonth.getMonth() + 1; // 1-indexed
-
-    // 今月残りレッスン数（引き継ぎ管理と同じロジック）
     const todayJst = new Date(jst.getFullYear(), jst.getMonth(), jst.getDate());
     const monthEnd = new Date(jst.getFullYear(), jst.getMonth() + 1, 0, 23, 59, 59);
 
@@ -293,8 +296,7 @@ app.get('/new-assignments', async (c) => {
       remainingMap[row.student_id] = parseInt(row.remaining_lessons, 10);
     }
 
-    // lesson_start_date は 'yyyy/mm/dd' 形式の TEXT or DATE
-    // EXTRACT で年・月を比較する
+    // DATE/TEXT どちらの環境でも扱えるよう、空文字を NULL にしてから日付化する
     const result = await query(`
       SELECT
         s.id,
@@ -316,18 +318,24 @@ app.get('/new-assignments', async (c) => {
       WHERE
         s.status = 'レッスン準備中'
         AND s.lesson_start_date IS NOT NULL
-        AND s.lesson_start_date <> ''
-        AND TO_DATE(s.lesson_start_date::TEXT, 'YYYY/MM/DD') >= DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month'
-        AND TO_DATE(s.lesson_start_date::TEXT, 'YYYY/MM/DD') <  DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '2 month'
+        AND NULLIF(TRIM(s.lesson_start_date::TEXT), '')::date >= $1::date
+        AND NULLIF(TRIM(s.lesson_start_date::TEXT), '')::date <  $2::date
       ORDER BY s.lesson_start_date ASC, s.student_id ASC
-    `);
+    `, [targetMonth.startDate, targetMonth.endDate]);
 
     const data = result.rows.map(row => ({
       ...row,
       remaining_lessons: remainingMap[row.student_id] || 0
     }));
 
-    return c.json({ success: true, data, next_month: `${nextYear}/${String(nextMon).padStart(2, '0')}` });
+    return c.json({
+      success: true,
+      data,
+      selected_month: selectedMonth,
+      target_month: targetMonth.label,
+      // Keep the existing response field for clients using the default next-month request.
+      ...(selectedMonth === 'next' ? { next_month: targetMonth.label } : {})
+    });
   } catch (error) {
     console.error('[Handover] Error fetching new assignments:', error);
     return c.json({ success: false, error: error.message }, 500);
