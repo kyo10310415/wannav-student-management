@@ -198,7 +198,7 @@ test('Discord channel URLs are strictly parsed', () => {
 });
 
 test('enqueueBroadcast reuses the existing GAS job for the same campaign key', async () => {
-  const state = { broadcast: null, job: null, runCount: 0 };
+  const state = { broadcast: null, job: null, recipients: [], runCount: 0 };
   const dbClient = {
     async query(sql, params = []) {
       if (/^BEGIN|^COMMIT|^ROLLBACK|pg_advisory_xact_lock/.test(sql)) {
@@ -222,8 +222,12 @@ test('enqueueBroadcast reuses the existing GAS job for the same campaign key', a
           jobId: params[0],
           broadcastId: params[1],
           total: params[2],
-          createdBy: params[3]
+          createdBy: params[4]
         };
+        return { rows: [] };
+      }
+      if (sql.includes('INSERT INTO broadcast_job_recipients')) {
+        state.recipients = JSON.parse(params[1]);
         return { rows: [] };
       }
       throw new Error(`Unexpected SQL: ${sql}`);
@@ -252,6 +256,7 @@ test('enqueueBroadcast reuses the existing GAS job for the same campaign key', a
   assert.equal(second.broadcastId, first.broadcastId);
   assert.equal(state.broadcast.name, 'GAS::same-key');
   assert.equal(state.broadcast.createdBy, GAS_BROADCAST_CREATED_BY);
+  assert.equal(state.recipients[0].chat_url, CHANNEL_URL_1);
   assert.equal(state.runCount, 1);
 });
 
@@ -291,30 +296,36 @@ test('explicit targets omit mentions while normal broadcasts keep them', () => {
   assert.equal(buildBotMessageContent(normal.discordId, '本文'), '<@423456789012345678>\n本文');
 });
 
-test('normal enqueue behavior remains available without GAS transaction handling', async () => {
+test('normal enqueue persists the recipient snapshot in the same transaction', async () => {
   const calls = [];
   const runnerCalls = [];
+  const dbClient = {
+    async query(sql, params = []) {
+      calls.push({ sql, params });
+      if (sql.includes('INSERT INTO broadcast_messages')) {
+        return { rows: [{ id: 77 }] };
+      }
+      return { rows: [] };
+    },
+    release() {}
+  };
   const result = await enqueueBroadcast(
     { content: '本文', channelType: 'chat', name: '通常送信' },
     [{ student_id: 'S001', name: '生徒一郎' }],
     'user@example.com',
     {
-      query: async (sql, params) => {
-        calls.push({ sql, params });
-        return sql.includes('INSERT INTO broadcast_messages')
-          ? { rows: [{ id: 77 }] }
-          : { rows: [] };
-      },
-      getClient: async () => { throw new Error('GAS transaction must not be used'); },
+      getClient: async () => dbClient,
       runBroadcastJob: async (...args) => { runnerCalls.push(args); }
     }
   );
 
   assert.equal(result.broadcastId, 77);
   assert.equal(result.total, 1);
-  assert.equal(calls.length, 2);
+  assert.ok(calls.some(call => call.sql === 'BEGIN'));
+  assert.ok(calls.some(call => call.sql.includes('INSERT INTO broadcast_job_recipients')));
+  assert.ok(calls.some(call => call.sql === 'COMMIT'));
   assert.equal(runnerCalls.length, 1);
-  assert.equal(runnerCalls[0][2].name, '通常送信');
+  assert.equal(runnerCalls[0][0], result.jobId);
 });
 
 test('jobs endpoint exposes only GAS-owned jobs', async () => {

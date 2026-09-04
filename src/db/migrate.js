@@ -1461,6 +1461,44 @@ const migrations = [
     down: `
       ALTER TABLE students DROP COLUMN IF EXISTS text_type;
     `
+  },
+  {
+    version: 52,
+    name: 'add_durable_broadcast_recipients',
+    up: `
+      ALTER TABLE broadcast_jobs
+        ADD COLUMN IF NOT EXISTS unknown_count INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS broadcast_job_recipients (
+        job_id         VARCHAR(64) NOT NULL REFERENCES broadcast_jobs(job_id) ON DELETE CASCADE,
+        student_id     VARCHAR(50) NOT NULL,
+        student_name   VARCHAR(255),
+        chat_url       TEXT,
+        recipient_order INTEGER NOT NULL,
+        status         VARCHAR(20) NOT NULL DEFAULT 'pending',
+        attempt_count  INTEGER NOT NULL DEFAULT 0,
+        error_message  TEXT,
+        started_at     TIMESTAMP WITH TIME ZONE,
+        completed_at   TIMESTAMP WITH TIME ZONE,
+        created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (job_id, student_id),
+        CONSTRAINT broadcast_job_recipients_status_check
+          CHECK (status IN ('pending', 'sending', 'sent', 'failed', 'unknown'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_broadcast_job_recipients_job_status
+        ON broadcast_job_recipients(job_id, status);
+
+      COMMENT ON TABLE broadcast_job_recipients IS '一斉送信の対象者スナップショットと送信状態';
+      COMMENT ON COLUMN broadcast_job_recipients.status IS 'pending / sending / sent / failed / unknown';
+      COMMENT ON COLUMN broadcast_jobs.unknown_count IS '送達結果を確定できない件数（自動再送対象外）';
+      COMMENT ON COLUMN broadcast_jobs.status IS 'pending / running / completed / failed / interrupted / needs_review';
+    `,
+    down: `
+      DROP TABLE IF EXISTS broadcast_job_recipients;
+      ALTER TABLE broadcast_jobs DROP COLUMN IF EXISTS unknown_count;
+    `
   }
 ];
 
