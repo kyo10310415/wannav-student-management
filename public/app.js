@@ -8849,10 +8849,16 @@ let broadcastPollingTimer = null; // ポーリングタイマー
  * 送信中オーバーレイを表示（body直下に挿入 → タブ切り替えでも残る）
  * @param {number} sent  - 送信済み件数
  * @param {number} total - 合計件数
+ * @param {number} failed - 送信失敗件数
+ * @param {number} unknown - 送達不明件数
  */
-function showBroadcastSendingOverlay(sent = 0, total = 0) {
+function showBroadcastSendingOverlay(sent = 0, total = 0, failed = 0, unknown = 0) {
   const existing = document.getElementById('broadcast-sending-overlay');
-  const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+  const processed = sent + failed + unknown;
+  const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+  const progressText = total > 0
+    ? `${processed} / ${total} 件処理済み（成功 ${sent}・失敗 ${failed}${unknown > 0 ? `・送達不明 ${unknown}` : ''}）`
+    : '準備中...';
   const progressHtml = `
     <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
       <div id="broadcast-progress-bar"
@@ -8860,7 +8866,7 @@ function showBroadcastSendingOverlay(sent = 0, total = 0) {
            style="width: ${pct}%"></div>
     </div>
     <p id="broadcast-progress-text" class="text-sm text-gray-600 mt-2">
-      ${total > 0 ? `${sent} / ${total} 件送信済み` : '準備中...'}
+      ${progressText}
     </p>
   `;
   if (existing) {
@@ -8868,7 +8874,7 @@ function showBroadcastSendingOverlay(sent = 0, total = 0) {
     const bar = document.getElementById('broadcast-progress-bar');
     const txt = document.getElementById('broadcast-progress-text');
     if (bar) bar.style.width = pct + '%';
-    if (txt) txt.textContent = total > 0 ? `${sent} / ${total} 件送信済み` : '準備中...';
+    if (txt) txt.textContent = progressText;
     return;
   }
   const overlay = document.createElement('div');
@@ -8907,7 +8913,9 @@ function showBroadcastCompleteModal(result, isTest) {
   const sent = result.sent ?? 1;
   const total = result.total ?? 1;
   const failed = result.failed ?? 0;
+  const unknown = result.unknown ?? 0;
   const hasErrors = failed > 0;
+  const needsReview = unknown > 0;
 
   const successHtml = isTest
     ? `<p class="text-lg text-gray-700">テスト送信が完了しました。</p>`
@@ -8922,12 +8930,17 @@ function showBroadcastCompleteModal(result, isTest) {
           <p class="text-3xl font-bold text-red-500">${failed}</p>
           <p class="text-sm text-gray-500">送信失敗</p>
         </div>` : ''}
+        ${needsReview ? `
+        <div class="text-center">
+          <p class="text-3xl font-bold text-yellow-600">${unknown}</p>
+          <p class="text-sm text-gray-500">送達不明</p>
+        </div>` : ''}
         <div class="text-center">
           <p class="text-3xl font-bold text-gray-700">${total}</p>
           <p class="text-sm text-gray-500">合計</p>
         </div>
       </div>
-      ${hasErrors ? `<p class="text-xs text-gray-400 mt-1">詳細は送信履歴をご確認ください</p>` : ''}
+      ${(hasErrors || needsReview) ? `<p class="text-xs text-gray-500 mt-1">失敗分は再開できます。送達不明は重複防止のため自動再送しません。</p>` : ''}
     `;
 
   showModal(`
@@ -8935,7 +8948,7 @@ function showBroadcastCompleteModal(result, isTest) {
       <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
         <i class="fas fa-check-circle text-green-600 text-4xl"></i>
       </div>
-      <h2 class="text-2xl font-bold text-gray-800 mb-3">送信完了</h2>
+      <h2 class="text-2xl font-bold text-gray-800 mb-3">${needsReview ? '送信処理完了（要確認）' : '送信完了'}</h2>
       ${successHtml}
       <button onclick="closeModal()" class="mt-6 w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-semibold">
         閉じる
@@ -8970,6 +8983,8 @@ async function renderBroadcastPage() {
             <i class="fas fa-folder-open mr-2"></i>テンプレート管理
           </button>
         </div>
+
+        <div id="broadcast-recovery-container" class="hidden mb-6"></div>
         
         <!-- Broadcast Form -->
         <div class="bg-white rounded-xl shadow-md p-6 mb-6">
@@ -9140,6 +9155,7 @@ async function renderBroadcastPage() {
   await updatePreviewCount();
   await loadSchedules();
   await loadBroadcastLogs();
+  await restoreRecoverableBroadcastJob();
 }
 
 /**
@@ -9517,50 +9533,179 @@ async function sendBroadcast(confirmed = false) {
   }
 }
 
+function renderBroadcastRecoveryBanner(job) {
+  const container = document.getElementById('broadcast-recovery-container');
+  if (!container) return;
+
+  const retryable = Number(job.pending || 0) + Number(job.failed || 0);
+  const unknownRecipients = Array.isArray(job.unknownRecipients) ? job.unknownRecipients : [];
+  const unknownNames = unknownRecipients
+    .map(recipient => escapeHtml(recipient.name || recipient.studentId))
+    .join('、');
+  const canResume = retryable > 0 && job.status !== 'running' && job.status !== 'pending';
+  const canAcknowledge = retryable === 0 && Number(job.unknown || 0) > 0 && job.status === 'needs_review';
+
+  container.className = 'mb-6 bg-yellow-50 border border-yellow-300 rounded-xl p-5';
+  container.innerHTML = `
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 class="font-bold text-yellow-900 mb-2">
+          <i class="fas fa-exclamation-triangle mr-2"></i>中断または未完了の一斉送信があります
+        </h2>
+        <p class="text-sm text-yellow-900">
+          成功 ${job.sent}件・未送信 ${job.pending}件・失敗 ${job.failed}件・送達不明 ${job.unknown}件
+        </p>
+        <p class="text-xs text-yellow-800 mt-1">
+          再開時は成功済みと送達不明を除外し、未送信・失敗分だけを送信します。
+        </p>
+        ${unknownNames ? `<p class="text-xs text-yellow-800 mt-2">送達不明（自動再送しません）：${unknownNames}</p>` : ''}
+      </div>
+      ${canResume ? `
+        <button onclick="resumeBroadcast('${job.jobId}')"
+                class="shrink-0 bg-yellow-600 text-white px-5 py-3 rounded-lg hover:bg-yellow-700 transition font-semibold">
+          <i class="fas fa-play mr-2"></i>未送信分だけ再開
+        </button>
+      ` : ''}
+      ${canAcknowledge ? `
+        <button onclick="acknowledgeBroadcast('${job.jobId}')"
+                class="shrink-0 bg-gray-600 text-white px-5 py-3 rounded-lg hover:bg-gray-700 transition font-semibold">
+          <i class="fas fa-check mr-2"></i>確認済みにする
+        </button>
+      ` : ''}
+    </div>
+  `;
+}
+
+async function restoreRecoverableBroadcastJob() {
+  try {
+    const container = document.getElementById('broadcast-recovery-container');
+    if (container) {
+      container.className = 'hidden mb-6';
+      container.innerHTML = '';
+    }
+    const response = await axios.get(`${API_BASE}/api/broadcast/jobs/recoverable`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` },
+      timeout: 30000
+    });
+    const job = response.data.job;
+    if (!job) return;
+
+    if (job.status === 'running' || job.status === 'pending') {
+      broadcastIsSending = true;
+      broadcastCurrentJobId = job.jobId;
+      showBroadcastSendingOverlay(job.sent, job.total, job.failed, job.unknown);
+      _startBroadcastPolling(job.jobId, job.total, job.isTest);
+      return;
+    }
+    renderBroadcastRecoveryBanner(job);
+  } catch (error) {
+    console.warn('[Broadcast] Failed to restore previous job:', error.message);
+    const container = document.getElementById('broadcast-recovery-container');
+    if (container) {
+      container.className = 'mb-6 bg-red-50 border border-red-300 rounded-xl p-5 text-sm text-red-800';
+      container.textContent = '中断した一斉送信の復旧情報を取得できませんでした: ' +
+        (error.response?.data?.error || error.message);
+    }
+  }
+}
+
+async function resumeBroadcast(jobId) {
+  if (!confirm('成功済みと送達不明を除外し、未送信・失敗分だけ送信します。再開しますか？')) return;
+
+  try {
+    broadcastIsSending = true;
+    broadcastCurrentJobId = jobId;
+    showBroadcastSendingOverlay(0, 0);
+    const response = await axios.post(
+      `${API_BASE}/api/broadcast/jobs/${jobId}/resume`,
+      {},
+      {
+        headers: { 'Authorization': `Bearer ${sessionToken}` },
+        timeout: 30000
+      }
+    );
+    const job = response.data.job;
+    showBroadcastSendingOverlay(job.sent, job.total, job.failed, job.unknown);
+    _startBroadcastPolling(jobId, job.total, job.isTest);
+  } catch (error) {
+    broadcastIsSending = false;
+    broadcastCurrentJobId = null;
+    hideBroadcastSendingOverlay();
+    showNotification('送信の再開に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
+  }
+}
+
+async function acknowledgeBroadcast(jobId) {
+  if (!confirm('送達不明者を確認済みとして、この通知を閉じますか？')) return;
+  try {
+    await axios.post(
+      `${API_BASE}/api/broadcast/jobs/${jobId}/acknowledge`,
+      {},
+      {
+        headers: { 'Authorization': `Bearer ${sessionToken}` },
+        timeout: 30000
+      }
+    );
+    await restoreRecoverableBroadcastJob();
+    showNotification('送達不明の確認を記録しました', 'success');
+  } catch (error) {
+    showNotification('確認状態の更新に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
+  }
+}
+
 /**
  * ポーリングを開始して進捗を監視する
  */
 function _startBroadcastPolling(jobId, total, isTest) {
   // 既存タイマーをクリア
-  if (broadcastPollingTimer) clearInterval(broadcastPollingTimer);
+  if (broadcastPollingTimer) clearTimeout(broadcastPollingTimer);
 
-  broadcastPollingTimer = setInterval(async () => {
+  const poll = async () => {
     try {
       const res = await axios.get(`${API_BASE}/api/broadcast/jobs/${jobId}`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` },
         timeout: 10000
       });
 
-      if (!res.data.success) return; // 一時的なエラーはスキップ
+      if (!res.data.success) throw new Error(res.data.error || '進捗を取得できませんでした');
 
       const job = res.data.job;
 
       // オーバーレイの進捗を更新
-      showBroadcastSendingOverlay(job.sent, job.total);
+      showBroadcastSendingOverlay(job.sent, job.total, job.failed, job.unknown);
 
-      // 完了 or 失敗
-      if (job.status === 'completed' || job.status === 'failed') {
-        clearInterval(broadcastPollingTimer);
+      const terminalStatuses = ['completed', 'failed', 'interrupted', 'needs_review'];
+      if (terminalStatuses.includes(job.status)) {
+        clearTimeout(broadcastPollingTimer);
         broadcastPollingTimer = null;
         broadcastIsSending = false;
         broadcastCurrentJobId = null;
 
         hideBroadcastSendingOverlay();
-        showBroadcastCompleteModal(
-          { sent: job.sent, total: job.total, failed: job.failed },
-          job.isTest
-        );
+        if (job.status === 'completed' || job.status === 'needs_review') {
+          showBroadcastCompleteModal(
+            { sent: job.sent, total: job.total, failed: job.failed, unknown: job.unknown },
+            job.isTest
+          );
+        } else {
+          showNotification('一斉送信が中断されました。成功済みを除外して再開できます。', 'error');
+        }
 
         // 送信履歴を更新
         if (currentPage === 'broadcast') {
           await loadBroadcastLogs();
+          await restoreRecoverableBroadcastJob();
         }
+        return;
       }
     } catch (err) {
       // ネットワークエラーなどは無視して次のポーリングを待つ
       console.warn('[Broadcast] Polling error (will retry):', err.message);
     }
-  }, 2000); // 2秒ごとにポーリング
+    broadcastPollingTimer = setTimeout(poll, 2000);
+  };
+
+  broadcastPollingTimer = setTimeout(poll, 0);
 }
 
 /**
@@ -9775,6 +9920,7 @@ function renderBroadcastLogs() {
     const firstLog = logs[0];
     const successCount = logs.filter(l => l.status === 'sent').length;
     const failCount = logs.filter(l => l.status === 'failed').length;
+    const unknownCount = logs.filter(l => l.status === 'unknown').length;
     const totalCount = logs.length;
     
     return `
@@ -9793,6 +9939,11 @@ function renderBroadcastLogs() {
             ${failCount > 0 ? `
               <span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
                 <i class="fas fa-times mr-1"></i>${failCount}
+              </span>
+            ` : ''}
+            ${unknownCount > 0 ? `
+              <span class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
+                <i class="fas fa-question mr-1"></i>${unknownCount}
               </span>
             ` : ''}
           </div>

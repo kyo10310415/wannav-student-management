@@ -3,6 +3,10 @@ import {
   getTargetStudents, 
   enqueueBroadcast,
   getBroadcastJobStatus,
+  getLatestRecoverableBroadcastJob,
+  reconcileStaleBroadcastJobs,
+  resumeBroadcastJob,
+  acknowledgeBroadcastJob,
   getTemplates, 
   saveTemplate, 
   deleteTemplate,
@@ -14,6 +18,22 @@ import { query } from '../db/connection.js';
 // No need for in-memory storage
 
 const app = new Hono();
+
+function serializeBroadcastJob(job) {
+  return {
+    jobId:             job.job_id,
+    broadcastId:       job.broadcast_id,
+    status:            job.status,
+    total:             Number(job.total),
+    sent:              Number(job.sent),
+    failed:            Number(job.failed),
+    unknown:           Number(job.unknown_count || 0),
+    pending:           Number(job.pending || 0),
+    isTest:            job.is_test,
+    updatedAt:         job.updated_at,
+    unknownRecipients: job.unknown_recipients || []
+  };
+}
 
 /**
  * Middleware: Verify session authentication
@@ -267,30 +287,84 @@ app.get('/logs', async (c) => {
 });
 
 /**
+ * GET /api/broadcast/jobs/recoverable
+ * ログインユーザーが再接続または再開できる最新ジョブを返す
+ */
+app.get('/jobs/recoverable', async (c) => {
+  try {
+    const user = c.get('user');
+    const job = await getLatestRecoverableBroadcastJob(user.email, user.role);
+    return c.json({
+      success: true,
+      job: job ? serializeBroadcastJob(job) : null
+    });
+  } catch (error) {
+    console.error('Error getting recoverable broadcast job:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/broadcast/jobs/:jobId/resume
+ * 成功済みと送達不明を除外し、未送信・失敗分だけ再開する
+ */
+app.post('/jobs/:jobId/resume', async (c) => {
+  try {
+    const user = c.get('user');
+    const job = await resumeBroadcastJob(c.req.param('jobId'), user.email, user.role);
+    return c.json({
+      success: true,
+      job: serializeBroadcastJob(job),
+      message: '未送信分の送信を再開しました'
+    });
+  } catch (error) {
+    console.error('Error resuming broadcast job:', error);
+    return c.json(
+      { success: false, error: error.message },
+      error.status || 500
+    );
+  }
+});
+
+/**
+ * POST /api/broadcast/jobs/:jobId/acknowledge
+ * 送達不明者を確認した後、要確認表示を閉じる
+ */
+app.post('/jobs/:jobId/acknowledge', async (c) => {
+  try {
+    const user = c.get('user');
+    const job = await acknowledgeBroadcastJob(c.req.param('jobId'), user.email, user.role);
+    return c.json({ success: true, job: serializeBroadcastJob(job) });
+  } catch (error) {
+    console.error('Error acknowledging broadcast job:', error);
+    return c.json(
+      { success: false, error: error.message },
+      error.status || 500
+    );
+  }
+});
+
+/**
  * GET /api/broadcast/jobs/:jobId
  * ジョブの進捗を返す（フロントエンドがポーリングで呼び出す）
  */
 app.get('/jobs/:jobId', async (c) => {
   try {
+    const user = c.get('user');
     const jobId = c.req.param('jobId');
+    await reconcileStaleBroadcastJobs();
     const job = await getBroadcastJobStatus(jobId);
 
     if (!job) {
       return c.json({ success: false, error: 'Job not found' }, 404);
     }
+    if (user.role === 'crew' && job.created_by !== user.email) {
+      return c.json({ success: false, error: 'この送信ジョブを表示する権限がありません' }, 403);
+    }
 
     return c.json({
       success: true,
-      job: {
-        jobId:       job.job_id,
-        broadcastId: job.broadcast_id,
-        status:      job.status,       // pending / running / completed / failed
-        total:       job.total,
-        sent:        job.sent,
-        failed:      job.failed,
-        isTest:      job.is_test,
-        updatedAt:   job.updated_at
-      }
+      job: serializeBroadcastJob(job)
     });
   } catch (error) {
     console.error('Error getting job status:', error);
