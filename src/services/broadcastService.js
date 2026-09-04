@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { query } from '../db/connection.js';
+import { getClient, query } from '../db/connection.js';
 import { fetchStudentBroadcastInfo } from './sheetsService.js';
 import { client as discordClient } from './discordService.js';
 
@@ -15,6 +15,9 @@ const RATE_LIMIT_DELAY_MS = 200;
 
 /** 進捗をDBへ書き込む間隔 (件数) */
 const PROGRESS_FLUSH_INTERVAL = 10;
+
+/** GAS 専用一斉送信の作成者識別子 */
+export const GAS_BROADCAST_CREATED_BY = 'gas-broadcast';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -227,11 +230,7 @@ async function sendViaBot(chatUrl, discordId, content, imageId) {
 
   if (!channel) throw new Error('Channel not found');
 
-  let messageContent = '';
-  if (discordId) messageContent += `<@${discordId}>\n`;
-  messageContent += content;
-
-  const messageOptions = { content: messageContent };
+  const messageOptions = { content: buildBotMessageContent(discordId, content) };
 
   if (imageId) {
     console.log('[Broadcast] Bot: Fetching image from database:', imageId);
@@ -270,6 +269,14 @@ async function sendViaBot(chatUrl, discordId, content, imageId) {
   return { success: true };
 }
 
+/**
+ * Bot送信本文を組み立てる。
+ * 通常一斉送信は従来どおりメンション付き、GAS明示対象は discordId=null のため本文のみ。
+ */
+export function buildBotMessageContent(discordId, content) {
+  return discordId ? `<@${discordId}>\n${content}` : content;
+}
+
 // ─── スケジューラー互換ラッパー ───────────────────────────────────────────────
 
 export async function sendBroadcast(messageData, targetStudents, userEmail) {
@@ -294,10 +301,102 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
 
 // ─── ジョブエンキュー ─────────────────────────────────────────────────────────
 
-export async function enqueueBroadcast(messageData, targetStudents, userEmail) {
+export async function enqueueBroadcast(messageData, targetStudents, userEmail, dependencies = {}) {
+  const queryFn = dependencies.query || query;
+  const getClientFn = dependencies.getClient || getClient;
+  const runBroadcastJob = dependencies.runBroadcastJob || _runBroadcastJob;
   const { content, imageId, channelType, name, saveAsTemplate, isTest } = messageData;
 
-  const insertResult = await query(
+  // GASのcampaignKey付き送信だけは、同一キーの同時リクエストも直列化して
+  // broadcast_message と job を1トランザクションで作成する。
+  if (
+    messageData.explicitTargets === true &&
+    userEmail === GAS_BROADCAST_CREATED_BY &&
+    messageData.campaignKey
+  ) {
+    const gasMessageName = `GAS::${messageData.campaignKey}`;
+    const dbClient = await getClientFn();
+    let newJob = null;
+
+    try {
+      await dbClient.query('BEGIN');
+      await dbClient.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        [`gas-broadcast:${messageData.campaignKey}`]
+      );
+
+      const existingResult = await dbClient.query(
+        `SELECT bj.job_id, bj.broadcast_id, bj.total
+         FROM broadcast_messages bm
+         INNER JOIN broadcast_jobs bj ON bj.broadcast_id = bm.id
+         WHERE bm.name = $1
+           AND bm.created_by = $2
+           AND bj.created_by = $2
+         ORDER BY bj.created_at DESC
+         LIMIT 1`,
+        [gasMessageName, GAS_BROADCAST_CREATED_BY]
+      );
+
+      if (existingResult.rows.length > 0) {
+        await dbClient.query('COMMIT');
+        const existing = existingResult.rows[0];
+        return {
+          jobId: existing.job_id,
+          broadcastId: existing.broadcast_id,
+          total: existing.total,
+          reused: true
+        };
+      }
+
+      const insertResult = await dbClient.query(
+        `INSERT INTO broadcast_messages
+          (name, content, image_url, channel_type, target_status, target_tutor, created_by, is_template, last_sent_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+        RETURNING id`,
+        [
+          gasMessageName,
+          content,
+          null,
+          'chat',
+          'explicit',
+          null,
+          GAS_BROADCAST_CREATED_BY,
+          false
+        ]
+      );
+      const broadcastId = insertResult.rows[0].id;
+      const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const total = targetStudents.length;
+
+      await dbClient.query(
+        `INSERT INTO broadcast_jobs (job_id, broadcast_id, status, total, sent, failed, is_test, created_by)
+         VALUES ($1, $2, 'pending', $3, 0, 0, false, $4)`,
+        [jobId, broadcastId, total, GAS_BROADCAST_CREATED_BY]
+      );
+      await dbClient.query('COMMIT');
+      newJob = { jobId, broadcastId, total, reused: false };
+    } catch (error) {
+      await dbClient.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      dbClient.release();
+    }
+
+    // DBコミット後にだけ送信を開始する。
+    runBroadcastJob(
+      newJob.jobId,
+      newJob.broadcastId,
+      messageData,
+      targetStudents,
+      userEmail
+    ).catch(err => {
+      console.error(`[Broadcast] Background job ${newJob.jobId} crashed:`, err.message);
+    });
+
+    return newJob;
+  }
+
+  const insertResult = await queryFn(
     `INSERT INTO broadcast_messages
       (name, content, image_url, channel_type, target_status, target_tutor, created_by, is_template, last_sent_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
@@ -318,14 +417,14 @@ export async function enqueueBroadcast(messageData, targetStudents, userEmail) {
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const total = isTest ? 1 : targetStudents.length;
 
-  await query(
+  await queryFn(
     `INSERT INTO broadcast_jobs (job_id, broadcast_id, status, total, sent, failed, is_test, created_by)
      VALUES ($1, $2, 'pending', $3, 0, 0, $4, $5)`,
     [jobId, broadcastId, total, isTest, userEmail]
   );
 
   // バックグラウンドで送信開始（await しない）
-  _runBroadcastJob(jobId, broadcastId, messageData, targetStudents, userEmail).catch(err => {
+  runBroadcastJob(jobId, broadcastId, messageData, targetStudents, userEmail).catch(err => {
     console.error(`[Broadcast] Background job ${jobId} crashed:`, err.message);
   });
 
@@ -346,7 +445,12 @@ export async function getBroadcastJobStatus(jobId) {
 // ─── バックグラウンド送信ジョブ ───────────────────────────────────────────────
 
 async function _runBroadcastJob(jobId, broadcastId, messageData, targetStudents, userEmail) {
-  const { content, imageId, channelType, isTest } = messageData;
+  const { content, imageId, channelType, isTest, explicitTargets } = messageData;
+  const usesExplicitTargets = (
+    explicitTargets === true &&
+    userEmail === GAS_BROADCAST_CREATED_BY &&
+    channelType === 'chat'
+  );
 
   await query(
     `UPDATE broadcast_jobs SET status = 'running', updated_at = NOW() WHERE job_id = $1`,
@@ -377,11 +481,14 @@ async function _runBroadcastJob(jobId, broadcastId, messageData, targetStudents,
       return;
     }
 
-    // ── 通常モード ────────────────────────────────────────────────────────
-    console.log(`[Broadcast Job ${jobId}] Fetching student broadcast info from sheets...`);
-    const studentBroadcastInfo = await fetchStudentBroadcastInfo();
-    const broadcastInfoMap = new Map(studentBroadcastInfo.map(s => [s.studentId, s]));
-    console.log(`[Broadcast Job ${jobId}] Sheet data loaded: ${studentBroadcastInfo.length} records`);
+    // ── 通常 / GAS明示対象モード ─────────────────────────────────────────
+    let broadcastInfoMap = null;
+    if (!usesExplicitTargets) {
+      console.log(`[Broadcast Job ${jobId}] Fetching student broadcast info from sheets...`);
+      const studentBroadcastInfo = await fetchStudentBroadcastInfo();
+      broadcastInfoMap = new Map(studentBroadcastInfo.map(s => [s.studentId, s]));
+      console.log(`[Broadcast Job ${jobId}] Sheet data loaded: ${studentBroadcastInfo.length} records`);
+    }
 
     let sent   = 0;
     let failed = 0;
@@ -394,7 +501,7 @@ async function _runBroadcastJob(jobId, broadcastId, messageData, targetStudents,
         console.log(`[Broadcast Job ${jobId}] Progress: ${i}/${targetStudents.length} processed (sent=${sent}, failed=${failed})`);
       }
 
-      const broadcastInfo = broadcastInfoMap.get(student.student_id);
+      const broadcastInfo = resolveBroadcastInfo(student, broadcastInfoMap, usesExplicitTargets);
 
       if (!broadcastInfo) {
         console.log(`[Broadcast Job ${jobId}] No broadcast info for ${student.student_id} (${student.name})`);
@@ -454,6 +561,19 @@ async function _runBroadcastJob(jobId, broadcastId, messageData, targetStudents,
       [jobId]
     ).catch(() => {});
   }
+}
+
+/**
+ * GAS明示対象ではスプレッドシートを再検索せず、渡されたchat_urlだけを使用する。
+ */
+export function resolveBroadcastInfo(student, broadcastInfoMap, explicitTargets) {
+  if (explicitTargets === true) {
+    return {
+      chatUrl: student.chat_url,
+      discordId: null
+    };
+  }
+  return broadcastInfoMap.get(student.student_id);
 }
 
 // ─── ログ記録 ─────────────────────────────────────────────────────────────────
