@@ -9544,6 +9544,7 @@ function renderBroadcastRecoveryBanner(job) {
     .join('、');
   const canResume = retryable > 0 && job.status !== 'running' && job.status !== 'pending';
   const canAcknowledge = retryable === 0 && Number(job.unknown || 0) > 0 && job.status === 'needs_review';
+  const lastError = job.lastError ? escapeHtml(job.lastError) : '';
 
   container.className = 'mb-6 bg-yellow-50 border border-yellow-300 rounded-xl p-5';
   container.innerHTML = `
@@ -9559,6 +9560,7 @@ function renderBroadcastRecoveryBanner(job) {
           再開時は成功済みと送達不明を除外し、未送信・失敗分だけを送信します。
         </p>
         ${unknownNames ? `<p class="text-xs text-yellow-800 mt-2">送達不明（自動再送しません）：${unknownNames}</p>` : ''}
+        ${lastError ? `<p class="text-xs text-red-700 mt-2 break-words"><i class="fas fa-bug mr-1"></i>停止理由：${lastError}</p>` : ''}
       </div>
       ${canResume ? `
         <button onclick="resumeBroadcast('${job.jobId}')"

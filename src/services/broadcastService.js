@@ -4,6 +4,7 @@ import { getClient, query } from '../db/connection.js';
 import { fetchStudentBroadcastInfo } from './sheetsService.js';
 import { client as discordClient } from './discordService.js';
 import { classifyLegacyBroadcastRecipients } from '../utils/broadcastRecovery.js';
+import { createKeyedJobDispatcher } from '../utils/keyedJobDispatcher.js';
 
 // ─── 定数 ─────────────────────────────────────────────────────────────────────
 /** axios / discord.js 単体送信タイムアウト (ms) */
@@ -18,12 +19,19 @@ const RATE_LIMIT_DELAY_MS = 200;
 /** この時間更新されなかった実行中ジョブは中断扱いにする */
 const STALE_JOB_INTERVAL = '5 minutes';
 const STALE_PENDING_JOB_INTERVAL = '30 seconds';
-
-/** 同一プロセス内で同じジョブを二重起動しない */
-const activeBroadcastJobs = new Set();
+/**
+ * 同じジョブの二重実行を防ぎつつ、実行中に届いた再開要求は次の周回へ積み直す。
+ */
+const broadcastJobDispatcher = createKeyedJobDispatcher(_runBroadcastJob);
 
 /** GAS 専用一斉送信の作成者識別子 */
 export const GAS_BROADCAST_CREATED_BY = 'gas-broadcast';
+
+function logBroadcastDebug(message, details) {
+  if (process.env.BROADCAST_VERBOSE_LOGGING === 'true') {
+    console.log(message, details ?? '');
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -125,7 +133,7 @@ class DeliveryUncertainError extends Error {
  * リトライ付き（429 Rate Limit 対応）
  */
 async function sendViaWebhook(webhookUrl, discordId, content, imageData) {
-  console.log('[Broadcast] sendViaWebhook called with:', {
+  logBroadcastDebug('[Broadcast] sendViaWebhook called with:', {
     hasWebhookUrl: !!webhookUrl,
     discordId: discordId || 'none',
     contentLength: content ? content.length : 0,
@@ -142,7 +150,7 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageData) {
   if (discordId) payload.content = `<@${discordId}>`;
 
   if (imageData) {
-    console.log('[Broadcast] Sending webhook with file attachment');
+    logBroadcastDebug('[Broadcast] Sending webhook with file attachment');
     const response = await _axiosPostWithRetry(
       webhookUrl,
       () => {
@@ -159,18 +167,18 @@ async function sendViaWebhook(webhookUrl, discordId, content, imageData) {
       },
       'sendViaWebhook (with image)'
     );
-    console.log('[Broadcast] Webhook response status:', response.status);
+    logBroadcastDebug('[Broadcast] Webhook response status:', response.status);
     return { success: true };
   }
 
   // 画像なし送信
-  console.log('[Broadcast] Sending webhook without image');
+  logBroadcastDebug('[Broadcast] Sending webhook without image');
   const response = await _axiosPostWithRetry(
     webhookUrl,
     () => ({ data: payload, config: {} }),
     'sendViaWebhook (no image)'
   );
-  console.log('[Broadcast] Webhook response status:', response.status);
+  logBroadcastDebug('[Broadcast] Webhook response status:', response.status);
   return { success: true };
 }
 
@@ -292,7 +300,7 @@ export async function sendBroadcast(messageData, targetStudents, userEmail) {
 
 export async function enqueueBroadcast(messageData, targetStudents, userEmail, dependencies = {}) {
   const getClientFn = dependencies.getClient || getClient;
-  const runBroadcastJob = dependencies.runBroadcastJob || _runBroadcastJob;
+  const runBroadcastJob = dependencies.runBroadcastJob || dispatchBroadcastJob;
   const { content, imageId, channelType, name, saveAsTemplate, isTest } = messageData;
   const usesExplicitTargets = (
     messageData.explicitTargets === true &&
@@ -391,7 +399,8 @@ export async function getBroadcastJobStatus(jobId) {
          ELSE GREATEST(bj.total - bj.sent - bj.failed - bj.unknown_count, 0)
        END AS pending,
        counts.recipient_count,
-       COALESCE(counts.unknown_recipients, '[]'::json) AS unknown_recipients
+       COALESCE(counts.unknown_recipients, '[]'::json) AS unknown_recipients,
+       counts.last_error
      FROM broadcast_jobs bj
      LEFT JOIN LATERAL (
        SELECT
@@ -401,7 +410,9 @@ export async function getBroadcastJobStatus(jobId) {
            JSON_AGG(JSON_BUILD_OBJECT('studentId', student_id, 'name', student_name) ORDER BY recipient_order)
              FILTER (WHERE status = 'unknown'),
            '[]'::json
-         ) AS unknown_recipients
+         ) AS unknown_recipients,
+         (ARRAY_AGG(error_message ORDER BY updated_at DESC)
+           FILTER (WHERE error_message IS NOT NULL))[1] AS last_error
        FROM broadcast_job_recipients
        WHERE job_id = bj.job_id
      ) counts ON true
@@ -559,7 +570,7 @@ async function prepareLegacyJobRecipients(jobId, userEmail, userRole) {
 
 export async function reconcileStaleBroadcastJobs() {
   const staleResult = await query(
-    `SELECT job_id
+     `SELECT job_id
      FROM broadcast_jobs
      WHERE (status = 'running' AND updated_at < NOW() - $1::interval)
         OR (status = 'pending' AND updated_at < NOW() - $2::interval)`,
@@ -639,7 +650,7 @@ export async function resumeBroadcastJob(jobId, userEmail, userRole) {
     `UPDATE broadcast_jobs SET status = 'pending', updated_at = NOW() WHERE job_id = $1`,
     [jobId]
   );
-  _runBroadcastJob(jobId).catch(err => {
+  dispatchBroadcastJob(jobId).catch(err => {
     console.error(`[Broadcast] Resumed job ${jobId} crashed:`, err.message);
   });
   return getBroadcastJobStatus(jobId);
@@ -665,9 +676,6 @@ export async function acknowledgeBroadcastJob(jobId, userEmail, userRole) {
 // ─── バックグラウンド送信ジョブ ───────────────────────────────────────────────
 
 async function _runBroadcastJob(jobId) {
-  if (activeBroadcastJobs.has(jobId)) return;
-  activeBroadcastJobs.add(jobId);
-
   try {
     const startResult = await query(
       `UPDATE broadcast_jobs
@@ -682,6 +690,13 @@ async function _runBroadcastJob(jobId) {
       [jobId]
     );
     if (startResult.rows.length === 0) return;
+
+    await query(
+      `UPDATE broadcast_job_recipients
+       SET error_message = NULL
+       WHERE job_id = $1 AND status IN ('pending', 'failed')`,
+      [jobId]
+    );
 
     const messageResult = await query(
       `SELECT bj.broadcast_id, bj.is_test, bj.created_by,
@@ -800,14 +815,56 @@ async function _runBroadcastJob(jobId) {
     console.error(`[Broadcast Job ${jobId}] Fatal error:`, err.message);
     await query(
       `UPDATE broadcast_job_recipients
-       SET status = 'unknown', error_message = $2, completed_at = NOW(), updated_at = NOW()
-       WHERE job_id = $1 AND status = 'sending'`,
+       SET status = CASE WHEN status = 'sending' THEN 'unknown' ELSE status END,
+           error_message = $2,
+           completed_at = CASE WHEN status = 'sending' THEN NOW() ELSE completed_at END,
+           updated_at = NOW()
+       WHERE job_id = $1 AND status IN ('pending', 'sending')`,
       [jobId, `Worker stopped: ${err.message}`]
     ).catch(() => {});
     await syncJobProgress(jobId, 'interrupted').catch(() => {});
-  } finally {
-    activeBroadcastJobs.delete(jobId);
   }
+}
+
+/**
+ * ジョブを永続キューから実行する。
+ * fire-and-forget の取りこぼしや、実行中に届いた再開要求も次の周回で処理する。
+ */
+export function dispatchBroadcastJob(jobId) {
+  return broadcastJobDispatcher.dispatch(jobId);
+}
+
+/**
+ * Render再起動直後など、まだ新しい pending ジョブを再度キューへ積む。
+ * durable recipient が存在するジョブだけを対象にするため、旧形式ジョブは自動送信しない。
+ * 30秒以上経過した pending は先に interrupted へ変換され、画面で明示的に再開する。
+ */
+export async function recoverPendingBroadcastJobs() {
+  await reconcileStaleBroadcastJobs();
+  const result = await query(
+    `SELECT bj.job_id
+     FROM broadcast_jobs bj
+     WHERE bj.status = 'pending'
+       AND EXISTS (
+         SELECT 1
+         FROM broadcast_job_recipients recipient
+         WHERE recipient.job_id = bj.job_id
+           AND recipient.status IN ('pending', 'failed')
+       )
+     ORDER BY bj.created_at`,
+    []
+  );
+
+  for (const { job_id: jobId } of result.rows) {
+    dispatchBroadcastJob(jobId).catch(err => {
+      console.error(`[Broadcast] Failed to recover pending job ${jobId}:`, err.message);
+    });
+  }
+
+  if (result.rows.length > 0) {
+    console.log(`[Broadcast] Re-queued ${result.rows.length} pending job(s)`);
+  }
+  return result.rows.length;
 }
 
 /**
