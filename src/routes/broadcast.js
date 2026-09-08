@@ -31,6 +31,7 @@ function serializeBroadcastJob(job) {
     pending:           Number(job.pending || 0),
     isTest:            job.is_test,
     updatedAt:         job.updated_at,
+    lastError:         job.last_error || null,
     unknownRecipients: job.unknown_recipients || []
   };
 }

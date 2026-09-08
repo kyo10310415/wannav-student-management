@@ -56,6 +56,7 @@ import { monthlyRedListReset } from './jobs/redListMonthly.js';
 import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
 import { weeklyTutorSnapshot, monthlyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
+import { recoverPendingBroadcastJobs } from './services/broadcastService.js';
 
 const app = new Hono();
 
@@ -423,4 +424,20 @@ console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 serve({
   fetch: app.fetch,
   port: Number(port),
+});
+
+// Render再起動や一時的なプロセス競合で取り残された直近の pending 送信を回収する。
+// 30秒以上経過したものは中断扱いになり、利用者が対象を確認してから再開する。
+recoverPendingBroadcastJobs().catch(error => {
+  console.error('[Broadcast] Initial pending-job recovery failed:', error.message);
+});
+
+cron.schedule('*/1 * * * *', async () => {
+  try {
+    await recoverPendingBroadcastJobs();
+  } catch (error) {
+    console.error('[Broadcast] Pending-job recovery failed:', error.message);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
 });
