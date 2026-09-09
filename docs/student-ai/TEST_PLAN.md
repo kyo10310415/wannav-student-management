@@ -1,5 +1,12 @@
 # テスト計画
 
+## T017 / T005 実施結果
+
+Node v22.23.2: 変更前56件、T017後62件、inventory追加後78件すべて成功。
+minutes全8操作で未認証/期限切れを拒否し、3ロールのCRUD/生成/template回帰をmockで検証。
+inventoryはDrive pagination、不完全/ループ検出、集計統計、日付、学籍番号、重複、欠損、サンプル/失敗状態、DB読み取り専用transaction/keyset pagination/rollback、照合、既存Docs抽出再利用を検証。
+実データ未接続のため、Google権限・DB schemaとの実統合・本番スケール・検索精度/AI費用の検証とは区別する。
+
 ## 自動テスト
 
 - 認証: tokenなし401、有効3 role成功、期限切れ401、DB障害500。

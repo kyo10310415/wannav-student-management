@@ -3,7 +3,7 @@
 | ID | Status | 目的 | 依存 |
 |---|---|---|---|
 | T001 | Done | 現状調査とPhase 0文書 | - |
-| T005 | Blocked | Drive/DB読み取り専用inventoryで実数確定 | T001、認証情報 |
+| T005 | Implementation done / Measurement blocked | 読み取り専用CLI・unit test実装済み。Google/DB認証未設定につき実測未完了 | T001、認証情報 |
 | T010 | Blocked | inventoryの件数・文字量・精度評価を踏まえアーキテクチャ最終確定 | T001,T005 |
 | T015 | Done | 共通requireAuth middlewareとunit test（inventory非依存） | T001,baseline test |
 | T016 | Investigated | 既存minutes API認証影響調査（本番外部利用者の確認は残る） | T001 |

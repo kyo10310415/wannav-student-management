@@ -135,7 +135,7 @@ function flattenTabs(tabs) {
  * ネスト（childTabs）を再帰的に展開して「文字起こし」タブを探す。
  * タブが存在しない／見つからない場合は本文全体を返す。
  */
-async function getTranscriptFromDoc(docs, fileId) {
+export async function getTranscriptFromDoc(docs, fileId, logger = console) {
   // documentTabs を含むフルドキュメントを取得
   let docData;
   try {
@@ -155,7 +155,7 @@ async function getTranscriptFromDoc(docs, fileId) {
   if (rawTabs.length > 0) {
     const allTabs = flattenTabs(rawTabs);
 
-    console.log(`[Drive] Document tabs found: ${allTabs.map(t => `"${t.tabProperties?.title || '(無題)'}"`).join(', ')}`);
+    logger.log(`[Drive] Document tabs found: ${allTabs.map(t => `"${t.tabProperties?.title || '(無題)'}"`).join(', ')}`);
 
     // 「文字起こし」という名前のタブを優先
     const transcriptTab = allTabs.find(t =>
@@ -163,20 +163,20 @@ async function getTranscriptFromDoc(docs, fileId) {
     );
 
     if (transcriptTab) {
-      console.log(`[Drive] Using tab: "${transcriptTab.tabProperties?.title}"`);
+      logger.log(`[Drive] Using tab: "${transcriptTab.tabProperties?.title}"`);
       const body = transcriptTab.documentTab?.body;
       if (body) return extractTextFromBody(body);
     }
 
     // 「文字起こし」タブが見つからない場合は末尾タブ（フォールバック）
-    console.warn(`[Drive] "文字起こし" tab not found, falling back to last tab`);
+    logger.warn(`[Drive] "文字起こし" tab not found, falling back to last tab`);
     const lastTab = allTabs[allTabs.length - 1];
     const body = lastTab?.documentTab?.body;
     if (body) return extractTextFromBody(body);
   }
 
   // タブがない場合はドキュメント本文を使用
-  console.warn(`[Drive] No tabs found, using document body`);
+  logger.warn(`[Drive] No tabs found, using document body`);
   const body = docData.body;
   if (body) return extractTextFromBody(body);
 
@@ -259,4 +259,8 @@ export async function fetchTranscript(studentId, lessonDateStr, parentFolderId) 
     fileName: target.name,
     fileDate: target.date,
   };
+}
+export function createReadonlyDriveClients() {
+  const auth = getAuthClient();
+  return { drive: google.drive({ version: 'v3', auth }), docs: google.docs({ version: 'v1', auth }) };
 }
