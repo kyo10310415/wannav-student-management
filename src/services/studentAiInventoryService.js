@@ -1,6 +1,40 @@
 // Metadata/length-only inventory. No OpenAI, DML, application startup, or cron imports.
 const ID = /^OL[A-Z]{2}\d{6}-[A-Z0-9]{2}$/;
-export function recognizedStudentId(name) { return ID.test(name || '') ? name : null; }
+export function recognizedStudentId(name, students = []) { return students.includes(name) ? name : null; }
+
+export function resolveFolder(folder, students) {
+  const base = { folderId: folder.id, folderName: folder.name, resolvedStudentId: null,
+    formatAnomaly: !ID.test(folder.name || ''), candidates: [] };
+  if (students == null) return { ...base, status: 'unresolved_db_unavailable' };
+  if (students.includes(folder.name)) return { ...base, resolvedStudentId: folder.name, status: 'matched' };
+  const normalize = s => s.trim().toUpperCase().replace(/^0/, 'O').replace(/[-‐‑‒–—−ー－]/g, '');
+  const candidates = students.filter(id => normalize(id) === normalize(folder.name) || similarIds(folder.name, id));
+  return { ...base, candidates, status: candidates.length ? 'possible_typo' : 'unmatched' };
+}
+
+export function resolveDriveStudents(inventory, students) {
+  const folderResolutions = inventory.folders.map(f => resolveFolder(f, students));
+  const byId = new Map(folderResolutions.map(f => [f.folderId, f]));
+  const documents = inventory.documents.map(d => {
+    const folders = d.folders.map(f => byId.get(f.folderId) || resolveFolder({ id: f.folderId, name: f.folderName }, students));
+    const ids = new Set(folders.map(f => f.resolvedStudentId));
+    const resolvedStudentId = ids.size === 1 && !ids.has(null) ? [...ids][0] : null;
+    return { ...d, folders, resolvedStudentId, studentId: resolvedStudentId };
+  });
+  const perStudent = Object.create(null);
+  for (const f of folderResolutions) if (f.resolvedStudentId !== null) perStudent[f.resolvedStudentId] = 0;
+  for (const d of documents) if (d.resolvedStudentId !== null) perStudent[d.resolvedStudentId]++;
+  return { ...inventory, documents, folderResolutions, resolutionComplete: students != null,
+    studentFolderCount: students == null ? null : folderResolutions.filter(f => f.status === 'matched').length,
+    unmatchedFolderCount: students == null ? null : folderResolutions.filter(f => f.status !== 'matched').length,
+    unmatchedFolders: folderResolutions.filter(f => f.status !== 'matched'),
+    typoSuspects: folderResolutions.filter(f => f.status === 'possible_typo'),
+    formatAnomalies: folderResolutions.filter(f => f.formatAnomaly),
+    duplicateStudentFolders: groups(folderResolutions.map(f => ({ ...f, id: f.folderId })), f => f.resolvedStudentId),
+    perStudent, lessonsPerStudent: statistics(Object.values(perStudent)),
+    sameDayMultipleDocs: groups(documents, d => d.studentId && d.date ? `${d.studentId}/${d.date}` : null),
+    multiFolderDocs: documents.filter(d => d.folders.length > 1) };
+}
 
 export function statistics(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -56,7 +90,7 @@ export async function listAllFiles(drive, parent, mimeType) {
   return [...files.values()];
 }
 
-export async function collectDriveInventory({ drive, readTranscript, parentFolderId, textLimit = 50 }) {
+export async function collectDriveInventory({ drive, readTranscript, parentFolderId, textLimit = 50, students = null }) {
   if (!(textLimit === Infinity || Number.isInteger(textLimit) && textLimit >= 0)) throw new Error('INVALID_TEXT_LIMIT');
   const folders = await listAllFiles(drive, parentFolderId, 'application/vnd.google-apps.folder');
   folders.sort((a, b) => a.id.localeCompare(b.id));
@@ -69,10 +103,11 @@ export async function collectDriveInventory({ drive, readTranscript, parentFolde
         const existing = documents.get(file.id);
         if (existing) {
           existing.folderIds.push(folder.id);
-          if (existing.studentId !== recognizedStudentId(folder.name)) existing.studentId = null;
+          existing.folders.push({ folderId: folder.id, folderName: folder.name, resolvedStudentId: null });
           continue;
         }
-        documents.set(file.id, { id: file.id, studentId: recognizedStudentId(folder.name), folderIds: [folder.id],
+        documents.set(file.id, { id: file.id, studentId: null, folderIds: [folder.id],
+          folders: [{ folderId: folder.id, folderName: folder.name, resolvedStudentId: null }],
           date: fileDate(file.name), createdDate: file.createdTime?.slice(0, 10) || null });
       }
     } catch { failures.push({ folderId: folder.id, code: 'FOLDER_READ_FAILED' }); }
@@ -90,30 +125,14 @@ export async function collectDriveInventory({ drive, readTranscript, parentFolde
       if (result.fallback) fallbackCount++;
     } catch { failures.push({ documentId: doc.id, code: 'TEXT_READ_FAILED' }); }
   }
-  const perStudent = {};
-  for (const f of folders) if (recognizedStudentId(f.name)) perStudent[f.name] = 0;
-  for (const d of docs) if (d.studentId) perStudent[d.studentId]++;
   const dates = docs.map(d => d.date).filter(Boolean).sort();
-  const ids = Object.keys(perStudent).sort();
-  const similarIdPairs = [];
-  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
-    if (similarIds(ids[i], ids[j])) similarIdPairs.push([ids[i], ids[j]]);
-  }
-  return { complete: !failures.length, folders, documents: docs,
-    studentFolderCount: folders.filter(f => recognizedStudentId(f.name)).length,
-    folderCount: folders.length, totalDocs: docs.length, perStudent,
-    lessonsPerStudent: statistics(Object.values(perStudent)),
+  return resolveDriveStudents({ complete: !failures.length, folders, documents: docs,
+    folderCount: folders.length, totalDocs: docs.length,
     oldestFileDate: dates[0] || null, newestFileDate: dates.at(-1) || null,
     dateMissingCount: docs.filter(d => !d.date).length,
-    unrecognizedFolders: folders.filter(f => !recognizedStudentId(f.name)).map(f => ({ id: f.id, name: f.name })),
-    duplicateStudentFolders: groups(folders, f => recognizedStudentId(f.name)),
-    similarStudentFolders: groups(folders, f => f.name?.trim().toUpperCase().match(/^OL[A-Z]{2}\d{6}-[A-Z0-9]{2}/)?.[0]),
-    similarIdPairs,
-    sameDayMultipleDocs: groups(docs, d => d.studentId && d.date ? `${d.studentId}/${d.date}` : null),
-    multiFolderDocs: docs.filter(d => d.folderIds.length > 1),
     characters: { ...statistics(lengths), attempted: count, population: docs.length,
       fullPopulation: lengths.length === docs.length && !failures.length,
-      sampling: 'deterministic evenly spaced by file ID; not random', fallbackCount }, failures };
+      sampling: 'deterministic evenly spaced by file ID; not random', fallbackCount }, failures }, students);
 }
 
 export async function collectDatabaseInventory(client) {
@@ -159,11 +178,14 @@ export function summarizeDatabase(minutes, students) {
     unknownStudentIds: [...new Set(minutes.filter(r => !known.has(r.student_id)).map(r => r.student_id))],
     generatedCharacters: statistics(minutes.map(r => Number(r.generated_chars))),
     transcriptCharacters: statistics(minutes.map(r => Number(r.transcript_chars))),
+    maxStudentGeneratedCharacters: Math.max(0, ...Object.values(perStudentCharacters).map(c => c.generated)),
+    maxStudentTranscriptCharacters: Math.max(0, ...Object.values(perStudentCharacters).map(c => c.transcript)),
     perStudentCharacters, students, minutes };
 }
 
 export function reconcileInventory(drive, db) {
   if (!drive || !db) return { status: 'unmeasured', reason: 'Both Drive and DB inventories are required' };
+  drive = resolveDriveStudents(drive, db.students);
   const importedIds = new Set(db.minutes.map(r => r.drive_file_id?.trim()).filter(Boolean));
   const unmatched = drive.documents.filter(d => !importedIds.has(d.id));
   const known = new Set(db.students);
@@ -176,9 +198,13 @@ export function reconcileInventory(drive, db) {
     existingMinutes: db.totalMinutes, matchedDriveDocs: drive.totalDocs - unmatched.length,
     notImportedByFileId: unmatched.length, unmatchedFileIds: unmatched.map(d => d.id),
     sameDaySourceCandidates: candidates,
-    conflictingStudentAssignments: drive.documents.flatMap(d => db.minutes
-      .filter(m => m.drive_file_id?.trim() === d.id && d.studentId && m.student_id !== d.studentId)
-      .map(m => ({ fileId: d.id, minutesId: m.id, driveStudentId: d.studentId, minutesStudentId: m.student_id }))),
+    unmatchedFolders: drive.unmatchedFolders,
+    typoSuspects: drive.typoSuspects,
+    multiFolderDocs: drive.multiFolderDocs,
+    conflictingStudentAssignments: drive.documents.flatMap(d => [...new Set(d.folders
+      .map(f => f.resolvedStudentId).filter(id => id !== null))].flatMap(id => db.minutes
+      .filter(m => m.drive_file_id?.trim() === d.id && m.student_id !== id)
+      .map(m => ({ fileId: d.id, minutesId: m.id, driveStudentId: id, minutesStudentId: m.student_id })))),
     unknownStudentIds: [...new Set([...db.unknownStudentIds, ...Object.keys(drive.perStudent).filter(id => !known.has(id))])],
     note: 'Unmatched by file ID may already exist in minutes without a file ID; same-day candidates require review. Counts overlap.' };
 }

@@ -5,7 +5,7 @@
 CLIとunit testを実装済み。実測は未完了。現環境で実行すると `GOOGLE_CREDENTIALS_JSON_UNSET` / `DATABASE_URL_UNSET`、reconciliation=unmeasured、status=incompleteを返す。0件と未測定を混同しない。
 
 T017 remote commit: `5c922e5d221f8ae6a069c7764268c9a5e13be11a`。
-T017で全minutes routeを認証保護し、Node22.23.2で62/62テスト成功。inventory追加後は78/78成功（同Node22）。
+T017で全minutes routeを認証保護し、Node22.23.2で62/62テスト成功。DB source of truthへの修正後は82/82成功（同Node22）。
 
 ## 実行方法
 
@@ -25,15 +25,23 @@ node scripts/student-ai-inventory.js --text-limit=all
 |---|---|
 | Drive構造 | folderCount、studentFolderCount、totalDocs、perStudent、lessonsPerStudentの平均/最大 |
 | Drive日付 | oldestFileDate/newestFileDate（ファイル名のYYYY/MM/DDまたはYYYY-MM-DD、UTC変換で日をずらさない）、dateMissingCount |
-| Drive異常 | unrecognizedFolders、duplicateStudentFolders、similarStudentFolders、similarIdPairs、multiFolderDocs |
+| Drive解決/異常 | folderResolutions、unmatchedFolderCount、unmatchedFolders、typoSuspects、formatAnomalies、duplicateStudentFolders、multiFolderDocs |
 | Drive重複 | sameDayMultipleDocs（生徒＋ファイル名日付、2件以上のグループとID。削除対象とは断定しない） |
 | 文字量 | characters: count/total/mean/median/p95/max、attempted/population/fullPopulation、fallbackCount |
 | DB | totalMinutes、perStudent、withDriveId/withoutDriveId、missingLessonNumber |
 | DB重複/孤立 | duplicateDriveIds、sameDaySources、unknownStudentIds |
-| DB文字量 | generatedCharacters/transcriptCharactersの総量等、perStudentCharacters |
+| DB文字量 | generatedCharacters/transcriptCharactersの総量等、perStudentCharacters、maxStudentGeneratedCharacters、maxStudentTranscriptCharacters |
 | 照合 | matchedDriveDocs、notImportedByFileId、sameDaySourceCandidates、conflictingStudentAssignments、unknownStudentIds |
 
-学籍番号認識は例示形式 `OL[A-Z]{2}数字6桁-英数字2桁` の完全一致。別形式は削除/無視せずunrecognizedFoldersに残す。類似判定は大小文字・空白・接尾文字による候補と、認識IDの編集距離1以内。似ているIDを自動的に同一人物扱いしない。同じ文書が異なる生徒フォルダにある場合はstudentIdを未確定とし、multiFolderDocsに残す。
+正式student_idはDBのstudents.student_idだけをsource of truthとする。raw folderNameを正規化せず完全一致照合し、別形式でもDBに存在すればmatchedとする。正規表現はformatAnomalyの補助指標に限定し、正式判定へ使わない。
+
+内部の各documentはfolders配列にfolderId/folderName/resolvedStudentIdを保持し、複数フォルダの対応を失わない。DB取得後、およびreconciliation時にraw名から再解決する。DB未取得ならunresolved_db_unavailable、正式/不一致件数はnullとなる。
+
+完全一致しない場合のみ、先頭0/O・大小文字・前後空白・ハイフン有無/表記差・編集距離1をDB IDと比較してcandidatesを返す。候補ありはpossible_typo、なしはunmatched。どちらもresolvedStudentId=nullで、人間確認なしに候補へ紐付けない。完全一致IDにはtypo候補を出さない。
+
+同一documentの全folderが同じDB IDへ完全一致した場合のみ文書単位で確定し、異なるIDや未解決folderが混在すれば文書単位はnullにする。個々のfolderの解決結果は保持し、multiFolderDocsおよび既存minutesとのstudent競合候補に残す。
+
+サンプル実測が成功して件数・欠損・fallback・失敗状況を確認した後に限り、全件文字数計測へ進む。認証未設定の状態でall実行を成功扱いにしない。認証の新規設定や別環境の実行権限が必要なら、その環境の準備を依頼する。
 
 文字数はUnicodeコードポイント数（DB CHAR_LENGTHに対応）。サンプルはファイルID順に均等抽出し、無作為標本ではない。fullPopulation=falseの平均/中央値/p95はサンプル値。p95はnearest-rank。文字起こしタブがない場合の既存末尾タブ/本文fallbackを再利用し、fallbackCountで区別する。その文字数を厳密な文字起こし量とは断定しない。ファイル名日付欠損はcreatedTimeをレッスン日へ代用しない。
 

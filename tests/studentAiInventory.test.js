@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { statistics, fileDate, recognizedStudentId, similarIds, listAllFiles, collectDriveInventory,
+import { statistics, fileDate, recognizedStudentId, resolveFolder, resolveDriveStudents, similarIds, listAllFiles, collectDriveInventory as collectRaw,
   collectDatabaseInventory, summarizeDatabase, reconcileInventory } from '../src/services/studentAiInventoryService.js';
 import { getTranscriptFromDoc } from '../src/services/driveService.js';
 
 const student = 'OLWV260827-00';
+const collectDriveInventory = options => collectRaw({ students: [student, 'OLWV260828-00'], ...options });
 test('statistics handle empty, odd, even, p95 and max populations', () => {
   assert.deepEqual(statistics([]), { count: 0, total: 0, mean: null, median: null, p95: null, max: null });
   assert.equal(statistics([1, 4, 3, 2]).median, 2.5);
@@ -19,7 +20,7 @@ test('dates preserve calendar days and reject invalid dates', () => {
   assert.equal(fileDate('2024/02/29'), '2024-02-29');
 });
 test('student recognition is exact; similarities do not authorize assignment', () => {
-  assert.equal(recognizedStudentId(student), student);
+  assert.equal(recognizedStudentId(student, [student]), student);
   assert.equal(recognizedStudentId(student + ' notes'), null);
   assert.equal(recognizedStudentId('other'), null);
   assert.equal(similarIds(student, 'OLWV260828-00'), true);
@@ -56,7 +57,7 @@ test('Drive reports duplicates, invalid folders, dates, counts and Unicode chara
   assert.equal(result.perStudent[student], 3);
   assert.equal(result.duplicateStudentFolders.length, 1);
   assert.equal(result.sameDayMultipleDocs[0].count, 2);
-  assert.equal(result.unrecognizedFolders[0].name, 'misc');
+  assert.equal(result.unmatchedFolders[0].folderName, 'misc');
   assert.equal(result.oldestFileDate, '2025-01-01');
   assert.equal(result.newestFileDate, '2026-09-01');
   assert.equal(result.dateMissingCount, 1);
@@ -153,4 +154,61 @@ test('standalone inventory has no generation/migration/startup dependency', asyn
   const script = await readFile(new URL('../scripts/student-ai-inventory.js', import.meta.url), 'utf8');
   const imports = script.split('\n').filter(l => l.startsWith('import ')).join('\n');
   assert.doesNotMatch(imports, /minutesService|openai|migrate|index\.js/);
+});
+
+test('DB students are authoritative even for IDs outside the format regex', () => {
+  for (const name of [student, 'legacy_123', '12345']) {
+    const r = resolveFolder({ id: 'folder', name }, [student, 'legacy_123', '12345']);
+    assert.equal(r.resolvedStudentId, name);
+    assert.equal(r.status, 'matched');
+    assert.deepEqual(r.candidates, []);
+  }
+  const r = resolveFolder({ id: 'folder', name: 'OLWV999999-99' }, [student]);
+  assert.equal(r.status, 'unmatched');
+  assert.equal(r.resolvedStudentId, null);
+});
+
+test('typo variants report candidates without automatic binding', () => {
+  for (const name of ['0LWV260827-00', 'olwv260827-00', ' OLWV260827-00 ',
+    'OLWV26082700', 'OLWV260827－00', 'OLWV260828-00']) {
+    const r = resolveFolder({ id: 'folder', name }, [student]);
+    assert.equal(r.folderName, name);
+    assert.equal(r.status, 'possible_typo', name);
+    assert.equal(r.resolvedStudentId, null);
+    assert.deepEqual(r.candidates, [student]);
+  }
+});
+
+test('raw folder relationships survive no-DB collection and DB reconciliation', async () => {
+  const names = ['legacy_123', '0LWV260827-00'];
+  const drive = { files: { list: async ({ q }) => ({ data: { files: q.includes("'parent'")
+    ? names.map((name, i) => ({ id: `f${i}`, name }))
+    : [{ id: q.includes("'f0'") ? 'legacyDoc' : 'typoDoc', name: '2026/09/01' }] } }) } };
+  const raw = await collectRaw({ drive, parentFolderId: 'parent', textLimit: 0 });
+  assert.equal(raw.studentFolderCount, null);
+  assert.equal(raw.documents[0].folders[0].folderName, names[0]);
+  const resolved = resolveDriveStudents(raw, ['legacy_123', student]);
+  assert.equal(resolved.studentFolderCount, 1);
+  assert.equal(resolved.unmatchedFolderCount, 1);
+  assert.equal(resolved.perStudent.legacy_123, 1);
+  assert.equal(resolved.documents.find(d => d.id === 'typoDoc').resolvedStudentId, null);
+  const db = summarizeDatabase([{ ...rows[0], student_id: 'legacy_123', drive_file_id: null }], ['legacy_123', student]);
+  const report = reconcileInventory(raw, db);
+  assert.ok(report.sameDaySourceCandidates.some(c => c.fileId === 'legacyDoc'));
+  assert.equal(report.typoSuspects[0].folderName, names[1]);
+  assert.equal(report.unmatchedFolders.length, 1);
+});
+
+test('multi-folder documents retain all raw names and remain ambiguous', async () => {
+  const raw = { folders: [{ id: 'f1', name: student }, { id: 'f2', name: 'legacy_123' }, { id: 'f3', name: '0LWV260827-00' }],
+    documents: [{ id: 'doc', date: '2026-09-01', folders: [
+      { folderId: 'f1', folderName: student }, { folderId: 'f2', folderName: 'legacy_123' },
+      { folderId: 'f3', folderName: '0LWV260827-00' }] }] };
+  const r = resolveDriveStudents(raw, [student, 'legacy_123']);
+  assert.equal(r.documents[0].resolvedStudentId, null);
+  assert.deepEqual(r.documents[0].folders.map(f => f.resolvedStudentId), [student, 'legacy_123', null]);
+  assert.equal(r.documents[0].folders[2].status, 'possible_typo');
+  assert.equal(r.multiFolderDocs.length, 1);
+  const db = summarizeDatabase([{ ...rows[0], drive_file_id: 'doc' }], [student, 'legacy_123']);
+  assert.equal(reconcileInventory({ ...raw, complete: true, totalDocs: 1 }, db).conflictingStudentAssignments[0].driveStudentId, 'legacy_123');
 });

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { createReadonlyDriveClients, getTranscriptFromDoc } from '../src/services/driveService.js';
-import { collectDriveInventory, collectDatabaseInventory, reconcileInventory } from '../src/services/studentAiInventoryService.js';
+import { collectDriveInventory, collectDatabaseInventory, reconcileInventory, resolveDriveStudents } from '../src/services/studentAiInventoryService.js';
 
 // Standalone read-only entrypoint. Never imports index.js, migrations, or minutesService.
 const arg = process.argv.slice(2);
@@ -35,6 +35,7 @@ else {
   catch { report.errors.push('DB_INVENTORY_FAILED'); }
   finally { client?.release(); await pool.end(); }
 }
+if (drive && db) drive = resolveDriveStudents(drive, db.students);
 report.reconciliation = reconcileInventory(drive, db);
 // No document bodies, prompts, credentials or raw DB rows in output.
 if (drive) { const { folders, documents, ...summary } = drive; report.drive = summary; }
