@@ -12,12 +12,13 @@
  */
 
 import { Hono } from 'hono';
-import { query } from '../db/connection.js';
-import { fetchTranscript } from '../services/driveService.js';
-import { buildMinutesResult } from '../services/minutesService.js';
+import { query as defaultQuery } from '../db/connection.js';
+import { requireAuth, createRequireAuth } from '../middleware/auth.js';
+import { fetchTranscript as defaultFetchTranscript } from '../services/driveService.js';
+import { buildMinutesResult as defaultBuildMinutesResult } from '../services/minutesService.js';
 import {
-  getPreviousMinutesContext,
-  resolveMinutesTutor
+  getPreviousMinutesContext as defaultGetPreviousMinutesContext,
+  resolveMinutesTutor as defaultResolveMinutesTutor
 } from '../services/minutesContextService.js';
 import {
   buildLessonContentIndex,
@@ -25,7 +26,16 @@ import {
   resolveLessonReference
 } from '../services/lessonReferenceService.js';
 
+// Dependency boundary for route regression tests; production keeps existing services.
+export function createMinutesRoutes({
+  query = defaultQuery,
+  fetchTranscript = defaultFetchTranscript,
+  buildMinutesResult = defaultBuildMinutesResult,
+  getPreviousMinutesContext = defaultGetPreviousMinutesContext,
+  resolveMinutesTutor = defaultResolveMinutesTutor,
+} = {}) {
 const app = new Hono();
+app.use('*', query === defaultQuery ? requireAuth : createRequireAuth({ query }));
 
 // ─── テンプレート ───────────────────────────────────────────────
 
@@ -299,4 +309,7 @@ app.delete('/:id', async (c) => {
   }
 });
 
-export default app;
+return app;
+}
+
+export default createMinutesRoutes();

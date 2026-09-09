@@ -1,5 +1,14 @@
 # 最新main同期・実装前baseline
 
+## Node 22 / T017追記
+
+2026-09-09: `npm exec --yes --package=node@22 -- node -v` = v22.23.2。
+同じNode22環境の `npm test` で変更前56/56成功、T017後62/62成功。
+package.json、lockfile、postinstallは変更なし。DB migration未検証の制約は継続。
+
+T017 diff: minutes routeに共通requireAuthを適用し、テスト用service依存注入factoryを追加。list/all/detail/generate/update/delete/templates取得・更新すべてを保護。フロント、cron、自動生成serviceは変更なし。
+回帰はmock SQL/Drive/OpenAIによるHTTP route検証。期限切れはSQLのexpiry条件と空resultで検証し、実DB統合テストとは区別する。リポジトリ外consumerは既知のものなし。ただし存在する場合はBearer対応が必要で、運用時401の確認が残る。本番deployは未実施。
+
 ## 同期とSHAの確認（2026-09-09）
 
 - 調査開始時main: `f13996016bcf85ac35db022f3575068b5aa5e124`

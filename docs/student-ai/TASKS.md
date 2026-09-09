@@ -7,7 +7,7 @@
 | T010 | Blocked | inventoryの件数・文字量・精度評価を踏まえアーキテクチャ最終確定 | T001,T005 |
 | T015 | Done | 共通requireAuth middlewareとunit test（inventory非依存） | T001,baseline test |
 | T016 | Investigated | 既存minutes API認証影響調査（本番外部利用者の確認は残る） | T001 |
-| T017 | Todo | minutes全API認証適用＋回帰テスト。AI機能公開前の必須ゲート | T015,T016 |
+| T017 | Done (code/tests) | minutes全API認証適用＋Node22回帰62件成功。本番deployは未実施 | T015,T016 |
 | T020 | Review | 全期間backfill設計 | T005 |
 | T030 | Blocked | 質問意図分類・候補取得context service | T005,T010最終確定,T015,設計再報告 |
 | T040 | Todo | 回答生成service/API | T030 |
