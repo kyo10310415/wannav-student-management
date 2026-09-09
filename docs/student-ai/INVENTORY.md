@@ -1,5 +1,12 @@
 # T005 読み取り専用inventory
 
+## 追加診断
+
+`folderResolutions` / `unmatchedFolders` に `documentCount` と `listingComplete` を追加。失敗したfolderの0件を確定値と扱わない。
+`charactersByExtractionMode` は `transcript_tab` / `last_tab_fallback` / `body_fallback` / `empty_document` 別の文字数統計。タブ名だけで内容を厳密に保証はできないが、代替取得を原文字起こしと混ぜず評価できる。
+`extractionSamples` は最大50件のdocument ID、raw folder対応、選択タブ、全タブ名、API fallback、文字数のみ。原文は含めない。全件測定でも診断詳細は最大50件、方式別統計は全取得文書で集計する。
+同日複数・重複IDの配列件数はグループ数であり、重複文書数ではない。測定対象の不一致folderとfallback内訳を確認してから全件文字数計測を行う。
+
 ## 現在の状態
 
 CLIとunit testを実装済み。実測は未完了。現環境で実行すると `GOOGLE_CREDENTIALS_JSON_UNSET` / `DATABASE_URL_UNSET`、reconciliation=unmeasured、status=incompleteを返す。0件と未測定を混同しない。

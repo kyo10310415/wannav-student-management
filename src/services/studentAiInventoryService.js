@@ -13,7 +13,11 @@ export function resolveFolder(folder, students) {
 }
 
 export function resolveDriveStudents(inventory, students) {
-  const folderResolutions = inventory.folders.map(f => resolveFolder(f, students));
+  const folderCounts = new Map();
+  for (const d of inventory.documents) for (const f of d.folders) folderCounts.set(f.folderId, (folderCounts.get(f.folderId) || 0) + 1);
+  const folderResolutions = inventory.folders.map(f => ({ ...resolveFolder(f, students),
+    documentCount: folderCounts.get(f.id) || 0,
+    listingComplete: !(inventory.failures || []).some(e => e.folderId === f.id) }));
   const byId = new Map(folderResolutions.map(f => [f.folderId, f]));
   const documents = inventory.documents.map(d => {
     const folders = d.folders.map(f => byId.get(f.folderId) || resolveFolder({ id: f.folderId, name: f.folderName }, students));
@@ -116,12 +120,22 @@ export async function collectDriveInventory({ drive, readTranscript, parentFolde
   const docs = [...documents.values()].sort((a, b) => a.id.localeCompare(b.id));
   const count = Math.min(textLimit, docs.length);
   const lengths = [];
+  const extractionSamples = [];
+  const lengthsByMode = new Map();
   let fallbackCount = 0;
   for (let i = 0; i < count; i++) {
     const doc = docs[Math.floor(i * docs.length / count)];
     try {
       const result = await readTranscript(doc.id);
       lengths.push(Array.from(result.text).length);
+      const mode = result.extraction?.mode || 'unspecified';
+      lengthsByMode.set(mode, [...(lengthsByMode.get(mode) || []), Array.from(result.text).length]);
+      // Only allowlisted metadata, never raw text. Bound diagnostic records even on --all.
+      if (extractionSamples.length < 50) extractionSamples.push({ documentId: doc.id,
+        folders: doc.folders.map(f => ({ folderId: f.folderId, folderName: f.folderName })),
+        mode, selectedTab: result.extraction?.selectedTab ?? null,
+        tabTitles: result.extraction?.tabTitles || [], apiFallback: result.extraction?.apiFallback || false,
+        characters: Array.from(result.text).length });
       if (result.fallback) fallbackCount++;
     } catch { failures.push({ documentId: doc.id, code: 'TEXT_READ_FAILED' }); }
   }
@@ -130,6 +144,8 @@ export async function collectDriveInventory({ drive, readTranscript, parentFolde
     folderCount: folders.length, totalDocs: docs.length,
     oldestFileDate: dates[0] || null, newestFileDate: dates.at(-1) || null,
     dateMissingCount: docs.filter(d => !d.date).length,
+    extractionSamples,
+    charactersByExtractionMode: Object.fromEntries([...lengthsByMode].map(([mode, values]) => [mode, statistics(values)])),
     characters: { ...statistics(lengths), attempted: count, population: docs.length,
       fullPopulation: lengths.length === docs.length && !failures.length,
       sampling: 'deterministic evenly spaced by file ID; not random', fallbackCount }, failures }, students);

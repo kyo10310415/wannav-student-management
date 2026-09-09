@@ -21,8 +21,9 @@ else {
       parentFolderId: process.env.LESSON_DRIVE_FOLDER_ID || '18YfaP1CrW5Lq_sAeVAR56tIRZR3GwMDS', textLimit,
       readTranscript: async id => {
         let fallback = false;
-        const text = await getTranscriptFromDoc(clients.docs, id, { log() {}, warn() { fallback = true; } });
-        return { text, fallback };
+        let extraction;
+        const text = await getTranscriptFromDoc(clients.docs, id, { log() {}, warn() { fallback = true; } }, value => { extraction = value; });
+        return { text, fallback, extraction };
       } });
   } catch { report.errors.push('DRIVE_INVENTORY_FAILED'); }
 }

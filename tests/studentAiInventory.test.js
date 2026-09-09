@@ -212,3 +212,42 @@ test('multi-folder documents retain all raw names and remain ambiguous', async (
   const db = summarizeDatabase([{ ...rows[0], drive_file_id: 'doc' }], [student, 'legacy_123']);
   assert.equal(reconcileInventory({ ...raw, complete: true, totalDocs: 1 }, db).conflictingStudentAssignments[0].driveStudentId, 'legacy_123');
 });
+
+test('extraction diagnostics distinguish nested transcript, last tab, body and empty without text', async () => {
+  const body = { content: [{ paragraph: { elements: [{ textRun: { content: 'PRIVATE_TEXT' } }] } }] };
+  const tab = title => ({ tabProperties: { title }, documentTab: { body } });
+  const cases = [
+    [{ tabs: [{ ...tab('summary'), childTabs: [tab('文字起こし')] }] }, 'transcript_tab', '文字起こし'],
+    [{ tabs: [tab('summary'), tab('notes')] }, 'last_tab_fallback', 'notes'],
+    [{ body }, 'body_fallback', null],
+    [{}, 'empty_document', null],
+  ];
+  for (const [data, mode, selectedTab] of cases) {
+    let metadata;
+    const result = await getTranscriptFromDoc({ documents: { get: async () => ({ data }) } }, 'id',
+      { log() {}, warn() {} }, value => { metadata = value; });
+    assert.equal(metadata.mode, mode); assert.equal(metadata.selectedTab, selectedTab);
+    assert.equal(result, mode === 'empty_document' ? '' : 'PRIVATE_TEXT');
+    assert.ok(!JSON.stringify(metadata).includes('PRIVATE_TEXT'));
+  }
+});
+
+test('legacy Docs API fallback is separately identified', async () => {
+  let calls = 0, metadata;
+  await getTranscriptFromDoc({ documents: { get: async () => {
+    if (++calls === 1) throw Error('unsupported'); return { data: {} };
+  } } }, 'id', { log() {}, warn() {} }, value => { metadata = value; });
+  assert.equal(metadata.apiFallback, true); assert.equal(calls, 2);
+});
+
+test('inventory includes folder document counts and separate extraction distributions', async () => {
+  const r = await collectDriveInventory({ drive: fakeDrive(), parentFolderId: 'parent', textLimit: Infinity,
+    readTranscript: async id => ({ text: 'secret', fallback: id === 'd1', extraction: {
+      mode: id === 'd1' ? 'body_fallback' : 'transcript_tab', selectedTab: null, tabTitles: [], text: 'secret' } }) });
+  assert.equal(r.unmatchedFolders[0].documentCount, 1);
+  assert.equal(r.folderResolutions.find(f => f.folderId === 'f1').documentCount, 2);
+  assert.equal(r.charactersByExtractionMode.body_fallback.count, 1);
+  assert.equal(r.charactersByExtractionMode.transcript_tab.count, 3);
+  assert.equal(r.extractionSamples.length, 4);
+  assert.ok(!JSON.stringify(r).includes('secret'));
+});

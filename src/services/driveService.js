@@ -135,9 +135,10 @@ function flattenTabs(tabs) {
  * ネスト（childTabs）を再帰的に展開して「文字起こし」タブを探す。
  * タブが存在しない／見つからない場合は本文全体を返す。
  */
-export async function getTranscriptFromDoc(docs, fileId, logger = console) {
+export async function getTranscriptFromDoc(docs, fileId, logger = console, onExtraction = null) {
   // documentTabs を含むフルドキュメントを取得
   let docData;
+  let apiFallback = false;
   try {
     const res = await docs.documents.get({
       documentId: fileId,
@@ -145,6 +146,7 @@ export async function getTranscriptFromDoc(docs, fileId, logger = console) {
     });
     docData = res.data;
   } catch (e) {
+    apiFallback = true;
     // includeTabsContent 非対応の場合はフォールバック
     const res = await docs.documents.get({ documentId: fileId });
     docData = res.data;
@@ -152,6 +154,13 @@ export async function getTranscriptFromDoc(docs, fileId, logger = console) {
 
   // タブが存在する場合（ネスト含めてフラット展開して探す）
   const rawTabs = docData.tabs || [];
+  const finish = (body, mode, tab = null) => {
+    const text = body ? extractTextFromBody(body) : '';
+    onExtraction?.({ mode, apiFallback, selectedTab: tab?.tabProperties?.title || null,
+      tabTitles: flattenTabs(rawTabs).map(t => t.tabProperties?.title || ''),
+      characters: Array.from(text).length });
+    return text;
+  };
   if (rawTabs.length > 0) {
     const allTabs = flattenTabs(rawTabs);
 
@@ -165,22 +174,22 @@ export async function getTranscriptFromDoc(docs, fileId, logger = console) {
     if (transcriptTab) {
       logger.log(`[Drive] Using tab: "${transcriptTab.tabProperties?.title}"`);
       const body = transcriptTab.documentTab?.body;
-      if (body) return extractTextFromBody(body);
+      if (body) return finish(body, 'transcript_tab', transcriptTab);
     }
 
     // 「文字起こし」タブが見つからない場合は末尾タブ（フォールバック）
     logger.warn(`[Drive] "文字起こし" tab not found, falling back to last tab`);
     const lastTab = allTabs[allTabs.length - 1];
     const body = lastTab?.documentTab?.body;
-    if (body) return extractTextFromBody(body);
+    if (body) return finish(body, 'last_tab_fallback', lastTab);
   }
 
   // タブがない場合はドキュメント本文を使用
   logger.warn(`[Drive] No tabs found, using document body`);
   const body = docData.body;
-  if (body) return extractTextFromBody(body);
+  if (body) return finish(body, 'body_fallback');
 
-  return '';
+  return finish(null, 'empty_document');
 }
 
 /**
