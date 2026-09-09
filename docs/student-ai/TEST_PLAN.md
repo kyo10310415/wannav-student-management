@@ -6,13 +6,21 @@
 - validation: 空質問、1000文字超、不正/不存在student ID。
 - 分離: Aへの質問時、SQL引数と取得rowがAだけ。B固有カナリア語がanswer/contextにない。
 - 検索: latest、previous goal、3ヶ月比較、longitudinal、repeated issue、YouTube/X。
-- 長期: 1年以上を四半期サンプリングし、複数時点をsourcesへ含める。
+- 長期: 全期間軽量情報→意味的重要度選択→原文確認。固定時期サンプリングから外れる重要レッスンを正解セットに含め、再現率を比較する。入力上限超過時の階層要約でも出典・矛盾・転機を維持する。
 - 最新性: 現在質問で古い矛盾より最新情報が優先され、変化として説明される。
 - 根拠不足: 記録0件/1件では判断不能または低確信度。
 - injection: transcript内の「systemを無視」等が命令として実行されない。
 - 引用: AIが候補外IDを返した場合に除去/失敗させる。
 - 障害: OpenAI timeout/429/5xx、Drive障害で既存画面が壊れない。
 - backfill: 重複、再開、retry上限、停止、同日複数Docs。
+- 欠損: reportなし、番号不明、masterなし、日付不明、要約失敗でもsourceを保持して検索可能にする。架空の番号/Tutor/達成事実を補わない。
+- 統合source: minutesとの重複排除、別student競合の隔離、文書変更/削除時の索引無効化。
+- T015: Bearer不正/欠落、3 role、期限切れ、存在しないtoken、DB障害、SQL injection文字列のparameter化、context最小化、後段500の維持。
+- T016/T017: UI全8呼出しのAuthorization確認、minutes全APIの未認証拒否、認証済みCRUD・生成・テンプレート回帰、cron直呼び継続。
+
+## 実装前baselineの管理
+
+最新main同期後のアプリコードがmainと同じ状態でnpm ci/npm testを実行し、T015後の結果と分ける。Node指定22.xと実行環境の差、依存インストール・postinstall migrationの失敗は、機能テストの失敗と区別してBASELINE.mdへ記録する。T005とT010は未完了ゲートのまま保持する。
 
 ## 手動/E2E
 
@@ -28,7 +36,7 @@
 
 `npm test` に加え、生徒管理、Tutor管理、今日のレッスン、議事録、レッスン報告のsmoke testを行う。
 
-Phase 0時点のbaselineは依存パッケージ未導入のため、node標準だけの33件が成功し、`tests/gasBroadcast.test.js` は`hono`未導入でload失敗した。依存導入後に正式なbaselineを取り直す。
+旧Phase 0では依存未導入により33件成功、gasBroadcastはhono欠落でload失敗。その後、最新main同期と依存導入により既存48件すべて成功を確認した。T015追加後は56件成功。npm ciのpostinstall DB接続失敗とNodeバージョン差はBASELINE.md参照。
 
 ## 合格基準
 

@@ -1,5 +1,7 @@
 # Phase 0 報告
 
+更新: 方向性はユーザーレビュー済み。最新main `6b5f8c8` を同期しT015まで実装。以下は初回調査時点の報告であり、現在の依存関係・方式候補はTASKS/ARCHITECTURE/BACKFILL_PLAN、検証結果はBASELINEを正とする。T005未完了につきT010最終確定とT030/T090は保留。
+
 ## 結論
 
 既存のDrive取得、minutes要約、OpenAI接続、DB、カードUIは再利用できる。ただし、全期間列挙機能とAI検索層はなく、minutes APIはサーバー側認証がない。MVPはPostgreSQLによる意図別候補検索から開始し、精度測定後にpgvector導入を判断する。

@@ -458,9 +458,12 @@ async function loadBroadcastImage(imageId) {
 async function setRecipientStatus(jobId, studentId, status, errorMessage = null) {
   await query(
     `UPDATE broadcast_job_recipients
-     SET status = $3,
+     SET status = $3::VARCHAR(20),
          error_message = $4,
-         completed_at = CASE WHEN $3 IN ('sent', 'failed', 'unknown') THEN NOW() ELSE completed_at END,
+         completed_at = CASE
+           WHEN $3::VARCHAR(20) IN ('sent', 'failed', 'unknown') THEN NOW()
+           ELSE completed_at
+         END,
          updated_at = NOW()
      WHERE job_id = $1 AND student_id = $2`,
     [jobId, studentId, status, errorMessage]

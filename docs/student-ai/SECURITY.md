@@ -38,4 +38,10 @@
 
 ## 既存システムへの指摘
 
-`minutes.js` を含む複数routeは共通認証で保護されていない。AI APIを追加するだけで現行minutes本文が安全になるわけではない。T015で共通middlewareを追加し、まず新APIへ適用する。既存minutes API全体への適用は互換性検証後に別タスクとして行う。
+`minutes.js` は現時点で未保護。T015は共通requireAuthを作成、T016は既存consumerの認証影響調査、T017はminutes全routeに認証を適用して回帰テストする。T017をAI機能公開前の必須ゲートとし、原文/生成文APIを未認証のまま公開しない。
+
+コード調査では既存UIの全8種類のminutes呼出しがBearer送信済み。自動jobはservice直呼びのためHTTP認証に影響されない。リポジトリ外consumerの有無は未確認。適用後はlist/all/detailだけでなく、生成・編集・削除・テンプレートも未認証拒否を確認する。
+
+T015ではuser contextはid/email/roleのみに限定しtokenを含めない。認証DBエラーは固定500を返し、後段handlerの例外を認証失敗にすり替えない。roleの認可条件はmiddlewareへ追加せず、全ログインユーザーを許可する。
+
+階層要約や新規sourceも非信頼資料として扱い、student境界、出典検証、削除連動、上限を適用する。要約に含まれる命令にも特別な権限を与えない。
