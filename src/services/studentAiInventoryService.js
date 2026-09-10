@@ -36,6 +36,7 @@ export function resolveDriveStudents(inventory, students) {
     formatAnomalies: folderResolutions.filter(f => f.formatAnomaly),
     duplicateStudentFolders: groups(folderResolutions.map(f => ({ ...f, id: f.folderId })), f => f.resolvedStudentId),
     perStudent, lessonsPerStudent: statistics(Object.values(perStudent)),
+    studentCharacterInventory: summarizeStudentCharacters(documents, Object.keys(perStudent), inventory.complete, students != null),
     sameDayMultipleDocs: groups(documents, d => d.studentId && d.date ? `${d.studentId}/${d.date}` : null),
     multiFolderDocs: documents.filter(d => d.folders.length > 1) };
 }
@@ -94,12 +95,14 @@ export async function listAllFiles(drive, parent, mimeType) {
   return [...files.values()];
 }
 
-export async function collectDriveInventory({ drive, readTranscript, parentFolderId, textLimit = 50, students = null }) {
+export async function collectDriveInventory({ drive, readTranscript, parentFolderId, textLimit = 50, students = null, onProgress = () => {} }) {
   if (!(textLimit === Infinity || Number.isInteger(textLimit) && textLimit >= 0)) throw new Error('INVALID_TEXT_LIMIT');
   const folders = await listAllFiles(drive, parentFolderId, 'application/vnd.google-apps.folder');
   folders.sort((a, b) => a.id.localeCompare(b.id));
   const documents = new Map();
   const failures = [];
+  let folderIndex = 0;
+  onProgress({ phase: 'listing', total: folders.length, completed: 0 });
   for (const folder of folders) {
     try {
       const files = await listAllFiles(drive, folder.id, 'application/vnd.google-apps.document');
@@ -112,9 +115,11 @@ export async function collectDriveInventory({ drive, readTranscript, parentFolde
         }
         documents.set(file.id, { id: file.id, studentId: null, folderIds: [folder.id],
           folders: [{ folderId: folder.id, folderName: folder.name, resolvedStudentId: null }],
+          modifiedTime: file.modifiedTime || null,
           date: fileDate(file.name), createdDate: file.createdTime?.slice(0, 10) || null });
       }
     } catch { failures.push({ folderId: folder.id, code: 'FOLDER_READ_FAILED' }); }
+    onProgress({ phase: 'listing', completed: ++folderIndex, total: folders.length });
   }
   // Spread a deterministic sample across the complete list; never claim it is a population metric.
   const docs = [...documents.values()].sort((a, b) => a.id.localeCompare(b.id));
@@ -123,21 +128,26 @@ export async function collectDriveInventory({ drive, readTranscript, parentFolde
   const extractionSamples = [];
   const lengthsByMode = new Map();
   let fallbackCount = 0;
+  onProgress({ phase: 'text', completed: 0, total: count });
   for (let i = 0; i < count; i++) {
     const doc = docs[Math.floor(i * docs.length / count)];
     try {
-      const result = await readTranscript(doc.id);
-      lengths.push(Array.from(result.text).length);
+      const result = await readTranscript(doc.id, doc);
+      const characters = result.characters ?? Array.from(result.text).length;
+      if (!Number.isSafeInteger(characters) || characters < 0) throw new Error('INVALID_CHARACTERS');
+      lengths.push(characters);
       const mode = result.extraction?.mode || 'unspecified';
-      lengthsByMode.set(mode, [...(lengthsByMode.get(mode) || []), Array.from(result.text).length]);
+      lengthsByMode.set(mode, [...(lengthsByMode.get(mode) || []), characters]);
+      doc.measurement = { characters, mode };
       // Only allowlisted metadata, never raw text. Bound diagnostic records even on --all.
       if (extractionSamples.length < 50) extractionSamples.push({ documentId: doc.id,
         folders: doc.folders.map(f => ({ folderId: f.folderId, folderName: f.folderName })),
         mode, selectedTab: result.extraction?.selectedTab ?? null,
         tabTitles: result.extraction?.tabTitles || [], apiFallback: result.extraction?.apiFallback || false,
-        characters: Array.from(result.text).length });
+        characters });
       if (result.fallback) fallbackCount++;
     } catch { failures.push({ documentId: doc.id, code: 'TEXT_READ_FAILED' }); }
+    onProgress({ phase: 'text', completed: i + 1, total: count, failures: failures.length });
   }
   const dates = docs.map(d => d.date).filter(Boolean).sort();
   return resolveDriveStudents({ complete: !failures.length, folders, documents: docs,
@@ -223,4 +233,30 @@ export function reconcileInventory(drive, db) {
       .map(m => ({ fileId: d.id, minutesId: m.id, driveStudentId: id, minutesStudentId: m.student_id })))),
     unknownStudentIds: [...new Set([...db.unknownStudentIds, ...Object.keys(drive.perStudent).filter(id => !known.has(id))])],
     note: 'Unmatched by file ID may already exist in minutes without a file ID; same-day candidates require review. Counts overlap.' };
+}
+
+// Only exact, unambiguous student assignments contribute. Missing measurements are
+// explicitly counted; partial sums are never presented as complete student totals.
+export function summarizeStudentCharacters(documents, studentIds, listingComplete, resolutionComplete) {
+  const perStudent = Object.create(null);
+  for (const id of studentIds) perStudent[id] = { documents: 0, measured: 0, characters: 0, byMode: Object.create(null) };
+  let unresolvedDocuments = 0;
+  for (const doc of documents) {
+    const row = perStudent[doc.resolvedStudentId];
+    if (!row || doc.resolvedStudentId == null) { unresolvedDocuments++; continue; }
+    row.documents++;
+    if (!doc.measurement) continue;
+    row.measured++;
+    row.characters += doc.measurement.characters;
+    const mode = doc.measurement.mode;
+    const group = row.byMode[mode] ||= { count: 0, characters: 0 };
+    group.count++;
+    group.characters += doc.measurement.characters;
+  }
+  const rows = Object.values(perStudent);
+  const complete = Boolean(resolutionComplete && listingComplete && rows.every(r => r.documents === r.measured));
+  return { complete, unresolvedDocuments, perStudent,
+    measuredCharactersPerStudent: statistics(rows.map(r => r.characters)),
+    fullPopulationCharactersPerStudent: complete ? statistics(rows.map(r => r.characters)) : null,
+    note: 'All-period metadata listing refreshed on every run. Per-student totals exclude unresolved/conflicting assignments. Measured sums include fallback text; byMode separates extraction modes.' };
 }
