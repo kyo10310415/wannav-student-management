@@ -3,13 +3,13 @@
 | ID | Status | 目的 | 依存 |
 |---|---|---|---|
 | T001 | Done | 現状調査とPhase 0文書 | - |
-| T005 | Implementation done / Measurement blocked | 読み取り専用CLI・unit test実装済み。Google/DB認証未設定につき実測未完了 | T001、認証情報 |
-| T010 | Blocked | inventoryの件数・文字量・精度評価を踏まえアーキテクチャ最終確定 | T001,T005 |
+| T005 | Done (measurement) | 読み取り専用全期間測定完了。実測詳細は作業報告書で管理 | T001 |
+| T010 | Approved (MVP design) | PostgreSQL＋全期間要約の意味選択＋選択原文確認。実精度・速度・費用は実装後評価 | T001,T005 |
 | T015 | Done | 共通requireAuth middlewareとunit test（inventory非依存） | T001,baseline test |
 | T016 | Investigated | 既存minutes API認証影響調査（本番外部利用者の確認は残る） | T001 |
 | T017 | Done (code/tests) | minutes全API認証適用＋Node22回帰62件成功。本番deployは未実施 | T015,T016 |
 | T020 | Review | 全期間backfill設計 | T005 |
-| T030 | Blocked | 質問意図分類・候補取得context service | T005,T010最終確定,T015,設計再報告 |
+| T030 | Code/tests done | 質問意図分類・候補取得context serviceと注入可能な選択adapter。API接続・実データ評価は未実施 | T005,T010,T015 |
 | T040 | Todo | 回答生成service/API | T030 |
 | T050 | Todo | 検索精度・生徒分離テスト | T040 |
 | T060 | Todo | 生徒AIカルテmodal追加 | T040 |
@@ -47,3 +47,7 @@ parameterized query、全row student ID assert、意図別日付窓、入力文�
 ## T060概要
 
 `renderStudentRowsSimple` のリンク群にAIボタンを1個追加し、既存modalパターンを利用する。`public/app.js` の全面整形・分割は行わない。
+
+## T030 implementation
+
+詳細はT030_CONTEXT.md。read-only queryとAI selectorを注入し、生徒分離、候補/引用ID検証、全期間軽量情報の段階選択、入力/呼出数上限、未確認範囲を実装。T040/T090は未着手。実精度・遅延・費用の合格を宣言しない。
