@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'extensions';
   } else if (hash === 'database') {
     currentPage = 'database';
-  } else if (hash === 'funnel' && currentUser?.role === 'admin') {
+  } else if (hash === 'funnel' && (currentUser?.role === 'admin' || currentUser?.role === 'leader')) {
     currentPage = 'funnel';
   }
   // Default is 'today' (already set)
@@ -186,8 +186,8 @@ function renderHeader() {
     </button>
   ` : '';
 
-  // Build funnel management button (admin only)
-  const funnelManagementButton = currentUser && currentUser.role === 'admin' ? `
+  // Build funnel management button (leader or above)
+  const funnelManagementButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <button id="nav-funnel" onclick="changePage('funnel')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'funnel' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-filter mr-2"></i>ファネル管理
     </button>
@@ -918,8 +918,8 @@ async function renderApp() {
     }
     await renderLessonContentsPage();
   } else if (currentPage === 'funnel') {
-    if (!currentUser || currentUser.role !== 'admin') {
-      showNotification('このページは管理者のみアクセスできます', 'error');
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
+      showNotification('このページはリーダー以上のみアクセスできます', 'error');
       currentPage = 'today';
       await renderTodayLessonsPage();
       return;
@@ -934,8 +934,8 @@ async function renderApp() {
 
 // Change page
 async function changePage(page) {
-  if (page === 'funnel' && (!currentUser || currentUser.role !== 'admin')) {
-    showNotification('このページは管理者のみアクセスできます', 'error');
+  if (page === 'funnel' && (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader'))) {
+    showNotification('このページはリーダー以上のみアクセスできます', 'error');
     return;
   }
   currentPage = page;
@@ -1167,7 +1167,7 @@ function renderFunnelDashboard() {
 
     <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
       <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
-      <p>対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。各指標は前段階の達成を条件にせず、それぞれ独立して集計しています。</p>
+      <p>対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プラン・エントリープランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。各指標は前段階の達成を条件にせず、それぞれ独立して集計しています。</p>
     </div>
 
     <div class="space-y-7">

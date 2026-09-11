@@ -19,6 +19,7 @@ test('limits the cohort to active students who started by the target month', () 
   assert.equal(isFunnelEligibleStudent({ status: 'アクティブ', contract_plan: '通常', lesson_start_date: '2026-09-30' }, 2026, 9), true);
   assert.equal(isFunnelEligibleStudent({ status: 'アクティブ', contract_plan: '通常', lesson_start_date: '2026-10-01' }, 2026, 9), false);
   assert.equal(isFunnelEligibleStudent({ status: 'アクティブ', contract_plan: '永久会員' }, 2026, 9), false);
+  assert.equal(isFunnelEligibleStudent({ status: 'アクティブ', contract_plan: 'エントリープラン' }, 2026, 9), false);
   assert.equal(isFunnelEligibleStudent({ status: '退会済み', contract_plan: '通常' }, 2026, 9), false);
 });
 

@@ -1,4 +1,4 @@
-const EXCLUDED_CONTRACT_PLANS = new Set(['永久会員', '在籍プラン']);
+const EXCLUDED_CONTRACT_PLANS = new Set(['永久会員', '在籍プラン', 'エントリープラン']);
 const PAYMENT_COMPLETE_STATUSES = new Set(['支払い完了', '支払完了']);
 
 export function normalizeFunnelStudentId(studentId) {

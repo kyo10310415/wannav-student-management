@@ -5,7 +5,7 @@ import { buildFunnelData } from '../services/funnelService.js';
 
 const app = new Hono();
 
-async function requireAdmin(c, next) {
+async function requireLeaderOrAdmin(c, next) {
   const sessionToken = c.req.header('Authorization')?.replace('Bearer ', '');
   if (!sessionToken) {
     return c.json({ success: false, error: '認証が必要です' }, 401);
@@ -23,14 +23,14 @@ async function requireAdmin(c, next) {
   if (sessionResult.rows.length === 0) {
     return c.json({ success: false, error: 'セッションが無効です' }, 401);
   }
-  if (sessionResult.rows[0].role !== 'admin') {
-    return c.json({ success: false, error: '管理者権限が必要です' }, 403);
+  if (!['admin', 'leader'].includes(sessionResult.rows[0].role)) {
+    return c.json({ success: false, error: 'リーダー以上の権限が必要です' }, 403);
   }
 
   await next();
 }
 
-app.get('/', requireAdmin, async (c) => {
+app.get('/', requireLeaderOrAdmin, async (c) => {
   const year = Number(c.req.query('year'));
   const month = Number(c.req.query('month'));
   if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
