@@ -998,7 +998,7 @@ function renderFunnelMetric(metric) {
 
 function renderFunnelVisualization(title, metrics, accentClass) {
   const stages = [
-    { key: 'payment', label: 'お支払い完了率', hint: '対象月の支払いが完了', icon: 'fa-credit-card', color: '#2563eb' },
+    { key: 'payment', label: 'お支払い完了率', hint: '対象月の前月分の支払いが完了', icon: 'fa-credit-card', color: '#2563eb' },
     { key: 'reservation', label: 'レッスン予約率', hint: '生徒1人あたり月2回を基準に、予約1回ずつを集計', icon: 'fa-calendar-check', color: '#4f46e5', unit: '回' },
     { key: 'completion', label: 'レッスン実施率', hint: '生徒1人あたり月2回を基準に、実施1回ずつを集計', icon: 'fa-chalkboard-teacher', color: '#7c3aed', unit: '回' },
     { key: 'survey', label: 'アンケート回答率', hint: '対象月に1回以上回答', icon: 'fa-comment-dots', color: '#db2777' }
@@ -1070,10 +1070,11 @@ function renderFunnelDashboard() {
       <i class="fas fa-exclamation-triangle mr-2"></i>${funnelWarnings.map(escapeHtml).join('<br>')}
     </div>
   ` : '';
+  const [paymentYear, paymentMonth] = String(funnelData.paymentReferenceYearMonth || '').split('-');
   const paymentNotice = !funnelData.paymentMonthAvailable ? `
     <div class="mb-6 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 text-sm text-blue-800">
       <i class="fas fa-info-circle mr-2"></i>
-      ${funnelSelectedYear}年${funnelSelectedMonth}月の支払情報は現在のキャッシュにありません。支払情報は前月・当月分のみ保持されるため、この指標だけ「データ対象外」としています。
+      ${funnelSelectedYear}年${funnelSelectedMonth}月に対応する${paymentYear}年${Number(paymentMonth)}月分の支払情報は現在のキャッシュにありません。支払情報は前月・当月分のみ保持されるため、この指標だけ「データ対象外」としています。
     </div>
   ` : '';
 
@@ -1120,7 +1121,7 @@ function renderFunnelDashboard() {
 
     <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
       <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
-      <p>対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プランは除外しています。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。各指標は前段階の達成を条件にせず、それぞれ独立して集計しています。</p>
+      <p>対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。各指標は前段階の達成を条件にせず、それぞれ独立して集計しています。</p>
     </div>
 
     <div class="space-y-7">
