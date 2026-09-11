@@ -28,7 +28,6 @@ let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for ac
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports', 'daily-reports'
 let funnelSelectedYear = getJstDateParts().year;
 let funnelSelectedMonth = getJstDateParts().month;
-let funnelSelectedTutorId = '';
 let funnelData = null;
 let funnelWarnings = [];
 let schedules = []; // Tutor schedules data
@@ -970,9 +969,6 @@ async function renderFunnelPage() {
     funnelData = response.data.data;
     funnelWarnings = response.data.warnings || [];
 
-    if (funnelSelectedTutorId && !funnelData.tutors.some(tutor => tutor.employeeId === funnelSelectedTutorId)) {
-      funnelSelectedTutorId = '';
-    }
     renderFunnelDashboard();
   } catch (error) {
     console.error('[Funnel] Failed to load data:', error);
@@ -1054,17 +1050,75 @@ function renderFunnelVisualization(title, metrics, accentClass) {
   `;
 }
 
+function renderFunnelTableMetric(metric, unit = '名', showCoverage = false) {
+  if (!metric.available) {
+    return '<span class="inline-flex px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold">データ対象外</span>';
+  }
+  if (metric.denominator === 0 || metric.rate === null) {
+    return '<span class="text-gray-400">-</span>';
+  }
+
+  const coverage = showCoverage && metric.knownCount < metric.denominator
+    ? `<div class="mt-1 text-xs text-amber-600">確認可能 ${metric.knownCount}/${metric.denominator}名</div>`
+    : '';
+  return `
+    <div class="font-bold text-gray-900">${Number(metric.rate).toFixed(1)}%</div>
+    <div class="mt-0.5 text-xs text-gray-500">${metric.numerator}/${metric.denominator}${unit}</div>
+    ${coverage}
+  `;
+}
+
+function renderTutorFunnelTable(tutors) {
+  const rows = (tutors || []).map(tutor => {
+    const metrics = tutor.metrics;
+    return `
+      <tr class="border-b border-gray-100 hover:bg-purple-50/40 transition">
+        <td class="px-5 py-4 whitespace-nowrap font-semibold text-gray-900">${escapeHtml(tutor.name)}</td>
+        <td class="px-5 py-4 text-center text-gray-700 font-semibold">${metrics.denominator}名</td>
+        <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.payment, '名', true)}</td>
+        <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.reservation, '回')}</td>
+        <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.completion, '回')}</td>
+        <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.survey)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <section class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+      <div class="px-6 py-5 border-b border-gray-100">
+        <h2 class="text-xl font-bold text-gray-900">担当Tutor別</h2>
+        <p class="mt-1 text-sm text-gray-500">全Tutorの月次結果を一覧で比較できます</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[900px]">
+          <thead class="bg-gray-50 text-xs font-bold text-gray-600 uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left">担当Tutor</th>
+              <th class="px-5 py-3 text-center">対象生徒</th>
+              <th class="px-5 py-3 text-center">お支払い完了率</th>
+              <th class="px-5 py-3 text-center">レッスン予約率</th>
+              <th class="px-5 py-3 text-center">レッスン実施率</th>
+              <th class="px-5 py-3 text-center">アンケート回答率</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || `
+              <tr>
+                <td colspan="6" class="px-5 py-10 text-center text-gray-500">表示対象のTutorがいません</td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function renderFunnelDashboard() {
   if (!funnelData) return;
 
   const content = document.getElementById('content');
-  const selectedTutor = funnelData.tutors.find(tutor => tutor.employeeId === funnelSelectedTutorId);
   const monthValue = `${funnelSelectedYear}-${String(funnelSelectedMonth).padStart(2, '0')}`;
-  const tutorOptions = funnelData.tutors.map(tutor => `
-    <option value="${escapeHtml(tutor.employeeId)}" ${tutor.employeeId === funnelSelectedTutorId ? 'selected' : ''}>
-      ${escapeHtml(tutor.name)}
-    </option>
-  `).join('');
   const warnings = funnelWarnings.length > 0 ? `
     <div class="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
       <i class="fas fa-exclamation-triangle mr-2"></i>${funnelWarnings.map(escapeHtml).join('<br>')}
@@ -1091,7 +1145,7 @@ function renderFunnelDashboard() {
           </div>
         </div>
       </div>
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col sm:flex-row gap-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div>
           <label for="funnel-month" class="block text-xs font-bold text-gray-600 mb-1">対象月</label>
           <div class="flex items-center gap-2">
@@ -1104,14 +1158,6 @@ function renderFunnelDashboard() {
               <i class="fas fa-chevron-right"></i>
             </button>
           </div>
-        </div>
-        <div class="sm:min-w-64">
-          <label for="funnel-tutor" class="block text-xs font-bold text-gray-600 mb-1">担当Tutor</label>
-          <select id="funnel-tutor" onchange="selectFunnelTutor(this.value)"
-                  class="w-full h-9 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-            <option value="">Tutorを選択してください</option>
-            ${tutorOptions}
-          </select>
         </div>
       </div>
     </div>
@@ -1126,15 +1172,7 @@ function renderFunnelDashboard() {
 
     <div class="space-y-7">
       ${renderFunnelVisualization('生徒様全体', funnelData.overall, 'bg-orange-100 text-orange-700')}
-      ${selectedTutor
-        ? renderFunnelVisualization(`担当Tutor：${selectedTutor.name}`, selectedTutor.metrics, 'bg-purple-100 text-purple-700')
-        : `
-          <section class="bg-white rounded-2xl shadow-md border border-dashed border-purple-200 p-10 text-center">
-            <i class="fas fa-user-check text-4xl text-purple-300"></i>
-            <h2 class="mt-4 text-lg font-bold text-gray-800">担当Tutor別ファネル</h2>
-            <p class="mt-2 text-sm text-gray-500">上のドロップダウンからTutorを選択すると、そのTutorの結果を表示します。</p>
-          </section>
-        `}
+      ${renderTutorFunnelTable(funnelData.tutors)}
     </div>
   `;
 }
@@ -1154,11 +1192,6 @@ async function setFunnelMonth(value) {
   funnelSelectedMonth = Number(match[2]);
   funnelData = null;
   await renderFunnelPage();
-}
-
-function selectFunnelTutor(employeeId) {
-  funnelSelectedTutorId = employeeId;
-  renderFunnelDashboard();
 }
 
 // Render Reservations Page (original page with all columns)
