@@ -40,6 +40,7 @@ import tutorRedListRoutes from './routes/tutorRedList.js';
 import dailyReportRoutes from './routes/dailyReports.js';
 import minutesRoutes from './routes/minutes.js';
 import lessonContentsRoutes from './routes/lessonContents.js';
+import funnelRoutes from './routes/funnel.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -103,6 +104,7 @@ app.route('/api/tutor-red-list', tutorRedListRoutes);
 app.route('/api/daily-reports', dailyReportRoutes);
 app.route('/api/minutes', minutesRoutes);
 app.route('/api/lesson-contents', lessonContentsRoutes);
+app.route('/api/funnel', funnelRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {

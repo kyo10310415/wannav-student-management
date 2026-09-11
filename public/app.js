@@ -26,6 +26,11 @@ let selectedTutorMonth = new Date().getMonth() + 1; // Tutor満足度表示月
 let currentTab = 'active'; // 'active', 'preparing', 'suspended', 'graduated', 'cancelled', 'today'
 let activeSubTab = 'lesson'; // 'lesson', 'pro', 'permanent', 'enrolled' (for active tab only)
 let currentPage = 'today'; // 'reservations', 'students', 'tutors', 'today', 'helpers', 'schedules', 'users', 'extensions', 'lesson-reports', 'daily-reports'
+let funnelSelectedYear = getJstDateParts().year;
+let funnelSelectedMonth = getJstDateParts().month;
+let funnelSelectedTutorId = '';
+let funnelData = null;
+let funnelWarnings = [];
 let schedules = []; // Tutor schedules data
 let pendingRequests = []; // Pending absence requests
 
@@ -150,6 +155,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'extensions';
   } else if (hash === 'database') {
     currentPage = 'database';
+  } else if (hash === 'funnel' && currentUser?.role === 'admin') {
+    currentPage = 'funnel';
   }
   // Default is 'today' (already set)
   
@@ -177,6 +184,13 @@ function renderHeader() {
   const databaseManagementButton = currentUser && currentUser.role === 'admin' ? `
     <button id="nav-database" onclick="changePage('database')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'database' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-database mr-2"></i>DB管理
+    </button>
+  ` : '';
+
+  // Build funnel management button (admin only)
+  const funnelManagementButton = currentUser && currentUser.role === 'admin' ? `
+    <button id="nav-funnel" onclick="changePage('funnel')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'funnel' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+      <i class="fas fa-filter mr-2"></i>ファネル管理
     </button>
   ` : '';
   
@@ -325,7 +339,7 @@ function renderHeader() {
               </button>
             </div>
             
-            ${userManagementButton || databaseManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton || minutesButton || lessonContentsButton ? `
+            ${userManagementButton || databaseManagementButton || funnelManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton || minutesButton || lessonContentsButton ? `
               <!-- Divider -->
               <div class="w-px bg-white/30"></div>
               
@@ -336,6 +350,7 @@ function renderHeader() {
                 ${vqDiagnosisButton}
                 ${lessonReportsButton}
                 ${rouletteWinnersButton}
+                ${funnelManagementButton}
                 ${userManagementButton}
                 ${databaseManagementButton}
               </div>
@@ -903,6 +918,14 @@ async function renderApp() {
       return;
     }
     await renderLessonContentsPage();
+  } else if (currentPage === 'funnel') {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showNotification('このページは管理者のみアクセスできます', 'error');
+      currentPage = 'today';
+      await renderTodayLessonsPage();
+      return;
+    }
+    await renderFunnelPage();
   } else {
     // Default to today's lessons
     currentPage = 'today';
@@ -912,6 +935,10 @@ async function renderApp() {
 
 // Change page
 async function changePage(page) {
+  if (page === 'funnel' && (!currentUser || currentUser.role !== 'admin')) {
+    showNotification('このページは管理者のみアクセスできます', 'error');
+    return;
+  }
   currentPage = page;
   renderHeader();
   
@@ -920,6 +947,217 @@ async function changePage(page) {
   updateExtensionBadges();
   
   await renderApp();
+}
+
+async function renderFunnelPage() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="bg-white rounded-xl shadow-md p-10 text-center">
+      <i class="fas fa-spinner fa-spin text-4xl text-orange-500"></i>
+      <p class="mt-4 text-gray-600">ファネルデータを集計しています...</p>
+    </div>
+  `;
+
+  const requestedYear = funnelSelectedYear;
+  const requestedMonth = funnelSelectedMonth;
+  try {
+    const response = await axios.get(`${API_BASE}/api/funnel`, {
+      params: { year: requestedYear, month: requestedMonth },
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    });
+
+    if (requestedYear !== funnelSelectedYear || requestedMonth !== funnelSelectedMonth) return;
+    funnelData = response.data.data;
+    funnelWarnings = response.data.warnings || [];
+
+    if (funnelSelectedTutorId && !funnelData.tutors.some(tutor => tutor.employeeId === funnelSelectedTutorId)) {
+      funnelSelectedTutorId = '';
+    }
+    renderFunnelDashboard();
+  } catch (error) {
+    console.error('[Funnel] Failed to load data:', error);
+    const message = error.response?.data?.error || error.message;
+    content.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+        <i class="fas fa-exclamation-circle text-4xl text-red-500"></i>
+        <h2 class="mt-4 text-lg font-bold text-red-800">ファネルデータを取得できませんでした</h2>
+        <p class="mt-2 text-sm text-red-700">${escapeHtml(message)}</p>
+        <button onclick="renderFunnelPage()" class="mt-5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+          <i class="fas fa-redo mr-2"></i>再読み込み
+        </button>
+      </div>
+    `;
+  }
+}
+
+function renderFunnelMetric(metric) {
+  if (!metric.available) return 'データ対象外';
+  if (metric.denominator === 0 || metric.rate === null) return '対象者なし';
+  return `${Number(metric.rate).toFixed(1)}%`;
+}
+
+function renderFunnelVisualization(title, metrics, accentClass) {
+  const stages = [
+    { key: 'payment', label: 'お支払い完了率', hint: '対象月の支払いが完了', icon: 'fa-credit-card', color: '#2563eb' },
+    { key: 'reservation', label: 'レッスン予約率', hint: '生徒1人あたり月2回を基準に、予約1回ずつを集計', icon: 'fa-calendar-check', color: '#4f46e5', unit: '回' },
+    { key: 'completion', label: 'レッスン実施率', hint: '生徒1人あたり月2回を基準に、実施1回ずつを集計', icon: 'fa-chalkboard-teacher', color: '#7c3aed', unit: '回' },
+    { key: 'survey', label: 'アンケート回答率', hint: '対象月に1回以上回答', icon: 'fa-comment-dots', color: '#db2777' }
+  ];
+
+  const stageRows = stages.map(stage => {
+    const metric = metrics[stage.key];
+    const rateText = renderFunnelMetric(metric);
+    const width = metric.available && metric.rate !== null
+      ? Math.max(38, Math.min(100, 38 + Number(metric.rate) * 0.62))
+      : 70;
+    const countText = metric.available
+      ? `${metric.numerator} / ${metric.denominator}${stage.unit || '名'}`
+      : `— / ${metric.denominator}${stage.unit || '名'}`;
+    const paymentCoverage = stage.key === 'payment' && metric.available && metric.knownCount < metric.denominator
+      ? `<div class="mt-1 text-xs text-white/80">支払情報確認可能 ${metric.knownCount} / ${metric.denominator}名</div>`
+      : '';
+
+    return `
+      <div class="flex justify-center" title="${escapeHtml(stage.hint)}">
+        <div class="text-white px-8 py-5 text-center shadow-sm transition-all duration-300"
+             style="width:${width}%; min-width:260px; background:${stage.color}; clip-path:polygon(4% 0, 96% 0, 91% 100%, 9% 100%);">
+          <div class="flex items-center justify-center gap-2 text-sm font-semibold text-white/90">
+            <i class="fas ${stage.icon}"></i>${stage.label}
+          </div>
+          <div class="mt-1 text-3xl font-black tracking-tight">${rateText}</div>
+          <div class="mt-1 text-sm text-white/90">${countText}</div>
+          ${paymentCoverage}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <section class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+      <div class="px-6 py-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">${escapeHtml(title)}</h2>
+          <p class="mt-1 text-sm text-gray-500">対象生徒 ${metrics.denominator}名</p>
+        </div>
+        <span class="px-3 py-1 rounded-full text-xs font-bold ${accentClass}">対象月の到達率</span>
+      </div>
+      <div class="px-4 sm:px-8 py-7 overflow-x-auto">
+        <div class="min-w-[320px] max-w-3xl mx-auto space-y-2" role="img" aria-label="${escapeHtml(title)}の月次ファネル">
+          <div class="mx-auto w-full rounded-lg bg-slate-800 text-white py-3 px-6 text-center shadow-sm">
+            <span class="font-bold">対象生徒</span>
+            <span class="ml-2 text-xl font-black">${metrics.denominator}名</span>
+          </div>
+          ${stageRows}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderFunnelDashboard() {
+  if (!funnelData) return;
+
+  const content = document.getElementById('content');
+  const selectedTutor = funnelData.tutors.find(tutor => tutor.employeeId === funnelSelectedTutorId);
+  const monthValue = `${funnelSelectedYear}-${String(funnelSelectedMonth).padStart(2, '0')}`;
+  const tutorOptions = funnelData.tutors.map(tutor => `
+    <option value="${escapeHtml(tutor.employeeId)}" ${tutor.employeeId === funnelSelectedTutorId ? 'selected' : ''}>
+      ${escapeHtml(tutor.name)}
+    </option>
+  `).join('');
+  const warnings = funnelWarnings.length > 0 ? `
+    <div class="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+      <i class="fas fa-exclamation-triangle mr-2"></i>${funnelWarnings.map(escapeHtml).join('<br>')}
+    </div>
+  ` : '';
+  const paymentNotice = !funnelData.paymentMonthAvailable ? `
+    <div class="mb-6 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 text-sm text-blue-800">
+      <i class="fas fa-info-circle mr-2"></i>
+      ${funnelSelectedYear}年${funnelSelectedMonth}月の支払情報は現在のキャッシュにありません。支払情報は前月・当月分のみ保持されるため、この指標だけ「データ対象外」としています。
+    </div>
+  ` : '';
+
+  content.innerHTML = `
+    <div class="mb-7 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="w-11 h-11 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+            <i class="fas fa-filter text-xl"></i>
+          </span>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">ファネル管理</h1>
+            <p class="text-sm text-gray-500">生徒様の月次状況を全体・担当Tutor別に確認できます</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col sm:flex-row gap-4">
+        <div>
+          <label for="funnel-month" class="block text-xs font-bold text-gray-600 mb-1">対象月</label>
+          <div class="flex items-center gap-2">
+            <button onclick="changeFunnelMonth(-1)" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="前月">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <input id="funnel-month" type="month" value="${monthValue}" onchange="setFunnelMonth(this.value)"
+                   class="h-9 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+            <button onclick="changeFunnelMonth(1)" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="翌月">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+        <div class="sm:min-w-64">
+          <label for="funnel-tutor" class="block text-xs font-bold text-gray-600 mb-1">担当Tutor</label>
+          <select id="funnel-tutor" onchange="selectFunnelTutor(this.value)"
+                  class="w-full h-9 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+            <option value="">Tutorを選択してください</option>
+            ${tutorOptions}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    ${warnings}
+    ${paymentNotice}
+
+    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
+      <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
+      <p>対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プランは除外しています。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。各指標は前段階の達成を条件にせず、それぞれ独立して集計しています。</p>
+    </div>
+
+    <div class="space-y-7">
+      ${renderFunnelVisualization('生徒様全体', funnelData.overall, 'bg-orange-100 text-orange-700')}
+      ${selectedTutor
+        ? renderFunnelVisualization(`担当Tutor：${selectedTutor.name}`, selectedTutor.metrics, 'bg-purple-100 text-purple-700')
+        : `
+          <section class="bg-white rounded-2xl shadow-md border border-dashed border-purple-200 p-10 text-center">
+            <i class="fas fa-user-check text-4xl text-purple-300"></i>
+            <h2 class="mt-4 text-lg font-bold text-gray-800">担当Tutor別ファネル</h2>
+            <p class="mt-2 text-sm text-gray-500">上のドロップダウンからTutorを選択すると、そのTutorの結果を表示します。</p>
+          </section>
+        `}
+    </div>
+  `;
+}
+
+async function changeFunnelMonth(delta) {
+  const zeroBasedMonth = funnelSelectedYear * 12 + funnelSelectedMonth - 1 + delta;
+  funnelSelectedYear = Math.floor(zeroBasedMonth / 12);
+  funnelSelectedMonth = (zeroBasedMonth % 12) + 1;
+  funnelData = null;
+  await renderFunnelPage();
+}
+
+async function setFunnelMonth(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})$/);
+  if (!match) return;
+  funnelSelectedYear = Number(match[1]);
+  funnelSelectedMonth = Number(match[2]);
+  funnelData = null;
+  await renderFunnelPage();
+}
+
+function selectFunnelTutor(employeeId) {
+  funnelSelectedTutorId = employeeId;
+  renderFunnelDashboard();
 }
 
 // Render Reservations Page (original page with all columns)
