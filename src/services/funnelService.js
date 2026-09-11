@@ -50,6 +50,14 @@ export function getPaymentStatusForMonth(student, targetYearMonth) {
   return { known: false, status: null };
 }
 
+export function getPaymentReferenceYearMonth(year, month) {
+  const numericYear = Number(year);
+  const numericMonth = Number(month);
+  const paymentYear = numericMonth === 1 ? numericYear - 1 : numericYear;
+  const paymentMonth = numericMonth === 1 ? 12 : numericMonth - 1;
+  return `${paymentYear}-${String(paymentMonth).padStart(2, '0')}`;
+}
+
 function makeMetric(numerator, denominator, options = {}) {
   const available = options.available !== false;
   return {
@@ -80,7 +88,7 @@ function buildSummary({
   surveyStudentIds,
   paymentMonthAvailable,
   surveyAvailable,
-  targetYearMonth
+  paymentReferenceYearMonth
 }) {
   const denominator = students.length;
   const eligibleStudentIds = new Set(students.map(student => normalizeFunnelStudentId(student.student_id)));
@@ -88,7 +96,7 @@ function buildSummary({
   let paymentCompleteCount = 0;
   let paymentKnownCount = 0;
   for (const student of students) {
-    const payment = getPaymentStatusForMonth(student, targetYearMonth);
+    const payment = getPaymentStatusForMonth(student, paymentReferenceYearMonth);
     if (!payment.known) continue;
     paymentKnownCount++;
     if (PAYMENT_COMPLETE_STATUSES.has(String(payment.status).trim())) paymentCompleteCount++;
@@ -130,14 +138,15 @@ export function buildFunnelData({
   const numericYear = Number(year);
   const numericMonth = Number(month);
   const targetYearMonth = `${numericYear}-${String(numericMonth).padStart(2, '0')}`;
+  const paymentReferenceYearMonth = getPaymentReferenceYearMonth(numericYear, numericMonth);
 
   const eligibleStudents = students.filter(student =>
     isFunnelEligibleStudent(student, numericYear, numericMonth)
   );
 
   const paymentMonthAvailable = students.some(student =>
-    normalizeYearMonth(student.payment_year_month_last) === targetYearMonth ||
-    normalizeYearMonth(student.payment_year_month_current) === targetYearMonth
+    normalizeYearMonth(student.payment_year_month_last) === paymentReferenceYearMonth ||
+    normalizeYearMonth(student.payment_year_month_current) === paymentReferenceYearMonth
   );
 
   const reservationCounts = new Map();
@@ -169,7 +178,7 @@ export function buildFunnelData({
     surveyStudentIds,
     paymentMonthAvailable,
     surveyAvailable,
-    targetYearMonth
+    paymentReferenceYearMonth
   };
 
   const tutorData = tutors
@@ -188,6 +197,7 @@ export function buildFunnelData({
     year: numericYear,
     month: numericMonth,
     targetYearMonth,
+    paymentReferenceYearMonth,
     paymentMonthAvailable,
     surveyAvailable,
     overall: buildSummary({ ...summaryArgs, students: eligibleStudents }),

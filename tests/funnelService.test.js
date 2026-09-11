@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildFunnelData,
+  getPaymentReferenceYearMonth,
   getPaymentStatusForMonth,
   isFunnelEligibleStudent,
   normalizeYearMonth
@@ -33,23 +34,28 @@ test('selects payment status only when the stored month matches', () => {
   assert.deepEqual(getPaymentStatusForMonth(student, '2026-07'), { known: false, status: null });
 });
 
+test('uses the previous calendar month as the payment reference', () => {
+  assert.equal(getPaymentReferenceYearMonth(2026, 9), '2026-08');
+  assert.equal(getPaymentReferenceYearMonth(2026, 1), '2025-12');
+});
+
 test('counts every reservation and completed lesson against two lessons per student', () => {
   const students = [
     {
       student_id: 's-1', status: 'アクティブ', contract_plan: '通常', homeroom_tutor: 'A notion',
-      lesson_start_date: '2026-08-01', payment_year_month_current: '2026/9', payment_status_current_month: '支払い完了'
+      lesson_start_date: '2026-08-01', payment_year_month_last: '2026/8', payment_status_last_month: '支払い完了'
     },
     {
       student_id: 'S-2', status: 'アクティブ', contract_plan: 'PRO', homeroom_tutor: 'A notion',
-      lesson_start_date: '2026-09-01', payment_year_month_current: '2026/9', payment_status_current_month: '未払い'
+      lesson_start_date: '2026-09-01', payment_year_month_last: '2026/8', payment_status_last_month: '未払い'
     },
     {
       student_id: 'S-3', status: 'アクティブ', contract_plan: '通常', homeroom_tutor: 'B notion',
-      lesson_start_date: '2026-09-10', payment_year_month_current: '2026/9', payment_status_current_month: '支払完了'
+      lesson_start_date: '2026-09-10', payment_year_month_last: '2026/8', payment_status_last_month: '支払完了'
     },
     {
       student_id: 'S-4', status: 'アクティブ', contract_plan: '通常', homeroom_tutor: 'B notion',
-      lesson_start_date: '2026-10-01', payment_year_month_current: '2026/9', payment_status_current_month: '支払い完了'
+      lesson_start_date: '2026-10-01', payment_year_month_last: '2026/8', payment_status_last_month: '支払い完了'
     }
   ];
   const tutors = [
@@ -89,6 +95,7 @@ test('counts every reservation and completed lesson against two lessons per stud
     numerator: 3, denominator: 6, rate: 50, available: true
   });
   assert.equal(result.overall.survey.numerator, 1);
+  assert.equal(result.paymentReferenceYearMonth, '2026-08');
   assert.equal(result.tutors[0].metrics.denominator, 2);
   assert.equal(result.tutors[0].metrics.reservation.rate, 75);
   assert.equal(result.tutors[0].metrics.completion.rate, 50);
