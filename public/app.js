@@ -2635,7 +2635,7 @@ function renderTutorsPage() {
         <!-- Month Navigation for Satisfaction Data -->
         <div class="flex items-center gap-2">
           <label class="text-sm font-medium text-gray-700">
-            <i class="fas fa-calendar mr-1"></i>満足度表示月:
+            <i class="fas fa-calendar mr-1"></i>集計表示月:
           </label>
           <button onclick="changeTutorStatsMonth(-1)" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
             <i class="fas fa-chevron-left"></i>
@@ -2659,6 +2659,10 @@ function renderTutorsPage() {
         
         <button onclick="exportTutorSatisfactionToSheet()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
           <i class="fas fa-file-excel mr-2"></i>満足度データをスプレッドシートに書き出し
+        </button>
+
+        <button onclick="exportTutorQualityToSheet(this)" class="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition">
+          <i class="fas fa-clipboard-check mr-2"></i>品質評価をスプレッドシートに書き出し
         </button>
         
         <button onclick="sendStatsReport()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
@@ -3511,6 +3515,42 @@ async function showTutorMinutesQualityModal(employeeId) {
   }
 }
 
+async function exportTutorQualityToSheet(button) {
+  const targetYear = selectedTutorYear;
+  const targetMonth = selectedTutorMonth;
+  const originalHTML = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>品質評価を書き出し中...';
+
+  try {
+    const response = await axios.post(
+      `${API_BASE}/api/tutors/quality/export`,
+      { year: targetYear, month: targetMonth },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 120000
+      }
+    );
+
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+    notification.innerHTML = `
+      <i class="fas fa-check-circle mr-2"></i>
+      ${targetYear}年${targetMonth}月の品質評価を追記しました<br>
+      <span class="text-sm">全体平均＋Tutor ${response.data.tutorCount}名分</span><br>
+      <a href="${response.data.spreadsheetUrl}" target="_blank" rel="noopener noreferrer" class="underline text-sm">スプレッドシートを開く</a>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 7000);
+  } catch (error) {
+    console.error('[Tutor Quality Export] Error:', error);
+    alert('品質評価の書き出しに失敗しました: ' + (error.response?.data?.error || error.message));
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalHTML;
+  }
+}
+
 function closeTutorMinutesQualityModal() {
   document.getElementById('tutor-minutes-quality-modal')?.remove();
 }
@@ -3529,9 +3569,10 @@ function renderTutorMinutesQualityModal(data) {
         <div class="text-2xl font-bold text-cyan-700 mt-1">${data.totalMinutes}件</div>
       </div>
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div class="text-xs text-gray-500">AI評価済み</div>
+        <div class="text-xs text-gray-500">厳格評価済み</div>
         <div class="text-2xl font-bold text-blue-700 mt-1">${data.evaluatedMinutes}件</div>
-        ${data.missingEvaluationMinutes > 0 ? `<div class="text-xs text-orange-600 mt-1">未評価 ${data.missingEvaluationMinutes}件</div>` : ''}
+        ${data.missingEvaluationMinutes > 0 ? `<div class="text-xs text-orange-600 mt-1">厳格評価前・未評価 ${data.missingEvaluationMinutes}件</div>` : ''}
+        ${data.legacyEvaluationMinutes > 0 ? `<div class="text-xs text-gray-500 mt-1">旧判定 ${data.legacyEvaluationMinutes}件は集計対象外</div>` : ''}
       </div>
       <div class="bg-green-50 border border-green-200 rounded-lg p-4">
         <div class="text-xs text-gray-500">目標達成指標</div>
@@ -3542,8 +3583,8 @@ function renderTutorMinutesQualityModal(data) {
     ${data.evaluatedMinutes === 0 ? `
       <div class="py-10 text-center text-gray-400 border rounded-lg">
         <i class="fas fa-clipboard-check text-4xl mb-3"></i>
-        <p>この月にはAI評価済みの議事録がありません。</p>
-        <p class="text-xs mt-1">新規生成または再生成された議事録から集計されます。</p>
+        <p>この月には厳格評価済みの議事録がありません。</p>
+        <p class="text-xs mt-1">新規生成・再生成、または自動再評価された議事録から集計されます。</p>
       </div>` : `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         ${(data.metrics || []).map(metric => {
@@ -3598,6 +3639,9 @@ function renderTutorMinutesQualityModal(data) {
                   <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(lesson.lesson_date || '')}</td>
                   <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(lesson.student_name || lesson.student_id || '')}</td>
                   ${minutesQualityMetricDefinitions.map(definition => {
+                    if (lesson.legacyQualityEvaluation) {
+                      return '<td class="px-3 py-2 text-center text-orange-500">要再評価</td>';
+                    }
                     const metric = lesson.quality_evaluation?.metrics?.[definition.key];
                     if (!metric) return '<td class="px-3 py-2 text-center text-gray-300">-</td>';
                     const display = getMinutesQualityStatusDisplay(metric.status);
@@ -18288,10 +18332,18 @@ function renderMinutesQualityEvaluation(rawEvaluation) {
     return;
   }
 
+  const legacyWarning = Number(evaluation.version || 1) < 2
+    ? `<div class="mb-4 rounded-lg bg-orange-50 border border-orange-200 px-4 py-3 text-sm text-orange-800">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        旧判定ロジックの結果です。Tutor月次集計には含まれません。再生成または自動再評価後に厳格評価へ更新されます。
+      </div>`
+    : '';
+
   container.innerHTML = `
+    ${legacyWarning}
     <div class="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
       <i class="fas fa-info-circle mr-1"></i>
-      AIが文字起こしと前回議事録を根拠に評価した結果です。
+      独立したAI監査と文字起こし原文の照合による評価結果です。
     </div>
     <div class="space-y-3">
       ${minutesQualityMetricDefinitions.map(definition => {

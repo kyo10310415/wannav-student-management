@@ -6,13 +6,14 @@
  *
  * フロー:
  * 1. lessons・lesson_reports から直近7日間の実施済みレッスンを取得
- * 2. minutes テーブルで同日の品質評価済み議事録が存在する student_id を除外
- * 3. 残った生徒について fetchTranscript → buildMinutesResult → DB UPSERT
+ * 2. 厳格評価済み（version 2以降）の議事録を除外
+ * 3. 新規議事録を生成し、旧判定は本文を変えず品質評価だけを順次更新
  */
 
 import { query } from '../db/connection.js';
 import { fetchTranscript } from '../services/driveService.js';
-import { buildMinutesResult } from '../services/minutesService.js';
+import { buildMinutesResult, evaluateLessonQuality } from '../services/minutesService.js';
+import { isVerifiedMinutesQualityEvaluation } from '../services/minutesQualityService.js';
 import {
   getPreviousMinutesContext,
   resolveMinutesTutor
@@ -81,7 +82,7 @@ export async function minutesAutoGenerate() {
   }
   console.log(`[MinutesAutoGen] ${candidates.length} lesson(s) found.`);
 
-  // ── 2. 既に品質評価済みの議事録が存在するものをスキップ ────────────
+  // ── 2. 厳格評価済みの議事録を除外し、旧判定は再評価対象にする ────────
   let existingResult;
   try {
     // 対象の student_id 一覧と日付一覧で絞り込み、後でSetで照合
@@ -90,7 +91,7 @@ export async function minutesAutoGenerate() {
     const sidPlaceholders  = studentIds.map((_, i) => `$${i + 1}`).join(',');
     const datePlaceholders = dates.map((_, i) => `$${studentIds.length + i + 1}`).join(',');
     existingResult = await query(
-      `SELECT student_id, lesson_date::text
+      `SELECT id, student_id, lesson_date::text, transcript, quality_evaluation
          FROM minutes
         WHERE student_id IN (${sidPlaceholders})
           AND lesson_date::text IN (${datePlaceholders})
@@ -102,19 +103,35 @@ export async function minutesAutoGenerate() {
     return;
   }
 
-  const existingSet = new Set(
-    existingResult.rows.map(r => `${r.student_id}__${r.lesson_date}`)
+  const existingByKey = new Map(
+    existingResult.rows.map(row => [`${row.student_id}__${row.lesson_date}`, row])
   );
-
-  const targets = candidates.filter(
-    c => !existingSet.has(`${c.student_id}__${c.lesson_date}`)
+  const verifiedSet = new Set(
+    existingResult.rows
+      .filter(row => isVerifiedMinutesQualityEvaluation(row.quality_evaluation))
+      .map(row => `${row.student_id}__${row.lesson_date}`)
   );
+  const newTargets = candidates.filter(
+    candidate => !existingByKey.has(`${candidate.student_id}__${candidate.lesson_date}`)
+  );
+  const legacyTargets = candidates
+    .filter(candidate => {
+      const key = `${candidate.student_id}__${candidate.lesson_date}`;
+      return existingByKey.has(key) && !verifiedSet.has(key);
+    })
+    .sort((left, right) => left.lesson_date.localeCompare(right.lesson_date));
+  // 新規議事録を優先し、旧判定の再評価はAPI負荷を抑えて1時間あたり20件に制限する。
+  const targets = [...newTargets, ...legacyTargets.slice(0, 20)];
 
   if (targets.length === 0) {
     console.log('[MinutesAutoGen] All minutes already generated. Nothing to do.');
     return;
   }
-  console.log(`[MinutesAutoGen] ${targets.length} target(s) to generate (${existingSet.size} skipped).`);
+  console.log(
+    `[MinutesAutoGen] ${newTargets.length} new target(s), `
+    + `${Math.min(legacyTargets.length, 20)}/${legacyTargets.length} legacy target(s) to re-evaluate, `
+    + `${verifiedSet.size} verified skipped.`
+  );
 
   // ── 3. テンプレート取得（id=1 固定、なければデフォルト） ────────────
   let template = { id: 1, template_text: '{{summary}}\n\n{{notes}}' };
@@ -151,6 +168,36 @@ export async function minutesAutoGenerate() {
     const tag = `[MinutesAutoGen][${student_id}][${lesson_date}]`;
 
     try {
+      const existingMinute = existingByKey.get(`${student_id}__${lesson_date}`);
+      if (existingMinute && !isVerifiedMinutesQualityEvaluation(existingMinute.quality_evaluation)) {
+        let transcript = existingMinute.transcript;
+        if (!transcript) {
+          const driveResult = await fetchTranscript(student_id, lesson_date);
+          transcript = driveResult?.transcript || '';
+        }
+        if (!transcript) {
+          console.log(`${tag} No transcript found for strict re-evaluation — skip.`);
+          skipCount++;
+          continue;
+        }
+
+        const previousMinutesContext = await getPreviousMinutesContext(student_id, lesson_date);
+        const qualityEvaluation = await evaluateLessonQuality(
+          transcript,
+          previousMinutesContext
+        );
+        await query(
+          `UPDATE minutes
+              SET quality_evaluation = $1,
+                  updated_at = NOW()
+            WHERE id = $2`,
+          [JSON.stringify(qualityEvaluation), existingMinute.id]
+        );
+        console.log(`${tag} ✅ Legacy quality evaluation upgraded.`);
+        successCount++;
+        continue;
+      }
+
       const lessonReference = resolveLessonReference({
         lesson_number,
         pro_curriculum,
