@@ -5,11 +5,33 @@ import { fetchTutorsFromCache, fetchSatisfactionFromCache, getCacheSyncTime } fr
 import { aggregateSatisfactionByTutorMonth } from '../services/tutorSatisfactionService.js';
 import {
   aggregateMinutesQualityEvaluations,
+  isVerifiedMinutesQualityEvaluation,
   normalizeMinutesQualityEvaluation
 } from '../services/minutesQualityService.js';
+import { exportTutorQualitySnapshot } from '../services/tutorQualityExportService.js';
 import { weeklyTutorSnapshot } from '../jobs/tutorWeeklySnapshot.js';
 
 const app = new Hono();
+
+async function requireTutorQualityExportAuth(c, next) {
+  const sessionToken = c.req.header('Authorization')?.replace('Bearer ', '');
+  if (!sessionToken) {
+    return c.json({ success: false, error: '認証が必要です' }, 401);
+  }
+
+  const sessionResult = await query(
+    `SELECT 1
+       FROM sessions
+      WHERE session_token = $1
+        AND expires_at > NOW()`,
+    [sessionToken]
+  );
+  if (sessionResult.rows.length === 0) {
+    return c.json({ success: false, error: 'セッションが無効です' }, 401);
+  }
+
+  await next();
+}
 
 /**
  * GET /api/tutors
@@ -276,12 +298,16 @@ app.get('/quality/monthly/:employeeId/:year/:month', async (c) => {
     );
 
     const summary = aggregateMinutesQualityEvaluations(minutesResult.rows);
-    const lessons = minutesResult.rows.map(row => ({
-      ...row,
-      quality_evaluation: row.quality_evaluation
-        ? normalizeMinutesQualityEvaluation(row.quality_evaluation)
-        : null
-    }));
+    const lessons = minutesResult.rows.map(row => {
+      const verified = isVerifiedMinutesQualityEvaluation(row.quality_evaluation);
+      return {
+        ...row,
+        legacyQualityEvaluation: Boolean(row.quality_evaluation) && !verified,
+        quality_evaluation: verified
+          ? normalizeMinutesQualityEvaluation(row.quality_evaluation)
+          : null
+      };
+    });
 
     return c.json({
       success: true,
@@ -298,6 +324,35 @@ app.get('/quality/monthly/:employeeId/:year/:month', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching monthly tutor quality:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+/**
+ * POST /api/tutors/quality/export
+ * 選択月の品質評価（全体・Tutor別）を専用シートへ追記する。
+ */
+app.post('/quality/export', requireTutorQualityExportAuth, async (c) => {
+  try {
+    const { year: rawYear, month: rawMonth } = await c.req.json();
+    const year = Number(rawYear);
+    const month = Number(rawMonth);
+
+    if (
+      !Number.isInteger(year)
+      || year < 2000
+      || year > 2100
+      || !Number.isInteger(month)
+      || month < 1
+      || month > 12
+    ) {
+      return c.json({ success: false, error: 'Invalid year/month' }, 400);
+    }
+
+    const result = await exportTutorQualitySnapshot(year, month);
+    return c.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Error exporting tutor quality:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });

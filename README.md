@@ -348,6 +348,12 @@ NOTION_TUTOR_DB_ID=your_tutor_db_id
 GOOGLE_SHEET_ID=your_spreadsheet_id
 GOOGLE_CREDENTIALS_JSON=your_credentials_json
 
+# Tutor品質評価の出力先（省略時はTUTOR_SATISFACTION_SHEET_IDを使用）
+TUTOR_QUALITY_SHEET_ID=your_tutor_quality_spreadsheet_id
+
+# 品質評価専用モデル（省略時はOPENAI_MODELを使用）
+OPENAI_QUALITY_MODEL=gpt-4o-mini
+
 # Discord Bot
 DISCORD_BOT_TOKEN=your_bot_token
 
