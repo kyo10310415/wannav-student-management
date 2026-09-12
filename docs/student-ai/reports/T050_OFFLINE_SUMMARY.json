@@ -1,0 +1,2654 @@
+{
+  "notice": "Synthetic scripted/oracle wiring metrics, NOT live semantic search quality",
+  "schemaVersion": 1,
+  "fixtureVersion": "1.0.0",
+  "evaluatorVersion": "1.0.0",
+  "fixtureHash": "f2d2fcbdcb7b2fa0c6edd164c2f05984314104c70711554aec97b152a9cb0c1c",
+  "runId": "T050-9a37aa5-a",
+  "implementationSha": "9a37aa59cf4378ac1a5d04331d60e29ae12dacfd",
+  "gitDirty": false,
+  "nodeVersion": "v22.23.2",
+  "mode": "offline_mock",
+  "semanticQuality": "not_evaluated",
+  "liveQuality": "pending",
+  "status": "completed",
+  "technicalAcceptance": "passed_offline_checks_only",
+  "harnessChecks": {
+    "expectedOutcomes": 40,
+    "total": 40,
+    "mechanicalFailures": 0,
+    "technicalFailures": 0
+  },
+  "reproducibility": "Two fresh runs have identical aggregates and output hashes",
+  "aggregate": {
+    "mode": "offline_mock",
+    "semanticQuality": "not_evaluated",
+    "liveQuality": "pending",
+    "status": "completed",
+    "overall": {
+      "cases": 40,
+      "completed": 40,
+      "failed": 0,
+      "partial": 0,
+      "retrieval": {
+        "requiredRecall": {
+          "macro": 0.875,
+          "micro": {
+            "numerator": 32,
+            "denominator": 36,
+            "value": 0.8888888888888888
+          },
+          "evaluated": 32,
+          "notApplicable": 8,
+          "notEvaluated": 0
+        },
+        "sourcePrecision": {
+          "macro": 0.7944444444444445,
+          "micro": {
+            "numerator": 35,
+            "denominator": 54,
+            "value": 0.6481481481481481
+          },
+          "evaluated": 30,
+          "notApplicable": 10,
+          "notEvaluated": 0
+        },
+        "counterevidenceRecall": {
+          "macro": 1,
+          "micro": {
+            "numerator": 1,
+            "denominator": 1,
+            "value": 1
+          },
+          "evaluated": 1,
+          "notApplicable": 39,
+          "notEvaluated": 0
+        },
+        "comparisonRecall": {
+          "macro": 1,
+          "micro": {
+            "numerator": 2,
+            "denominator": 2,
+            "value": 1
+          },
+          "evaluated": 2,
+          "notApplicable": 38,
+          "notEvaluated": 0
+        }
+      },
+      "mechanical": {
+        "pass": 31,
+        "fail": 0,
+        "pending": 0,
+        "not_applicable": 9,
+        "not_evaluated": 0
+      },
+      "manualReview": {
+        "pass": 0,
+        "fail": 0,
+        "pending": 40,
+        "not_applicable": 0,
+        "not_evaluated": 0
+      },
+      "apiSuccessRate": {
+        "numerator": 31,
+        "denominator": 40,
+        "value": 0.775
+      },
+      "unknownResponseCount": 0,
+      "expectedOutcomeMatchedCount": 40,
+      "completionRate": {
+        "numerator": 40,
+        "denominator": 40,
+        "value": 1
+      },
+      "formatRefusalRate": {
+        "numerator": 2,
+        "denominator": 40,
+        "value": 0.05
+      },
+      "inputLimitRate": {
+        "numerator": 1,
+        "denominator": 40,
+        "value": 0.025
+      },
+      "timeoutRate": {
+        "numerator": 1,
+        "denominator": 40,
+        "value": 0.025
+      },
+      "calls": {
+        "selection": 92,
+        "answer": 30
+      }
+    },
+    "categories": {
+      "authentication": {
+        "cases": 1,
+        "completed": 1,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 1,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 1,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 1,
+        "completionRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "calls": {
+          "selection": 0,
+          "answer": 0
+        }
+      },
+      "comparison": {
+        "cases": 2,
+        "completed": 2,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 4,
+              "denominator": 4,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 2,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 2,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 2,
+        "completionRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "calls": {
+          "selection": 4,
+          "answer": 2
+        }
+      },
+      "counterevidence": {
+        "cases": 1,
+        "completed": 1,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 1,
+              "denominator": 1,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 1,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 1,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 1,
+        "completionRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "calls": {
+          "selection": 3,
+          "answer": 1
+        }
+      },
+      "dates": {
+        "cases": 3,
+        "completed": 3,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 2,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 1,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 3,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 2,
+          "denominator": 3,
+          "value": 0.6666666666666666
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 3,
+        "completionRate": {
+          "numerator": 3,
+          "denominator": 3,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "calls": {
+          "selection": 3,
+          "answer": 2
+        }
+      },
+      "failures": {
+        "cases": 2,
+        "completed": 2,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 2,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 2,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 2,
+        "completionRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 1,
+          "denominator": 2,
+          "value": 0.5
+        },
+        "calls": {
+          "selection": 2,
+          "answer": 0
+        }
+      },
+      "injection": {
+        "cases": 1,
+        "completed": 1,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 1,
+              "denominator": 1,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 1,
+              "denominator": 1,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 1,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 1,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 1,
+        "completionRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "calls": {
+          "selection": 1,
+          "answer": 1
+        }
+      },
+      "isolation": {
+        "cases": 4,
+        "completed": 4,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 0.6666666666666666,
+            "micro": {
+              "numerator": 2,
+              "denominator": 3,
+              "value": 0.6666666666666666
+            },
+            "evaluated": 3,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 4,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 4,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 1,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 3,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 4,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 1,
+          "denominator": 4,
+          "value": 0.25
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 4,
+        "completionRate": {
+          "numerator": 4,
+          "denominator": 4,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 2,
+          "denominator": 4,
+          "value": 0.5
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 4,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 4,
+          "value": 0
+        },
+        "calls": {
+          "selection": 3,
+          "answer": 2
+        }
+      },
+      "limits": {
+        "cases": 4,
+        "completed": 4,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 0.3333333333333333,
+            "micro": {
+              "numerator": 1,
+              "denominator": 3,
+              "value": 0.3333333333333333
+            },
+            "evaluated": 3,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 0.16666666666666666,
+            "micro": {
+              "numerator": 1,
+              "denominator": 12,
+              "value": 0.08333333333333333
+            },
+            "evaluated": 3,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 4,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 4,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 3,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 1,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 4,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 3,
+          "denominator": 4,
+          "value": 0.75
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 4,
+        "completionRate": {
+          "numerator": 4,
+          "denominator": 4,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 4,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 1,
+          "denominator": 4,
+          "value": 0.25
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 4,
+          "value": 0
+        },
+        "calls": {
+          "selection": 37,
+          "answer": 3
+        }
+      },
+      "longitudinal": {
+        "cases": 2,
+        "completed": 2,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 0.41666666666666663,
+            "micro": {
+              "numerator": 2,
+              "denominator": 5,
+              "value": 0.4
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 2,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 2,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 2,
+        "completionRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "calls": {
+          "selection": 7,
+          "answer": 2
+        }
+      },
+      "missing": {
+        "cases": 5,
+        "completed": 5,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 3,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 3,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 5,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 5,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 5,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 5,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 5,
+          "denominator": 5,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 5,
+        "completionRate": {
+          "numerator": 5,
+          "denominator": 5,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 5,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 5,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 5,
+          "value": 0
+        },
+        "calls": {
+          "selection": 3,
+          "answer": 3
+        }
+      },
+      "recent": {
+        "cases": 2,
+        "completed": 2,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 0.5,
+            "micro": {
+              "numerator": 2,
+              "denominator": 4,
+              "value": 0.5
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 2,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 2,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 2,
+        "completionRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "calls": {
+          "selection": 4,
+          "answer": 2
+        }
+      },
+      "repetition": {
+        "cases": 1,
+        "completed": 1,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 1,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 1,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 1,
+        "completionRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "calls": {
+          "selection": 4,
+          "answer": 1
+        }
+      },
+      "semantics": {
+        "cases": 3,
+        "completed": 3,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 3,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 0.8333333333333334,
+            "micro": {
+              "numerator": 3,
+              "denominator": 4,
+              "value": 0.75
+            },
+            "evaluated": 3,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 3,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 3,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 3,
+          "denominator": 3,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 3,
+        "completionRate": {
+          "numerator": 3,
+          "denominator": 3,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "calls": {
+          "selection": 5,
+          "answer": 3
+        }
+      },
+      "single": {
+        "cases": 2,
+        "completed": 2,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 2,
+              "denominator": 2,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 2,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 2,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 2,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 2,
+        "completionRate": {
+          "numerator": 2,
+          "denominator": 2,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 2,
+          "value": 0
+        },
+        "calls": {
+          "selection": 3,
+          "answer": 2
+        }
+      },
+      "source-integrity": {
+        "cases": 3,
+        "completed": 3,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 0.6666666666666666,
+            "micro": {
+              "numerator": 3,
+              "denominator": 4,
+              "value": 0.75
+            },
+            "evaluated": 3,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 2,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 2,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 1,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 3,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 2,
+          "denominator": 3,
+          "value": 0.6666666666666666
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 3,
+        "completionRate": {
+          "numerator": 3,
+          "denominator": 3,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "calls": {
+          "selection": 3,
+          "answer": 2
+        }
+      },
+      "topic": {
+        "cases": 3,
+        "completed": 3,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 3,
+              "denominator": 3,
+              "value": 1
+            },
+            "evaluated": 3,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 0.6666666666666666,
+            "micro": {
+              "numerator": 4,
+              "denominator": 6,
+              "value": 0.6666666666666666
+            },
+            "evaluated": 3,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 3,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 3,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 3,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 3,
+          "denominator": 3,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 3,
+        "completionRate": {
+          "numerator": 3,
+          "denominator": 3,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 3,
+          "value": 0
+        },
+        "calls": {
+          "selection": 9,
+          "answer": 3
+        }
+      },
+      "usage": {
+        "cases": 1,
+        "completed": 1,
+        "failed": 0,
+        "partial": 0,
+        "retrieval": {
+          "requiredRecall": {
+            "macro": 1,
+            "micro": {
+              "numerator": 1,
+              "denominator": 1,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "sourcePrecision": {
+            "macro": 1,
+            "micro": {
+              "numerator": 1,
+              "denominator": 1,
+              "value": 1
+            },
+            "evaluated": 1,
+            "notApplicable": 0,
+            "notEvaluated": 0
+          },
+          "counterevidenceRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          },
+          "comparisonRecall": {
+            "macro": null,
+            "micro": {
+              "numerator": 0,
+              "denominator": 0,
+              "value": null
+            },
+            "evaluated": 0,
+            "notApplicable": 1,
+            "notEvaluated": 0
+          }
+        },
+        "mechanical": {
+          "pass": 1,
+          "fail": 0,
+          "pending": 0,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "manualReview": {
+          "pass": 0,
+          "fail": 0,
+          "pending": 1,
+          "not_applicable": 0,
+          "not_evaluated": 0
+        },
+        "apiSuccessRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "unknownResponseCount": 0,
+        "expectedOutcomeMatchedCount": 1,
+        "completionRate": {
+          "numerator": 1,
+          "denominator": 1,
+          "value": 1
+        },
+        "formatRefusalRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "inputLimitRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "timeoutRate": {
+          "numerator": 0,
+          "denominator": 1,
+          "value": 0
+        },
+        "calls": {
+          "selection": 1,
+          "answer": 1
+        }
+      }
+    },
+    "actualUsage": "unknown",
+    "liveLatency": "not_measured",
+    "liveCost": "not_measured"
+  },
+  "cases": [
+    {
+      "caseId": "current-issue",
+      "category": "recent",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "07ed41de13799ba3cefed6414ca8d26c18794d663a5dc6028ebe85fbfe3240e9"
+    },
+    {
+      "caseId": "previous-small-goal",
+      "category": "recent",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "6a0d164a82459add57f1f2cb2c90a43fbc9612bf90177e65c38b9a6804bfe260"
+    },
+    {
+      "caseId": "comparison-both-sides",
+      "category": "comparison",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "967813fc5c5b242e6de0fbbaa4411f361b35d1396ccc5301d0e34e4ecd495012"
+    },
+    {
+      "caseId": "historical-turning-point",
+      "category": "longitudinal",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "b534d7932adda1acfe5d62968add9c6e3f7c5fa24dca73c6d030a418d7882be4"
+    },
+    {
+      "caseId": "repeated-issue-three-dates",
+      "category": "repetition",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 3,
+        "denominator": 3,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "f633cf1bc4934259f5cd88fb0ab19f8d16e0ca583312e7cf5f8bde40226d9fa0"
+    },
+    {
+      "caseId": "youtube-retention",
+      "category": "topic",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "4d5fa40e7a530aa7ebf2e3c77253a6cd31eb2dde79654d7e552969f490d0fe69"
+    },
+    {
+      "caseId": "sns-paraphrase-alternative",
+      "category": "topic",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "3bd960bd4d72b29fab8ac405e4544f97d4f71896561d6328b70c1794ffde1454"
+    },
+    {
+      "caseId": "similar-word-distractor",
+      "category": "topic",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "0717bf36f0eb06609e4aabee8333182e6d8aac9f5e0557ede7563341fb509805"
+    },
+    {
+      "caseId": "off-monthly-representative",
+      "category": "longitudinal",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "daf092bce7a327bdc7e2c8a40509f428793c1ff76498594d48f60bd2f9fec585"
+    },
+    {
+      "caseId": "later-counterevidence",
+      "category": "counterevidence",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 2,
+        "denominator": 2,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "d972435ec075dba317d3760bb0ce0bcac49f263624083e9397a08b13944ee35e"
+    },
+    {
+      "caseId": "month-end-comparison",
+      "category": "comparison",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "a9cdcf9c9db48f86a5f38d3b07aad458db704b319c6f427b98d25ece6b7aed26"
+    },
+    {
+      "caseId": "jst-today-boundary",
+      "category": "dates",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "ae237abd0fb2a5193d9a8928ffe1e9e1a007dd69f16ce97f02afcc3022aedef1"
+    },
+    {
+      "caseId": "ambiguous-comparison",
+      "category": "dates",
+      "httpStatus": 400,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "a23f9b28902a706cf15cee7e2615d3f7790b6a8b9982a76f7004647c93b927df"
+    },
+    {
+      "caseId": "zero-records",
+      "category": "missing",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "c6599be87675a08be1bec8815c15658062653c93c1f12a9a6e7c593724699e48"
+    },
+    {
+      "caseId": "single-supported-fact",
+      "category": "single",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "0e559a820e664b963b23bc40b2a47604cd07763268858cf0dceee726fd524a9b"
+    },
+    {
+      "caseId": "single-cannot-prove-growth",
+      "category": "single",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "a9b99f3b0edd2b63b7bc1a1c5c5f5453b46df069dc43b3c89ab25df18ba3c6a7"
+    },
+    {
+      "caseId": "summary-missing-raw-present",
+      "category": "missing",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "bb3a20310ef298a3941b106bb62c0bf6a530213fc27c2da0227474323b691462"
+    },
+    {
+      "caseId": "summary-only",
+      "category": "missing",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "dde383ab355195fc3c59f9f9f68f80eab64c9ddfc3d2d44f706a1a8f56bb8a73"
+    },
+    {
+      "caseId": "all-text-missing",
+      "category": "missing",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "cd8846f809c3c9c9b3fe783d0879847a82412db6c97248a647dde29247f10dbe"
+    },
+    {
+      "caseId": "unknown-date",
+      "category": "dates",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "a01355f1c479044922698bd7402e2b810f50392af23d43aa5290c68c28aaa8a5"
+    },
+    {
+      "caseId": "legacy-id-missing-lesson-number",
+      "category": "missing",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "1871103f3d11210e3bd613791d43fa8f1972b78446d200ab21c2cf2a9404d218"
+    },
+    {
+      "caseId": "same-day-distinct-sources",
+      "category": "source-integrity",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 2,
+        "denominator": 2,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "9e4a81099256d91b49b1b3b3203e2b5ff6ba3740a074a26007a07a2c234ae9dc"
+    },
+    {
+      "caseId": "duplicate-drive",
+      "category": "source-integrity",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "67ba79fdfaa150a509a87f7690a915d473bcbbba3994521dbfcfc56c1760781b"
+    },
+    {
+      "caseId": "version-changed",
+      "category": "source-integrity",
+      "httpStatus": 409,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 1,
+        "value": 0
+      },
+      "missingGroups": [
+        {
+          "groupId": "required-1",
+          "dbCandidates": true,
+          "selectedSources": true,
+          "finalEvidence": false,
+          "missingAt": "finalEvidence"
+        }
+      ],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "9311a10fe07007303cccf4dd0fdc399706740c3daa61e2f211eb084c92e366a0"
+    },
+    {
+      "caseId": "hierarchical-many-records",
+      "category": "limits",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "53afdb909f55f55aad671c9c98e53acbdcbe64b129f23c238a8af1af16f94c58"
+    },
+    {
+      "caseId": "final-excerpt-count-loss",
+      "category": "limits",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 1,
+        "value": 0
+      },
+      "missingGroups": [
+        {
+          "groupId": "required-1",
+          "dbCandidates": true,
+          "selectedSources": true,
+          "finalEvidence": false,
+          "missingAt": "finalEvidence"
+        }
+      ],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "d5d630406327858445c12763586d1ad7983381d99b87a9c2a2f8681b4198f43e"
+    },
+    {
+      "caseId": "final-character-loss",
+      "category": "limits",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 1,
+        "value": 0
+      },
+      "missingGroups": [
+        {
+          "groupId": "required-1",
+          "dbCandidates": true,
+          "selectedSources": true,
+          "finalEvidence": false,
+          "missingAt": "finalEvidence"
+        }
+      ],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "9579b95e279d043b941af9ed1cf805d8b9aa65a08053cbc0547aa982007a5d05"
+    },
+    {
+      "caseId": "similar-students-canary",
+      "category": "isolation",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "484b380708c990988977c50782f328b7be0f103ce5cfde78db4b55463d04cf57"
+    },
+    {
+      "caseId": "document-injection",
+      "category": "injection",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "6f2151dbfe43a02fa9a6a65185182344789d339386ec3a34d293f2bd5b87f743"
+    },
+    {
+      "caseId": "valid-quote-reverse-conclusion",
+      "category": "semantics",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "45bbd035c101a188fcbbabea312c4d2f2ed14874299e96f6c1598dae2faa88c2"
+    },
+    {
+      "caseId": "unrelated-valid-quote",
+      "category": "semantics",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "19819cf9b48093575d528c3b11d12e323d62997ccf517bf3d7e0c6d9a82417d8"
+    },
+    {
+      "caseId": "proposal-presented-as-fact",
+      "category": "semantics",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "d688a3ccac30c6adf336e0f5312f282364a0752b6bde99a7bcf66b061360cd07"
+    },
+    {
+      "caseId": "contaminated-db-row",
+      "category": "isolation",
+      "httpStatus": 500,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 1,
+        "value": 0
+      },
+      "missingGroups": [
+        {
+          "groupId": "required-1",
+          "dbCandidates": true,
+          "selectedSources": false,
+          "finalEvidence": false,
+          "missingAt": "selectedSources"
+        }
+      ],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "b9e9225bb07ac5bf809cf80e018860fbcb14b3f883cadc6180d262a1d1d631da"
+    },
+    {
+      "caseId": "forged-answer-citation",
+      "category": "isolation",
+      "httpStatus": 502,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "a124355031e866438c85c83140aa423c7435fb5b927f7e7877c7656e3666d0ff"
+    },
+    {
+      "caseId": "unauthenticated",
+      "category": "authentication",
+      "httpStatus": 401,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "d93d2e31c97eb3c41a090e3740d5ad7637b8f77e717707b3d245001d138f4c03"
+    },
+    {
+      "caseId": "input-budget-rejection",
+      "category": "limits",
+      "httpStatus": 422,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "cd55f867547a0d937a17973a285fed638eace6771e2b4fa298f9044c88180c6f"
+    },
+    {
+      "caseId": "provider-timeout",
+      "category": "failures",
+      "httpStatus": 504,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "9366c8b45f03ee8d655baaef10609b70e009329977d7a81c4e1e4edf341b05e0"
+    },
+    {
+      "caseId": "forged-selector-id",
+      "category": "isolation",
+      "httpStatus": 502,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "2ab3e7aa13eec9235a9dcf6757615c0198f13e408ae3ba852471eabd22cfcbb7"
+    },
+    {
+      "caseId": "missing-provider-usage",
+      "category": "usage",
+      "httpStatus": 200,
+      "requiredRecall": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "pass",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "a03b099814cb03a507cb7811e8ea0a18075d727428e559c59918806f676ac6cc"
+    },
+    {
+      "caseId": "provider-secret-error",
+      "category": "failures",
+      "httpStatus": 503,
+      "requiredRecall": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null
+      },
+      "missingGroups": [],
+      "mechanical": {
+        "status": "not_applicable",
+        "violations": []
+      },
+      "semantic": {
+        "status": "pending",
+        "semanticQuality": "not_evaluated",
+        "manualRequired": true
+      },
+      "outputHash": "8ecb38f32d00e9bf7aa865a2c5b24ed00bc345ead37e2b9e4334210392e833a7"
+    }
+  ]
+}
