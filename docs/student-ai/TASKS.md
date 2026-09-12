@@ -10,7 +10,7 @@
 | T017 | Done (code/tests) | minutes全API認証適用＋Node22回帰62件成功。本番deployは未実施 | T015,T016 |
 | T020 | Review | 全期間backfill設計 | T005 |
 | T030 | Code/tests done | 質問意図分類・候補取得context serviceと注入可能な選択adapter。T040でAPI接続済み、実データ評価は未実施 | T005,T010,T015 |
-| T040 | Code/tests done; Work review pending | 認証付き回答API・引用/入力予算/キャンセル検証。実AI・実DB・本番受入は未実施。T040_API.md参照 | T030 |
+| T040 | Approved (code/tests; Work reviewed) | 認証付き回答API・引用/入力予算/キャンセル検証。実AI・実DB・本番受入は未実施。[Workレビュー](reports/T040_WORK_REVIEW.md)・T040_API.md参照 | T030 |
 | T050 | Todo | 検索精度・生徒分離テスト | T040 |
 | T060 | Todo | 生徒AIカルテmodal追加 | T040 |
 | T070 | Todo | 質問例、loading/error、引用UI | T060 |
