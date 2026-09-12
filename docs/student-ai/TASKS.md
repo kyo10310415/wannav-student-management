@@ -9,8 +9,8 @@
 | T016 | Investigated | 既存minutes API認証影響調査（本番外部利用者の確認は残る） | T001 |
 | T017 | Done (code/tests) | minutes全API認証適用＋Node22回帰62件成功。本番deployは未実施 | T015,T016 |
 | T020 | Review | 全期間backfill設計 | T005 |
-| T030 | Code/tests done | 質問意図分類・候補取得context serviceと注入可能な選択adapter。API接続・実データ評価は未実施 | T005,T010,T015 |
-| T040 | Todo | 回答生成service/API | T030 |
+| T030 | Code/tests done | 質問意図分類・候補取得context serviceと注入可能な選択adapter。T040でAPI接続済み、実データ評価は未実施 | T005,T010,T015 |
+| T040 | Code/tests done; Work review pending | 認証付き回答API・引用/入力予算/キャンセル検証。実AI・実DB・本番受入は未実施。T040_API.md参照 | T030 |
 | T050 | Todo | 検索精度・生徒分離テスト | T040 |
 | T060 | Todo | 生徒AIカルテmodal追加 | T040 |
 | T070 | Todo | 質問例、loading/error、引用UI | T060 |
@@ -50,4 +50,4 @@ parameterized query、全row student ID assert、意図別日付窓、入力文�
 
 ## T030 implementation
 
-詳細はT030_CONTEXT.md。read-only queryとAI selectorを注入し、生徒分離、候補/引用ID検証、全期間軽量情報の段階選択、入力/呼出数上限、未確認範囲を実装。T040/T090は未着手。実精度・遅延・費用の合格を宣言しない。
+詳細はT030_CONTEXT.md。read-only queryとAI selectorを注入し、生徒分離、候補/引用ID検証、全期間軽量情報の段階選択、入力/呼出数上限、未確認範囲を実装。T040のコード接続は実装済み、T090は未着手。実精度・遅延・費用の合格を宣言しない。

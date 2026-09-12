@@ -1,5 +1,6 @@
 // Read-only T030 boundary. Authentication and answer generation belong to T040.
 // No application startup, migrations, OpenAI calls or logging on import.
+import { checkAbort } from './studentAiRuntime.js';
 export const LIMITS = Object.freeze({ question: 2000, rows: 2000, sourceChars: 2000000,
   summaryChars: 16000, chunkChars: 4000, batchChars: 24000, candidates: 8,
   excerpts: 12, contextChars: 24000, calls: 48 });
@@ -62,17 +63,24 @@ function assertRow(row, studentId) {
 
 export function createStudentAiContextService({ query, select }) {
   if (typeof query !== 'function' || typeof select !== 'function') fail('DEPENDENCIES_REQUIRED');
-  return async function buildContext({ studentId, question, now = new Date().toISOString().slice(0, 10), compareAt }) {
+  return async function buildContext({ studentId, question, now = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10), compareAt, signal }) {
+    const read = async (sql, params) => {
+      checkAbort(signal);
+      const result = await query(sql, params);
+      checkAbort(signal);
+      return result;
+    };
+    checkAbort(signal);
     if (typeof studentId !== 'string' || !studentId.trim() || size(studentId) > 128 || /[\x00-\x1f]/.test(studentId)) fail('INVALID_STUDENT_ID');
     if (typeof question !== 'string' || !question.trim() || size(question) > LIMITS.question) fail('INVALID_QUESTION');
     if (!validDate(now)) fail('INVALID_CURRENT_DATE');
     const intent = classifyQuestion(question);
     const baseline = intent === 'period_compare' ? (compareAt ?? comparisonDate(question, now)) : null;
     if (baseline && !validDate(baseline)) fail('INVALID_COMPARISON_DATE');
-    const found = await query('SELECT student_id FROM students WHERE student_id = $1', [studentId]);
+    const found = await read('SELECT student_id FROM students WHERE student_id = $1', [studentId]);
     if (found.rows.some(r => r.student_id !== studentId)) fail('STUDENT_SCOPE_VIOLATION');
     if (!found.rows.length) fail('STUDENT_NOT_FOUND');
-    const response = await query(`SELECT id, student_id, lesson_date::text AS lesson_date,
+    const response = await read(`SELECT id, student_id, lesson_date::text AS lesson_date,
       updated_at::text AS version, drive_file_id,
       LEFT(COALESCE(generated_text, ''), $3) AS summary,
       LEFT(COALESCE(quality_evaluation::text, ''), $3) AS quality,
@@ -98,13 +106,15 @@ export function createStudentAiContextService({ query, select }) {
       newest: records.map(r => r.lesson_date).filter(Boolean).sort().at(-1) ?? null };
     let calls = 0; const usage = [];
     async function choose(items, phase, limit) {
+      checkAbort(signal);
       if (!items.length) return [];
       if (++calls > LIMITS.calls) fail('SELECTION_CALL_LIMIT');
-      const result = await select({ rules: SELECTION_RULES, question, phase, limit, items });
+      const result = await select({ rules: SELECTION_RULES, question, phase, limit, items, signal });
+      checkAbort(signal);
       if (!result || !Array.isArray(result.ids) || result.ids.length > limit || result.ids.some(id => typeof id !== 'string')) fail('INVALID_SELECTION');
       const allowed = new Map(items.map(item => [item.id, item]));
       if (new Set(result.ids).size !== result.ids.length || result.ids.some(id => !allowed.has(id))) fail('INVALID_SELECTION');
-      if (result.usage) usage.push(result.usage);
+      usage.push(result.usage ?? null);
       return result.ids.map(id => allowed.get(id));
     }
     async function reduce(items, phase, limit) {
@@ -138,7 +148,7 @@ export function createStudentAiContextService({ query, select }) {
     if (!coverage.summaryScannedIds.length) coverage.summaryScannedIds = candidates.map(r => r.id);
     const excerpts = [];
     if (candidates.length) {
-      const detail = await query(`SELECT id, student_id, lesson_date::text AS lesson_date,
+      const detail = await read(`SELECT id, student_id, lesson_date::text AS lesson_date,
         updated_at::text AS version, drive_file_id,
         LEFT(COALESCE(transcript, ''), $3) AS transcript,
         CHAR_LENGTH(COALESCE(transcript, '')) AS transcript_length

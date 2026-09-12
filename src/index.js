@@ -39,6 +39,7 @@ import handoverRoutes from './routes/handover.js';
 import tutorRedListRoutes from './routes/tutorRedList.js';
 import dailyReportRoutes from './routes/dailyReports.js';
 import minutesRoutes from './routes/minutes.js';
+import studentAiRoutes from './routes/studentAi.js';
 import lessonContentsRoutes from './routes/lessonContents.js';
 
 // Services
@@ -102,6 +103,7 @@ app.route('/api/handover', handoverRoutes);
 app.route('/api/tutor-red-list', tutorRedListRoutes);
 app.route('/api/daily-reports', dailyReportRoutes);
 app.route('/api/minutes', minutesRoutes);
+app.route('/api/student-ai', studentAiRoutes);
 app.route('/api/lesson-contents', lessonContentsRoutes);
 
 // Serve index.html for root

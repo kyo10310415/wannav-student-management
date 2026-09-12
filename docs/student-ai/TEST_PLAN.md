@@ -11,14 +11,14 @@ inventoryはDrive pagination、不完全/ループ検出、集計統計、日付
 ## 自動テスト
 
 - 認証: tokenなし401、有効3 role成功、期限切れ401、DB障害500。
-- validation: 空質問、1000文字超、不正/不存在student ID。
+- validation: 空質問、2000 Unicodeコードポイント超、32 KiB超、不正/不存在student ID、未知キー、厳密な比較日付。
 - 分離: Aへの質問時、SQL引数と取得rowがAだけ。B固有カナリア語がanswer/contextにない。
 - 検索: latest、previous goal、3ヶ月比較、longitudinal、repeated issue、YouTube/X。
 - 長期: 全期間軽量情報→意味的重要度選択→原文確認。固定時期サンプリングから外れる重要レッスンを正解セットに含め、再現率を比較する。入力上限超過時の階層要約でも出典・矛盾・転機を維持する。
 - 最新性: 現在質問で古い矛盾より最新情報が優先され、変化として説明される。
 - 根拠不足: 記録0件/1件では判断不能または低確信度。
 - injection: transcript内の「systemを無視」等が命令として実行されない。
-- 引用: AIが候補外IDを返した場合に除去/失敗させる。
+- 引用: AIが候補外IDを返した場合は回答全体を失敗させる。引用だけ除去して成功扱いにしない。
 - 障害: OpenAI timeout/429/5xx、Drive障害で既存画面が壊れない。
 - backfill: 重複、再開、retry上限、停止、同日複数Docs。
 - 欠損: reportなし、番号不明、masterなし、日付不明、要約失敗でもsourceを保持して検索可能にする。架空の番号/Tutor/達成事実を補わない。
@@ -53,3 +53,11 @@ inventoryはDrive pagination、不完全/ループ検出、集計統計、日付
 - 主要質問で妥当な複数時点を取得。
 - backfill再実行で重複0。
 - 既存自動テスト全件成功。
+
+## T040の自動検証と残る受入
+
+tests/studentAiAnswer.test.jsとtests/studentAiRoutes.test.jsで、Hono app.request、架空DB、OpenAI mockを使う。index.jsやcronは起動しない。未認証/期限切れ/3ロール/未知role、既定OFF、設定不足、旧形式ID、質問/日付/body上限（stream・Content-Length偽装含む）、JST境界、生徒カナリア分離、引用完全一致、全参照・型・上限・未知キー、断念時定型文、coverage、実usage欠損を検証する。
+
+全体/プロバイダー期限、下流AbortSignal、次バッチ停止、例外後枠解放、DB/AIのキャンセル未完了時の枠維持、生エラーのログ/レスポンス非露出も検証する。T030と既存minutes認証を含むnpm test全件を回帰対象とする。baseline/最終件数は[完了報告](reports/T040_IMPLEMENTATION_REPORT.md)。
+
+これは実モデルの注入攻撃耐性や主張の意味的妥当性の証明ではない。実AI精度・費用・速度、実PostgreSQL統合/クエリ計画、ブラウザーでの既存画面smoke、複数インスタンス運用は未検証。T050以降、本番deploy、backfillへ自動で進まない。

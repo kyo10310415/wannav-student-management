@@ -25,7 +25,7 @@
 
 ## 入力・出力制御
 
-- questionは文字列、1〜1000文字、空白のみ不可。
+- T040のquestionは文字列、1〜2000 Unicodeコードポイント、空白のみ不可。実bodyは32 KiBまで。未知キーと不正compareAtは400。
 - student IDは既存studentsとの完全一致で確認。
 - page/batch sizeはサーバー側上限を固定。
 - AIの引用minutes IDを、取得候補集合に含まれるものだけ許可する。
@@ -35,7 +35,7 @@
 
 - user ID単位と全体のrate limit、同時実行上限、timeoutを設定。
 - モデル、最大入力、最大出力を環境設定の許可リストに限定。
-- usageを記録し、日次上限超過時は429/503で停止できる設計にする。
+- T040は実usageをレスポンスへ返し、永続保存はしない。日次課金上限は未実装。ユーザー1件/プロセス2件の同時実行制限、120秒の処理期限、1回60秒のプロバイダー制限を適用する。
 - backfillは既定disabled、admin明示操作、dry-run、小規模canaryを必須とする。
 
 ## 既存システムへの指摘
@@ -47,3 +47,11 @@
 T015ではuser contextはid/email/roleのみに限定しtokenを含めない。認証DBエラーは固定500を返し、後段handlerの例外を認証失敗にすり替えない。roleの認可条件はmiddlewareへ追加せず、全ログインユーザーを許可する。
 
 階層要約や新規sourceも非信頼資料として扱い、student境界、出典検証、削除連動、上限を適用する。要約に含まれる命令にも特別な権限を与えない。
+
+## T040実装
+
+専用フラグSTUDENT_AI_ENABLEDは未設定時OFF。認証→role認可後に503を返す。OpenAIはlazy生成、SDKログOFF、retryなし、store:false。既存connection.queryの生error.message出力を避ける専用read-only poolを認証と生徒検索に注入し、poolのidle errorも原文を記録しない。接続のSSL設定は既存connection.jsと同じであり、認証方式や共有ヘルパーは変更しない。
+
+回答JSONは必須キー・未知キー・型・長さ・件数を検証し、抜粋ID/引用原文/すべての参照IDを検証する。不正引用の部分削除で成功扱いにしない。sources/coverageはサーバーが構築し、モデルのメタデータキーは拒否する。引用一致は主張の意味的正しさを保証しない。本文内の架空情報やprompt injectionへの実モデル耐性はT050で評価する。
+
+新APIはno-store、機密内容のログなし、チャット履歴保存なし。中断後の追加AI呼び出しを禁止し、進行中処理の終了まで枠を保持する。詳細・残る制約は[T040_API.md](T040_API.md)。

@@ -42,13 +42,17 @@ T005全期間測定と設計再報告を経て、利用者がT010案AとT030着�
 | 繰り返し課題 | 全期間の要約をテーマ検索し、異なる3時点以上を優先 |
 | YouTube/X | generated_textの該当節を検索、直近＋過去代表件 |
 
-## API案
+## T040 API（コード実装済み・実環境未受入）
 
 `POST /api/student-ai/:studentId/questions`
 
-Request: `{ "question": "..." }`
+Request: `{ "question": "...", "compareAt": "2026-06-01" }`（compareAtは任意）
 
-Response: `{ success, data: { answer, evidence, changes, recommendedActions, confidence, sources: [{ minutesId, lessonDate, tutorName, driveUrl }] } }`
+Response: `{ success, data: { status, answer, evidence, changes, recommendedActions, confidence, sources, coverage, usage } }`。sourceId・日付・version・Drive URLはサーバーのT030根拠から構築する。未知Tutor名は補完しない。厳密な契約と上限は[T040_API.md](T040_API.md)。
+
+認証（共通createRequireAuth）→3ロール確認→既定OFFフラグ→入力検証→ユーザー/プロセス同時実行枠→全体期限付きT030→回答予算→生成1回→構造/完全一致引用検証の順に処理する。認証にも専用read-only poolを注入し、生のDBエラーログを回避する。既存minutes APIや共有接続ヘルパーは変更しない。
+
+キャンセルはT030のDB境界・各選択バッチ・選択/回答OpenAI呼び出しへ伝播する。504応答後も未完了処理があれば枠を保持し、終了後に解放する。全インスタンス共通の制限ではない。チャット履歴保存、UI、backfill、本番deployは含まない。
 
 student IDはUI入力欄を設けず、開いたカードの内部値を使う。ただしサーバーはURL値を信用せず、存在・長さ・形式を検証する。
 

@@ -8,6 +8,8 @@ T010 A (PostgreSQL + semantic selection from summaries + selected original evide
 
 `createStudentAiContextService({ query, select })` returns `buildContext({ studentId, question, now?, compareAt? })`.
 
+T040 adds optional signal to buildContext/select, cancellation checks before/after each DB query and selection, and JST for the default current date. The query itself remains non-cancellable; after cancellation no subsequent query or AI call starts. Selection usage now keeps a null entry when a call has no usage, preserving call alignment.
+
 - `query(sql, params)` is an injected PostgreSQL query function.
 - `select({ rules, question, phase, limit, items })` returns `{ ids, usage? }`.
 - `createStudentAiSelector({ client, model, countTokens?, maxInputTokens? })` supplies the OpenAI implementation. Client/model are explicit. No network or credentials on import.
@@ -30,6 +32,8 @@ Persisted transcript content is labelled stored_transcript_unverified: the legac
 Defaults: question 2,000 code points; metadata 2,000 rows (overflow rejected); each summary/quality slice 16,000 characters (reported if truncated); each selected original 2,000,000 characters (overflow rejected); batch serialization 24,000 JS string units; eight candidate records; 12 final excerpts; 24,000 final evidence code points; 48 selection calls. Provider request timeout 60s, retries disabled, response cap 1,200 completion tokens. Selector validates finish/refusal/JSON and allowed IDs. Call limits are request-local, not a monthly cost budget.
 
 The selection adapter accepts the chosen model's token counter; absent a counter it uses UTF-8 byte count as a conservative estimate with a framing reserve. Default token budget 100,000 is an implementation cap, not a statement about every model's supported context length. T040 must supply a model-appropriate token budget/counter and separately bound the final answer request, including metadata, instructions and reserved output.
+
+T040 now wires the verified GPT-4.1 mini configuration, reserves 1,200 output + 1,024 framing tokens inside the selection budget, and shares a cancellable provider boundary (store:false, retries disabled). Final-answer budget/configuration and remaining acceptance work are documented in [T040_API.md](T040_API.md).
 
 ## Integration / outstanding
 
