@@ -48,3 +48,6 @@ build/
 # Database
 *.sqlite
 *.db
+
+# Synthetic offline evaluation runs (keep only curated reports in docs)
+/work/student-ai-evaluation/

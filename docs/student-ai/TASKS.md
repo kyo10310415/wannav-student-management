@@ -11,7 +11,7 @@
 | T020 | Review | 全期間backfill設計 | T005 |
 | T030 | Code/tests done | 質問意図分類・候補取得context serviceと注入可能な選択adapter。T040でAPI接続済み、実データ評価は未実施 | T005,T010,T015 |
 | T040 | Approved (code/tests; Work reviewed) | 認証付き回答API・引用/入力予算/キャンセル検証。実AI・実DB・本番受入は未実施。[Workレビュー](reports/T040_WORK_REVIEW.md)・T040_API.md参照 | T030 |
-| T050 | Ready for Codex | 検索評価基盤・生徒分離テスト。[実装指示](T050_CODEX_HANDOFF.md)。実AI品質評価は別途実施 | T040 |
+| T050 | evaluation harness/code/tests done; live quality pending | 架空40ケース、採点器、オフラインCLI・分離検証。[評価仕様](T050_EVALUATION.md)。Workレビュー待ち、実品質受入は保留 | T040 |
 | T060 | Todo | 生徒AIカルテmodal追加 | T040 |
 | T070 | Todo | 質問例、loading/error、引用UI | T060 |
 | T080 | Todo | admin/leader/crew/未ログイン検証 | T015,T070 |

@@ -10,7 +10,8 @@
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node src/db/seed.js",
     "postinstall": "node src/db/migrate.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "student-ai:evaluate": "node scripts/evaluate-student-ai.js"
   },
   "keywords": [
     "wannav",

@@ -15,8 +15,8 @@ inventoryはDrive pagination、不完全/ループ検出、集計統計、日付
 - 分離: Aへの質問時、SQL引数と取得rowがAだけ。B固有カナリア語がanswer/contextにない。
 - 検索: latest、previous goal、3ヶ月比較、longitudinal、repeated issue、YouTube/X。
 - 長期: 全期間軽量情報→意味的重要度選択→原文確認。固定時期サンプリングから外れる重要レッスンを正解セットに含め、再現率を比較する。入力上限超過時の階層要約でも出典・矛盾・転機を維持する。
-- 最新性: 現在質問で古い矛盾より最新情報が優先され、変化として説明される。
-- 根拠不足: 記録0件/1件では判断不能または低確信度。
+- 時点と反証: 新旧の矛盾と後日の改善を扱う。最新であるという理由だけで正しいと断定しない。
+- 根拠不足: 記録0件は判断不能。1件でも支持できる事実は回答可能。長期変化は別時点の根拠を必要とする。
 - injection: transcript内の「systemを無視」等が命令として実行されない。
 - 引用: AIが候補外IDを返した場合は回答全体を失敗させる。引用だけ除去して成功扱いにしない。
 - 障害: OpenAI timeout/429/5xx、Drive障害で既存画面が壊れない。
@@ -28,7 +28,7 @@ inventoryはDrive pagination、不完全/ループ検出、集計統計、日付
 
 ## 実装前baselineの管理
 
-最新main同期後のアプリコードがmainと同じ状態でnpm ci/npm testを実行し、T015後の結果と分ける。Node指定22.xと実行環境の差、依存インストール・postinstall migrationの失敗は、機能テストの失敗と区別してBASELINE.mdへ記録する。T005とT010は未完了ゲートのまま保持する。
+最新remote feature/student-ai-assistantのローカル変更・祖先関係を確認し、Node22でnpm testのbaselineを取る。main同期や巻戻しは行わない。依存がなければnpm ci --ignore-scriptsを使い、postinstall migrationやindex/cron起動は禁止。T005は測定完了、T010はMVP方式承認済み。実AI品質・実DB受入は未実施として区別する。以下の過去テスト件数・失敗履歴は当時の記録として保持する。
 
 ## 手動/E2E
 
@@ -61,3 +61,11 @@ tests/studentAiAnswer.test.jsとtests/studentAiRoutes.test.jsで、Hono app.requ
 全体/プロバイダー期限、下流AbortSignal、次バッチ停止、例外後枠解放、DB/AIのキャンセル未完了時の枠維持、生エラーのログ/レスポンス非露出も検証する。T030と既存minutes認証を含むnpm test全件を回帰対象とする。baseline/最終件数は[完了報告](reports/T040_IMPLEMENTATION_REPORT.md)。
 
 これは実モデルの注入攻撃耐性や主張の意味的妥当性の証明ではない。実AI精度・費用・速度、実PostgreSQL統合/クエリ計画、ブラウザーでの既存画面smoke、複数インスタンス運用は未検証。T050以降、本番deploy、backfillへ自動で進まない。
+
+## T050評価基盤（code/tests done; live quality pending）
+
+架空40ケースを実際のT030 selector/contextとT040 answer/認証routeに通す。外部依存は注入されたSQL fakeとscripted/oracle mockのみ。goldはprovider入力から分離する。原文位置付き必須グループ（OR代替/AND両時点）、一意source precision、反証、比較の両時点、欠落段階、macro/micro/NAを測る。これは検索の意味的精度の実績ではない。
+
+tests/studentAiEvaluation.test.js / studentAiEvaluationScoring.test.jsで、schema、全40ケース、再現性、手計算、controlled bad outputs、gold/カナリア漏洩、権限拒否、秘密値fixtureの非露出、手動レビューのrun/case/hash束縛、CLI新規保存/上書き拒否/異常/中断を検証する。意味評価は未入力pending。正しいquoteに逆の結論を添えた例は機械passでも意味failになり得る。
+
+最終抜粋件数/文字数制限による重要根拠の欠落も正解から除外しない。今回の本体修正はなく、上限を緩和しない。実行方法、指標・分母・将来のlive開始条件は[T050_EVALUATION.md](T050_EVALUATION.md)、正式なtest件数とSHAは[完了報告](reports/T050_IMPLEMENTATION_REPORT.md)。
