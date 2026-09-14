@@ -273,6 +273,22 @@ ${buildTranscriptPromptText(fullTranscript)}`;
   }
 }
 
+export function resolveMinutesGenerationResults(minutesResult, qualityResult) {
+  if (minutesResult.status === 'rejected') {
+    throw minutesResult.reason;
+  }
+
+  return {
+    generatedContent: minutesResult.value,
+    lessonQualityEvaluation: qualityResult.status === 'fulfilled'
+      ? qualityResult.value
+      : null,
+    qualityEvaluationError: qualityResult.status === 'rejected'
+      ? qualityResult.reason?.message || String(qualityResult.reason)
+      : null
+  };
+}
+
 /**
  * テンプレートを適用して最終的な議事録テキストを生成する
  *
@@ -296,7 +312,8 @@ export async function buildMinutesResult(params) {
   } = params;
 
   // 議事録本文の生成と品質監査を独立したAI呼び出しとして並行実行する。
-  const [generatedContent, lessonQualityEvaluation] = await Promise.all([
+  // 品質評価だけが失敗した場合も議事録本文は保存し、次回の自動処理で評価を再試行する。
+  const [minutesResult, qualityResult] = await Promise.allSettled([
     generateMinutesContent(
       transcript,
       studentName,
@@ -306,6 +323,16 @@ export async function buildMinutesResult(params) {
     ),
     evaluateLessonQuality(transcript, previousMinutesContext)
   ]);
+
+  const {
+    generatedContent,
+    lessonQualityEvaluation,
+    qualityEvaluationError
+  } = resolveMinutesGenerationResults(minutesResult, qualityResult);
+
+  if (qualityEvaluationError) {
+    console.warn('[MinutesService] Minutes generated without quality evaluation:', qualityEvaluationError);
+  }
   const {
     today_lesson_summary,
     next_lesson_summary,
@@ -334,7 +361,8 @@ export async function buildMinutesResult(params) {
 
   return {
     generatedText,
-    qualityEvaluation: lessonQualityEvaluation
+    qualityEvaluation: lessonQualityEvaluation,
+    qualityEvaluationError
   };
 }
 
