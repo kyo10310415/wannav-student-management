@@ -62,11 +62,15 @@ function dateFromStr(str) {
  * @param {string} parentFolderId - 親フォルダID
  * @param {string} studentId       - 学籍番号
  */
-async function findStudentFolder(drive, parentFolderId, studentId) {
+export async function findStudentFolder(drive, parentFolderId, studentId) {
+  const escapedParentFolderId = escapeDriveQueryValue(parentFolderId);
+  const escapedStudentId = escapeDriveQueryValue(studentId);
   const res = await drive.files.list({
-    q: `'${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    // 親フォルダ全体を先頭から列挙すると、500件目より後ろの生徒を取りこぼす。
+    // 学籍番号を検索条件に含め、完全一致・前方一致候補だけを取得する。
+    q: `'${escapedParentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name contains '${escapedStudentId}' and trashed = false`,
     fields: 'files(id, name)',
-    pageSize: 500,
+    pageSize: 100,
   });
   const folders = res.data.files || [];
   // フォルダ名が学籍番号と一致するものを探す（完全一致 or 前方一致）
@@ -74,6 +78,12 @@ async function findStudentFolder(drive, parentFolderId, studentId) {
   if (exact) return exact.id;
   const partial = folders.find(f => f.name.startsWith(studentId));
   return partial ? partial.id : null;
+}
+
+function escapeDriveQueryValue(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
 }
 
 /**

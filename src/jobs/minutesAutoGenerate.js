@@ -1,8 +1,8 @@
 /**
  * 議事録 自動生成ジョブ
  *
- * 1時間に1回実行。
- * 処理対象: 直近7日間（JST）に実施済み報告があり、品質評価済み議事録が存在しない生徒
+ * 1時間に1回実行。管理画面から任意期間のバックフィルにも利用する。
+ * 通常処理対象: 直近7日間（JST）に実施済み報告があり、議事録が存在しない生徒
  *
  * フロー:
  * 1. lessons・lesson_reports から直近7日間の実施済みレッスンを取得
@@ -39,11 +39,41 @@ function getDateDaysAgoJST(daysAgo) {
   return jst.toISOString().slice(0, 10);
 }
 
-export async function minutesAutoGenerate() {
-  const today     = getTodayJST();
-  const recentStart = getDateDaysAgoJST(7);
+let activeRun = null;
 
-  console.log(`[MinutesAutoGen] Start — range=${recentStart}..${today}`);
+export function getMinutesAutoGenerateStatus() {
+  return activeRun ? { ...activeRun } : null;
+}
+
+export async function minutesAutoGenerate(options = {}) {
+  if (activeRun) {
+    return {
+      success: false,
+      busy: true,
+      error: '別の議事録生成処理が実行中です',
+      activeRun: { ...activeRun }
+    };
+  }
+
+  const runType = options.runType || 'hourly';
+  const startedAt = new Date().toISOString();
+  activeRun = { runType, startedAt };
+
+  try {
+    return await runMinutesAutoGenerate(options);
+  } finally {
+    activeRun = null;
+  }
+}
+
+async function runMinutesAutoGenerate(options) {
+  const today = options.endDate || getTodayJST();
+  const recentStart = options.startDate || getDateDaysAgoJST(7);
+  const includeLegacyQuality = options.includeLegacyQuality !== false;
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+  const logPrefix = options.runType === 'backfill' ? '[MinutesBackfill]' : '[MinutesAutoGen]';
+
+  console.log(`${logPrefix} Start — range=${recentStart}..${today}`);
 
   // ── 1. 直近7日間に実施済み報告がある生徒を取得 ──────────────────────
   // lessons.lesson_date は TIMESTAMP 型。DATE にキャストして比較する
@@ -71,16 +101,16 @@ export async function minutesAutoGenerate() {
       [recentStart, today]
     );
   } catch (err) {
-    console.error('[MinutesAutoGen] Failed to query lessons:', err.message);
-    return;
+    console.error(`${logPrefix} Failed to query lessons:`, err.message);
+    throw err;
   }
 
   const candidates = lessonsResult.rows;
   if (candidates.length === 0) {
-    console.log('[MinutesAutoGen] No completed lessons found in the recent range. Skipping.');
-    return;
+    console.log(`${logPrefix} No completed lessons found in the range. Skipping.`);
+    return buildSummary({ candidates: 0 });
   }
-  console.log(`[MinutesAutoGen] ${candidates.length} lesson(s) found.`);
+  console.log(`${logPrefix} ${candidates.length} lesson(s) found.`);
 
   // ── 2. 厳格評価済みの議事録を除外し、旧判定は再評価対象にする ────────
   let existingResult;
@@ -94,13 +124,12 @@ export async function minutesAutoGenerate() {
       `SELECT id, student_id, lesson_date::text, transcript, quality_evaluation
          FROM minutes
         WHERE student_id IN (${sidPlaceholders})
-          AND lesson_date::text IN (${datePlaceholders})
-          AND quality_evaluation IS NOT NULL`,
+          AND lesson_date::text IN (${datePlaceholders})`,
       [...studentIds, ...dates]
     );
   } catch (err) {
-    console.error('[MinutesAutoGen] Failed to query existing minutes:', err.message);
-    return;
+    console.error(`${logPrefix} Failed to query existing minutes:`, err.message);
+    throw err;
   }
 
   const existingByKey = new Map(
@@ -121,15 +150,16 @@ export async function minutesAutoGenerate() {
     })
     .sort((left, right) => left.lesson_date.localeCompare(right.lesson_date));
   // 新規議事録を優先し、旧判定の再評価はAPI負荷を抑えて1時間あたり20件に制限する。
-  const targets = [...newTargets, ...legacyTargets.slice(0, 20)];
+  const qualityTargets = includeLegacyQuality ? legacyTargets.slice(0, 20) : [];
+  const targets = [...newTargets, ...qualityTargets];
 
   if (targets.length === 0) {
-    console.log('[MinutesAutoGen] All minutes already generated. Nothing to do.');
-    return;
+    console.log(`${logPrefix} All minutes already generated. Nothing to do.`);
+    return buildSummary({ candidates: candidates.length });
   }
   console.log(
-    `[MinutesAutoGen] ${newTargets.length} new target(s), `
-    + `${Math.min(legacyTargets.length, 20)}/${legacyTargets.length} legacy target(s) to re-evaluate, `
+    `${logPrefix} ${newTargets.length} new target(s), `
+    + `${qualityTargets.length}/${legacyTargets.length} legacy target(s) to re-evaluate, `
     + `${verifiedSet.size} verified skipped.`
   );
 
@@ -153,8 +183,12 @@ export async function minutesAutoGenerate() {
 
   // ── 5. 各生徒について生成 ────────────────────────────────────────────
   let successCount = 0;
+  let generatedCount = 0;
+  let qualityUpdatedCount = 0;
+  let qualityPendingCount = 0;
   let skipCount    = 0;
   let errorCount   = 0;
+  let processedCount = 0;
 
   for (const target of targets) {
     const {
@@ -195,6 +229,7 @@ export async function minutesAutoGenerate() {
         );
         console.log(`${tag} ✅ Legacy quality evaluation upgraded.`);
         successCount++;
+        qualityUpdatedCount++;
         continue;
       }
 
@@ -228,7 +263,7 @@ export async function minutesAutoGenerate() {
         getPreviousMinutesContext(student_id, lesson_date),
         resolveMinutesTutor(student_id, lesson_date)
       ]);
-      const { generatedText, qualityEvaluation } = await buildMinutesResult({
+      const { generatedText, qualityEvaluation, qualityEvaluationError } = await buildMinutesResult({
         templateText: template.template_text,
         studentName:  student_name || student_id,
         studentId:    student_id,
@@ -273,19 +308,62 @@ export async function minutesAutoGenerate() {
           template.id,
           resolvedTutor.tutorName,
           resolvedTutor.tutorEmployeeId,
-          JSON.stringify(qualityEvaluation),
+          qualityEvaluation ? JSON.stringify(qualityEvaluation) : null,
         ]
       );
 
-      console.log(`${tag} ✅ Generated successfully.`);
+      if (qualityEvaluationError) {
+        console.warn(`${tag} ⚠️ Minutes generated; quality evaluation will be retried: ${qualityEvaluationError}`);
+        qualityPendingCount++;
+      } else {
+        console.log(`${tag} ✅ Generated successfully.`);
+      }
       successCount++;
+      generatedCount++;
     } catch (err) {
       console.error(`${tag} ❌ Error:`, err.message);
       errorCount++;
+    } finally {
+      processedCount++;
+      onProgress?.({
+        processed: processedCount,
+        total: targets.length,
+        generated: generatedCount,
+        qualityUpdated: qualityUpdatedCount,
+        qualityPending: qualityPendingCount,
+        skipped: skipCount,
+        errors: errorCount
+      });
     }
   }
 
   console.log(
-    `[MinutesAutoGen] Done — success=${successCount}, skipped(no transcript)=${skipCount}, error=${errorCount}`
+    `${logPrefix} Done — generated=${generatedCount}, qualityUpdated=${qualityUpdatedCount}, `
+    + `qualityPending=${qualityPendingCount}, skipped=${skipCount}, error=${errorCount}`
   );
+
+  return buildSummary({
+    candidates: candidates.length,
+    targets: targets.length,
+    success: successCount,
+    generated: generatedCount,
+    qualityUpdated: qualityUpdatedCount,
+    qualityPending: qualityPendingCount,
+    skipped: skipCount,
+    errors: errorCount
+  });
+}
+
+function buildSummary(values = {}) {
+  return {
+    success: true,
+    candidates: values.candidates || 0,
+    targets: values.targets || 0,
+    processed: values.targets || 0,
+    generated: values.generated || 0,
+    qualityUpdated: values.qualityUpdated || 0,
+    qualityPending: values.qualityPending || 0,
+    skipped: values.skipped || 0,
+    errors: values.errors || 0
+  };
 }

@@ -18284,6 +18284,7 @@ let minutesCurrentStudentName = null;
 let minutesListCache          = [];
 let minutesTemplates          = [];
 let minutesCurrentDetail      = null;
+let minutesBackfillPollTimer  = null;
 
 const minutesQualityMetricDefinitions = [
   { key: 'opening_anxiety_check', label: 'レッスン冒頭の不安確認', monthlyLabel: 'レッスン冒頭の不安確認実施率', targetRate: 90, asanaUrl: 'https://app.asana.com/1/1209158858248774/task/1217705044515425' },
@@ -18308,6 +18309,10 @@ async function openMinutesForStudent(studentId, studentName) {
 }
 
 async function renderMinutesPage() {
+  if (minutesBackfillPollTimer) {
+    clearTimeout(minutesBackfillPollTimer);
+    minutesBackfillPollTimer = null;
+  }
   const content = document.getElementById('content');
   content.innerHTML = `
     <div class="max-w-4xl mx-auto px-4 py-6">
@@ -18350,6 +18355,36 @@ async function renderMinutesPage() {
         </div>
         <div id="minutes-student-results" class="mt-2"></div>
       </div>
+
+      ${!minutesCurrentStudentId ? `
+      <div class="bg-white rounded-lg shadow p-4 mb-4">
+        <h2 class="font-semibold text-gray-700 mb-2">
+          <i class="fas fa-history mr-2 text-teal-500"></i>未生成議事録の再処理
+        </h2>
+        <p class="text-xs text-gray-500 mb-3">
+          指定期間の実施済みレッスンを確認し、議事録がないものだけを生成します。既存本文は上書きせず、未評価の品質評価だけ再試行します。
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">開始日</label>
+            <input id="minutes-backfill-start" type="date" value="${getMinutesDateDaysAgoJST(180)}"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">終了日</label>
+            <input id="minutes-backfill-end" type="date" value="${getTodayJST()}"
+                   class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div class="flex items-end">
+            <button id="minutes-backfill-btn" onclick="startMinutesBackfillFromPage()"
+                    class="w-full px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 flex items-center justify-center gap-2">
+              <i class="fas fa-play"></i>未生成分を再処理
+            </button>
+          </div>
+        </div>
+        <div id="minutes-backfill-status" class="mt-3 text-sm text-gray-500">状態を確認中...</div>
+      </div>
+      ` : ''}
 
       <!-- 議事録生成パネル（生徒選択時のみ） -->
       ${minutesCurrentStudentId ? `
@@ -18452,12 +18487,94 @@ async function renderMinutesPage() {
 
   // 生徒指定あり・なし問わず一覧をロード
   await loadMinutesList();
+  if (!minutesCurrentStudentId) await loadMinutesBackfillStatus();
 }
 
 function getTodayJST() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return jst.toISOString().slice(0, 10);
+}
+
+function getMinutesDateDaysAgoJST(daysAgo) {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  jst.setUTCDate(jst.getUTCDate() - daysAgo);
+  return jst.toISOString().slice(0, 10);
+}
+
+async function startMinutesBackfillFromPage() {
+  const startDate = document.getElementById('minutes-backfill-start')?.value;
+  const endDate = document.getElementById('minutes-backfill-end')?.value;
+  const button = document.getElementById('minutes-backfill-btn');
+  if (!startDate || !endDate) {
+    showNotification('開始日と終了日を指定してください', 'error');
+    return;
+  }
+  if (!confirm(`${startDate}〜${endDate} の未生成議事録を再処理しますか？\n文字起こしがあるレッスンではAI生成が実行されます。`)) return;
+
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>開始中...';
+  }
+  try {
+    await axios.post('/api/minutes/backfill', { startDate, endDate }, {
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    });
+    showNotification('未生成議事録の再処理を開始しました', 'success');
+    await loadMinutesBackfillStatus();
+  } catch (err) {
+    const message = err.response?.data?.error || err.message;
+    showNotification('再処理を開始できませんでした: ' + message, 'error');
+    await loadMinutesBackfillStatus();
+  }
+}
+
+async function loadMinutesBackfillStatus() {
+  const container = document.getElementById('minutes-backfill-status');
+  if (!container) return;
+
+  try {
+    const response = await axios.get('/api/minutes/backfill/status', {
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    });
+    const state = response.data.data || { status: 'idle' };
+    const progress = state.progress || {};
+    const button = document.getElementById('minutes-backfill-btn');
+
+    if (state.status === 'running') {
+      container.className = 'mt-3 text-sm text-blue-700';
+      container.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>処理中: ${Number(progress.processed || 0)}/${Number(progress.total || 0)}件確認、${Number(progress.generated || 0)}件生成、${Number(progress.qualityUpdated || 0)}件評価更新、${Number(progress.skipped || 0)}件スキップ、${Number(progress.errors || 0)}件エラー`;
+      if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>再処理中...';
+      }
+      minutesBackfillPollTimer = setTimeout(loadMinutesBackfillStatus, 5000);
+      return;
+    }
+
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '<i class="fas fa-play"></i>未生成分を再処理';
+    }
+    if (state.status === 'completed') {
+      const summary = state.summary || progress;
+      container.className = 'mt-3 text-sm text-green-700';
+      container.textContent = `完了: ${Number(summary.generated || 0)}件生成、${Number(summary.qualityUpdated || 0)}件評価更新、${Number(summary.qualityPending || 0)}件評価再試行待ち、${Number(summary.skipped || 0)}件スキップ、${Number(summary.errors || 0)}件エラー`;
+      await loadMinutesList();
+    } else if (state.status === 'failed') {
+      container.className = 'mt-3 text-sm text-red-600';
+      container.textContent = `停止: ${state.error || '不明なエラー'}`;
+    } else {
+      container.className = 'mt-3 text-sm text-gray-500';
+      container.textContent = '待機中';
+    }
+  } catch (err) {
+    container.className = 'mt-3 text-sm text-red-600';
+    container.textContent = '状態の取得に失敗しました';
+    const button = document.getElementById('minutes-backfill-btn');
+    if (button) button.disabled = false;
+  }
 }
 
 async function loadMinutesList() {
@@ -18676,7 +18793,7 @@ async function generateMinutes() {
       lessonNumber,
     }, { headers: { Authorization: `Bearer ${sessionToken}` }, timeout: 120000 });
 
-    showNotification('議事録を生成しました', 'success');
+    showNotification(res.data.warning || '議事録を生成しました', res.data.warning ? 'warning' : 'success');
     status.classList.add('hidden');
     await loadMinutesList();
     // 生成後すぐに詳細を開く

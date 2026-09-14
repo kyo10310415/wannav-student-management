@@ -24,8 +24,44 @@ import {
   getLessonContent,
   resolveLessonReference
 } from '../services/lessonReferenceService.js';
+import {
+  getMinutesBackfillState,
+  startMinutesBackfill
+} from '../jobs/minutesBackfill.js';
 
 const app = new Hono();
+
+async function requireMinutesManager(c, next) {
+  const sessionToken = c.req.header('Authorization')?.replace('Bearer ', '');
+  if (!sessionToken) {
+    return c.json({ success: false, error: '認証が必要です' }, 401);
+  }
+
+  const sessionResult = await query(
+    `SELECT u.role
+       FROM sessions s
+       JOIN users u ON s.user_id = u.id
+      WHERE s.session_token = $1
+        AND s.expires_at > NOW()`,
+    [sessionToken]
+  );
+  if (sessionResult.rows.length === 0) {
+    return c.json({ success: false, error: 'セッションが無効です' }, 401);
+  }
+  if (!['admin', 'leader'].includes(sessionResult.rows[0].role)) {
+    return c.json({ success: false, error: 'リーダー以上の権限が必要です' }, 403);
+  }
+
+  await next();
+}
+
+function parseIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value
+    ? null
+    : date;
+}
 
 // ─── テンプレート ───────────────────────────────────────────────
 
@@ -130,6 +166,46 @@ app.get('/detail/:id', async (c) => {
 
 // ─── 議事録生成 ────────────────────────────────────────────────
 
+/** 過去の未生成議事録を任意期間で再処理する（admin/leaderのみ）。 */
+app.post('/backfill', requireMinutesManager, async (c) => {
+  try {
+    const { startDate, endDate } = await c.req.json();
+    const parsedStart = parseIsoDate(startDate);
+    const parsedEnd = parseIsoDate(endDate);
+    if (!parsedStart || !parsedEnd) {
+      return c.json({ success: false, error: 'startDate と endDate は YYYY-MM-DD 形式で指定してください' }, 400);
+    }
+    if (parsedStart > parsedEnd) {
+      return c.json({ success: false, error: '開始日は終了日以前にしてください' }, 400);
+    }
+    const rangeDays = Math.floor((parsedEnd - parsedStart) / 86400000) + 1;
+    if (rangeDays > 366) {
+      return c.json({ success: false, error: '一度に再処理できる期間は366日以内です' }, 400);
+    }
+
+    const result = startMinutesBackfill({ startDate, endDate });
+    if (!result.started) {
+      return c.json({
+        success: false,
+        error: result.reason === 'backfill_running'
+          ? 'バックフィルがすでに実行中です'
+          : '定期の議事録生成が実行中です。完了後に再実行してください',
+        data: result.state || result.activeRun || null
+      }, 409);
+    }
+
+    return c.json({ success: true, data: result.state }, 202);
+  } catch (err) {
+    console.error('[Minutes] POST /backfill error:', err);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/** バックフィルの進捗を取得する（admin/leaderのみ）。 */
+app.get('/backfill/status', requireMinutesManager, (c) => (
+  c.json({ success: true, data: getMinutesBackfillState() })
+));
+
 /**
  * POST /api/minutes/generate
  * Body: { studentId, studentName, lessonDate, lessonNumber?, templateId? }
@@ -211,7 +287,7 @@ app.post('/generate', async (c) => {
       getPreviousMinutesContext(studentId, lessonDate),
       resolveMinutesTutor(studentId, lessonDate)
     ]);
-    const { generatedText, qualityEvaluation } = await buildMinutesResult({
+    const { generatedText, qualityEvaluation, qualityEvaluationError } = await buildMinutesResult({
       templateText: template.template_text,
       studentName:  studentName || studentId,
       studentId,
@@ -257,11 +333,17 @@ app.post('/generate', async (c) => {
         tmplId,
         resolvedTutor.tutorName,
         resolvedTutor.tutorEmployeeId,
-        JSON.stringify(qualityEvaluation),
+        qualityEvaluation ? JSON.stringify(qualityEvaluation) : null,
       ]
     );
 
-    return c.json({ success: true, data: upsertResult.rows[0] });
+    return c.json({
+      success: true,
+      data: upsertResult.rows[0],
+      ...(qualityEvaluationError
+        ? { warning: '議事録は保存しましたが、品質評価は次回の自動処理で再試行します。' }
+        : {})
+    });
   } catch (err) {
     console.error('[Minutes] POST /generate error:', err);
     return c.json({ success: false, error: err.message }, 500);
