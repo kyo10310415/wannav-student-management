@@ -1499,6 +1499,26 @@ const migrations = [
       DROP TABLE IF EXISTS broadcast_job_recipients;
       ALTER TABLE broadcast_jobs DROP COLUMN IF EXISTS unknown_count;
     `
+  },
+  {
+    version: 53,
+    name: 'add_overall_satisfaction_to_weekly_snapshots',
+    up: `
+      ALTER TABLE tutor_weekly_snapshots
+        ADD COLUMN IF NOT EXISTS overall_active_student_count INTEGER,
+        ADD COLUMN IF NOT EXISTS overall_collection_rate NUMERIC(6,2),
+        ADD COLUMN IF NOT EXISTS overall_satisfaction_score NUMERIC(6,2);
+
+      COMMENT ON COLUMN tutor_weekly_snapshots.overall_active_student_count IS '全体回収率の分母となる対象アクティブ生徒数';
+      COMMENT ON COLUMN tutor_weekly_snapshots.overall_collection_rate IS '対象アクティブ生徒全員を分母とする全体回収率（%）';
+      COMMENT ON COLUMN tutor_weekly_snapshots.overall_satisfaction_score IS '満足度×全体回収率/100';
+    `,
+    down: `
+      ALTER TABLE tutor_weekly_snapshots
+        DROP COLUMN IF EXISTS overall_satisfaction_score,
+        DROP COLUMN IF EXISTS overall_collection_rate,
+        DROP COLUMN IF EXISTS overall_active_student_count;
+    `
   }
 ];
 

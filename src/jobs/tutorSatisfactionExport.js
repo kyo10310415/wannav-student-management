@@ -89,8 +89,8 @@ export async function monthlyTutorSatisfactionExport() {
         console.log(
           `[Tutor Satisfaction Export] No data for ${tutorName} in ${currentYearMonth}`
         );
-        legacyRows.push(...emptyTutorRows(tutorName));
-        lessonAdjustedRows.push(...emptyTutorRows(tutorName));
+        legacyRows.push(...emptyTutorRows(tutorName, '全体'));
+        lessonAdjustedRows.push(...emptyTutorRows(tutorName, 'レッスン'));
         continue;
       }
 
@@ -104,9 +104,9 @@ export async function monthlyTutorSatisfactionExport() {
         referenceDate: now
       });
 
-      legacyRows.push(...metricsToTutorRows(tutorName, variants.legacy));
+      legacyRows.push(...metricsToTutorRows(tutorName, variants.legacy, '全体'));
       lessonAdjustedRows.push(
-        ...metricsToTutorRows(tutorName, variants.lessonAdjusted)
+        ...metricsToTutorRows(tutorName, variants.lessonAdjusted, 'レッスン')
       );
     }
 
@@ -174,25 +174,25 @@ export async function monthlyTutorSatisfactionExport() {
   }
 }
 
-function emptyTutorRows(tutorName) {
+function emptyTutorRows(tutorName, metricPrefix) {
   return [
     [tutorName, 'レッスン満足度', ''],
-    ['', '回収率', ''],
-    ['', '満足度スコア', '']
+    ['', `${metricPrefix}回収率`, ''],
+    ['', `${metricPrefix}満足度スコア`, '']
   ];
 }
 
-function metricsToTutorRows(tutorName, metrics) {
+function metricsToTutorRows(tutorName, metrics, metricPrefix) {
   return [
     [tutorName, 'レッスン満足度', metrics.satisfactionValue.toFixed(2)],
     [
       '',
-      '回収率',
+      `${metricPrefix}回収率`,
       metrics.collectionRate !== null ? metrics.collectionRate.toFixed(2) : '-'
     ],
     [
       '',
-      '満足度スコア',
+      `${metricPrefix}満足度スコア`,
       metrics.satisfactionScore !== null && metrics.satisfactionScore > 0
         ? metrics.satisfactionScore.toFixed(2)
         : '-'

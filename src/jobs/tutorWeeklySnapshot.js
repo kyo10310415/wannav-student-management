@@ -137,6 +137,7 @@ async function _runSnapshot({ isMonthly }) {
         referenceDate: now
       });
       const adjustedMetrics = variants.lessonAdjusted;
+      const overallMetrics = variants.legacy;
 
       // 週次DBはTutor管理画面で使用するため、現行のレッスン実施考慮計算を保存する
       if (!isMonthly && lessonAdjustedCalculationAvailable) {
@@ -145,8 +146,10 @@ async function _runSnapshot({ isMonthly }) {
             INSERT INTO tutor_weekly_snapshots
               (snapshot_date, tutor_notion_name, year_month,
                active_student_count, satisfaction_count, satisfaction_avg,
-               satisfaction_value, collection_rate, satisfaction_score)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+               satisfaction_value, collection_rate, satisfaction_score,
+               overall_active_student_count, overall_collection_rate,
+               overall_satisfaction_score)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
             ON CONFLICT (snapshot_date, tutor_notion_name)
             DO UPDATE SET
               year_month           = EXCLUDED.year_month,
@@ -156,12 +159,17 @@ async function _runSnapshot({ isMonthly }) {
               satisfaction_value   = EXCLUDED.satisfaction_value,
               collection_rate      = EXCLUDED.collection_rate,
               satisfaction_score   = EXCLUDED.satisfaction_score,
+              overall_active_student_count = EXCLUDED.overall_active_student_count,
+              overall_collection_rate = EXCLUDED.overall_collection_rate,
+              overall_satisfaction_score = EXCLUDED.overall_satisfaction_score,
               created_at           = EXCLUDED.created_at
           `, [
             snapshotDate, tutor.notion_name, yearMonth,
             adjustedMetrics.denominator, adjustedMetrics.satisfactionCount, satisfactionAvg,
             adjustedMetrics.satisfactionValue, adjustedMetrics.collectionRate,
-            adjustedMetrics.satisfactionScore
+            adjustedMetrics.satisfactionScore,
+            overallMetrics.denominator, overallMetrics.collectionRate,
+            overallMetrics.satisfactionScore
           ]);
           savedCount++;
         } catch (err) {
