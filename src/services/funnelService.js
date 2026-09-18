@@ -143,27 +143,24 @@ export function buildAttritionSummary({ students, lastCompletedRows, year, month
       };
     });
 
+  const fiveMonthCohort = cohort.filter(student => student.observedMonths >= 5);
   const months = Array.from({ length: 5 }, (_, index) => {
     const monthNumber = index + 1;
-    const matured = cohort.filter(student => student.observedMonths >= monthNumber);
-    const numerator = matured.filter(student =>
+    const numerator = fiveMonthCohort.filter(student =>
       student.hasChurnedByTarget && student.churnMonth === monthNumber
     ).length;
     return {
       month: monthNumber,
-      ...makeCountMetric(numerator, matured.length)
+      ...makeCountMetric(numerator, fiveMonthCohort.length)
     };
   });
 
-  const fiveMonthMatured = cohort.filter(student => student.observedMonths >= 5);
-  const cumulativeCount = fiveMonthMatured.filter(student =>
-    student.hasChurnedByTarget && student.churnMonth <= 5
-  ).length;
+  const cumulativeCount = months.reduce((sum, item) => sum + item.numerator, 0);
 
   return {
-    cohortCount: cohort.length,
-    cumulativeFiveMonth: makeCountMetric(cumulativeCount, fiveMonthMatured.length),
-    statusAttritionCount: fiveMonthMatured.filter(student =>
+    cohortCount: fiveMonthCohort.length,
+    cumulativeFiveMonth: makeCountMetric(cumulativeCount, fiveMonthCohort.length),
+    statusAttritionCount: fiveMonthCohort.filter(student =>
       student.isActive && student.hasChurnedByTarget && student.churnMonth <= 5
     ).length,
     months

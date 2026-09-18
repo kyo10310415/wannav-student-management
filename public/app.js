@@ -1076,7 +1076,7 @@ function renderAttritionFlow(attrition) {
       <div class="px-6 py-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-xl font-bold text-gray-900">加入後1～5カ月の離脱分析</h2>
-          <p class="mt-1 text-sm text-gray-500">最後に実施済みだった月の翌月を離脱月として、一人を1つの月に割り当てます</p>
+          <p class="mt-1 text-sm text-gray-500">加入から5カ月以上経過した生徒様を共通母集団とし、一人を1つの離脱月に割り当てます</p>
         </div>
         <span class="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">対象 ${Number(attrition?.cohortCount || 0)}名</span>
       </div>
@@ -1300,7 +1300,7 @@ function renderFunnelDashboard() {
     <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
       <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
       <p>月次ファネルと未受講内訳は、対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プラン・エントリープランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。</p>
-      <p class="mt-2">離脱分析は契約プランの除外条件のみ共通とし、現在の在籍ステータスにかかわらず、開始月から対象月までの実施済みレッスンを参照します。最後に受講した月の翌月以降に一度も受講していない場合、その翌月を離脱月として1～5カ月目のいずれか1つに集計します。各月の分母は、その月数まで経過した生徒様です。</p>
+      <p class="mt-2">離脱分析は契約プランの除外条件のみ共通とし、現在の在籍ステータスにかかわらず、加入から5カ月以上経過した生徒様を共通の分母にします。開始月から対象月までの実施済みレッスンを参照し、最後に受講した月の翌月を1～5カ月目のいずれか1つの離脱月として集計します。各月の離脱人数の合計は5カ月累積離脱人数と一致します。</p>
     </div>
 
     <div class="space-y-7">
