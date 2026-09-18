@@ -1000,12 +1000,9 @@ function renderFunnelVisualization(title, metrics, accentClass) {
     { key: 'survey', label: 'アンケート回答率', hint: '対象月に1回以上回答', icon: 'fa-comment-dots', color: '#db2777' }
   ];
 
-  const stageRows = stages.map(stage => {
+  const stageRows = stages.map((stage, index) => {
     const metric = metrics[stage.key];
     const rateText = renderFunnelMetric(metric);
-    const width = metric.available && metric.rate !== null
-      ? Math.max(38, Math.min(100, 38 + Number(metric.rate) * 0.62))
-      : 70;
     const countText = metric.available
       ? `${metric.numerator} / ${metric.denominator}${stage.unit || '名'}`
       : `— / ${metric.denominator}${stage.unit || '名'}`;
@@ -1014,16 +1011,17 @@ function renderFunnelVisualization(title, metrics, accentClass) {
       : '';
 
     return `
-      <div class="flex justify-center" title="${escapeHtml(stage.hint)}">
-        <div class="text-white px-8 py-5 text-center shadow-sm transition-all duration-300"
-             style="width:${width}%; min-width:260px; background:${stage.color}; clip-path:polygon(4% 0, 96% 0, 91% 100%, 9% 100%);">
-          <div class="flex items-center justify-center gap-2 text-sm font-semibold text-white/90">
-            <i class="fas ${stage.icon}"></i>${stage.label}
-          </div>
-          <div class="mt-1 text-3xl font-black tracking-tight">${rateText}</div>
-          <div class="mt-1 text-sm text-white/90">${countText}</div>
-          ${paymentCoverage}
+      ${index > 0 ? `
+        <div class="hidden lg:flex items-center justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+        <div class="lg:hidden flex items-center justify-center text-gray-400 py-1"><i class="fas fa-arrow-down"></i></div>
+      ` : ''}
+      <div class="rounded-xl text-white px-5 py-5 text-center shadow-sm min-w-[190px]" style="background:${stage.color}" title="${escapeHtml(stage.hint)}">
+        <div class="flex items-center justify-center gap-2 text-sm font-semibold text-white/90">
+          <i class="fas ${stage.icon}"></i>${stage.label}
         </div>
+        <div class="mt-2 text-3xl font-black tracking-tight">${rateText}</div>
+        <div class="mt-1 text-sm text-white/90">${countText}</div>
+        ${paymentCoverage}
       </div>
     `;
   }).join('');
@@ -1035,15 +1033,149 @@ function renderFunnelVisualization(title, metrics, accentClass) {
           <h2 class="text-xl font-bold text-gray-900">${escapeHtml(title)}</h2>
           <p class="mt-1 text-sm text-gray-500">対象生徒 ${metrics.denominator}名</p>
         </div>
-        <span class="px-3 py-1 rounded-full text-xs font-bold ${accentClass}">対象月の到達率</span>
+        <span class="px-3 py-1 rounded-full text-xs font-bold ${accentClass}">月次ファネル</span>
       </div>
-      <div class="px-4 sm:px-8 py-7 overflow-x-auto">
-        <div class="min-w-[320px] max-w-3xl mx-auto space-y-2" role="img" aria-label="${escapeHtml(title)}の月次ファネル">
-          <div class="mx-auto w-full rounded-lg bg-slate-800 text-white py-3 px-6 text-center shadow-sm">
+      <div class="px-4 sm:px-6 py-7 overflow-x-auto">
+        <div class="min-w-[240px] lg:min-w-[1040px] grid grid-cols-1 lg:grid-cols-[200px_32px_1fr_32px_1fr_32px_1fr_32px_1fr] items-stretch" role="img" aria-label="${escapeHtml(title)}の月次ファネル">
+          <div class="rounded-xl bg-slate-800 text-white py-5 px-5 text-center shadow-sm flex flex-col justify-center">
             <span class="font-bold">対象生徒</span>
-            <span class="ml-2 text-xl font-black">${metrics.denominator}名</span>
+            <span class="mt-1 text-3xl font-black">${metrics.denominator}名</span>
           </div>
+          <div class="hidden lg:flex items-center justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+          <div class="lg:hidden flex items-center justify-center text-gray-400 py-1"><i class="fas fa-arrow-down"></i></div>
           ${stageRows}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderFunnelRateCard(label, metric, options = {}) {
+  const rate = metric?.denominator > 0 && metric?.rate !== null
+    ? `${Number(metric.rate).toFixed(1)}%`
+    : '対象者なし';
+  const tone = options.primary
+    ? 'border-red-300 bg-red-50 text-red-900'
+    : 'border-gray-300 bg-white text-gray-900';
+  return `
+    <div class="rounded-xl border-2 ${tone} px-5 py-4 text-center shadow-sm min-w-[170px]">
+      <div class="text-sm font-bold">${escapeHtml(label)}</div>
+      <div class="mt-1 text-2xl font-black">${rate}</div>
+      <div class="mt-1 text-xs text-gray-600">${Number(metric?.numerator || 0)} / ${Number(metric?.denominator || 0)}名</div>
+    </div>
+  `;
+}
+
+function renderAttritionFlow(attrition) {
+  const monthCards = (attrition?.months || []).map(item =>
+    renderFunnelRateCard(`${item.month}カ月目離脱率`, item, { primary: item.month === 1 })
+  ).join('');
+
+  return `
+    <section class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+      <div class="px-6 py-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">加入後1～5カ月の離脱分析</h2>
+          <p class="mt-1 text-sm text-gray-500">最後に実施済みだった月の翌月を離脱月として、一人を1つの月に割り当てます</p>
+        </div>
+        <span class="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">対象 ${Number(attrition?.cohortCount || 0)}名</span>
+      </div>
+      <div class="p-6 overflow-x-auto">
+        <div class="min-w-[240px] lg:min-w-[1040px] grid grid-cols-1 lg:grid-cols-[220px_42px_1fr] items-center gap-y-3">
+          ${renderFunnelRateCard('5カ月累積離脱率', attrition?.cumulativeFiveMonth || {}, { primary: true })}
+          <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+          <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">${monthCards}</div>
+        </div>
+        <div class="mt-5 rounded-xl border-2 border-red-300 bg-red-50 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="font-bold text-red-900">状態的離脱数</div>
+            <div class="text-xs text-red-700 mt-1">5カ月到達者のうち、1～5カ月目で受講が止まり、現在もアクティブな生徒様</div>
+          </div>
+          <div class="text-3xl font-black text-red-800">${Number(attrition?.statusAttritionCount || 0)}名</div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderFunnelCountCard(label, count, options = {}) {
+  const unavailable = count === null || count === undefined;
+  const tone = options.primary
+    ? 'border-red-300 bg-red-50'
+    : unavailable
+      ? 'border-gray-300 border-dashed bg-gray-50'
+      : 'border-gray-300 bg-white';
+  return `
+    <div class="rounded-xl border-2 ${tone} px-4 py-3 text-center shadow-sm min-w-[170px]">
+      <div class="text-sm font-bold text-gray-900">${escapeHtml(label)}</div>
+      <div class="mt-1 ${unavailable ? 'text-sm font-semibold text-gray-400' : 'text-2xl font-black text-red-800'}">
+        ${unavailable ? 'データ未取得' : `${Number(count)}件`}
+      </div>
+    </div>
+  `;
+}
+
+function renderUnavailableChildren(items) {
+  const columnClass = items.length >= 3
+    ? 'xl:grid-cols-3'
+    : items.length === 2
+      ? 'xl:grid-cols-2'
+      : 'xl:grid-cols-1';
+  return `<div class="grid grid-cols-1 ${columnClass} gap-2">${items.map(item =>
+    renderFunnelCountCard(item.label, item.value)
+  ).join('')}</div>`;
+}
+
+function renderCancellationBranch(label, count, children) {
+  return `
+    <div class="grid grid-cols-1 lg:grid-cols-[210px_34px_1fr] items-center gap-y-2">
+      ${renderFunnelCountCard(label, count, { primary: true })}
+      <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+      <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+      ${renderUnavailableChildren(children)}
+    </div>
+  `;
+}
+
+function renderNonAttendanceFlow(breakdown) {
+  return `
+    <section class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+      <div class="px-6 py-5 border-b border-gray-100">
+        <h2 class="text-xl font-bold text-gray-900">レッスン未受講の内訳</h2>
+        <p class="mt-1 text-sm text-gray-500">未受講総数は月2回想定の未実施枠、予約済み未受講はレッスン報告のキャンセル件数です</p>
+      </div>
+      <div class="p-6 overflow-x-auto">
+        <div class="min-w-[240px] lg:min-w-[1080px] grid grid-cols-1 lg:grid-cols-[220px_40px_220px_40px_1fr] items-center gap-y-3">
+          ${renderFunnelCountCard('レッスン未受講総数', breakdown?.lessonNotAttendedTotal, { primary: true })}
+          <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+          <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+          ${renderFunnelCountCard('予約済み未受講数', breakdown?.bookedNotAttended, { primary: true })}
+          <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+          <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+          <div class="space-y-4">
+            ${renderCancellationBranch('事前キャンセル', breakdown?.studentReschedule, [
+              { label: '再予約し受講', value: breakdown?.unavailable?.rebookedAndCompleted },
+              { label: '再予約し再キャンセル', value: breakdown?.unavailable?.rebookedAndCancelled },
+              { label: '再予約なし', value: breakdown?.unavailable?.noRebooking }
+            ])}
+            ${renderCancellationBranch('連絡なしキャンセル', breakdown?.noShow, [
+              { label: '後日連絡あり', value: breakdown?.unavailable?.contactedLater },
+              { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow }
+            ])}
+            ${renderCancellationBranch('先生都合キャンセル', breakdown?.tutorReschedule, [
+              { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent },
+              { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent }
+            ])}
+          </div>
+        </div>
+        <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div class="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800">
+            <span class="font-bold">実施済み:</span> ${Number(breakdown?.completed || 0)}件
+          </div>
+          <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-gray-600">
+            再予約・後日連絡・予約リンク送付状況は、データ取得方法の確定後に数値を連携します。
+          </div>
         </div>
       </div>
     </section>
@@ -1141,7 +1273,7 @@ function renderFunnelDashboard() {
           </span>
           <div>
             <h1 class="text-2xl font-bold text-gray-900">ファネル管理</h1>
-            <p class="text-sm text-gray-500">生徒様の月次状況を全体・担当Tutor別に確認できます</p>
+            <p class="text-sm text-gray-500">月次到達率・加入後離脱・未受講内訳を確認できます</p>
           </div>
         </div>
       </div>
@@ -1167,11 +1299,14 @@ function renderFunnelDashboard() {
 
     <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
       <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
-      <p>対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プラン・エントリープランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。各指標は前段階の達成を条件にせず、それぞれ独立して集計しています。</p>
+      <p>月次ファネルと未受講内訳は、対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プラン・エントリープランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。</p>
+      <p class="mt-2">離脱分析は契約プランの除外条件のみ共通とし、現在の在籍ステータスにかかわらず、開始月から対象月までの実施済みレッスンを参照します。最後に受講した月の翌月以降に一度も受講していない場合、その翌月を離脱月として1～5カ月目のいずれか1つに集計します。各月の分母は、その月数まで経過した生徒様です。</p>
     </div>
 
     <div class="space-y-7">
       ${renderFunnelVisualization('生徒様全体', funnelData.overall, 'bg-orange-100 text-orange-700')}
+      ${renderAttritionFlow(funnelData.attrition)}
+      ${renderNonAttendanceFlow(funnelData.cancellationBreakdown)}
       ${renderTutorFunnelTable(funnelData.tutors)}
     </div>
   `;

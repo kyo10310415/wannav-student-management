@@ -43,7 +43,14 @@ app.get('/', requireLeaderOrAdmin, async (c) => {
   const nextMonthStart = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
   try {
-    const [studentsResult, tutorsResult, reservationsResult, completedResult] = await Promise.all([
+    const [
+      studentsResult,
+      tutorsResult,
+      reservationsResult,
+      completedResult,
+      lessonResultsResult,
+      lastCompletedResult
+    ] = await Promise.all([
       query(`
         SELECT student_id, status, contract_plan, homeroom_tutor, lesson_start_date,
                payment_status_last_month, payment_status_current_month,
@@ -73,7 +80,21 @@ app.get('/', requireLeaderOrAdmin, async (c) => {
            AND lesson_date < $2::date
            AND lesson_result = '実施済み'
          GROUP BY student_id
-      `, [startDate, nextMonthStart])
+      `, [startDate, nextMonthStart]),
+      query(`
+        SELECT student_id, lesson_result, COUNT(*)::int AS result_count
+          FROM lesson_reports
+         WHERE lesson_date >= $1::date
+           AND lesson_date < $2::date
+         GROUP BY student_id, lesson_result
+      `, [startDate, nextMonthStart]),
+      query(`
+        SELECT student_id, MAX(lesson_date)::date::text AS last_completed_date
+          FROM lesson_reports
+         WHERE lesson_date < $1::date
+           AND lesson_result = '実施済み'
+         GROUP BY student_id
+      `, [nextMonthStart])
     ]);
 
     let surveyRecords = [];
@@ -101,6 +122,8 @@ app.get('/', requireLeaderOrAdmin, async (c) => {
       tutors: tutorsResult.rows,
       reservationRows: reservationsResult.rows,
       completedRows: completedResult.rows,
+      lessonResultRows: lessonResultsResult.rows,
+      lastCompletedRows: lastCompletedResult.rows,
       surveyRecords,
       surveyAvailable,
       year,

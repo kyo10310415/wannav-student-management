@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildAttritionSummary,
+  buildCancellationBreakdown,
   buildFunnelData,
   getPaymentReferenceYearMonth,
   getPaymentStatusForMonth,
@@ -117,4 +119,63 @@ test('marks payment and survey metrics unavailable instead of reporting false ze
   assert.equal(result.overall.payment.rate, null);
   assert.equal(result.overall.survey.available, false);
   assert.equal(result.overall.survey.rate, null);
+});
+
+test('assigns each student to the first month after their final completed lesson', () => {
+  const students = [
+    { student_id: 'S-1', contract_plan: '通常', lesson_start_date: '2026-01-10' },
+    { student_id: 'S-2', status: 'アクティブ', contract_plan: '通常', lesson_start_date: '2026-01-10' },
+    { student_id: 'S-3', status: '退会', contract_plan: 'PRO', lesson_start_date: '2026-01-10' },
+    { student_id: 'S-4', contract_plan: '通常', lesson_start_date: '2026-01-10' },
+    { student_id: 'S-5', contract_plan: '通常', lesson_start_date: '2026-04-01' },
+    { student_id: 'S-6', contract_plan: 'エントリープラン', lesson_start_date: '2026-01-01' }
+  ];
+
+  const result = buildAttritionSummary({
+    students,
+    lastCompletedRows: [
+      { student_id: 'S-2', last_completed_date: '2026-01-20' },
+      { student_id: 'S-3', last_completed_date: '2026-02-20' },
+      { student_id: 'S-4', last_completed_date: '2026-05-20' }
+    ],
+    year: 2026,
+    month: 5
+  });
+
+  assert.equal(result.cohortCount, 5);
+  assert.deepEqual(result.months[0], {
+    month: 1, numerator: 2, denominator: 5, rate: 40, available: true
+  });
+  assert.deepEqual(result.months[1], {
+    month: 2, numerator: 1, denominator: 5, rate: 20, available: true
+  });
+  assert.deepEqual(result.months[2], {
+    month: 3, numerator: 1, denominator: 4, rate: 25, available: true
+  });
+  assert.deepEqual(result.cumulativeFiveMonth, {
+    numerator: 3, denominator: 4, rate: 75, available: true
+  });
+  assert.equal(result.statusAttritionCount, 1);
+});
+
+test('breaks non-attendance reports into student, no-show, and tutor cancellations', () => {
+  const result = buildCancellationBreakdown([
+    { student_id: 'S-1', lesson_result: '実施済み', result_count: 2 },
+    { student_id: 'S-1', lesson_result: '生徒様都合でリスケ', result_count: 3 },
+    { student_id: 'S-2', lesson_result: '無断キャンセル', result_count: 1 },
+    { student_id: 'S-2', lesson_result: 'Tutor都合でリスケ', result_count: 2 },
+    { student_id: 'OUTSIDE', lesson_result: '無断キャンセル', result_count: 99 }
+  ], [
+    { student_id: 'S-1' },
+    { student_id: 'S-2' }
+  ], 10);
+
+  assert.equal(result.completed, 2);
+  assert.equal(result.studentReschedule, 3);
+  assert.equal(result.noShow, 1);
+  assert.equal(result.tutorReschedule, 2);
+  assert.equal(result.bookedNotAttended, 6);
+  assert.equal(result.lessonNotAttendedTotal, 8);
+  assert.equal(result.unavailable.rebookedAndCompleted, null);
+  assert.equal(result.unavailable.contactedLater, null);
 });
