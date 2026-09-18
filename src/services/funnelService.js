@@ -81,6 +81,146 @@ function toStudentIdSet(rows, predicate = () => true) {
   return result;
 }
 
+function getYearMonthSerial(value) {
+  const match = String(value || '').trim().match(/^(\d{4})[/-](\d{1,2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return null;
+  return year * 12 + month - 1;
+}
+
+export function isAttritionEligibleStudent(student, year, month) {
+  if (!student || EXCLUDED_CONTRACT_PLANS.has(student.contract_plan)) return false;
+  const startMonth = getYearMonthSerial(student.lesson_start_date);
+  const targetMonth = Number(year) * 12 + Number(month) - 1;
+  return startMonth !== null && startMonth <= targetMonth;
+}
+
+function makeCountMetric(numerator, denominator) {
+  return {
+    numerator,
+    denominator,
+    rate: denominator > 0
+      ? Math.round((numerator / denominator) * 1000) / 10
+      : null,
+    available: true
+  };
+}
+
+/**
+ * 最終実施月の翌月を離脱月として、一人を1つの月だけに割り当てる。
+ * 例: 1カ月目に実施あり、2カ月目以降に実施なし → 2カ月目離脱。
+ */
+export function buildAttritionSummary({ students, lastCompletedRows, year, month }) {
+  const targetMonth = Number(year) * 12 + Number(month) - 1;
+  const lastCompletedByStudent = new Map();
+  for (const row of lastCompletedRows || []) {
+    const studentId = normalizeFunnelStudentId(row.student_id);
+    const completedMonth = getYearMonthSerial(row.last_completed_date);
+    if (studentId && completedMonth !== null) {
+      lastCompletedByStudent.set(studentId, completedMonth);
+    }
+  }
+
+  const cohort = (students || [])
+    .filter(student => isAttritionEligibleStudent(student, year, month))
+    .map(student => {
+      const studentId = normalizeFunnelStudentId(student.student_id);
+      const startMonth = getYearMonthSerial(student.lesson_start_date);
+      const observedMonths = targetMonth - startMonth + 1;
+      const lastCompletedMonth = lastCompletedByStudent.get(studentId);
+      const lastCompletedOffset = lastCompletedMonth === undefined
+        ? 0
+        : Math.max(0, lastCompletedMonth - startMonth + 1);
+      const churnMonth = lastCompletedOffset + 1;
+      const hasChurnedByTarget = churnMonth <= observedMonths;
+      return {
+        observedMonths,
+        churnMonth,
+        hasChurnedByTarget,
+        isActive: student.status === 'アクティブ'
+      };
+    });
+
+  const months = Array.from({ length: 5 }, (_, index) => {
+    const monthNumber = index + 1;
+    const matured = cohort.filter(student => student.observedMonths >= monthNumber);
+    const numerator = matured.filter(student =>
+      student.hasChurnedByTarget && student.churnMonth === monthNumber
+    ).length;
+    return {
+      month: monthNumber,
+      ...makeCountMetric(numerator, matured.length)
+    };
+  });
+
+  const fiveMonthMatured = cohort.filter(student => student.observedMonths >= 5);
+  const cumulativeCount = fiveMonthMatured.filter(student =>
+    student.hasChurnedByTarget && student.churnMonth <= 5
+  ).length;
+
+  return {
+    cohortCount: cohort.length,
+    cumulativeFiveMonth: makeCountMetric(cumulativeCount, fiveMonthMatured.length),
+    statusAttritionCount: fiveMonthMatured.filter(student =>
+      student.isActive && student.hasChurnedByTarget && student.churnMonth <= 5
+    ).length,
+    months
+  };
+}
+
+export function buildCancellationBreakdown(resultRows, eligibleStudents, expectedLessonCount = 0) {
+  const eligibleStudentIds = new Set(
+    (eligibleStudents || []).map(student => normalizeFunnelStudentId(student.student_id))
+  );
+  const counts = {
+    completed: 0,
+    studentReschedule: 0,
+    noShow: 0,
+    tutorReschedule: 0,
+    other: 0
+  };
+
+  for (const row of resultRows || []) {
+    const studentId = normalizeFunnelStudentId(row.student_id);
+    if (!eligibleStudentIds.has(studentId)) continue;
+    const count = Number(row.result_count) || 0;
+    switch (String(row.lesson_result || '').trim()) {
+      case '実施済み':
+        counts.completed += count;
+        break;
+      case '生徒様都合でリスケ':
+        counts.studentReschedule += count;
+        break;
+      case '無断キャンセル':
+        counts.noShow += count;
+        break;
+      case 'Tutor都合でリスケ':
+        counts.tutorReschedule += count;
+        break;
+      default:
+        counts.other += count;
+    }
+  }
+
+  const bookedNotAttended = counts.studentReschedule + counts.noShow + counts.tutorReschedule + counts.other;
+  return {
+    lessonNotAttendedTotal: Math.max(0, Number(expectedLessonCount) - counts.completed),
+    bookedNotAttended,
+    ...counts,
+    unavailable: {
+      rebookedAndCompleted: null,
+      rebookedAndCancelled: null,
+      noRebooking: null,
+      contactedLater: null,
+      noContactAfterNoShow: null,
+      bookingLinkNotSent: null,
+      bookingLinkSent: null
+    }
+  };
+}
+
 function buildSummary({
   students,
   reservationCounts,
@@ -130,6 +270,8 @@ export function buildFunnelData({
   tutors = [],
   reservationRows = [],
   completedRows = [],
+  lessonResultRows = [],
+  lastCompletedRows = [],
   surveyRecords = [],
   surveyAvailable = true,
   year,
@@ -181,6 +323,18 @@ export function buildFunnelData({
     paymentReferenceYearMonth
   };
 
+  const attrition = buildAttritionSummary({
+    students,
+    lastCompletedRows,
+    year: numericYear,
+    month: numericMonth
+  });
+  const cancellationBreakdown = buildCancellationBreakdown(
+    lessonResultRows,
+    eligibleStudents,
+    eligibleStudents.length * 2
+  );
+
   const tutorData = tutors
     .filter(tutor => tutor.notion_name)
     .map(tutor => ({
@@ -201,6 +355,8 @@ export function buildFunnelData({
     paymentMonthAvailable,
     surveyAvailable,
     overall: buildSummary({ ...summaryArgs, students: eligibleStudents }),
+    attrition,
+    cancellationBreakdown,
     tutors: tutorData
   };
 }
