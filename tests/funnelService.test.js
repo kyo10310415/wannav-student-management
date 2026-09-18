@@ -142,12 +142,12 @@ test('assigns each student to the first month after their final completed lesson
     month: 5
   });
 
-  assert.equal(result.cohortCount, 5);
+  assert.equal(result.cohortCount, 4);
   assert.deepEqual(result.months[0], {
-    month: 1, numerator: 2, denominator: 5, rate: 40, available: true
+    month: 1, numerator: 1, denominator: 4, rate: 25, available: true
   });
   assert.deepEqual(result.months[1], {
-    month: 2, numerator: 1, denominator: 5, rate: 20, available: true
+    month: 2, numerator: 1, denominator: 4, rate: 25, available: true
   });
   assert.deepEqual(result.months[2], {
     month: 3, numerator: 1, denominator: 4, rate: 25, available: true
@@ -155,6 +155,10 @@ test('assigns each student to the first month after their final completed lesson
   assert.deepEqual(result.cumulativeFiveMonth, {
     numerator: 3, denominator: 4, rate: 75, available: true
   });
+  assert.equal(
+    result.months.reduce((sum, item) => sum + item.numerator, 0),
+    result.cumulativeFiveMonth.numerator
+  );
   assert.equal(result.statusAttritionCount, 1);
 });
 
