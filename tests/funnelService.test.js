@@ -98,6 +98,7 @@ test('counts every reservation and completed lesson against two lessons per stud
     numerator: 3, denominator: 6, rate: 50, available: true
   });
   assert.equal(result.overall.survey.numerator, 1);
+  assert.equal(result.cancellationBreakdown.unreservedCount, 0);
   assert.equal(result.paymentReferenceYearMonth, '2026-08');
   assert.equal(result.tutors[0].metrics.denominator, 2);
   assert.equal(result.tutors[0].metrics.reservation.rate, 75);
@@ -159,7 +160,7 @@ test('assigns each student to the first month after their final completed lesson
     result.months.reduce((sum, item) => sum + item.numerator, 0),
     result.cumulativeFiveMonth.numerator
   );
-  assert.equal(result.statusAttritionCount, 1);
+  assert.equal(result.statusAttritionCount, null);
 });
 
 test('breaks non-attendance reports into student, no-show, and tutor cancellations', () => {
@@ -167,18 +168,20 @@ test('breaks non-attendance reports into student, no-show, and tutor cancellatio
     { student_id: 'S-1', lesson_result: '実施済み', result_count: 2 },
     { student_id: 'S-1', lesson_result: '生徒様都合でリスケ', result_count: 3 },
     { student_id: 'S-2', lesson_result: '無断キャンセル', result_count: 1 },
-    { student_id: 'S-2', lesson_result: 'Tutor都合でリスケ', result_count: 2 },
+    { student_id: 'S-2', lesson_result: 'Tutor都合でリスケ', result_count: 1 },
+    { student_id: 'S-2', lesson_result: 'Tutor都合によるリスケ', result_count: 1 },
     { student_id: 'OUTSIDE', lesson_result: '無断キャンセル', result_count: 99 }
   ], [
     { student_id: 'S-1' },
     { student_id: 'S-2' }
-  ], 10);
+  ], 10, 7);
 
   assert.equal(result.completed, 2);
   assert.equal(result.studentReschedule, 3);
   assert.equal(result.noShow, 1);
   assert.equal(result.tutorReschedule, 2);
   assert.equal(result.bookedNotAttended, 6);
+  assert.equal(result.unreservedCount, 3);
   assert.equal(result.lessonNotAttendedTotal, 8);
   assert.equal(result.unavailable.rebookedAndCompleted, null);
   assert.equal(result.unavailable.contactedLater, null);
