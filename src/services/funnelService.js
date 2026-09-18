@@ -138,8 +138,7 @@ export function buildAttritionSummary({ students, lastCompletedRows, year, month
       return {
         observedMonths,
         churnMonth,
-        hasChurnedByTarget,
-        isActive: student.status === 'アクティブ'
+        hasChurnedByTarget
       };
     });
 
@@ -160,14 +159,17 @@ export function buildAttritionSummary({ students, lastCompletedRows, year, month
   return {
     cohortCount: fiveMonthCohort.length,
     cumulativeFiveMonth: makeCountMetric(cumulativeCount, fiveMonthCohort.length),
-    statusAttritionCount: fiveMonthCohort.filter(student =>
-      student.isActive && student.hasChurnedByTarget && student.churnMonth <= 5
-    ).length,
+    statusAttritionCount: null,
     months
   };
 }
 
-export function buildCancellationBreakdown(resultRows, eligibleStudents, expectedLessonCount = 0) {
+export function buildCancellationBreakdown(
+  resultRows,
+  eligibleStudents,
+  expectedLessonCount = 0,
+  reservedLessonCount = 0
+) {
   const eligibleStudentIds = new Set(
     (eligibleStudents || []).map(student => normalizeFunnelStudentId(student.student_id))
   );
@@ -194,6 +196,7 @@ export function buildCancellationBreakdown(resultRows, eligibleStudents, expecte
         counts.noShow += count;
         break;
       case 'Tutor都合でリスケ':
+      case 'Tutor都合によるリスケ':
         counts.tutorReschedule += count;
         break;
       default:
@@ -205,6 +208,7 @@ export function buildCancellationBreakdown(resultRows, eligibleStudents, expecte
   return {
     lessonNotAttendedTotal: Math.max(0, Number(expectedLessonCount) - counts.completed),
     bookedNotAttended,
+    unreservedCount: Math.max(0, Number(expectedLessonCount) - Number(reservedLessonCount)),
     ...counts,
     unavailable: {
       rebookedAndCompleted: null,
@@ -329,7 +333,9 @@ export function buildFunnelData({
   const cancellationBreakdown = buildCancellationBreakdown(
     lessonResultRows,
     eligibleStudents,
-    eligibleStudents.length * 2
+    eligibleStudents.length * 2,
+    eligibleStudents.reduce((sum, student) =>
+      sum + (reservationCounts.get(normalizeFunnelStudentId(student.student_id)) || 0), 0)
   );
 
   const tutorData = tutors

@@ -1090,9 +1090,8 @@ function renderAttritionFlow(attrition) {
         <div class="mt-5 rounded-xl border-2 border-red-300 bg-red-50 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="font-bold text-red-900">状態的離脱数</div>
-            <div class="text-xs text-red-700 mt-1">5カ月到達者のうち、1～5カ月目で受講が止まり、現在もアクティブな生徒様</div>
           </div>
-          <div class="text-3xl font-black text-red-800">${Number(attrition?.statusAttritionCount || 0)}名</div>
+          <div class="text-3xl font-black text-red-800">${attrition?.statusAttritionCount === null || attrition?.statusAttritionCount === undefined ? '&nbsp;' : `${Number(attrition.statusAttritionCount)}名`}</div>
         </div>
       </div>
     </section>
@@ -1128,6 +1127,9 @@ function renderUnavailableChildren(items) {
 }
 
 function renderCancellationBranch(label, count, children) {
+  if (!children || children.length === 0) {
+    return `<div class="max-w-[210px]">${renderFunnelCountCard(label, count, { primary: true })}</div>`;
+  }
   return `
     <div class="grid grid-cols-1 lg:grid-cols-[210px_34px_1fr] items-center gap-y-2">
       ${renderFunnelCountCard(label, count, { primary: true })}
@@ -1143,30 +1145,40 @@ function renderNonAttendanceFlow(breakdown) {
     <section class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
       <div class="px-6 py-5 border-b border-gray-100">
         <h2 class="text-xl font-bold text-gray-900">レッスン未受講の内訳</h2>
-        <p class="mt-1 text-sm text-gray-500">未受講総数は月2回想定の未実施枠、予約済み未受講はレッスン報告のキャンセル件数です</p>
+        <p class="mt-1 text-sm text-gray-500">未受講総数は月2回想定の未実施枠、未予約数は月2回想定枠から予約回数を差し引いて算出します</p>
       </div>
       <div class="p-6 overflow-x-auto">
-        <div class="min-w-[240px] lg:min-w-[1080px] grid grid-cols-1 lg:grid-cols-[220px_40px_220px_40px_1fr] items-center gap-y-3">
+        <div class="min-w-[240px] lg:min-w-[1180px] grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
           ${renderFunnelCountCard('レッスン未受講総数', breakdown?.lessonNotAttendedTotal, { primary: true })}
           <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
           <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
-          ${renderFunnelCountCard('予約済み未受講数', breakdown?.bookedNotAttended, { primary: true })}
-          <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
-          <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
-          <div class="space-y-4">
-            ${renderCancellationBranch('事前キャンセル', breakdown?.studentReschedule, [
-              { label: '再予約し受講', value: breakdown?.unavailable?.rebookedAndCompleted },
-              { label: '再予約し再キャンセル', value: breakdown?.unavailable?.rebookedAndCancelled },
-              { label: '再予約なし', value: breakdown?.unavailable?.noRebooking }
-            ])}
-            ${renderCancellationBranch('連絡なしキャンセル', breakdown?.noShow, [
-              { label: '後日連絡あり', value: breakdown?.unavailable?.contactedLater },
-              { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow }
-            ])}
-            ${renderCancellationBranch('先生都合キャンセル', breakdown?.tutorReschedule, [
-              { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent },
-              { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent }
-            ])}
+          <div class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
+              ${renderFunnelCountCard('予約済み未受講数', breakdown?.bookedNotAttended, { primary: true })}
+              <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+              <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+              <div class="space-y-4">
+                ${renderCancellationBranch('事前キャンセル', breakdown?.studentReschedule, [
+                  { label: '再予約し受講', value: breakdown?.unavailable?.rebookedAndCompleted },
+                  { label: '再予約し再キャンセル', value: breakdown?.unavailable?.rebookedAndCancelled },
+                  { label: '再予約なし', value: breakdown?.unavailable?.noRebooking }
+                ])}
+                ${renderCancellationBranch('連絡なしキャンセル', breakdown?.noShow, [
+                  { label: '後日連絡あり', value: breakdown?.unavailable?.contactedLater },
+                  { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow }
+                ])}
+                ${renderCancellationBranch('先生都合キャンセル', breakdown?.tutorReschedule, [])}
+              </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
+              ${renderFunnelCountCard('未予約数', breakdown?.unreservedCount, { primary: true })}
+              <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
+              <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+              ${renderUnavailableChildren([
+                { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent },
+                { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent }
+              ])}
+            </div>
           </div>
         </div>
         <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
