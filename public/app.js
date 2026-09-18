@@ -572,6 +572,14 @@ function getSatisfactionActiveStudents(tutor) {
   );
 }
 
+function canViewOverallSatisfactionMetrics() {
+  return currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader');
+}
+
+function getOverallSatisfactionDenominator(tutor) {
+  return getSatisfactionActiveStudents(tutor).length;
+}
+
 async function loadSatisfactionLessonCompletion(year, month, force = false) {
   const key = `${year}/${month}`;
 
@@ -3039,6 +3047,7 @@ function renderStudentRowsSimple() {
 // Render Tutors Page
 function renderTutorsPage() {
   const content = document.getElementById('content');
+  const showOverallMetrics = canViewOverallSatisfactionMetrics();
   
   content.innerHTML = `
     ${satisfactionDataCacheError ? `
@@ -3069,7 +3078,8 @@ function renderTutorsPage() {
 
         <span class="text-xs text-gray-500 bg-blue-50 px-3 py-1.5 rounded-lg">
           <i class="fas fa-info-circle mr-1"></i>
-          回収率の分母：25日までは対象アクティブ生徒、26日以降は表示月にレッスン実施済みの生徒
+          レッスン回収率：25日までは対象アクティブ生徒、26日以降は表示月にレッスン実施済みの生徒
+          ${showOverallMetrics ? ' ／ 全体回収率：対象アクティブ生徒' : ''}
         </span>
         
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
@@ -3155,12 +3165,14 @@ function renderTutorsPage() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">レッスン<br>満足度
                 <div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div>
               </th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">回収率
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">レッスン<br>回収率
                 <div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div>
               </th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">満足度<br>スコア
+              ${showOverallMetrics ? '<th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">全体<br>回収率<div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div></th>' : ''}
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">レッスン<br>満足度スコア
                 <div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div>
               </th>
+              ${showOverallMetrics ? '<th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">全体<br>満足度スコア<div class="text-gray-400 font-normal normal-case text-xs">前週▲▼比較</div></th>' : ''}
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">わなみさん</th>
             </tr>
           </thead>
@@ -3341,6 +3353,7 @@ function handleTeamFilterChange(team) {
 
 // Render tutor statistics
 function renderTutorStatistics() {
+  const showOverallMetrics = canViewOverallSatisfactionMetrics();
   // Always use all active tutors for statistics (no filter applied)
   const allActiveTutors = tutors.filter(t => 
     t.status === 'アクティブ' && 
@@ -3372,9 +3385,14 @@ function renderTutorStatistics() {
 
   // Calculate overall statistics
   let overallSatisfaction = 0;
-  let overallTotalAnswers = 0;    // 全回答数合計（回収率加重平均用）
-  let overallTotalStudents = 0;   // 全アクティブ生徒数合計（回収率加重平均用）
-  let overallSatisfactionScore = 0;
+  let overallLessonTotalAnswers = 0;
+  let overallLessonTotalStudents = 0;
+  let overallLessonScoreSum = 0;
+  let overallLessonValidCount = 0;
+  let overallAllTotalAnswers = 0;
+  let overallAllTotalStudents = 0;
+  let overallAllScoreSum = 0;
+  let overallAllValidCount = 0;
   let overallValidCount = 0;
 
   allActiveTutors.forEach(tutor => {
@@ -3387,36 +3405,54 @@ function renderTutorStatistics() {
     const currentMonthData = tutorSatisfactionData[selectedYearMonth];
 
     const snapForStats = tutorWeeklySnapshotData[tutor.notion_name] || null;
-    const baseStudentCountStats = getSatisfactionDenominator(
+    const lessonStudentCountStats = getSatisfactionDenominator(
       tutor,
       selectedTutorYear,
       selectedTutorMonth,
       snapForStats
     );
-    
-    if (currentMonthData && baseStudentCountStats > 0) {
+    const allStudentCountStats = getOverallSatisfactionDenominator(tutor);
+
+    if (currentMonthData && (lessonStudentCountStats > 0 || allStudentCountStats > 0)) {
       const satisfactionValue = currentMonthData.average * 10;
       const satisfactionCount = currentMonthData.count;
-      const collectionRateValue = (satisfactionCount / baseStudentCountStats * 100);
-      const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
-      
+
       overallSatisfaction += satisfactionValue;
-      overallTotalAnswers  += satisfactionCount;          // 回答数を累積
-      overallTotalStudents += baseStudentCountStats;      // 生徒数を累積
-      overallSatisfactionScore += satisfactionScoreValue;
       overallValidCount++;
+
+      if (lessonStudentCountStats > 0) {
+        const rate = satisfactionCount / lessonStudentCountStats * 100;
+        overallLessonTotalAnswers += satisfactionCount;
+        overallLessonTotalStudents += lessonStudentCountStats;
+        overallLessonScoreSum += satisfactionValue * rate / 100;
+        overallLessonValidCount++;
+      }
+      if (allStudentCountStats > 0) {
+        const rate = satisfactionCount / allStudentCountStats * 100;
+        overallAllTotalAnswers += satisfactionCount;
+        overallAllTotalStudents += allStudentCountStats;
+        overallAllScoreSum += satisfactionValue * rate / 100;
+        overallAllValidCount++;
+      }
     }
   });
   
   const overallAvgSatisfaction = overallValidCount > 0 ? (overallSatisfaction / overallValidCount).toFixed(2) : '-';
-  // 回収率 = 全回答数合計 ÷ 全アクティブ生徒数合計 × 100（加重平均）
-  const overallAvgCollectionRate = overallTotalStudents > 0 ? (overallTotalAnswers / overallTotalStudents * 100).toFixed(2) : '-';
-  const overallAvgSatisfactionScore = overallValidCount > 0 ? (overallSatisfactionScore / overallValidCount).toFixed(2) : '-';
+  const overallLessonCollectionRate = overallLessonTotalStudents > 0
+    ? (overallLessonTotalAnswers / overallLessonTotalStudents * 100).toFixed(2) : '-';
+  const overallAllCollectionRate = overallAllTotalStudents > 0
+    ? (overallAllTotalAnswers / overallAllTotalStudents * 100).toFixed(2) : '-';
+  const overallLessonSatisfactionScore = overallLessonValidCount > 0
+    ? (overallLessonScoreSum / overallLessonValidCount).toFixed(2) : '-';
+  const overallAllSatisfactionScore = overallAllValidCount > 0
+    ? (overallAllScoreSum / overallAllValidCount).toFixed(2) : '-';
   
   // Color coding for overall
   const overallSatisfactionColor = overallAvgSatisfaction !== '-' && parseFloat(overallAvgSatisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
-  const overallCollectionRateColor = overallAvgCollectionRate !== '-' && parseFloat(overallAvgCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
-  const overallSatisfactionScoreColor = overallAvgSatisfactionScore !== '-' && parseFloat(overallAvgSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+  const overallLessonCollectionRateColor = overallLessonCollectionRate !== '-' && parseFloat(overallLessonCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+  const overallAllCollectionRateColor = overallAllCollectionRate !== '-' && parseFloat(overallAllCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+  const overallLessonSatisfactionScoreColor = overallLessonSatisfactionScore !== '-' && parseFloat(overallLessonSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+  const overallAllSatisfactionScoreColor = overallAllSatisfactionScore !== '-' && parseFloat(overallAllSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
   
   // Calculate team-specific statistics
   const teamStats = {};
@@ -3439,9 +3475,14 @@ function renderTutorStatistics() {
       }
     });
     let teamSatisfaction = 0;
-    let teamTotalAnswers = 0;    // チーム内全回答数合計（回収率加重平均用）
-    let teamTotalStudents = 0;   // チーム内全アクティブ生徒数合計（回収率加重平均用）
-    let teamSatisfactionScore = 0;
+    let teamLessonTotalAnswers = 0;
+    let teamLessonTotalStudents = 0;
+    let teamLessonSatisfactionScore = 0;
+    let teamLessonValidCount = 0;
+    let teamAllTotalAnswers = 0;
+    let teamAllTotalStudents = 0;
+    let teamAllSatisfactionScore = 0;
+    let teamAllValidCount = 0;
     let teamValidCount = 0;
     
     teamTutors.forEach(tutor => {
@@ -3454,24 +3495,35 @@ function renderTutorStatistics() {
       const currentMonthData = tutorSatisfactionData[selectedYearMonth];
 
       const snapForTeam = tutorWeeklySnapshotData[tutor.notion_name] || null;
-      const baseStudentCountTeam = getSatisfactionDenominator(
+      const lessonStudentCountTeam = getSatisfactionDenominator(
         tutor,
         selectedTutorYear,
         selectedTutorMonth,
         snapForTeam
       );
+      const allStudentCountTeam = getOverallSatisfactionDenominator(tutor);
       
-      if (currentMonthData && baseStudentCountTeam > 0) {
+      if (currentMonthData && (lessonStudentCountTeam > 0 || allStudentCountTeam > 0)) {
         const satisfactionValue = currentMonthData.average * 10;
         const satisfactionCount = currentMonthData.count;
-        const collectionRateValue = (satisfactionCount / baseStudentCountTeam * 100);
-        const satisfactionScoreValue = satisfactionValue * collectionRateValue / 100;
         
         teamSatisfaction += satisfactionValue;
-        teamTotalAnswers  += satisfactionCount;           // 回答数を累積
-        teamTotalStudents += baseStudentCountTeam;        // 生徒数を累積
-        teamSatisfactionScore += satisfactionScoreValue;
         teamValidCount++;
+
+        if (lessonStudentCountTeam > 0) {
+          const rate = satisfactionCount / lessonStudentCountTeam * 100;
+          teamLessonTotalAnswers += satisfactionCount;
+          teamLessonTotalStudents += lessonStudentCountTeam;
+          teamLessonSatisfactionScore += satisfactionValue * rate / 100;
+          teamLessonValidCount++;
+        }
+        if (allStudentCountTeam > 0) {
+          const rate = satisfactionCount / allStudentCountTeam * 100;
+          teamAllTotalAnswers += satisfactionCount;
+          teamAllTotalStudents += allStudentCountTeam;
+          teamAllSatisfactionScore += satisfactionValue * rate / 100;
+          teamAllValidCount++;
+        }
       }
     });
     
@@ -3480,9 +3532,10 @@ function renderTutorStatistics() {
       sectionCounts: teamSectionCounts,
       sectionStudents: teamSectionStudents,
       satisfaction: teamValidCount > 0 ? (teamSatisfaction / teamValidCount).toFixed(2) : '-',
-      // 回収率 = チーム内全回答数合計 ÷ チーム内全アクティブ生徒数合計 × 100（加重平均）
-      collectionRate: teamTotalStudents > 0 ? (teamTotalAnswers / teamTotalStudents * 100).toFixed(2) : '-',
-      satisfactionScore: teamValidCount > 0 ? (teamSatisfactionScore / teamValidCount).toFixed(2) : '-',
+      lessonCollectionRate: teamLessonTotalStudents > 0 ? (teamLessonTotalAnswers / teamLessonTotalStudents * 100).toFixed(2) : '-',
+      allCollectionRate: teamAllTotalStudents > 0 ? (teamAllTotalAnswers / teamAllTotalStudents * 100).toFixed(2) : '-',
+      lessonSatisfactionScore: teamLessonValidCount > 0 ? (teamLessonSatisfactionScore / teamLessonValidCount).toFixed(2) : '-',
+      allSatisfactionScore: teamAllValidCount > 0 ? (teamAllSatisfactionScore / teamAllValidCount).toFixed(2) : '-',
       wanamiUsage: 0  // Will be populated later from API
     };
   });
@@ -3493,7 +3546,7 @@ function renderTutorStatistics() {
       <h3 class="text-lg font-semibold text-gray-800 mb-3">
         <i class="fas fa-globe mr-2"></i>全体統計
       </h3>
-      <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 ${showOverallMetrics ? 'xl:grid-cols-8' : 'xl:grid-cols-6'} gap-4">
         <div class="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
           <div class="text-sm text-gray-600 mb-1">アクティブTutor数</div>
           <div class="text-3xl font-bold text-blue-600">${allActiveTutors.length}名</div>
@@ -3527,13 +3580,23 @@ function renderTutorStatistics() {
           <div class="text-3xl font-bold ${overallSatisfactionColor}">${overallAvgSatisfaction}</div>
         </div>
         <div class="bg-green-50 p-4 rounded-lg border-2 border-green-200">
+          <div class="text-sm text-gray-600 mb-1">レッスン回収率</div>
+          <div class="text-3xl font-bold ${overallLessonCollectionRateColor}">${overallLessonCollectionRate}${overallLessonCollectionRate !== '-' ? '%' : ''}</div>
+        </div>
+        ${showOverallMetrics ? `
+        <div class="bg-emerald-50 p-4 rounded-lg border-2 border-emerald-200">
           <div class="text-sm text-gray-600 mb-1">全体回収率</div>
-          <div class="text-3xl font-bold ${overallCollectionRateColor}">${overallAvgCollectionRate}${overallAvgCollectionRate !== '-' ? '%' : ''}</div>
-        </div>
+          <div class="text-3xl font-bold ${overallAllCollectionRateColor}">${overallAllCollectionRate}${overallAllCollectionRate !== '-' ? '%' : ''}</div>
+        </div>` : ''}
         <div class="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
-          <div class="text-sm text-gray-600 mb-1">満足度スコア平均</div>
-          <div class="text-3xl font-bold ${overallSatisfactionScoreColor}">${overallAvgSatisfactionScore}</div>
+          <div class="text-sm text-gray-600 mb-1">レッスン満足度スコア平均</div>
+          <div class="text-3xl font-bold ${overallLessonSatisfactionScoreColor}">${overallLessonSatisfactionScore}</div>
         </div>
+        ${showOverallMetrics ? `
+        <div class="bg-violet-50 p-4 rounded-lg border-2 border-violet-200">
+          <div class="text-sm text-gray-600 mb-1">全体満足度スコア平均</div>
+          <div class="text-3xl font-bold ${overallAllSatisfactionScoreColor}">${overallAllSatisfactionScore}</div>
+        </div>` : ''}
       </div>
     </div>
     
@@ -3550,8 +3613,10 @@ function renderTutorStatistics() {
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tutor数</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">担当セクション</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度平均</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">全体回収率</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">満足度スコア平均</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン回収率</th>
+              ${showOverallMetrics ? '<th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">全体回収率</th>' : ''}
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン満足度スコア平均</th>
+              ${showOverallMetrics ? '<th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">全体満足度スコア平均</th>' : ''}
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">わなみさん合計</th>
             </tr>
           </thead>
@@ -3565,8 +3630,10 @@ function renderTutorStatistics() {
               .map(team => {
               const stats = teamStats[team];
               const satisfactionColor = stats.satisfaction !== '-' && parseFloat(stats.satisfaction) < 80 ? 'text-red-600' : 'text-purple-600';
-              const collectionRateColor = stats.collectionRate !== '-' && parseFloat(stats.collectionRate) < 50 ? 'text-red-600' : 'text-green-600';
-              const satisfactionScoreColor = stats.satisfactionScore !== '-' && parseFloat(stats.satisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+              const lessonCollectionRateColor = stats.lessonCollectionRate !== '-' && parseFloat(stats.lessonCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+              const allCollectionRateColor = stats.allCollectionRate !== '-' && parseFloat(stats.allCollectionRate) < 50 ? 'text-red-600' : 'text-green-600';
+              const lessonSatisfactionScoreColor = stats.lessonSatisfactionScore !== '-' && parseFloat(stats.lessonSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
+              const allSatisfactionScoreColor = stats.allSatisfactionScore !== '-' && parseFloat(stats.allSatisfactionScore) < 60 ? 'text-red-600' : 'text-indigo-600';
               
               return `
                 <tr class="hover:bg-gray-50">
@@ -3593,8 +3660,10 @@ function renderTutorStatistics() {
                     }
                   </td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionColor}">${stats.satisfaction}</td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${collectionRateColor}">${stats.collectionRate}${stats.collectionRate !== '-' ? '%' : ''}</td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${satisfactionScoreColor}">${stats.satisfactionScore}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${lessonCollectionRateColor}">${stats.lessonCollectionRate}${stats.lessonCollectionRate !== '-' ? '%' : ''}</td>
+                  ${showOverallMetrics ? `<td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${allCollectionRateColor}">${stats.allCollectionRate}${stats.allCollectionRate !== '-' ? '%' : ''}</td>` : ''}
+                  <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${lessonSatisfactionScoreColor}">${stats.lessonSatisfactionScore}</td>
+                  ${showOverallMetrics ? `<td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${allSatisfactionScoreColor}">${stats.allSatisfactionScore}</td>` : ''}
                   <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">
                     <span class="wanami-usage-team text-gray-400" data-team-name="${team}">...</span>
                   </td>
@@ -3610,6 +3679,7 @@ function renderTutorStatistics() {
 
 // Render tutor rows
 function renderTutorRows() {
+  const showOverallMetrics = canViewOverallSatisfactionMetrics();
   // Filter: Only show tutors with status='アクティブ' AND job_type contains 'Tutor'
   let filteredTutors = tutors.filter(t => 
     t.status === 'アクティブ' && 
@@ -3625,7 +3695,7 @@ function renderTutorRows() {
   if (filteredTutors.length === 0) {
     return `
       <tr>
-        <td colspan="15" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="${showOverallMetrics ? 17 : 15}" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-inbox text-4xl mb-2"></i>
           <p>アクティブなTutorが見つかりません</p>
         </td>
@@ -3682,12 +3752,13 @@ function renderTutorRows() {
 
     // 25日までは従来のアクティブ生徒数、26日以降は選択月に
     // 1回以上「実施済み」のレッスンがある生徒だけを回収率の分母にする。
-    const baseStudentCount = getSatisfactionDenominator(
+    const lessonStudentCount = getSatisfactionDenominator(
       tutor,
       selectedTutorYear,
       selectedTutorMonth,
       prevSnap
     );
+    const overallStudentCount = getOverallSatisfactionDenominator(tutor);
 
     // レッスン満足度 (平均 × 10、100がMAX、小数第2位まで)
     let satisfactionAverage = '-';
@@ -3707,14 +3778,14 @@ function renderTutorRows() {
     let collectionRate = '-';
     let collectionRateValue = 0;
     let collectionRateColor = 'text-green-600'; // デフォルト色
-    if (!isKyoheiSensei && baseStudentCount > 0 && satisfactionCount > 0) {
-      collectionRateValue = (satisfactionCount / baseStudentCount * 100);
+    if (!isKyoheiSensei && lessonStudentCount > 0 && satisfactionCount > 0) {
+      collectionRateValue = (satisfactionCount / lessonStudentCount * 100);
       collectionRate = `${collectionRateValue.toFixed(2)}%`;
       // 50未満は赤文字
       if (collectionRateValue < 50) {
         collectionRateColor = 'text-red-600';
       }
-    } else if (!isKyoheiSensei && baseStudentCount > 0 && satisfactionCount === 0) {
+    } else if (!isKyoheiSensei && lessonStudentCount > 0 && satisfactionCount === 0) {
       collectionRate = '0.00%';
       collectionRateColor = 'text-red-600'; // 0%は赤文字
     }
@@ -3731,6 +3802,23 @@ function renderTutorRows() {
       if (satisfactionScoreValue < 60) {
         satisfactionScoreColor = 'text-red-600';
       }
+    }
+
+    let overallCollectionRate = '-';
+    let overallCollectionRateValue = 0;
+    let overallCollectionRateColor = 'text-green-600';
+    if (!isKyoheiSensei && overallStudentCount > 0) {
+      overallCollectionRateValue = satisfactionCount / overallStudentCount * 100;
+      overallCollectionRate = `${overallCollectionRateValue.toFixed(2)}%`;
+      if (overallCollectionRateValue < 50) overallCollectionRateColor = 'text-red-600';
+    }
+
+    let overallSatisfactionScore = '-';
+    let overallSatisfactionScoreColor = 'text-indigo-600';
+    if (!isKyoheiSensei && satisfactionValue > 0 && overallCollectionRateValue > 0) {
+      const overallSatisfactionScoreValue = satisfactionValue * overallCollectionRateValue / 100;
+      overallSatisfactionScore = overallSatisfactionScoreValue.toFixed(2);
+      if (overallSatisfactionScoreValue < 60) overallSatisfactionScoreColor = 'text-red-600';
     }
     
     // 満足度ボタン (表示月にデータがある場合のみ表示、きょうへい先生は非表示)
@@ -3801,6 +3889,8 @@ function renderTutorRows() {
     const prevSatisfactionValue = prevSnap ? prevSnap.satisfaction_value : null;
     const prevCollectionRate    = prevSnap ? prevSnap.collection_rate    : null;
     const prevSatisfactionScore = prevSnap ? prevSnap.satisfaction_score : null;
+    const prevOverallCollectionRate = prevSnap ? prevSnap.overall_collection_rate : null;
+    const prevOverallSatisfactionScore = prevSnap ? prevSnap.overall_satisfaction_score : null;
     const prevSnapshotDateStr   = prevSnap ? (prevSnap.snapshot_date ? new Date(prevSnap.snapshot_date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '') : '';
 
     // 差分バッジ
@@ -3816,6 +3906,14 @@ function renderTutorRows() {
       satisfactionScoreValue > 0 ? satisfactionScoreValue.toFixed(2) : null,
       prevSatisfactionScore, '', true
     );
+    const overallCollectionRateDiff = _diffBadge(
+      overallCollectionRateValue > 0 ? overallCollectionRateValue.toFixed(2) : null,
+      prevOverallCollectionRate, '%', true
+    );
+    const overallSatisfactionScoreDiff = _diffBadge(
+      overallSatisfactionScore !== '-' ? overallSatisfactionScore : null,
+      prevOverallSatisfactionScore, '', true
+    );
 
     // 前週値表示
     const prevSatisfactionDisplay = prevSatisfactionValue !== null
@@ -3826,6 +3924,12 @@ function renderTutorRows() {
       : '';
     const prevSatisfactionScoreDisplay = prevSatisfactionScore !== null
       ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevSatisfactionScore).toFixed(2)}</div>`
+      : '';
+    const prevOverallCollectionRateDisplay = prevOverallCollectionRate !== null
+      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevOverallCollectionRate).toFixed(2)}%</div>`
+      : '';
+    const prevOverallSatisfactionScoreDisplay = prevOverallSatisfactionScore !== null
+      ? `<div class="text-xs text-gray-400 mt-0.5">前週: ${parseFloat(prevOverallSatisfactionScore).toFixed(2)}</div>`
       : '';
     // ─────────────────────────────────────────────────────────────────
 
@@ -3872,10 +3976,20 @@ function renderTutorRows() {
           <div><span class="font-semibold ${collectionRateColor}">${collectionRate}</span>${collectionRateDiff}</div>
           ${prevCollectionRateDisplay}
         </td>
+        ${showOverallMetrics ? `
+        <td class="px-4 py-3 text-sm text-center">
+          <div><span class="font-semibold ${overallCollectionRateColor}">${overallCollectionRate}</span>${overallCollectionRateDiff}</div>
+          ${prevOverallCollectionRateDisplay}
+        </td>` : ''}
         <td class="px-4 py-3 text-sm text-center">
           <div><span class="font-bold ${satisfactionScoreColor}">${satisfactionScore}</span>${satisfactionScoreDiff}</div>
           ${prevSatisfactionScoreDisplay}
         </td>
+        ${showOverallMetrics ? `
+        <td class="px-4 py-3 text-sm text-center">
+          <div><span class="font-bold ${overallSatisfactionScoreColor}">${overallSatisfactionScore}</span>${overallSatisfactionScoreDiff}</div>
+          ${prevOverallSatisfactionScoreDisplay}
+        </td>` : ''}
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${wanamiUsage}</td>
       </tr>
     `;
@@ -4293,8 +4407,8 @@ async function exportTutorSatisfactionToSheet() {
       });
       rows.push(satisfactionRow);
       
-      // Row 2: 回収率
-      const collectionRow = ['', '回収率'];
+      // Row 2: レッスン回収率
+      const lessonCollectionRow = ['', 'レッスン回収率'];
       sortedMonths.forEach(month => {
         const monthData = tutorSatisfactionData[month];
         if (monthData) {
@@ -4303,15 +4417,30 @@ async function exportTutorSatisfactionToSheet() {
           const collectionRate = denominator > 0
             ? ((monthData.count / denominator) * 100).toFixed(2)
             : '-';
-          collectionRow.push(collectionRate);
+          lessonCollectionRow.push(collectionRate);
         } else {
-          collectionRow.push('');
+          lessonCollectionRow.push('');
         }
       });
-      rows.push(collectionRow);
+      rows.push(lessonCollectionRow);
+
+      // Row 3: 全体回収率
+      const allCollectionRow = ['', '全体回収率'];
+      sortedMonths.forEach(month => {
+        const monthData = tutorSatisfactionData[month];
+        if (monthData) {
+          const denominator = getOverallSatisfactionDenominator(tutor);
+          allCollectionRow.push(denominator > 0
+            ? ((monthData.count / denominator) * 100).toFixed(2)
+            : '-');
+        } else {
+          allCollectionRow.push('');
+        }
+      });
+      rows.push(allCollectionRow);
       
-      // Row 3: 満足度スコア
-      const scoreRow = ['', '満足度スコア'];
+      // Row 4: レッスン満足度スコア
+      const lessonScoreRow = ['', 'レッスン満足度スコア'];
       sortedMonths.forEach(month => {
         const monthData = tutorSatisfactionData[month];
         if (monthData) {
@@ -4324,12 +4453,29 @@ async function exportTutorSatisfactionToSheet() {
           const satisfactionScore = collectionRate !== null && collectionRate > 0 && satisfactionValue > 0
             ? (satisfactionValue * collectionRate / 100).toFixed(2)
             : '-';
-          scoreRow.push(satisfactionScore);
+          lessonScoreRow.push(satisfactionScore);
         } else {
-          scoreRow.push('');
+          lessonScoreRow.push('');
         }
       });
-      rows.push(scoreRow);
+      rows.push(lessonScoreRow);
+
+      // Row 5: 全体満足度スコア
+      const allScoreRow = ['', '全体満足度スコア'];
+      sortedMonths.forEach(month => {
+        const monthData = tutorSatisfactionData[month];
+        if (monthData) {
+          const denominator = getOverallSatisfactionDenominator(tutor);
+          const collectionRate = denominator > 0 ? (monthData.count / denominator) * 100 : null;
+          const satisfactionValue = monthData.average * 10;
+          allScoreRow.push(collectionRate !== null && collectionRate > 0 && satisfactionValue > 0
+            ? (satisfactionValue * collectionRate / 100).toFixed(2)
+            : '-');
+        } else {
+          allScoreRow.push('');
+        }
+      });
+      rows.push(allScoreRow);
     });
     
     console.log('[Export] Total rows prepared:', rows.length);
@@ -4343,7 +4489,8 @@ async function exportTutorSatisfactionToSheet() {
     const response = await axios.post(`${API_BASE}/api/tutors/export-satisfaction`, {
       rows: rows,
       sortedMonths: sortedMonths,
-      isManualExport: true
+      isManualExport: true,
+      rowGroupSize: 5
     }, {
       headers: { 'Authorization': `Bearer ${sessionToken}` },
       timeout: 120000 // 120 seconds timeout for large exports
@@ -4384,6 +4531,7 @@ async function exportTutorSatisfactionToSheet() {
 
 // Show satisfaction modal for a tutor
 async function showSatisfactionModal(tutorName) {
+  const showOverallMetrics = canViewOverallSatisfactionMetrics();
   const tutorSatisfactionData = satisfactionData[tutorName] || {};
   // 表示中の選択月を使用（currentMonthではなくselectedTutorYear/Monthを参照）
   const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
@@ -4490,6 +4638,8 @@ async function showSatisfactionModal(tutorName) {
       ? baseStudentCountModal
       : getSatisfactionDenominator(tutor, chartYear, chartMonth);
     const collectionRate = denomForChart > 0 ? (data.count / denomForChart * 100) : 0;
+    const allDenomForChart = getOverallSatisfactionDenominator(tutor);
+    const allCollectionRate = allDenomForChart > 0 ? (data.count / allDenomForChart * 100) : 0;
     // 満足度スコア: レッスン満足度 × 回収率(数値) / 100
     const satisfactionScore = satisfactionValue * collectionRate / 100;
     
@@ -4499,7 +4649,9 @@ async function showSatisfactionModal(tutorName) {
       satisfactionValue: satisfactionValue, // 0-100スケール
       count: data.count,
       collectionRate: collectionRate,
-      satisfactionScore: satisfactionScore
+      satisfactionScore: satisfactionScore,
+      allCollectionRate,
+      allSatisfactionScore: satisfactionValue * allCollectionRate / 100
     };
   });
   
@@ -4507,16 +4659,21 @@ async function showSatisfactionModal(tutorName) {
   const chartSatisfactionValues = chartData.map(d => d.satisfactionValue); // 0-100スケールの満足度
   const chartCounts = chartData.map(d => d.count);
   const chartScores = chartData.map(d => d.satisfactionScore);
+  const chartAllScores = chartData.map(d => d.allSatisfactionScore);
   
   // Calculate current month values (baseStudentCountModal を使用)
   const currentSatisfactionValue = currentMonthData.average * 10; // 0-100スケール
   const currentCollectionRate = baseStudentCountModal > 0 ? (currentMonthData.count / baseStudentCountModal * 100) : 0;
   const currentSatisfactionScore = currentSatisfactionValue * currentCollectionRate / 100;
+  const currentAllCollectionRate = activeStudentCount > 0 ? (currentMonthData.count / activeStudentCount * 100) : 0;
+  const currentAllSatisfactionScore = currentSatisfactionValue * currentAllCollectionRate / 100;
   
   // Color coding for modal summary
   const modalSatisfactionColor = currentSatisfactionValue < 80 ? 'text-red-600' : 'text-purple-600';
   const modalCollectionRateColor = currentCollectionRate < 50 ? 'text-red-600' : 'text-green-600';
   const modalSatisfactionScoreColor = currentSatisfactionScore < 60 ? 'text-red-600' : 'text-indigo-600';
+  const modalAllCollectionRateColor = currentAllCollectionRate < 50 ? 'text-red-600' : 'text-green-600';
+  const modalAllSatisfactionScoreColor = currentAllSatisfactionScore < 60 ? 'text-red-600' : 'text-indigo-600';
   
   // Create modal
   const modalHtml = `
@@ -4537,13 +4694,14 @@ async function showSatisfactionModal(tutorName) {
           <div class="bg-purple-50 rounded-lg p-4 mb-6">
             <h4 class="font-semibold text-gray-800 mb-2">表示月 (${selectedYearMonth.replace('/', '年')}月)
               ${completionFilterApplied
-                ? `<span class="ml-2 text-xs font-normal text-gray-500">※ 分母：レッスン実施済みの対象生徒数 ${baseStudentCountModal}名</span>`
+                ? `<span class="ml-2 text-xs font-normal text-gray-500">※ レッスン回収率の分母：レッスン実施済みの対象生徒数 ${baseStudentCountModal}名</span>`
                 : !isCurrentMonthModal && snapForModal && snapForModal.active_student_count > 0
-                ? `<span class="ml-2 text-xs font-normal text-gray-500">※ 分母：スナップショット時点の生徒数 ${snapForModal.active_student_count}名</span>`
-                : `<span class="ml-2 text-xs font-normal text-gray-500">分母：現在のアクティブ生徒数 ${activeStudentCount}名</span>`
+                ? `<span class="ml-2 text-xs font-normal text-gray-500">※ レッスン回収率の分母：スナップショット時点の生徒数 ${snapForModal.active_student_count}名</span>`
+                : `<span class="ml-2 text-xs font-normal text-gray-500">レッスン回収率の分母：現在のアクティブ生徒数 ${activeStudentCount}名</span>`
               }
+              ${showOverallMetrics ? `<span class="ml-2 text-xs font-normal text-gray-500">全体回収率の分母：現在のアクティブ生徒数 ${activeStudentCount}名</span>` : ''}
             </h4>
-            <div class="grid grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-3 ${showOverallMetrics ? 'xl:grid-cols-6' : 'xl:grid-cols-4'} gap-4">
               <div>
                 <div class="text-sm text-gray-600">レッスン満足度</div>
                 <div class="text-3xl font-bold ${modalSatisfactionColor}">${currentSatisfactionValue.toFixed(2)}</div>
@@ -4553,13 +4711,22 @@ async function showSatisfactionModal(tutorName) {
                 <div class="text-3xl font-bold text-blue-600">${currentMonthData.count}件</div>
               </div>
               <div>
-                <div class="text-sm text-gray-600">回収率</div>
+                <div class="text-sm text-gray-600">レッスン回収率</div>
                 <div class="text-3xl font-bold ${modalCollectionRateColor}">${currentCollectionRate.toFixed(2)}%</div>
               </div>
               <div>
-                <div class="text-sm text-gray-600">満足度スコア</div>
+                <div class="text-sm text-gray-600">レッスン満足度スコア</div>
                 <div class="text-3xl font-bold ${modalSatisfactionScoreColor}">${currentSatisfactionScore.toFixed(2)}</div>
               </div>
+              ${showOverallMetrics ? `
+              <div>
+                <div class="text-sm text-gray-600">全体回収率</div>
+                <div class="text-3xl font-bold ${modalAllCollectionRateColor}">${currentAllCollectionRate.toFixed(2)}%</div>
+              </div>
+              <div>
+                <div class="text-sm text-gray-600">全体満足度スコア</div>
+                <div class="text-3xl font-bold ${modalAllSatisfactionScoreColor}">${currentAllSatisfactionScore.toFixed(2)}</div>
+              </div>` : ''}
             </div>
           </div>
           
@@ -4608,13 +4775,21 @@ async function showSatisfactionModal(tutorName) {
             tension: 0.3
           },
           {
-            label: '満足度スコア',
+            label: 'レッスン満足度スコア',
             data: chartScores,
             borderColor: 'rgb(99, 102, 241)',
             backgroundColor: 'rgba(99, 102, 241, 0.1)',
             yAxisID: 'y',
             tension: 0.3
-          }
+          },
+          ...(showOverallMetrics ? [{
+            label: '全体満足度スコア',
+            data: chartAllScores,
+            borderColor: 'rgb(16, 185, 129)',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            yAxisID: 'y',
+            tension: 0.3
+          }] : [])
         ]
       },
       options: {

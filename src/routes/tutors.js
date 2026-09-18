@@ -624,7 +624,10 @@ app.get('/monthly-stats/:year/:month', async (c) => {
 app.post('/export-satisfaction', async (c) => {
   try {
     console.log('[Export] Starting satisfaction export...');
-    const { rows, sortedMonths, isManualExport } = await c.req.json();
+    const { rows, sortedMonths, isManualExport, rowGroupSize: requestedRowGroupSize } = await c.req.json();
+    const rowGroupSize = Number.isInteger(requestedRowGroupSize) && requestedRowGroupSize >= 1 && requestedRowGroupSize <= 10
+      ? requestedRowGroupSize
+      : 3;
     
     console.log('[Export] Received data:', {
       rowCount: rows?.length,
@@ -745,15 +748,15 @@ app.post('/export-satisfaction', async (c) => {
         }
       });
       
-      // Merge cells for tutor names (every 3 rows, column A)
-      console.log('[Export] Adding merge requests for', Math.floor((rows.length - 1) / 3), 'tutors');
-      for (let i = 1; i < rows.length; i += 3) {
+      // Merge cells for each tutor's metric rows in column A.
+      console.log('[Export] Adding merge requests for', Math.ceil((rows.length - 1) / rowGroupSize), 'tutors');
+      for (let i = 1; i < rows.length; i += rowGroupSize) {
         requests.push({
           mergeCells: {
             range: {
               sheetId: newSheetId,
               startRowIndex: i,
-              endRowIndex: i + 3,
+              endRowIndex: Math.min(i + rowGroupSize, rows.length),
               startColumnIndex: 0,
               endColumnIndex: 1
             },
@@ -854,13 +857,13 @@ app.post('/export-satisfaction', async (c) => {
         
         // Merge cells for tutor names
         const mergeRequests = [];
-        for (let i = 1; i < rows.length; i += 3) {
+        for (let i = 1; i < rows.length; i += rowGroupSize) {
           mergeRequests.push({
             mergeCells: {
               range: {
                 sheetId,
                 startRowIndex: i,
-                endRowIndex: i + 3,
+                endRowIndex: Math.min(i + rowGroupSize, rows.length),
                 startColumnIndex: 0,
                 endColumnIndex: 1
               },
@@ -990,7 +993,8 @@ app.get('/weekly-snapshot/latest', async (c) => {
       SELECT DISTINCT ON (tutor_notion_name)
         id, snapshot_date, tutor_notion_name, year_month,
         active_student_count, satisfaction_count,
-        satisfaction_avg, satisfaction_value, collection_rate, satisfaction_score
+        satisfaction_avg, satisfaction_value, collection_rate, satisfaction_score,
+        overall_active_student_count, overall_collection_rate, overall_satisfaction_score
       FROM tutor_weekly_snapshots
       WHERE snapshot_date <= $1
         AND year_month = $2
@@ -1008,6 +1012,9 @@ app.get('/weekly-snapshot/latest', async (c) => {
         satisfaction_value:   row.satisfaction_value !== null ? parseFloat(row.satisfaction_value) : null,
         collection_rate:      row.collection_rate !== null ? parseFloat(row.collection_rate) : null,
         satisfaction_score:   row.satisfaction_score !== null ? parseFloat(row.satisfaction_score) : null,
+        overall_active_student_count: row.overall_active_student_count,
+        overall_collection_rate: row.overall_collection_rate !== null ? parseFloat(row.overall_collection_rate) : null,
+        overall_satisfaction_score: row.overall_satisfaction_score !== null ? parseFloat(row.overall_satisfaction_score) : null,
       };
     });
 
