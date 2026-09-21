@@ -126,8 +126,11 @@ app.get('/tutor-sidebar', async (c) => {
         t.student_capacity,
         t.responsible_section
       FROM tutors t
+      INNER JOIN users u
+        ON LOWER(u.email) = LOWER(t.email)
       WHERE t.tutor_name IS NOT NULL
         AND t.tutor_name <> ''
+        AND COALESCE(u.job_title, '') <> '契約解除'
       ORDER BY t.tutor_name ASC
     `);
 

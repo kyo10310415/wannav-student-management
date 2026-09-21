@@ -35,6 +35,27 @@ function messageContainsBookingUrl(content, bookingUrl) {
   return String(content || '').toLowerCase().includes(expected);
 }
 
+export function resolveTutorBookingLink(student) {
+  const isPro = /pro/i.test(String(student?.contract_plan || ''));
+  const lessonType = isPro ? 'PROプランレッスン' : '通常レッスン';
+  const tutorName = String(student?.booking_tutor_name || student?.homeroom_tutor || '').trim();
+
+  if (!String(student?.homeroom_tutor || '').trim()) {
+    return { url: '', error: '担当Tutorが未設定です' };
+  }
+  if (!student?.booking_user_id) {
+    return { url: '', error: `担当Tutor（${tutorName}）がユーザー管理に登録されていません` };
+  }
+
+  const url = String(
+    isPro ? student.funnel_pro_booking_url : student.funnel_regular_booking_url
+  ).trim();
+  return {
+    url,
+    error: url ? null : `担当Tutor（${tutorName}）の${lessonType}予約URLが未設定です`
+  };
+}
+
 export function classifyFunnelDiscordMessages({
   messages,
   studentDiscordId,
@@ -190,8 +211,28 @@ async function runFunnelDiscordScan(jobId, year, month) {
       [jobId]
     );
 
-    const [studentsResult, reservationsResult, noShowsResult, settingsResult, discordInfo] = await Promise.all([
-      query(`SELECT student_id, status, contract_plan, lesson_start_date FROM students`),
+    const [studentsResult, reservationsResult, noShowsResult, discordInfo] = await Promise.all([
+      query(`
+        SELECT
+          s.student_id,
+          s.status,
+          s.contract_plan,
+          s.lesson_start_date,
+          s.homeroom_tutor,
+          t.tutor_name AS booking_tutor_name,
+          u.id AS booking_user_id,
+          u.funnel_regular_booking_url,
+          u.funnel_pro_booking_url
+        FROM students s
+        LEFT JOIN LATERAL (
+          SELECT tutor_name, email
+          FROM tutors
+          WHERE notion_name = s.homeroom_tutor
+          ORDER BY id
+          LIMIT 1
+        ) t ON TRUE
+        LEFT JOIN users u ON LOWER(u.email) = LOWER(t.email)
+      `),
       query(
         `SELECT student_id, COUNT(*)::int AS reservation_count
            FROM lessons
@@ -212,10 +253,6 @@ async function runFunnelDiscordScan(jobId, year, month) {
           WHERE lr.lesson_date >= $1::date AND lr.lesson_date < $2::date
             AND lr.lesson_result = '無断キャンセル'`,
         [bounds.startDate, bounds.nextMonthStart]
-      ),
-      query(
-        `SELECT setting_key, setting_value FROM system_settings
-          WHERE setting_key IN ('funnel_regular_booking_url', 'funnel_pro_booking_url')`
       ),
       fetchStudentBroadcastInfo()
     ]);
@@ -242,7 +279,6 @@ async function runFunnelDiscordScan(jobId, year, month) {
       normalizeFunnelStudentId(student.student_id), student
     ]));
     const candidateIds = new Set([...unreservedByStudent.keys(), ...noShowsByStudent.keys()]);
-    const settings = Object.fromEntries(settingsResult.rows.map(row => [row.setting_key, row.setting_value || '']));
     const discordInfoMap = new Map(discordInfo.map(info => [normalizeFunnelStudentId(info.studentId), info]));
 
     await query(
@@ -256,11 +292,8 @@ async function runFunnelDiscordScan(jobId, year, month) {
       const unreservedStudent = unreservedByStudent.get(studentId);
       const noShowEvents = noShowsByStudent.get(studentId) || [];
       const info = discordInfoMap.get(studentId);
-      const bookingUrl = unreservedStudent
-        ? (/pro/i.test(String(unreservedStudent.contract_plan || ''))
-          ? settings.funnel_pro_booking_url
-          : settings.funnel_regular_booking_url)
-        : null;
+      const bookingLink = unreservedStudent ? resolveTutorBookingLink(unreservedStudent) : null;
+      const bookingUrl = bookingLink?.url || null;
       const latestNoShowDeadline = noShowEvents.reduce((latest, event) => {
         const deadline = new Date(new Date(event.event_at).getTime() + (7 * 24 * 60 * 60 * 1000));
         return deadline > latest ? deadline : latest;
@@ -279,11 +312,7 @@ async function runFunnelDiscordScan(jobId, year, month) {
           noShowEvents
         });
         if (unreservedStudent) {
-          const bookingError = bookingUrl
-            ? null
-            : (/pro/i.test(String(unreservedStudent.contract_plan || ''))
-              ? 'PROプランレッスン予約URLが未設定です'
-              : '通常レッスン予約URLが未設定です');
+          const bookingError = bookingLink.error;
           await upsertBookingCheck(
             jobId,
             bounds.yearMonth,
