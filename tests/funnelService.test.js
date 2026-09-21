@@ -98,13 +98,18 @@ test('counts every reservation and completed lesson against two lessons per stud
     numerator: 3, denominator: 6, rate: 50, available: true
   });
   assert.equal(result.overall.survey.numerator, 1);
+  assert.deepEqual(result.overall.surveyAmongCompleted, {
+    numerator: 1, denominator: 2, rate: 50, available: true
+  });
   assert.equal(result.cancellationBreakdown.unreservedCount, 0);
   assert.equal(result.paymentReferenceYearMonth, '2026-08');
   assert.equal(result.tutors[0].metrics.denominator, 2);
   assert.equal(result.tutors[0].metrics.reservation.rate, 75);
   assert.equal(result.tutors[0].metrics.completion.rate, 50);
+  assert.equal(result.tutors[0].metrics.surveyAmongCompleted.rate, 100);
   assert.equal(result.tutors[1].metrics.denominator, 1);
   assert.equal(result.tutors[1].metrics.reservation.rate, 150);
+  assert.equal(result.tutors[1].metrics.surveyAmongCompleted.rate, 0);
 });
 
 test('marks payment and survey metrics unavailable instead of reporting false zeroes', () => {
@@ -120,6 +125,31 @@ test('marks payment and survey metrics unavailable instead of reporting false ze
   assert.equal(result.overall.payment.rate, null);
   assert.equal(result.overall.survey.available, false);
   assert.equal(result.overall.survey.rate, null);
+  assert.equal(result.overall.surveyAmongCompleted.available, false);
+  assert.equal(result.overall.surveyAmongCompleted.rate, null);
+});
+
+test('calculates survey response rate only among students with a completed lesson', () => {
+  const result = buildFunnelData({
+    students: [
+      { student_id: 'S-1', status: 'アクティブ', contract_plan: '通常' },
+      { student_id: 'S-2', status: 'アクティブ', contract_plan: '通常' }
+    ],
+    completedRows: [{ student_id: 'S-1', completion_count: 2 }],
+    surveyRecords: [
+      { student_id: 'S-1', year_month: '2026/9' },
+      { student_id: 'S-2', year_month: '2026/9' }
+    ],
+    year: 2026,
+    month: 9
+  });
+
+  assert.deepEqual(result.overall.survey, {
+    numerator: 2, denominator: 2, rate: 100, available: true
+  });
+  assert.deepEqual(result.overall.surveyAmongCompleted, {
+    numerator: 1, denominator: 1, rate: 100, available: true
+  });
 });
 
 test('assigns each student to the first month after their final completed lesson', () => {
