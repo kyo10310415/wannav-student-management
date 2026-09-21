@@ -1596,6 +1596,45 @@ const migrations = [
       DELETE FROM system_settings
        WHERE setting_key IN ('funnel_regular_booking_url', 'funnel_pro_booking_url');
     `
+  },
+  {
+    version: 55,
+    name: 'add_tutor_booking_urls_to_users',
+    up: `
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS funnel_regular_booking_url TEXT,
+        ADD COLUMN IF NOT EXISTS funnel_pro_booking_url TEXT;
+
+      UPDATE users
+         SET funnel_regular_booking_url = NULLIF((
+               SELECT setting_value
+                 FROM system_settings
+                WHERE setting_key = 'funnel_regular_booking_url'
+             ), '')
+       WHERE funnel_regular_booking_url IS NULL
+         AND EXISTS (
+           SELECT 1 FROM tutors t WHERE LOWER(t.email) = LOWER(users.email)
+         );
+
+      UPDATE users
+         SET funnel_pro_booking_url = NULLIF((
+               SELECT setting_value
+                 FROM system_settings
+                WHERE setting_key = 'funnel_pro_booking_url'
+             ), '')
+       WHERE funnel_pro_booking_url IS NULL
+         AND EXISTS (
+           SELECT 1 FROM tutors t WHERE LOWER(t.email) = LOWER(users.email)
+         );
+
+      COMMENT ON COLUMN users.funnel_regular_booking_url IS 'Tutor別の通常レッスン予約URL（ファネル判定用）';
+      COMMENT ON COLUMN users.funnel_pro_booking_url IS 'Tutor別のPROプランレッスン予約URL（ファネル判定用）';
+    `,
+    down: `
+      ALTER TABLE users
+        DROP COLUMN IF EXISTS funnel_pro_booking_url,
+        DROP COLUMN IF EXISTS funnel_regular_booking_url;
+    `
   }
 ];
 

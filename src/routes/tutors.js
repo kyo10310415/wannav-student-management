@@ -40,7 +40,16 @@ async function requireTutorQualityExportAuth(c, next) {
 app.get('/', async (c) => {
   try {
     const result = await query(
-      'SELECT * FROM tutors ORDER BY name ASC'
+      `SELECT
+         t.*,
+         EXISTS (
+           SELECT 1
+           FROM users u
+           WHERE LOWER(u.email) = LOWER(t.email)
+             AND COALESCE(u.job_title, '') <> '契約解除'
+         ) AS is_assignable
+       FROM tutors t
+       ORDER BY t.name ASC`
     );
     
     return c.json({

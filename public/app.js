@@ -1612,11 +1612,18 @@ function renderReservationsPage() {
 
 // Get tutor options for filter (only cached tutors)
 function getTutorOptions() {
-  // Get unique notion_names from students (all tutors, regardless of cache)
+  const assignableNotionNames = new Set(
+    tutors
+      .filter(tutor => tutor.is_assignable === true)
+      .map(tutor => tutor.notion_name)
+      .filter(Boolean)
+  );
+
+  // ユーザー管理に登録済みで、契約解除ではないTutorのみを候補にする
   const uniqueNotionNames = [...new Set(
     students
       .map(s => s.homeroom_tutor)
-      .filter(notionName => notionName) // 空でないもののみ
+      .filter(notionName => notionName && assignableNotionNames.has(notionName))
   )];
   
   // Map notion_name to tutor_name for display
@@ -8143,15 +8150,11 @@ async function renderUsersPage() {
   `;
   
   try {
-    // Fetch users and booking-link settings
+    // Fetch users
     const requestConfig = { headers: { 'Authorization': `Bearer ${sessionToken}` } };
-    const [response, bookingLinksResponse] = await Promise.all([
-      axios.get(`${API_BASE}/api/users`, requestConfig),
-      axios.get(`${API_BASE}/api/users/booking-links`, requestConfig)
-    ]);
+    const response = await axios.get(`${API_BASE}/api/users`, requestConfig);
     
     const users = response.data.data;
-    const bookingLinks = bookingLinksResponse.data.data || {};
     
     content.innerHTML = `
       <div class="bg-white rounded-lg shadow-md p-6">
@@ -8170,32 +8173,6 @@ async function renderUsersPage() {
           </div>
         </div>
 
-        <div class="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-5">
-          <div class="flex flex-col lg:flex-row lg:items-end gap-4">
-            <div class="flex-1">
-              <h3 class="font-bold text-indigo-900">
-                <i class="fas fa-link mr-2"></i>ファネル管理・予約リンク判定設定
-              </h3>
-              <p class="mt-1 text-xs text-indigo-700">Discord投稿に以下のURLが含まれている場合、予約リンク送付済みとして判定します。</p>
-              <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div>
-                  <label for="funnel-regular-booking-url" class="block text-sm font-semibold text-gray-700 mb-1">通常レッスン予約URL</label>
-                  <input id="funnel-regular-booking-url" type="url" value="${escapeHtml(bookingLinks.regularUrl || '')}"
-                    placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500">
-                </div>
-                <div>
-                  <label for="funnel-pro-booking-url" class="block text-sm font-semibold text-gray-700 mb-1">PROプランレッスン予約URL</label>
-                  <input id="funnel-pro-booking-url" type="url" value="${escapeHtml(bookingLinks.proUrl || '')}"
-                    placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500">
-                </div>
-              </div>
-            </div>
-            <button onclick="saveFunnelBookingLinks()" class="px-5 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition whitespace-nowrap">
-              <i class="fas fa-save mr-2"></i>設定を保存
-            </button>
-          </div>
-        </div>
-        
         <!-- Users table -->
         <div class="overflow-x-auto">
           <table class="w-full">
@@ -8207,6 +8184,7 @@ async function renderUsersPage() {
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tutor番号</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">権限</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">役職</th>
+                <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">予約URL</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Discord設定</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">パスワード変更必須</th>
                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">最終ログイン</th>
@@ -8221,7 +8199,7 @@ async function renderUsersPage() {
                   <td class="px-4 py-3 text-sm">${user.tutor_name || '-'}</td>
                   <td class="px-4 py-3 text-sm font-mono text-gray-600">${user.tutor_number || '-'}</td>
                   <td class="px-4 py-3">
-                    <select 
+                    <select
                       class="px-2 py-1 border rounded text-sm ${getRoleBadgeClass(user.role)}"
                       onchange="updateUserRole(${user.id}, this.value)"
                     >
@@ -8243,6 +8221,23 @@ async function renderUsersPage() {
                       <option value="部署移動" ${user.job_title === '部署移動' ? 'selected' : ''}>部署移動</option>
                       <option value="契約解除" ${user.job_title === '契約解除' ? 'selected' : ''}>契約解除</option>
                     </select>
+                  </td>
+                  <td class="px-4 py-3">
+                    ${user.tutor_name ? `
+                      <button
+                        data-user-id="${user.id}"
+                        data-email="${escapeHtml(user.email)}"
+                        data-tutor-name="${escapeHtml(user.tutor_name)}"
+                        data-regular-url="${escapeHtml(user.funnel_regular_booking_url || '')}"
+                        data-pro-url="${escapeHtml(user.funnel_pro_booking_url || '')}"
+                        onclick="showEditBookingLinksModal(this)"
+                        class="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 transition whitespace-nowrap"
+                        title="Tutor別の予約URLを編集"
+                      >
+                        <i class="fas fa-link mr-1"></i>
+                        ${user.funnel_regular_booking_url || user.funnel_pro_booking_url ? '設定済み' : '未設定'}
+                      </button>
+                    ` : '<span class="text-xs text-gray-400">Tutor未紐付け</span>'}
                   </td>
                   <td class="px-4 py-3">
                     <button 
@@ -8302,16 +8297,67 @@ async function renderUsersPage() {
   }
 }
 
-async function saveFunnelBookingLinks() {
-  const regularUrl = document.getElementById('funnel-regular-booking-url')?.value.trim() || '';
-  const proUrl = document.getElementById('funnel-pro-booking-url')?.value.trim() || '';
+function showEditBookingLinksModal(button) {
+  const { userId, email, tutorName, regularUrl, proUrl } = button.dataset;
+  const modal = document.createElement('div');
+  modal.id = 'edit-booking-links-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+      <div class="flex justify-between items-center p-6 border-b">
+        <h2 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-link mr-2 text-teal-600"></i>予約URL設定
+        </h2>
+        <button type="button" onclick="closeEditBookingLinksModal()" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <form id="edit-booking-links-form" class="p-6 space-y-5">
+        <input type="hidden" id="booking-links-user-id" value="${escapeHtml(userId)}">
+        <div class="bg-teal-50 border border-teal-200 rounded-lg p-4 text-sm text-teal-900">
+          <strong>${escapeHtml(tutorName)}</strong>（${escapeHtml(email)}）の予約URL
+        </div>
+        <p class="text-sm text-gray-600">Discord投稿に設定したURLが含まれている場合、このTutorの担当生徒を「予約リンク送付済み」と判定します。</p>
+        <div>
+          <label for="booking-links-regular-url" class="block text-sm font-semibold text-gray-700 mb-1">通常レッスン予約URL</label>
+          <input id="booking-links-regular-url" type="url" value="${escapeHtml(regularUrl || '')}"
+            placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
+        </div>
+        <div>
+          <label for="booking-links-pro-url" class="block text-sm font-semibold text-gray-700 mb-1">PROプランレッスン予約URL</label>
+          <input id="booking-links-pro-url" type="url" value="${escapeHtml(proUrl || '')}"
+            placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
+        </div>
+        <div class="flex justify-end gap-3 pt-4 border-t">
+          <button type="button" onclick="closeEditBookingLinksModal()" class="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">キャンセル</button>
+          <button type="submit" class="px-5 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700">
+            <i class="fas fa-save mr-2"></i>保存
+          </button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('edit-booking-links-form').addEventListener('submit', saveTutorBookingLinks);
+}
+
+function closeEditBookingLinksModal() {
+  document.getElementById('edit-booking-links-modal')?.remove();
+}
+
+async function saveTutorBookingLinks(event) {
+  event.preventDefault();
+  const userId = document.getElementById('booking-links-user-id').value;
+  const regularUrl = document.getElementById('booking-links-regular-url').value.trim();
+  const proUrl = document.getElementById('booking-links-pro-url').value.trim();
   try {
     await axios.put(
-      `${API_BASE}/api/users/booking-links`,
+      `${API_BASE}/api/users/${userId}/booking-links`,
       { regularUrl, proUrl },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     showNotification('予約URL設定を保存しました', 'success');
+    closeEditBookingLinksModal();
+    await renderUsersPage();
   } catch (error) {
     console.error('予約URL設定の保存エラー:', error);
     showNotification(error.response?.data?.error || '予約URL設定の保存に失敗しました', 'error');
@@ -16980,6 +17026,12 @@ async function renderHandoverPage() {
 
 function _renderHandoverLayout() {
   const content = document.getElementById('content');
+  const assignableNotionNames = new Set(
+    handoverTutorSidebar.map(tutor => tutor.notion_name).filter(Boolean)
+  );
+  const assignableTutorNames = new Set(
+    handoverTutorSidebar.map(tutor => tutor.tutor_name).filter(Boolean)
+  );
 
   content.innerHTML = `
     <div class="flex gap-4 items-start">
@@ -17029,7 +17081,7 @@ function _renderHandoverLayout() {
                 <select id="handover-filter-assigned" onchange="handoverApplyFilter()"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="all">すべて</option>
-                  ${[...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+                  ${[...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(t => t && assignableNotionNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
                 </select>
               </div>
               <div>
@@ -17040,7 +17092,7 @@ function _renderHandoverLayout() {
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="all">すべて</option>
                   <option value="__empty__" ${handoverFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
-                  ${[...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+                  ${[...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(t => t && assignableTutorNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
                 </select>
               </div>
             </div>
@@ -17066,7 +17118,7 @@ function _renderHandoverLayout() {
                 <select id="new-assign-filter-assigned" onchange="newAssignApplyFilter()"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
                   <option value="all">すべて</option>
-                  ${[...new Set(newAssignStudents.map(s => s.homeroom_tutor).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+                  ${[...new Set(newAssignStudents.map(s => s.homeroom_tutor).filter(t => t && assignableNotionNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
                 </select>
               </div>
               <div>
@@ -17077,7 +17129,7 @@ function _renderHandoverLayout() {
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
                   <option value="all">すべて</option>
                   <option value="__empty__" ${newAssignFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
-                  ${[...new Set(newAssignStudents.map(s => s.handover_tutor_name).filter(Boolean))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+                  ${[...new Set(newAssignStudents.map(s => s.handover_tutor_name).filter(t => t && assignableTutorNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
                 </select>
               </div>
             </div>

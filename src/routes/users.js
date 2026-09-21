@@ -60,6 +60,8 @@ app.get('/', requireAdmin, async (c) => {
           u.discord_webhook_url,
           u.discord_user_id,
           u.job_title,
+          u.funnel_regular_booking_url,
+          u.funnel_pro_booking_url,
           t.tutor_name as tutor_name,
           t.employee_id as tutor_number
         FROM users u
@@ -130,33 +132,10 @@ app.get('/consultation-staff', async (c) => {
   }
 });
 
-/** ファネル判定用の予約URL設定を取得（管理者のみ） */
-app.get('/booking-links', requireAdmin, async (c) => {
+/** Tutor別のファネル判定用予約URLを更新（管理者のみ） */
+app.put('/:id/booking-links', requireAdmin, async (c) => {
   try {
-    const result = await query(
-      `SELECT setting_key, setting_value
-         FROM system_settings
-        WHERE setting_key IN ('funnel_regular_booking_url', 'funnel_pro_booking_url')`
-    );
-    const settings = Object.fromEntries(
-      result.rows.map(row => [row.setting_key, row.setting_value || ''])
-    );
-    return c.json({
-      success: true,
-      data: {
-        regularUrl: settings.funnel_regular_booking_url || '',
-        proUrl: settings.funnel_pro_booking_url || ''
-      }
-    });
-  } catch (error) {
-    console.error('Get booking link settings error:', error);
-    return c.json({ success: false, error: '予約URL設定の取得に失敗しました' }, 500);
-  }
-});
-
-/** ファネル判定用の予約URL設定を更新（管理者のみ） */
-app.put('/booking-links', requireAdmin, async (c) => {
-  try {
+    const userId = c.req.param('id');
     const { regularUrl = '', proUrl = '' } = await c.req.json();
     for (const [label, value] of [['通常レッスン', regularUrl], ['PROプランレッスン', proUrl]]) {
       if (value && !/^https:\/\//i.test(String(value).trim())) {
@@ -164,18 +143,21 @@ app.put('/booking-links', requireAdmin, async (c) => {
       }
     }
 
-    const updatedBy = c.get('currentUser')?.email || 'unknown';
-    await query(
-      `INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-       VALUES
-         ('funnel_regular_booking_url', $1, '通常レッスンの予約URL', $3, NOW()),
-         ('funnel_pro_booking_url', $2, 'PROプランレッスンの予約URL', $3, NOW())
-       ON CONFLICT (setting_key) DO UPDATE SET
-         setting_value = EXCLUDED.setting_value,
-         updated_by = EXCLUDED.updated_by,
-         updated_at = NOW()`,
-      [String(regularUrl).trim(), String(proUrl).trim(), updatedBy]
+    const result = await query(
+      `UPDATE users
+          SET funnel_regular_booking_url = NULLIF($1, ''),
+              funnel_pro_booking_url = NULLIF($2, ''),
+              updated_at = NOW()
+        WHERE id = $3
+          AND EXISTS (
+            SELECT 1 FROM tutors t WHERE LOWER(t.email) = LOWER(users.email)
+          )
+      RETURNING id`,
+      [String(regularUrl).trim(), String(proUrl).trim(), userId]
     );
+    if (result.rows.length === 0) {
+      return c.json({ success: false, error: 'Tutorと紐付くユーザーが見つかりません' }, 404);
+    }
     return c.json({ success: true, message: '予約URL設定を保存しました' });
   } catch (error) {
     console.error('Update booking link settings error:', error);
