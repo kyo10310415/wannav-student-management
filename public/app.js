@@ -17113,6 +17113,8 @@ function _renderHandoverLayout() {
                   ${_newAssignTh('lesson_start_date', 'レッスン開始月')}
                   ${_newAssignTh('student_id', '学籍番号')}
                   ${_newAssignTh('name', '生徒名')}
+                  <th class="px-4 py-3 text-left font-semibold text-gray-700">契約プラン</th>
+                  <th class="px-4 py-3 text-center font-semibold text-gray-700 whitespace-nowrap">テキスト種別</th>
                   ${_newAssignTh('lesson_progress', 'レッスン進捗')}
                   ${_newAssignTh('homeroom_tutor', '担当Tutor')}
                   <th class="px-4 py-3 text-left font-semibold text-gray-700">継続月数</th>
@@ -17626,7 +17628,7 @@ function _getNewAssignFiltered() {
 function _renderNewAssignRows() {
   const data = _getNewAssignFiltered();
   if (data.length === 0) {
-    return `<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400">
+    return `<tr><td colspan="12" class="px-4 py-8 text-center text-gray-400">
       <i class="fas fa-inbox text-3xl mb-2"></i><p>対象生徒がいません</p>
     </td></tr>`;
   }
@@ -17681,6 +17683,7 @@ function _renderNewAssignRows() {
         <td class="px-4 py-3 text-gray-600 font-mono text-xs">${escapeHtml(s.student_id || '-')}</td>
         <td class="px-4 py-3 font-medium text-gray-800">${escapeHtml(s.name || '-')}</td>
         <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">${escapeHtml(s.contract_plan || '-')}</td>
+        <td class="px-4 py-3 text-center whitespace-nowrap">${renderStudentTextTypeBadge(s.text_type)}</td>
         <td class="px-4 py-3 text-center">
           ${isPro
             ? '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">Pro</span>'

@@ -304,6 +304,7 @@ app.get('/new-assignments', async (c) => {
         s.name,
         s.lesson_progress,
         s.contract_plan,
+        s.text_type,
         s.homeroom_tutor,
         s.notion_url,
         s.discord_url,
