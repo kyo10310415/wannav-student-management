@@ -5019,6 +5019,7 @@ async function renderTodayLessonsPage() {
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リザルト総合</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">欠席回数</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Meet</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">前回情報</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">リンク</th>
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">レッスン報告</th>
             </tr>
@@ -5114,7 +5115,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
   if (dayStudents.length === 0) {
     return `
       <tr>
-        <td colspan="13" class="px-4 py-8 text-center text-gray-500">
+        <td colspan="14" class="px-4 py-8 text-center text-gray-500">
           <i class="fas fa-calendar-times text-4xl mb-2"></i>
           <p>この日のレッスンはありません</p>
         </td>
@@ -5182,6 +5183,15 @@ function renderTodayStudentRows(dayStudents, displayDate) {
           ${meetLink ? `<a href="${meetLink}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition" title="Google Meetを開く"><i class="fas fa-video mr-1"></i>Meet</a>` : '<span class="text-gray-400 text-xs">-</span>'}
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
+          <button
+            onclick="showPreviousLessonTargets(decodeURIComponent('${encodeURIComponent(student.student_id)}'), '${lessonDateStr}')"
+            class="inline-flex items-center px-3 py-1 bg-teal-600 text-white text-xs font-semibold rounded hover:bg-teal-700 transition"
+            title="前回の悩みと小目標を表示"
+          >
+            <i class="fas fa-history mr-1"></i>確認
+          </button>
+        </td>
+        <td class="px-3 py-3 whitespace-nowrap text-center">
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
@@ -5197,6 +5207,94 @@ function renderTodayStudentRows(dayStudents, displayDate) {
       </tr>
     `;
   }).join('');
+}
+
+async function showPreviousLessonTargets(studentId, lessonDate) {
+  document.getElementById('previous-lesson-targets-modal')?.remove();
+
+  const student = students.find(item => item.student_id === studentId);
+  const studentName = student?.name || studentId;
+  const modal = document.createElement('div');
+  modal.id = 'previous-lesson-targets-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+  modal.onclick = closePreviousLessonTargetsModal;
+  modal.innerHTML = `
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="p-5 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+        <div>
+          <h3 class="text-xl font-bold text-gray-800">
+            <i class="fas fa-history mr-2 text-teal-600"></i>前回の悩み・小目標
+          </h3>
+          <p class="text-sm text-gray-500 mt-1">${escapeHtml(studentName)} 様</p>
+        </div>
+        <button onclick="closePreviousLessonTargetsModal()" class="text-gray-500 hover:text-gray-700" aria-label="閉じる">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <div id="previous-lesson-targets-content" class="p-6 text-center text-gray-500">
+        <i class="fas fa-spinner fa-spin text-2xl text-teal-600"></i>
+        <p class="mt-2">前回の議事録を確認しています...</p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  try {
+    const response = await axios.get(
+      `${API_BASE}/api/minutes/previous-context/${encodeURIComponent(studentId)}`,
+      { params: { beforeDate: lessonDate } }
+    );
+    const data = response.data.data;
+    const content = document.getElementById('previous-lesson-targets-content');
+    if (!content) return;
+
+    if (!data.hasPreviousMinutes) {
+      content.innerHTML = `
+        <div class="py-6">
+          <i class="fas fa-file-alt text-4xl text-gray-300"></i>
+          <p class="mt-3 text-gray-600">このレッスンより前の議事録はありません。</p>
+        </div>
+      `;
+      return;
+    }
+
+    const renderTarget = (label, icon, value, colorClass) => `
+      <div class="border border-gray-200 rounded-lg p-4 text-left">
+        <h4 class="font-semibold text-gray-700 mb-3">
+          <i class="fas ${icon} mr-2 ${colorClass}"></i>${label}
+        </h4>
+        ${value
+          ? `<p class="text-gray-900 whitespace-pre-wrap break-words">${escapeHtml(value)}</p>`
+          : '<p class="text-gray-400">記録なし</p>'}
+      </div>
+    `;
+
+    content.innerHTML = `
+      <p class="text-sm text-gray-500 text-left mb-4">
+        参照した議事録のレッスン日：<span class="font-semibold text-gray-700">${escapeHtml(data.previousLessonDate)}</span>
+      </p>
+      <div class="grid grid-cols-1 gap-4">
+        ${renderTarget('前回の悩み', 'fa-cloud', data.anxietyContent, 'text-blue-500')}
+        ${renderTarget('前回の小目標', 'fa-bullseye', data.smallGoal, 'text-orange-500')}
+      </div>
+    `;
+  } catch (error) {
+    console.error('前回の悩み・小目標取得エラー:', error);
+    const content = document.getElementById('previous-lesson-targets-content');
+    if (content) {
+      content.innerHTML = `
+        <div class="py-6 text-red-600">
+          <i class="fas fa-exclamation-circle text-3xl"></i>
+          <p class="mt-3">${escapeHtml(error.response?.data?.error || '前回情報の取得に失敗しました')}</p>
+        </div>
+      `;
+    }
+  }
+}
+
+function closePreviousLessonTargetsModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('previous-lesson-targets-modal')?.remove();
 }
 
 // ===== Column Filter and Sort Functions =====

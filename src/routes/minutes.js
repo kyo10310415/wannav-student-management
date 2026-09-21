@@ -3,6 +3,7 @@
  *
  * GET  /api/minutes/:studentId          — 生徒の議事録一覧（日付降順）
  * GET  /api/minutes/:studentId/:id      — 議事録1件取得
+ * GET  /api/minutes/previous-context/:studentId — 指定日より前の最新の悩み・小目標
  * POST /api/minutes/generate            — 議事録を生成してDBに保存
  * PUT  /api/minutes/:id                 — 議事録テキストを手動編集
  * DELETE /api/minutes/:id              — 議事録削除
@@ -19,6 +20,7 @@ import {
   getPreviousMinutesContext,
   resolveMinutesTutor
 } from '../services/minutesContextService.js';
+import { getPreviousMinutesQualityTargets } from '../services/minutesQualityService.js';
 import {
   buildLessonContentIndex,
   getLessonContent,
@@ -145,6 +147,33 @@ app.get('/list/:studentId', async (c) => {
     return c.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('[Minutes] GET /list/:studentId error:', err);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/** 指定したレッスン日より前の、最新の悩み・小目標 */
+app.get('/previous-context/:studentId', async (c) => {
+  try {
+    const studentId = c.req.param('studentId');
+    const beforeDate = c.req.query('beforeDate');
+    if (!parseIsoDate(beforeDate)) {
+      return c.json({ success: false, error: 'beforeDate は YYYY-MM-DD 形式で指定してください' }, 400);
+    }
+
+    const previousMinutes = await getPreviousMinutesContext(studentId, beforeDate);
+    const targets = getPreviousMinutesQualityTargets(previousMinutes);
+
+    return c.json({
+      success: true,
+      data: {
+        hasPreviousMinutes: Boolean(previousMinutes),
+        previousLessonDate: previousMinutes?.lesson_date || null,
+        anxietyContent: targets.anxietyContent,
+        smallGoal: targets.smallGoal
+      }
+    });
+  } catch (err) {
+    console.error('[Minutes] GET /previous-context/:studentId error:', err);
     return c.json({ success: false, error: err.message }, 500);
   }
 });
