@@ -5,6 +5,7 @@ import {
   buildAttritionSummary,
   buildCancellationBreakdown,
   buildFunnelData,
+  buildRebookingSummary,
   getPaymentReferenceYearMonth,
   getPaymentStatusForMonth,
   isFunnelEligibleStudent,
@@ -204,15 +205,37 @@ test('breaks non-attendance reports into student, no-show, and tutor cancellatio
   ], [
     { student_id: 'S-1' },
     { student_id: 'S-2' }
-  ], 10, 7);
+  ], 10, { unreservedStudentCount: 2 });
 
   assert.equal(result.completed, 2);
   assert.equal(result.studentReschedule, 3);
   assert.equal(result.noShow, 1);
   assert.equal(result.tutorReschedule, 2);
   assert.equal(result.bookedNotAttended, 6);
-  assert.equal(result.unreservedCount, 3);
+  assert.equal(result.unreservedCount, 2);
   assert.equal(result.lessonNotAttendedTotal, 8);
   assert.equal(result.unavailable.rebookedAndCompleted, null);
   assert.equal(result.unavailable.contactedLater, null);
+});
+
+test('classifies the first reservation after a student cancellation', () => {
+  const result = buildRebookingSummary([
+    { student_id: 'S-1', next_lesson_date: '2026-09-15', next_lesson_result: '実施済み' },
+    { student_id: 'S-2', next_lesson_date: '2026-09-20', next_lesson_result: '無断キャンセル' },
+    { student_id: 'S-3', next_lesson_date: null, next_lesson_result: null },
+    { student_id: 'S-4', next_lesson_date: '2026-09-28', next_lesson_result: null },
+    { student_id: 'OUTSIDE', next_lesson_date: null, next_lesson_result: null }
+  ], [
+    { student_id: 'S-1' },
+    { student_id: 'S-2' },
+    { student_id: 'S-3' },
+    { student_id: 'S-4' }
+  ]);
+
+  assert.deepEqual(result, {
+    rebookedAndCompleted: 1,
+    rebookedAndCancelled: 1,
+    rebookingPending: 1,
+    noRebooking: 1
+  });
 });

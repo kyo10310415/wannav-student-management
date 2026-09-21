@@ -1118,7 +1118,7 @@ function renderFunnelCountCard(label, count, options = {}) {
     <div class="rounded-xl border-2 ${tone} px-4 py-3 text-center shadow-sm min-w-[170px]">
       <div class="text-sm font-bold text-gray-900">${escapeHtml(label)}</div>
       <div class="mt-1 ${unavailable ? 'text-sm font-semibold text-gray-400' : 'text-2xl font-black text-red-800'}">
-        ${unavailable ? 'データ未取得' : `${Number(count)}件`}
+        ${unavailable ? 'データ未取得' : `${Number(count)}${options.unit || '件'}`}
       </div>
     </div>
   `;
@@ -1131,7 +1131,7 @@ function renderUnavailableChildren(items) {
       ? 'xl:grid-cols-2'
       : 'xl:grid-cols-1';
   return `<div class="grid grid-cols-1 ${columnClass} gap-2">${items.map(item =>
-    renderFunnelCountCard(item.label, item.value)
+    renderFunnelCountCard(item.label, item.value, { unit: item.unit })
   ).join('')}</div>`;
 }
 
@@ -1154,7 +1154,7 @@ function renderNonAttendanceFlow(breakdown) {
     <section class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
       <div class="px-6 py-5 border-b border-gray-100">
         <h2 class="text-xl font-bold text-gray-900">レッスン未受講の内訳</h2>
-        <p class="mt-1 text-sm text-gray-500">未受講総数は月2回想定の未実施枠、未予約数は月2回想定枠から予約回数を差し引いて算出します</p>
+        <p class="mt-1 text-sm text-gray-500">未受講総数は月2回想定の未実施枠、未予約数は当月の予約が0回の生徒人数です</p>
       </div>
       <div class="p-6 overflow-x-auto">
         <div class="min-w-[240px] lg:min-w-[1180px] grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
@@ -1170,22 +1170,25 @@ function renderNonAttendanceFlow(breakdown) {
                 ${renderCancellationBranch('事前キャンセル', breakdown?.studentReschedule, [
                   { label: '再予約し受講', value: breakdown?.unavailable?.rebookedAndCompleted },
                   { label: '再予約し再キャンセル', value: breakdown?.unavailable?.rebookedAndCancelled },
+                  { label: '再予約済み・結果未確定', value: breakdown?.unavailable?.rebookingPending },
                   { label: '再予約なし', value: breakdown?.unavailable?.noRebooking }
                 ])}
                 ${renderCancellationBranch('連絡なしキャンセル', breakdown?.noShow, [
                   { label: '後日連絡あり', value: breakdown?.unavailable?.contactedLater },
-                  { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow }
+                  { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow },
+                  { label: '7日間確認中', value: breakdown?.unavailable?.followupPending },
+                  { label: 'Tutorからのリマインド', value: breakdown?.unavailable?.tutorReminderSent }
                 ])}
                 ${renderCancellationBranch('先生都合キャンセル', breakdown?.tutorReschedule, [])}
               </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
-              ${renderFunnelCountCard('未予約数', breakdown?.unreservedCount, { primary: true })}
+              ${renderFunnelCountCard('未予約数', breakdown?.unreservedCount, { primary: true, unit: '名' })}
               <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
               <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
               ${renderUnavailableChildren([
-                { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent },
-                { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent }
+                { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent, unit: '名' },
+                { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent, unit: '名' }
               ])}
             </div>
           </div>
@@ -1195,7 +1198,8 @@ function renderNonAttendanceFlow(breakdown) {
             <span class="font-bold">実施済み:</span> ${Number(breakdown?.completed || 0)}件
           </div>
           <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-gray-600">
-            再予約・後日連絡・予約リンク送付状況は、データ取得方法の確定後に数値を連携します。
+            後日連絡は無断キャンセル後7日間（翌月を含む）の生徒本人によるテキスト投稿を集計します。Tutorリマインドは同期間の生徒・Bot以外の投稿です。
+            ${breakdown?.unavailable?.discordErrorCount > 0 ? `<div class="mt-1 text-amber-700">Discord判定不能: ${Number(breakdown.unavailable.discordErrorCount)}件</div>` : ''}
           </div>
         </div>
       </div>
@@ -1301,7 +1305,8 @@ function renderFunnelDashboard() {
         </div>
       </div>
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div>
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
           <label for="funnel-month" class="block text-xs font-bold text-gray-600 mb-1">対象月</label>
           <div class="flex items-center gap-2">
             <button onclick="changeFunnelMonth(-1)" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="前月">
@@ -1313,12 +1318,27 @@ function renderFunnelDashboard() {
               <i class="fas fa-chevron-right"></i>
             </button>
           </div>
+          </div>
+          <button id="funnel-discord-refresh-button" onclick="refreshFunnelDiscordInsights()"
+                  class="h-9 px-4 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition">
+            <i class="fab fa-discord mr-2"></i>Discord状況を更新
+          </button>
         </div>
       </div>
     </div>
 
     ${warnings}
     ${paymentNotice}
+    ${funnelData.discordScan ? `
+      <div class="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3 text-sm text-indigo-800">
+        <i class="fab fa-discord mr-2"></i>Discord状況 最終更新：${escapeHtml(formatDateTime(funnelData.discordScan.completed_at))}
+        （${Number(funnelData.discordScan.processed_count || 0)}名処理、判定不能 ${Number(funnelData.discordScan.error_count || 0)}名）
+      </div>
+    ` : `
+      <div class="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 text-sm text-amber-800">
+        <i class="fas fa-info-circle mr-2"></i>この月のDiscord状況はまだ取得されていません。「Discord状況を更新」を実行してください。
+      </div>
+    `}
 
     <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
       <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
@@ -1350,6 +1370,53 @@ async function setFunnelMonth(value) {
   funnelSelectedMonth = Number(match[2]);
   funnelData = null;
   await renderFunnelPage();
+}
+
+async function refreshFunnelDiscordInsights() {
+  const targetYear = funnelSelectedYear;
+  const targetMonth = funnelSelectedMonth;
+  const button = document.getElementById('funnel-discord-refresh-button');
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>更新を開始中...';
+  }
+
+  try {
+    const response = await axios.post(
+      `${API_BASE}/api/funnel/discord-scan`,
+      { year: targetYear, month: targetMonth },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    const jobId = response.data.data.id;
+    for (let attempt = 0; attempt < 450; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const statusResponse = await axios.get(
+        `${API_BASE}/api/funnel/discord-scan/${encodeURIComponent(jobId)}`,
+        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+      );
+      const job = statusResponse.data.data;
+      if (button) {
+        button.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>${Number(job.processed_count || 0)}/${Number(job.total_count || 0)}名`;
+      }
+      if (job.status === 'completed') {
+        showNotification(`Discord状況を更新しました（判定不能 ${Number(job.error_count || 0)}名）`, 'success');
+        if (targetYear === funnelSelectedYear && targetMonth === funnelSelectedMonth) {
+          funnelData = null;
+          await renderFunnelPage();
+        }
+        return;
+      }
+      if (job.status === 'failed') throw new Error(job.error_message || 'Discord状況の更新に失敗しました');
+    }
+    throw new Error('Discord状況の更新がタイムアウトしました。処理はバックグラウンドで継続している可能性があります');
+  } catch (error) {
+    console.error('Discord状況更新エラー:', error);
+    showNotification(error.response?.data?.error || error.message || 'Discord状況の更新に失敗しました', 'error');
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '<i class="fab fa-discord mr-2"></i>Discord状況を更新';
+    }
+  }
 }
 
 // Render Reservations Page (original page with all columns)
@@ -8076,14 +8143,15 @@ async function renderUsersPage() {
   `;
   
   try {
-    // Fetch users
-    const response = await axios.get(`${API_BASE}/api/users`, {
-      headers: {
-        'Authorization': `Bearer ${sessionToken}`
-      }
-    });
+    // Fetch users and booking-link settings
+    const requestConfig = { headers: { 'Authorization': `Bearer ${sessionToken}` } };
+    const [response, bookingLinksResponse] = await Promise.all([
+      axios.get(`${API_BASE}/api/users`, requestConfig),
+      axios.get(`${API_BASE}/api/users/booking-links`, requestConfig)
+    ]);
     
     const users = response.data.data;
+    const bookingLinks = bookingLinksResponse.data.data || {};
     
     content.innerHTML = `
       <div class="bg-white rounded-lg shadow-md p-6">
@@ -8098,6 +8166,32 @@ async function renderUsersPage() {
             </button>
             <button onclick="showCreateUserModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
               <i class="fas fa-plus mr-2"></i>ユーザーを追加
+            </button>
+          </div>
+        </div>
+
+        <div class="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+          <div class="flex flex-col lg:flex-row lg:items-end gap-4">
+            <div class="flex-1">
+              <h3 class="font-bold text-indigo-900">
+                <i class="fas fa-link mr-2"></i>ファネル管理・予約リンク判定設定
+              </h3>
+              <p class="mt-1 text-xs text-indigo-700">Discord投稿に以下のURLが含まれている場合、予約リンク送付済みとして判定します。</p>
+              <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <label for="funnel-regular-booking-url" class="block text-sm font-semibold text-gray-700 mb-1">通常レッスン予約URL</label>
+                  <input id="funnel-regular-booking-url" type="url" value="${escapeHtml(bookingLinks.regularUrl || '')}"
+                    placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                  <label for="funnel-pro-booking-url" class="block text-sm font-semibold text-gray-700 mb-1">PROプランレッスン予約URL</label>
+                  <input id="funnel-pro-booking-url" type="url" value="${escapeHtml(bookingLinks.proUrl || '')}"
+                    placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500">
+                </div>
+              </div>
+            </div>
+            <button onclick="saveFunnelBookingLinks()" class="px-5 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition whitespace-nowrap">
+              <i class="fas fa-save mr-2"></i>設定を保存
             </button>
           </div>
         </div>
@@ -8205,6 +8299,22 @@ async function renderUsersPage() {
         </button>
       </div>
     `;
+  }
+}
+
+async function saveFunnelBookingLinks() {
+  const regularUrl = document.getElementById('funnel-regular-booking-url')?.value.trim() || '';
+  const proUrl = document.getElementById('funnel-pro-booking-url')?.value.trim() || '';
+  try {
+    await axios.put(
+      `${API_BASE}/api/users/booking-links`,
+      { regularUrl, proUrl },
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    showNotification('予約URL設定を保存しました', 'success');
+  } catch (error) {
+    console.error('予約URL設定の保存エラー:', error);
+    showNotification(error.response?.data?.error || '予約URL設定の保存に失敗しました', 'error');
   }
 }
 

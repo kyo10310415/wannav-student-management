@@ -2,7 +2,11 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { fetchLessonsForTomorrow } from './sheetsService.js';
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 let isClientReady = false;
