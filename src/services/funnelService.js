@@ -168,7 +168,7 @@ export function buildCancellationBreakdown(
   resultRows,
   eligibleStudents,
   expectedLessonCount = 0,
-  reservedLessonCount = 0
+  options = {}
 ) {
   const eligibleStudentIds = new Set(
     (eligibleStudents || []).map(student => normalizeFunnelStudentId(student.student_id))
@@ -205,21 +205,52 @@ export function buildCancellationBreakdown(
   }
 
   const bookedNotAttended = counts.studentReschedule + counts.noShow + counts.tutorReschedule + counts.other;
+  const rebooking = options.rebooking || {};
+  const discord = options.discord || {};
   return {
     lessonNotAttendedTotal: Math.max(0, Number(expectedLessonCount) - counts.completed),
     bookedNotAttended,
-    unreservedCount: Math.max(0, Number(expectedLessonCount) - Number(reservedLessonCount)),
+    unreservedCount: Number(options.unreservedStudentCount) || 0,
     ...counts,
     unavailable: {
-      rebookedAndCompleted: null,
-      rebookedAndCancelled: null,
-      noRebooking: null,
-      contactedLater: null,
-      noContactAfterNoShow: null,
-      bookingLinkNotSent: null,
-      bookingLinkSent: null
+      rebookedAndCompleted: rebooking.rebookedAndCompleted ?? null,
+      rebookedAndCancelled: rebooking.rebookedAndCancelled ?? null,
+      rebookingPending: rebooking.rebookingPending ?? null,
+      noRebooking: rebooking.noRebooking ?? null,
+      contactedLater: discord.available ? Number(discord.contactedLater || 0) : null,
+      noContactAfterNoShow: discord.available ? Number(discord.noContactAfterNoShow || 0) : null,
+      followupPending: discord.available ? Number(discord.followupPending || 0) : null,
+      tutorReminderSent: discord.available ? Number(discord.tutorReminderSent || 0) : null,
+      bookingLinkNotSent: discord.available ? Number(discord.bookingLinkNotSent || 0) : null,
+      bookingLinkSent: discord.available ? Number(discord.bookingLinkSent || 0) : null,
+      discordErrorCount: discord.available ? Number(discord.errorCount || 0) : null
     }
   };
+}
+
+export function buildRebookingSummary(rows, eligibleStudents) {
+  const eligibleStudentIds = new Set(
+    (eligibleStudents || []).map(student => normalizeFunnelStudentId(student.student_id))
+  );
+  const summary = {
+    rebookedAndCompleted: 0,
+    rebookedAndCancelled: 0,
+    rebookingPending: 0,
+    noRebooking: 0
+  };
+  for (const row of rows || []) {
+    if (!eligibleStudentIds.has(normalizeFunnelStudentId(row.student_id))) continue;
+    if (!row.next_lesson_date) {
+      summary.noRebooking++;
+    } else if (String(row.next_lesson_result || '').trim() === '実施済み') {
+      summary.rebookedAndCompleted++;
+    } else if (row.next_lesson_result) {
+      summary.rebookedAndCancelled++;
+    } else {
+      summary.rebookingPending++;
+    }
+  }
+  return summary;
 }
 
 function buildSummary({
@@ -282,6 +313,8 @@ export function buildFunnelData({
   reservationRows = [],
   completedRows = [],
   lessonResultRows = [],
+  rebookingRows = [],
+  discordInsights = {},
   lastCompletedRows = [],
   surveyRecords = [],
   surveyAvailable = true,
@@ -340,12 +373,18 @@ export function buildFunnelData({
     year: numericYear,
     month: numericMonth
   });
+  const unreservedStudentCount = eligibleStudents.filter(student =>
+    (reservationCounts.get(normalizeFunnelStudentId(student.student_id)) || 0) === 0
+  ).length;
   const cancellationBreakdown = buildCancellationBreakdown(
     lessonResultRows,
     eligibleStudents,
     eligibleStudents.length * 2,
-    eligibleStudents.reduce((sum, student) =>
-      sum + (reservationCounts.get(normalizeFunnelStudentId(student.student_id)) || 0), 0)
+    {
+      unreservedStudentCount,
+      rebooking: buildRebookingSummary(rebookingRows, eligibleStudents),
+      discord: discordInsights
+    }
   );
 
   const tutorData = tutors

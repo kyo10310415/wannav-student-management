@@ -555,9 +555,11 @@ npm run db:migrate
 1. [Discord Developer Portal](https://discord.com/developers/applications)でアプリケーション作成
 2. Botを作成してトークン取得
 3. 必要な権限:
+   - View Channel
    - Send Messages
    - Read Message History
-4. サーバーに招待
+4. Developer Portal の Bot 設定で Message Content Intent を有効化
+5. サーバーに招待
 
 ## 📅 自動実行スケジュール
 

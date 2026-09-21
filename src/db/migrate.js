@@ -1519,6 +1519,83 @@ const migrations = [
         DROP COLUMN IF EXISTS overall_collection_rate,
         DROP COLUMN IF EXISTS overall_active_student_count;
     `
+  },
+  {
+    version: 54,
+    name: 'add_funnel_discord_insights',
+    up: `
+      INSERT INTO system_settings (setting_key, setting_value, description, updated_by)
+      VALUES
+        ('funnel_regular_booking_url', '', '通常レッスンの予約URL', 'system'),
+        ('funnel_pro_booking_url', '', 'PROプランレッスンの予約URL', 'system')
+      ON CONFLICT (setting_key) DO NOTHING;
+
+      CREATE TABLE IF NOT EXISTS funnel_discord_scan_jobs (
+        id VARCHAR(100) PRIMARY KEY,
+        year_month VARCHAR(7) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        total_count INTEGER NOT NULL DEFAULT 0,
+        processed_count INTEGER NOT NULL DEFAULT 0,
+        error_count INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        created_by VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        started_at TIMESTAMP WITH TIME ZONE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        CONSTRAINT funnel_discord_scan_jobs_status_check
+          CHECK (status IN ('pending', 'running', 'completed', 'failed'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_funnel_discord_scan_jobs_month
+        ON funnel_discord_scan_jobs(year_month, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS funnel_booking_link_checks (
+        year_month VARCHAR(7) NOT NULL,
+        student_id VARCHAR(50) NOT NULL,
+        scan_job_id VARCHAR(100) NOT NULL,
+        link_sent BOOLEAN NOT NULL DEFAULT FALSE,
+        message_id VARCHAR(100),
+        sent_at TIMESTAMP WITH TIME ZONE,
+        scan_status VARCHAR(20) NOT NULL DEFAULT 'success',
+        error_message TEXT,
+        scanned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (scan_job_id, student_id),
+        FOREIGN KEY (scan_job_id) REFERENCES funnel_discord_scan_jobs(id) ON DELETE CASCADE,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS funnel_no_show_followups (
+        lesson_report_id INTEGER NOT NULL,
+        year_month VARCHAR(7) NOT NULL,
+        student_id VARCHAR(50) NOT NULL,
+        scan_job_id VARCHAR(100) NOT NULL,
+        lesson_date DATE NOT NULL,
+        followup_complete BOOLEAN NOT NULL DEFAULT FALSE,
+        student_contacted BOOLEAN NOT NULL DEFAULT FALSE,
+        student_message_id VARCHAR(100),
+        student_message_at TIMESTAMP WITH TIME ZONE,
+        tutor_reminder_sent BOOLEAN NOT NULL DEFAULT FALSE,
+        tutor_message_id VARCHAR(100),
+        tutor_message_at TIMESTAMP WITH TIME ZONE,
+        scan_status VARCHAR(20) NOT NULL DEFAULT 'success',
+        error_message TEXT,
+        scanned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (scan_job_id, lesson_report_id),
+        FOREIGN KEY (scan_job_id) REFERENCES funnel_discord_scan_jobs(id) ON DELETE CASCADE,
+        FOREIGN KEY (lesson_report_id) REFERENCES lesson_reports(id) ON DELETE CASCADE,
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_funnel_no_show_followups_month
+        ON funnel_no_show_followups(year_month, student_id);
+    `,
+    down: `
+      DROP TABLE IF EXISTS funnel_no_show_followups;
+      DROP TABLE IF EXISTS funnel_booking_link_checks;
+      DROP TABLE IF EXISTS funnel_discord_scan_jobs;
+      DELETE FROM system_settings
+       WHERE setting_key IN ('funnel_regular_booking_url', 'funnel_pro_booking_url');
+    `
   }
 ];
 

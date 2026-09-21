@@ -18,7 +18,7 @@ async function requireAdmin(c, next) {
   }
   
   const sessionResult = await query(
-    'SELECT u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.session_token = $1 AND s.expires_at > NOW()',
+    'SELECT u.role, u.email FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.session_token = $1 AND s.expires_at > NOW()',
     [sessionToken]
   );
   
@@ -35,6 +35,8 @@ async function requireAdmin(c, next) {
       error: '管理者権限が必要です'
     }, 403);
   }
+
+  c.set('currentUser', sessionResult.rows[0]);
   
   await next();
 }
@@ -125,6 +127,59 @@ app.get('/consultation-staff', async (c) => {
       success: false,
       error: `コンサル担当者一覧取得に失敗しました: ${error.message}`
     }, 500);
+  }
+});
+
+/** ファネル判定用の予約URL設定を取得（管理者のみ） */
+app.get('/booking-links', requireAdmin, async (c) => {
+  try {
+    const result = await query(
+      `SELECT setting_key, setting_value
+         FROM system_settings
+        WHERE setting_key IN ('funnel_regular_booking_url', 'funnel_pro_booking_url')`
+    );
+    const settings = Object.fromEntries(
+      result.rows.map(row => [row.setting_key, row.setting_value || ''])
+    );
+    return c.json({
+      success: true,
+      data: {
+        regularUrl: settings.funnel_regular_booking_url || '',
+        proUrl: settings.funnel_pro_booking_url || ''
+      }
+    });
+  } catch (error) {
+    console.error('Get booking link settings error:', error);
+    return c.json({ success: false, error: '予約URL設定の取得に失敗しました' }, 500);
+  }
+});
+
+/** ファネル判定用の予約URL設定を更新（管理者のみ） */
+app.put('/booking-links', requireAdmin, async (c) => {
+  try {
+    const { regularUrl = '', proUrl = '' } = await c.req.json();
+    for (const [label, value] of [['通常レッスン', regularUrl], ['PROプランレッスン', proUrl]]) {
+      if (value && !/^https:\/\//i.test(String(value).trim())) {
+        return c.json({ success: false, error: `${label}の予約URLは https:// から入力してください` }, 400);
+      }
+    }
+
+    const updatedBy = c.get('currentUser')?.email || 'unknown';
+    await query(
+      `INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+       VALUES
+         ('funnel_regular_booking_url', $1, '通常レッスンの予約URL', $3, NOW()),
+         ('funnel_pro_booking_url', $2, 'PROプランレッスンの予約URL', $3, NOW())
+       ON CONFLICT (setting_key) DO UPDATE SET
+         setting_value = EXCLUDED.setting_value,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = NOW()`,
+      [String(regularUrl).trim(), String(proUrl).trim(), updatedBy]
+    );
+    return c.json({ success: true, message: '予約URL設定を保存しました' });
+  } catch (error) {
+    console.error('Update booking link settings error:', error);
+    return c.json({ success: false, error: '予約URL設定の保存に失敗しました' }, 500);
   }
 });
 
