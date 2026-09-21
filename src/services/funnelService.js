@@ -246,10 +246,17 @@ function buildSummary({
   let reservationCount = 0;
   let lessonCompletionCount = 0;
   let surveyCompleteCount = 0;
+  let completedStudentCount = 0;
+  let completedStudentSurveyCount = 0;
   for (const studentId of eligibleStudentIds) {
     reservationCount += reservationCounts.get(studentId) || 0;
-    lessonCompletionCount += completionCounts.get(studentId) || 0;
+    const studentCompletionCount = completionCounts.get(studentId) || 0;
+    lessonCompletionCount += studentCompletionCount;
     if (surveyStudentIds.has(studentId)) surveyCompleteCount++;
+    if (studentCompletionCount > 0) {
+      completedStudentCount++;
+      if (surveyStudentIds.has(studentId)) completedStudentSurveyCount++;
+    }
   }
 
   const monthlyLessonCapacity = denominator * 2;
@@ -262,7 +269,10 @@ function buildSummary({
     }),
     reservation: makeMetric(reservationCount, monthlyLessonCapacity),
     completion: makeMetric(lessonCompletionCount, monthlyLessonCapacity),
-    survey: makeMetric(surveyCompleteCount, denominator, { available: surveyAvailable })
+    survey: makeMetric(surveyCompleteCount, denominator, { available: surveyAvailable }),
+    surveyAmongCompleted: makeMetric(completedStudentSurveyCount, completedStudentCount, {
+      available: surveyAvailable
+    })
   };
 }
 

@@ -1005,7 +1005,8 @@ function renderFunnelVisualization(title, metrics, accentClass) {
     { key: 'payment', label: 'お支払い完了率', hint: '対象月の前月分の支払いが完了', icon: 'fa-credit-card', color: '#2563eb' },
     { key: 'reservation', label: 'レッスン予約率', hint: '生徒1人あたり月2回を基準に、予約1回ずつを集計', icon: 'fa-calendar-check', color: '#4f46e5', unit: '回' },
     { key: 'completion', label: 'レッスン実施率', hint: '生徒1人あたり月2回を基準に、実施1回ずつを集計', icon: 'fa-chalkboard-teacher', color: '#7c3aed', unit: '回' },
-    { key: 'survey', label: 'アンケート回答率', hint: '対象月に1回以上回答', icon: 'fa-comment-dots', color: '#db2777' }
+    { key: 'survey', label: 'アンケート回答率', hint: '対象生徒のうち、対象月に1回以上回答', icon: 'fa-comment-dots', color: '#db2777' },
+    { key: 'surveyAmongCompleted', label: '実施者アンケート回答率', hint: '対象月に1回以上レッスンを実施した生徒のうち、対象月に1回以上回答', icon: 'fa-clipboard-check', color: '#be185d' }
   ];
 
   const stageRows = stages.map((stage, index) => {
@@ -1044,7 +1045,7 @@ function renderFunnelVisualization(title, metrics, accentClass) {
         <span class="px-3 py-1 rounded-full text-xs font-bold ${accentClass}">月次ファネル</span>
       </div>
       <div class="px-4 sm:px-6 py-7 overflow-x-auto">
-        <div class="min-w-[240px] lg:min-w-[1040px] grid grid-cols-1 lg:grid-cols-[200px_32px_1fr_32px_1fr_32px_1fr_32px_1fr] items-stretch" role="img" aria-label="${escapeHtml(title)}の月次ファネル">
+        <div class="min-w-[240px] lg:min-w-[1280px] grid grid-cols-1 lg:grid-cols-[200px_32px_1fr_32px_1fr_32px_1fr_32px_1fr_32px_1fr] items-stretch" role="img" aria-label="${escapeHtml(title)}の月次ファネル">
           <div class="rounded-xl bg-slate-800 text-white py-5 px-5 text-center shadow-sm flex flex-col justify-center">
             <span class="font-bold">対象生徒</span>
             <span class="mt-1 text-3xl font-black">${metrics.denominator}名</span>
@@ -1231,6 +1232,7 @@ function renderTutorFunnelTable(tutors) {
         <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.reservation, '回')}</td>
         <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.completion, '回')}</td>
         <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.survey)}</td>
+        <td class="px-5 py-4 text-center">${renderFunnelTableMetric(metrics.surveyAmongCompleted)}</td>
       </tr>
     `;
   }).join('');
@@ -1242,7 +1244,7 @@ function renderTutorFunnelTable(tutors) {
         <p class="mt-1 text-sm text-gray-500">全Tutorの月次結果を一覧で比較できます</p>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[900px]">
+        <table class="w-full min-w-[1080px]">
           <thead class="bg-gray-50 text-xs font-bold text-gray-600 uppercase tracking-wide">
             <tr>
               <th class="px-5 py-3 text-left">担当Tutor</th>
@@ -1251,12 +1253,13 @@ function renderTutorFunnelTable(tutors) {
               <th class="px-5 py-3 text-center">レッスン予約率</th>
               <th class="px-5 py-3 text-center">レッスン実施率</th>
               <th class="px-5 py-3 text-center">アンケート回答率</th>
+              <th class="px-5 py-3 text-center">実施者アンケート回答率</th>
             </tr>
           </thead>
           <tbody>
             ${rows || `
               <tr>
-                <td colspan="6" class="px-5 py-10 text-center text-gray-500">表示対象のTutorがいません</td>
+                <td colspan="7" class="px-5 py-10 text-center text-gray-500">表示対象のTutorがいません</td>
               </tr>
             `}
           </tbody>
