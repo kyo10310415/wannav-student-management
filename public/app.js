@@ -1003,8 +1003,8 @@ function renderFunnelMetric(metric) {
 function renderFunnelVisualization(title, metrics, accentClass) {
   const stages = [
     { key: 'payment', label: 'お支払い完了率', hint: '対象月の前月分の支払いが完了', icon: 'fa-credit-card', color: '#2563eb' },
-    { key: 'reservation', label: 'レッスン予約率', hint: '生徒1人あたり月2回を基準に、予約1回ずつを集計', icon: 'fa-calendar-check', color: '#4f46e5', unit: '回' },
-    { key: 'completion', label: 'レッスン実施率', hint: '生徒1人あたり月2回を基準に、実施1回ずつを集計', icon: 'fa-chalkboard-teacher', color: '#7c3aed', unit: '回' },
+    { key: 'reservation', label: 'レッスン予約率', hint: '支払い完了生徒数×月2回を分母に、予約1回ずつを集計', icon: 'fa-calendar-check', color: '#4f46e5', unit: '回' },
+    { key: 'completion', label: 'レッスン実施率', hint: '予約回数を分母に、実施1回ずつを集計', icon: 'fa-chalkboard-teacher', color: '#7c3aed', unit: '回' },
     { key: 'survey', label: 'アンケート回答率', hint: '対象生徒のうち、対象月に1回以上回答', icon: 'fa-comment-dots', color: '#db2777' },
     { key: 'surveyAmongCompleted', label: '実施者アンケート回答率', hint: '対象月に1回以上レッスンを実施した生徒のうち、対象月に1回以上回答', icon: 'fa-clipboard-check', color: '#be185d' }
   ];
@@ -1114,13 +1114,19 @@ function renderFunnelCountCard(label, count, options = {}) {
     : unavailable
       ? 'border-gray-300 border-dashed bg-gray-50'
       : 'border-gray-300 bg-white';
+  const clickable = !unavailable && options.detailKey;
+  const tag = clickable ? 'button' : 'div';
+  const clickAttributes = clickable
+    ? `type="button" data-detail-key="${escapeHtml(options.detailKey)}" data-detail-label="${escapeHtml(label)}" onclick="showFunnelStudentDetails(this.dataset.detailKey, this.dataset.detailLabel)"`
+    : '';
   return `
-    <div class="rounded-xl border-2 ${tone} px-4 py-3 text-center shadow-sm min-w-[170px]">
+    <${tag} ${clickAttributes} class="rounded-xl border-2 ${tone} px-4 py-3 text-center shadow-sm min-w-[170px] w-full ${clickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition focus:outline-none focus:ring-2 focus:ring-orange-400' : ''}">
       <div class="text-sm font-bold text-gray-900">${escapeHtml(label)}</div>
       <div class="mt-1 ${unavailable ? 'text-sm font-semibold text-gray-400' : 'text-2xl font-black text-red-800'}">
         ${unavailable ? 'データ未取得' : `${Number(count)}${options.unit || '件'}`}
       </div>
-    </div>
+      ${clickable ? '<div class="mt-1 text-[11px] font-semibold text-gray-500"><i class="fas fa-users mr-1"></i>生徒一覧を表示</div>' : ''}
+    </${tag}>
   `;
 }
 
@@ -1131,17 +1137,17 @@ function renderUnavailableChildren(items) {
       ? 'xl:grid-cols-2'
       : 'xl:grid-cols-1';
   return `<div class="grid grid-cols-1 ${columnClass} gap-2">${items.map(item =>
-    renderFunnelCountCard(item.label, item.value, { unit: item.unit })
+    renderFunnelCountCard(item.label, item.value, { unit: item.unit, detailKey: item.detailKey })
   ).join('')}</div>`;
 }
 
-function renderCancellationBranch(label, count, children) {
+function renderCancellationBranch(label, count, children, detailKey) {
   if (!children || children.length === 0) {
-    return `<div class="max-w-[210px]">${renderFunnelCountCard(label, count, { primary: true })}</div>`;
+    return `<div class="max-w-[210px]">${renderFunnelCountCard(label, count, { primary: true, detailKey })}</div>`;
   }
   return `
     <div class="grid grid-cols-1 lg:grid-cols-[210px_34px_1fr] items-center gap-y-2">
-      ${renderFunnelCountCard(label, count, { primary: true })}
+      ${renderFunnelCountCard(label, count, { primary: true, detailKey })}
       <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
       <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
       ${renderUnavailableChildren(children)}
@@ -1158,37 +1164,37 @@ function renderNonAttendanceFlow(breakdown) {
       </div>
       <div class="p-6 overflow-x-auto">
         <div class="min-w-[240px] lg:min-w-[1180px] grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
-          ${renderFunnelCountCard('レッスン未受講総数', breakdown?.lessonNotAttendedTotal, { primary: true })}
+          ${renderFunnelCountCard('レッスン未受講総数', breakdown?.lessonNotAttendedTotal, { primary: true, detailKey: 'lessonNotAttendedTotal' })}
           <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
           <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
           <div class="space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
-              ${renderFunnelCountCard('予約済み未受講数', breakdown?.bookedNotAttended, { primary: true })}
+              ${renderFunnelCountCard('予約済み未受講数', breakdown?.bookedNotAttended, { primary: true, detailKey: 'bookedNotAttended' })}
               <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
               <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
               <div class="space-y-4">
                 ${renderCancellationBranch('事前キャンセル', breakdown?.studentReschedule, [
-                  { label: '再予約し受講', value: breakdown?.unavailable?.rebookedAndCompleted },
-                  { label: '再予約し再キャンセル', value: breakdown?.unavailable?.rebookedAndCancelled },
-                  { label: '再予約済み・結果未確定', value: breakdown?.unavailable?.rebookingPending },
-                  { label: '再予約なし', value: breakdown?.unavailable?.noRebooking }
-                ])}
+                  { label: '再予約し受講', value: breakdown?.unavailable?.rebookedAndCompleted, detailKey: 'rebookedAndCompleted' },
+                  { label: '再予約し再キャンセル', value: breakdown?.unavailable?.rebookedAndCancelled, detailKey: 'rebookedAndCancelled' },
+                  { label: '再予約済み・結果未確定', value: breakdown?.unavailable?.rebookingPending, detailKey: 'rebookingPending' },
+                  { label: '再予約なし', value: breakdown?.unavailable?.noRebooking, detailKey: 'noRebooking' }
+                ], 'studentReschedule')}
                 ${renderCancellationBranch('連絡なしキャンセル', breakdown?.noShow, [
-                  { label: '後日連絡あり', value: breakdown?.unavailable?.contactedLater },
-                  { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow },
-                  { label: '7日間確認中', value: breakdown?.unavailable?.followupPending },
-                  { label: 'Tutorからのリマインド', value: breakdown?.unavailable?.tutorReminderSent }
-                ])}
-                ${renderCancellationBranch('先生都合キャンセル', breakdown?.tutorReschedule, [])}
+                  { label: '後日連絡あり', value: breakdown?.unavailable?.contactedLater, detailKey: 'contactedLater' },
+                  { label: '連絡なしでそのまま無断キャンセル', value: breakdown?.unavailable?.noContactAfterNoShow, detailKey: 'noContactAfterNoShow' },
+                  { label: '7日間確認中', value: breakdown?.unavailable?.followupPending, detailKey: 'followupPending' },
+                  { label: 'Tutorからのリマインド', value: breakdown?.unavailable?.tutorReminderSent, detailKey: 'tutorReminderSent' }
+                ], 'noShow')}
+                ${renderCancellationBranch('先生都合キャンセル', breakdown?.tutorReschedule, [], 'tutorReschedule')}
               </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-[220px_40px_1fr] items-center gap-y-3">
-              ${renderFunnelCountCard('未予約数', breakdown?.unreservedCount, { primary: true, unit: '名' })}
+              ${renderFunnelCountCard('未予約数', breakdown?.unreservedCount, { primary: true, unit: '名', detailKey: 'unreservedCount' })}
               <div class="hidden lg:flex justify-center text-gray-400"><i class="fas fa-arrow-right"></i></div>
               <div class="lg:hidden flex justify-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
               ${renderUnavailableChildren([
-                { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent, unit: '名' },
-                { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent, unit: '名' }
+                { label: '予約リンク未送付', value: breakdown?.unavailable?.bookingLinkNotSent, unit: '名', detailKey: 'bookingLinkNotSent' },
+                { label: '予約リンク送付', value: breakdown?.unavailable?.bookingLinkSent, unit: '名', detailKey: 'bookingLinkSent' }
               ])}
             </div>
           </div>
@@ -1205,6 +1211,59 @@ function renderNonAttendanceFlow(breakdown) {
       </div>
     </section>
   `;
+}
+
+function showFunnelStudentDetails(detailKey, label) {
+  const rows = funnelData?.cancellationBreakdown?.details?.[detailKey] || [];
+  const modal = document.createElement('div');
+  modal.id = 'funnel-student-details-modal';
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 border-b flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">${escapeHtml(label)}・該当生徒様一覧</h2>
+          <p class="mt-1 text-sm text-gray-500">${rows.length}名（同一生徒の複数件は「該当件数」にまとめています）</p>
+        </div>
+        <button type="button" onclick="closeFunnelStudentDetails()" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" aria-label="閉じる">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="overflow-auto">
+        <table class="w-full min-w-[760px] text-sm">
+          <thead class="sticky top-0 bg-gray-50 border-b text-gray-600">
+            <tr>
+              <th class="px-5 py-3 text-left">学籍番号</th>
+              <th class="px-5 py-3 text-left">生徒名</th>
+              <th class="px-5 py-3 text-left">担当Tutor</th>
+              <th class="px-5 py-3 text-center">該当件数</th>
+              <th class="px-5 py-3 text-left">状況</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="border-b border-gray-100 hover:bg-orange-50/40">
+                <td class="px-5 py-3 font-mono">${escapeHtml(row.studentId)}</td>
+                <td class="px-5 py-3 font-semibold text-gray-900">${escapeHtml(row.name || '-')}</td>
+                <td class="px-5 py-3">${escapeHtml(getTutorDisplayName(row.homeroomTutor) || row.homeroomTutor || '-')}</td>
+                <td class="px-5 py-3 text-center font-bold">${Number(row.count || 0)}</td>
+                <td class="px-5 py-3 text-gray-600">${escapeHtml(row.status || '-')}</td>
+              </tr>
+            `).join('') || `
+              <tr><td colspan="5" class="px-5 py-12 text-center text-gray-500">該当する生徒様はいません</td></tr>
+            `}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeFunnelStudentDetails();
+  });
+  document.body.appendChild(modal);
+}
+
+function closeFunnelStudentDetails() {
+  document.getElementById('funnel-student-details-modal')?.remove();
 }
 
 function renderFunnelTableMetric(metric, unit = '名', showCoverage = false) {
@@ -1342,7 +1401,7 @@ function renderFunnelDashboard() {
 
     <div class="mb-6 bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-600">
       <div class="font-semibold text-gray-800 mb-1"><i class="fas fa-calculator mr-2 text-orange-500"></i>集計条件</div>
-      <p>月次ファネルと未受講内訳は、対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プラン・エントリープランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。予約率・実施率は「対象生徒数 × 月2回」を分母、予約・実施の総回数を分子として計算します。</p>
+      <p>月次ファネルと未受講内訳は、対象月末までにレッスンを開始したアクティブ生徒様を対象とし、永久会員・在籍プラン・エントリープランは除外しています。支払い完了率は予約管理画面と同じく対象月の前月分を参照します。生徒様全体の予約率は「支払い完了人数 × 月2回」、実施率は「予約回数」をそれぞれ分母とします。担当Tutor別の表は従来どおり対象生徒数 × 月2回を分母にしています。</p>
       <p class="mt-2">離脱分析は契約プランの除外条件のみ共通とし、現在の在籍ステータスにかかわらず、加入から5カ月以上経過した生徒様を共通の分母にします。開始月から対象月までの実施済みレッスンを参照し、最後に受講した月の翌月を1～5カ月目のいずれか1つの離脱月として集計します。各月の離脱人数の合計は5カ月累積離脱人数と一致します。</p>
     </div>
 

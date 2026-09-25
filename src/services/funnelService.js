@@ -170,9 +170,37 @@ export function buildCancellationBreakdown(
   expectedLessonCount = 0,
   options = {}
 ) {
-  const eligibleStudentIds = new Set(
-    (eligibleStudents || []).map(student => normalizeFunnelStudentId(student.student_id))
+  const eligibleStudentMap = new Map(
+    (eligibleStudents || []).map(student => [normalizeFunnelStudentId(student.student_id), student])
   );
+  const eligibleStudentIds = new Set(eligibleStudentMap.keys());
+  const detailBuckets = new Map();
+  const addDetail = (key, studentId, count = 1, status = '') => {
+    const normalizedId = normalizeFunnelStudentId(studentId);
+    const student = eligibleStudentMap.get(normalizedId);
+    if (!student || Number(count) <= 0) return;
+    if (!detailBuckets.has(key)) detailBuckets.set(key, new Map());
+    const bucket = detailBuckets.get(key);
+    const existing = bucket.get(normalizedId) || {
+      studentId: student.student_id,
+      name: student.name || '',
+      homeroomTutor: student.homeroom_tutor || '',
+      count: 0,
+      statuses: new Set()
+    };
+    existing.count += Number(count) || 0;
+    if (status) existing.statuses.add(status);
+    bucket.set(normalizedId, existing);
+  };
+  const finalizeDetails = key => [...(detailBuckets.get(key)?.values() || [])]
+    .map(item => ({
+      studentId: item.studentId,
+      name: item.name,
+      homeroomTutor: item.homeroomTutor,
+      count: item.count,
+      status: [...item.statuses].join(' / ')
+    }))
+    .sort((a, b) => String(a.studentId).localeCompare(String(b.studentId), 'ja'));
   const counts = {
     completed: 0,
     studentReschedule: 0,
@@ -188,19 +216,76 @@ export function buildCancellationBreakdown(
     switch (String(row.lesson_result || '').trim()) {
       case '実施済み':
         counts.completed += count;
+        addDetail('completed', studentId, count, '実施済み');
         break;
       case '生徒様都合でリスケ':
         counts.studentReschedule += count;
+        addDetail('studentReschedule', studentId, count, '生徒様都合でリスケ');
+        addDetail('bookedNotAttended', studentId, count, '事前キャンセル');
         break;
       case '無断キャンセル':
         counts.noShow += count;
+        addDetail('noShow', studentId, count, '無断キャンセル');
+        addDetail('bookedNotAttended', studentId, count, '連絡なしキャンセル');
         break;
       case 'Tutor都合でリスケ':
       case 'Tutor都合によるリスケ':
         counts.tutorReschedule += count;
+        addDetail('tutorReschedule', studentId, count, 'Tutor都合によるリスケ');
+        addDetail('bookedNotAttended', studentId, count, '先生都合キャンセル');
         break;
       default:
         counts.other += count;
+        addDetail('bookedNotAttended', studentId, count, String(row.lesson_result || 'その他'));
+    }
+  }
+
+  for (const [studentId, student] of eligibleStudentMap) {
+    const completedCount = Number(options.completionCounts?.get(studentId) || 0);
+    const missingCount = Math.max(0, 2 - completedCount);
+    addDetail('lessonNotAttendedTotal', studentId, missingCount, `実施 ${completedCount}回`);
+    if (Number(options.reservationCounts?.get(studentId) || 0) === 0) {
+      addDetail('unreservedCount', studentId, 1, '当月予約0回');
+    }
+  }
+
+  for (const row of options.rebookingRows || []) {
+    const studentId = normalizeFunnelStudentId(row.student_id);
+    if (!eligibleStudentIds.has(studentId)) continue;
+    let key;
+    let status;
+    if (!row.next_lesson_date) {
+      key = 'noRebooking';
+      status = '再予約なし';
+    } else if (String(row.next_lesson_result || '').trim() === '実施済み') {
+      key = 'rebookedAndCompleted';
+      status = `再予約 ${row.next_lesson_date}・実施済み`;
+    } else if (row.next_lesson_result) {
+      key = 'rebookedAndCancelled';
+      status = `再予約 ${row.next_lesson_date}・${row.next_lesson_result}`;
+    } else {
+      key = 'rebookingPending';
+      status = `再予約 ${row.next_lesson_date}・結果未確定`;
+    }
+    addDetail(key, studentId, 1, status);
+  }
+
+  for (const row of options.discord?.bookingRows || []) {
+    if (row.scan_status !== 'success') continue;
+    addDetail(row.link_sent ? 'bookingLinkSent' : 'bookingLinkNotSent', row.student_id, 1,
+      row.link_sent ? '予約リンク送付' : '予約リンク未送付');
+  }
+  for (const row of options.discord?.noShowRows || []) {
+    if (row.scan_status !== 'success') continue;
+    if (row.student_contacted) {
+      addDetail('contactedLater', row.student_id, 1, '後日連絡あり');
+    } else if (row.followup_complete) {
+      addDetail('noContactAfterNoShow', row.student_id, 1, '7日間連絡なし');
+    } else {
+      addDetail('followupPending', row.student_id, 1, '7日間確認中');
+    }
+    if (row.tutor_reminder_sent) {
+      addDetail('tutorReminderSent', row.student_id, 1, 'Tutorからのリマインド');
     }
   }
 
@@ -224,7 +309,14 @@ export function buildCancellationBreakdown(
       bookingLinkNotSent: discord.available ? Number(discord.bookingLinkNotSent || 0) : null,
       bookingLinkSent: discord.available ? Number(discord.bookingLinkSent || 0) : null,
       discordErrorCount: discord.available ? Number(discord.errorCount || 0) : null
-    }
+    },
+    details: Object.fromEntries([
+      'lessonNotAttendedTotal', 'completed', 'bookedNotAttended', 'studentReschedule',
+      'noShow', 'tutorReschedule', 'unreservedCount', 'rebookedAndCompleted',
+      'rebookedAndCancelled', 'rebookingPending', 'noRebooking', 'contactedLater',
+      'noContactAfterNoShow', 'followupPending', 'tutorReminderSent',
+      'bookingLinkNotSent', 'bookingLinkSent'
+    ].map(key => [key, finalizeDetails(key)]))
   };
 }
 
@@ -260,7 +352,8 @@ function buildSummary({
   surveyStudentIds,
   paymentMonthAvailable,
   surveyAvailable,
-  paymentReferenceYearMonth
+  paymentReferenceYearMonth,
+  sequential = false
 }) {
   const denominator = students.length;
   const eligibleStudentIds = new Set(students.map(student => normalizeFunnelStudentId(student.student_id)));
@@ -291,6 +384,10 @@ function buildSummary({
   }
 
   const monthlyLessonCapacity = denominator * 2;
+  const reservationDenominator = sequential && paymentMonthAvailable
+    ? paymentCompleteCount * 2
+    : monthlyLessonCapacity;
+  const completionDenominator = sequential ? reservationCount : monthlyLessonCapacity;
 
   return {
     denominator,
@@ -298,8 +395,8 @@ function buildSummary({
       available: paymentMonthAvailable,
       knownCount: paymentKnownCount
     }),
-    reservation: makeMetric(reservationCount, monthlyLessonCapacity),
-    completion: makeMetric(lessonCompletionCount, monthlyLessonCapacity),
+    reservation: makeMetric(reservationCount, reservationDenominator),
+    completion: makeMetric(lessonCompletionCount, completionDenominator),
     survey: makeMetric(surveyCompleteCount, denominator, { available: surveyAvailable }),
     surveyAmongCompleted: makeMetric(completedStudentSurveyCount, completedStudentCount, {
       available: surveyAvailable
@@ -383,6 +480,9 @@ export function buildFunnelData({
     {
       unreservedStudentCount,
       rebooking: buildRebookingSummary(rebookingRows, eligibleStudents),
+      rebookingRows,
+      reservationCounts,
+      completionCounts,
       discord: discordInsights
     }
   );
@@ -406,7 +506,7 @@ export function buildFunnelData({
     paymentReferenceYearMonth,
     paymentMonthAvailable,
     surveyAvailable,
-    overall: buildSummary({ ...summaryArgs, students: eligibleStudents }),
+    overall: buildSummary({ ...summaryArgs, students: eligibleStudents, sequential: true }),
     attrition,
     cancellationBreakdown,
     tutors: tutorData
