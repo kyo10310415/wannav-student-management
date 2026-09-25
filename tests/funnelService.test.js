@@ -43,7 +43,7 @@ test('uses the previous calendar month as the payment reference', () => {
   assert.equal(getPaymentReferenceYearMonth(2026, 1), '2025-12');
 });
 
-test('counts every reservation and completed lesson against two lessons per student', () => {
+test('chains overall reservation and completion denominators from the previous funnel stage', () => {
   const students = [
     {
       student_id: 's-1', status: 'アクティブ', contract_plan: '通常', homeroom_tutor: 'A notion',
@@ -93,7 +93,7 @@ test('counts every reservation and completed lesson against two lessons per stud
     numerator: 2, denominator: 3, rate: 66.7, available: true, knownCount: 3
   });
   assert.deepEqual(result.overall.reservation, {
-    numerator: 6, denominator: 6, rate: 100, available: true
+    numerator: 6, denominator: 4, rate: 150, available: true
   });
   assert.deepEqual(result.overall.completion, {
     numerator: 3, denominator: 6, rate: 50, available: true
@@ -216,6 +216,51 @@ test('breaks non-attendance reports into student, no-show, and tutor cancellatio
   assert.equal(result.lessonNotAttendedTotal, 8);
   assert.equal(result.unavailable.rebookedAndCompleted, null);
   assert.equal(result.unavailable.contactedLater, null);
+});
+
+test('builds drill-down student details for cancellation and Discord classifications', () => {
+  const eligibleStudents = [
+    { student_id: 'S-1', name: '生徒一', homeroom_tutor: 'Tutor A' },
+    { student_id: 'S-2', name: '生徒二', homeroom_tutor: 'Tutor B' }
+  ];
+  const result = buildCancellationBreakdown([
+    { student_id: 'S-1', lesson_result: '生徒様都合でリスケ', result_count: 2 },
+    { student_id: 'S-2', lesson_result: '無断キャンセル', result_count: 1 }
+  ], eligibleStudents, 4, {
+    unreservedStudentCount: 1,
+    reservationCounts: new Map([['S-1', 1], ['S-2', 0]]),
+    completionCounts: new Map([['S-1', 1], ['S-2', 0]]),
+    rebooking: { rebookedAndCompleted: 1, rebookedAndCancelled: 0, rebookingPending: 0, noRebooking: 1 },
+    rebookingRows: [
+      { student_id: 'S-1', next_lesson_date: '2026-09-20', next_lesson_result: '実施済み' },
+      { student_id: 'S-2', next_lesson_date: null, next_lesson_result: null }
+    ],
+    discord: {
+      available: true,
+      bookingLinkSent: 1,
+      bookingLinkNotSent: 0,
+      contactedLater: 1,
+      noContactAfterNoShow: 0,
+      followupPending: 0,
+      tutorReminderSent: 1,
+      errorCount: 0,
+      bookingRows: [{ student_id: 'S-2', link_sent: true, scan_status: 'success' }],
+      noShowRows: [{
+        student_id: 'S-2', student_contacted: true, followup_complete: true,
+        tutor_reminder_sent: true, scan_status: 'success'
+      }]
+    }
+  });
+
+  assert.deepEqual(result.details.studentReschedule[0], {
+    studentId: 'S-1', name: '生徒一', homeroomTutor: 'Tutor A', count: 2,
+    status: '生徒様都合でリスケ'
+  });
+  assert.equal(result.details.unreservedCount[0].studentId, 'S-2');
+  assert.equal(result.details.rebookedAndCompleted[0].studentId, 'S-1');
+  assert.equal(result.details.contactedLater[0].studentId, 'S-2');
+  assert.equal(result.details.tutorReminderSent[0].studentId, 'S-2');
+  assert.equal(result.details.bookingLinkSent[0].studentId, 'S-2');
 });
 
 test('classifies the first reservation after a student cancellation', () => {

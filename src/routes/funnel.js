@@ -88,7 +88,7 @@ app.get('/', requireLeaderOrAdmin, async (c) => {
       rebookingResult
     ] = await Promise.all([
       query(`
-        SELECT student_id, status, contract_plan, homeroom_tutor, lesson_start_date,
+        SELECT student_id, name, status, contract_plan, homeroom_tutor, lesson_start_date,
                payment_status_last_month, payment_status_current_month,
                payment_year_month_last, payment_year_month_current
           FROM students
@@ -190,33 +190,33 @@ app.get('/', requireLeaderOrAdmin, async (c) => {
       const [bookingChecks, noShowChecks] = await Promise.all([
         query(
           `SELECT
-             COUNT(*) FILTER (WHERE scan_status = 'success' AND link_sent)::int AS sent_count,
-             COUNT(*) FILTER (WHERE scan_status = 'success' AND NOT link_sent)::int AS not_sent_count,
-             COUNT(*) FILTER (WHERE scan_status = 'error')::int AS error_count
+             student_id, link_sent, scan_status, error_message
            FROM funnel_booking_link_checks WHERE scan_job_id = $1`,
           [scanJob.id]
         ),
         query(
           `SELECT
-             COUNT(*) FILTER (WHERE scan_status = 'success' AND student_contacted)::int AS contacted_count,
-             COUNT(*) FILTER (WHERE scan_status = 'success' AND NOT student_contacted AND followup_complete)::int AS no_contact_count,
-             COUNT(*) FILTER (WHERE scan_status = 'success' AND NOT student_contacted AND NOT followup_complete)::int AS pending_count,
-             COUNT(*) FILTER (WHERE scan_status = 'success' AND tutor_reminder_sent)::int AS tutor_reminder_count,
-             COUNT(*) FILTER (WHERE scan_status = 'error')::int AS error_count
+             student_id, student_contacted, followup_complete,
+             tutor_reminder_sent, scan_status, error_message
            FROM funnel_no_show_followups WHERE scan_job_id = $1`,
           [scanJob.id]
         )
       ]);
+      const bookingRows = bookingChecks.rows;
+      const noShowRows = noShowChecks.rows;
       discordInsights = {
         available: true,
         scanJob,
-        bookingLinkSent: bookingChecks.rows[0]?.sent_count || 0,
-        bookingLinkNotSent: bookingChecks.rows[0]?.not_sent_count || 0,
-        contactedLater: noShowChecks.rows[0]?.contacted_count || 0,
-        noContactAfterNoShow: noShowChecks.rows[0]?.no_contact_count || 0,
-        followupPending: noShowChecks.rows[0]?.pending_count || 0,
-        tutorReminderSent: noShowChecks.rows[0]?.tutor_reminder_count || 0,
-        errorCount: Number(bookingChecks.rows[0]?.error_count || 0) + Number(noShowChecks.rows[0]?.error_count || 0)
+        bookingRows,
+        noShowRows,
+        bookingLinkSent: bookingRows.filter(row => row.scan_status === 'success' && row.link_sent).length,
+        bookingLinkNotSent: bookingRows.filter(row => row.scan_status === 'success' && !row.link_sent).length,
+        contactedLater: noShowRows.filter(row => row.scan_status === 'success' && row.student_contacted).length,
+        noContactAfterNoShow: noShowRows.filter(row => row.scan_status === 'success' && !row.student_contacted && row.followup_complete).length,
+        followupPending: noShowRows.filter(row => row.scan_status === 'success' && !row.student_contacted && !row.followup_complete).length,
+        tutorReminderSent: noShowRows.filter(row => row.scan_status === 'success' && row.tutor_reminder_sent).length,
+        errorCount: bookingRows.filter(row => row.scan_status === 'error').length +
+          noShowRows.filter(row => row.scan_status === 'error').length
       };
     }
 
