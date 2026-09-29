@@ -8373,6 +8373,8 @@ function showEditBookingLinksModal(button) {
       </div>
       <form id="edit-booking-links-form" class="p-6 space-y-5">
         <input type="hidden" id="booking-links-user-id" value="${escapeHtml(userId)}">
+        <input type="hidden" id="booking-links-original-regular-url" value="${escapeHtml(regularUrl || '')}">
+        <input type="hidden" id="booking-links-original-pro-url" value="${escapeHtml(proUrl || '')}">
         <div class="bg-teal-50 border border-teal-200 rounded-lg p-4 text-sm text-teal-900">
           <strong>${escapeHtml(tutorName)}</strong>（${escapeHtml(email)}）の予約URL
         </div>
@@ -8387,6 +8389,12 @@ function showEditBookingLinksModal(button) {
           <input id="booking-links-pro-url" type="url" value="${escapeHtml(proUrl || '')}"
             placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
         </div>
+        <div class="border-t pt-4">
+          <h3 class="text-sm font-bold text-gray-800"><i class="fas fa-history mr-2 text-gray-500"></i>変更履歴</h3>
+          <div id="booking-links-history" class="mt-2 text-sm text-gray-500">
+            <i class="fas fa-spinner fa-spin mr-1"></i>読み込み中...
+          </div>
+        </div>
         <div class="flex justify-end gap-3 pt-4 border-t">
           <button type="button" onclick="closeEditBookingLinksModal()" class="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">キャンセル</button>
           <button type="submit" class="px-5 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700">
@@ -8397,10 +8405,55 @@ function showEditBookingLinksModal(button) {
     </div>`;
   document.body.appendChild(modal);
   document.getElementById('edit-booking-links-form').addEventListener('submit', saveTutorBookingLinks);
+  loadTutorBookingLinkHistory(userId);
 }
 
 function closeEditBookingLinksModal() {
   document.getElementById('edit-booking-links-modal')?.remove();
+}
+
+async function loadTutorBookingLinkHistory(userId) {
+  const container = document.getElementById('booking-links-history');
+  if (!container) return;
+  try {
+    const response = await axios.get(
+      `${API_BASE}/api/users/${userId}/booking-links/history`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+    );
+    const history = response.data.data || [];
+    if (history.length === 0) {
+      container.innerHTML = '<div class="rounded-lg bg-gray-50 px-3 py-3 text-gray-500">保存済みの変更履歴はありません</div>';
+      return;
+    }
+    container.innerHTML = `
+      <div class="max-h-48 overflow-y-auto space-y-2">
+        ${history.map(item => `
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-gray-600">${escapeHtml(formatDateTime(item.changed_at))}・${escapeHtml(item.changed_by || 'system')}</span>
+              <button type="button"
+                data-regular-url="${escapeHtml(item.new_regular_url || '')}"
+                data-pro-url="${escapeHtml(item.new_pro_url || '')}"
+                onclick="restoreTutorBookingLinksFromHistory(this)"
+                class="text-xs font-semibold text-teal-700 hover:text-teal-900">
+                <i class="fas fa-undo mr-1"></i>この時点の値を入力
+              </button>
+            </div>
+            <div class="mt-1 text-xs text-gray-600 break-all">通常: ${escapeHtml(item.new_regular_url || '未設定')}</div>
+            <div class="mt-0.5 text-xs text-gray-600 break-all">PRO: ${escapeHtml(item.new_pro_url || '未設定')}</div>
+          </div>
+        `).join('')}
+      </div>`;
+  } catch (error) {
+    console.error('予約URL変更履歴の取得エラー:', error);
+    container.innerHTML = `<div class="rounded-lg bg-red-50 px-3 py-3 text-red-700">${escapeHtml(error.response?.data?.error || '変更履歴を取得できませんでした')}</div>`;
+  }
+}
+
+function restoreTutorBookingLinksFromHistory(button) {
+  document.getElementById('booking-links-regular-url').value = button.dataset.regularUrl || '';
+  document.getElementById('booking-links-pro-url').value = button.dataset.proUrl || '';
+  showNotification('履歴の値を入力欄へ反映しました。保存すると確定します', 'info');
 }
 
 async function saveTutorBookingLinks(event) {
@@ -8408,6 +8461,14 @@ async function saveTutorBookingLinks(event) {
   const userId = document.getElementById('booking-links-user-id').value;
   const regularUrl = document.getElementById('booking-links-regular-url').value.trim();
   const proUrl = document.getElementById('booking-links-pro-url').value.trim();
+  const originalRegularUrl = document.getElementById('booking-links-original-regular-url').value.trim();
+  const originalProUrl = document.getElementById('booking-links-original-pro-url').value.trim();
+  const clearedLabels = [];
+  if (originalRegularUrl && !regularUrl) clearedLabels.push('通常レッスン予約URL');
+  if (originalProUrl && !proUrl) clearedLabels.push('PROプランレッスン予約URL');
+  if (clearedLabels.length > 0 && !confirm(`${clearedLabels.join('・')}を未設定にします。よろしいですか？`)) {
+    return;
+  }
   try {
     await axios.put(
       `${API_BASE}/api/users/${userId}/booking-links`,

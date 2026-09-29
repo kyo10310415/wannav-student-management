@@ -1635,6 +1635,72 @@ const migrations = [
         DROP COLUMN IF EXISTS funnel_pro_booking_url,
         DROP COLUMN IF EXISTS funnel_regular_booking_url;
     `
+  },
+  {
+    version: 56,
+    name: 'add_tutor_booking_url_history',
+    up: `
+      CREATE TABLE IF NOT EXISTS tutor_booking_url_history (
+        id BIGSERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_email VARCHAR(255) NOT NULL,
+        previous_regular_url TEXT,
+        previous_pro_url TEXT,
+        new_regular_url TEXT,
+        new_pro_url TEXT,
+        changed_by VARCHAR(255) NOT NULL,
+        change_source VARCHAR(50) NOT NULL DEFAULT 'user_management',
+        changed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tutor_booking_url_history_user
+        ON tutor_booking_url_history(user_id, changed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tutor_booking_url_history_email
+        ON tutor_booking_url_history(LOWER(user_email), changed_at DESC);
+
+      INSERT INTO tutor_booking_url_history
+        (user_id, user_email, new_regular_url, new_pro_url, changed_by, change_source)
+      SELECT
+        u.id,
+        u.email,
+        u.funnel_regular_booking_url,
+        u.funnel_pro_booking_url,
+        'system',
+        'migration_snapshot'
+      FROM users u
+      WHERE u.funnel_regular_booking_url IS NOT NULL
+         OR u.funnel_pro_booking_url IS NOT NULL;
+
+      CREATE OR REPLACE FUNCTION log_tutor_booking_url_change()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF OLD.funnel_regular_booking_url IS DISTINCT FROM NEW.funnel_regular_booking_url
+           OR OLD.funnel_pro_booking_url IS DISTINCT FROM NEW.funnel_pro_booking_url THEN
+          INSERT INTO tutor_booking_url_history
+            (user_id, user_email, previous_regular_url, previous_pro_url,
+             new_regular_url, new_pro_url, changed_by, change_source)
+          VALUES
+            (NEW.id, NEW.email, OLD.funnel_regular_booking_url, OLD.funnel_pro_booking_url,
+             NEW.funnel_regular_booking_url, NEW.funnel_pro_booking_url,
+             COALESCE(NULLIF(current_setting('app.booking_url_changed_by', TRUE), ''), 'database'),
+             COALESCE(NULLIF(current_setting('app.booking_url_change_source', TRUE), ''), 'database'));
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_log_tutor_booking_url_change ON users;
+      CREATE TRIGGER trg_log_tutor_booking_url_change
+        AFTER UPDATE OF funnel_regular_booking_url, funnel_pro_booking_url ON users
+        FOR EACH ROW EXECUTE FUNCTION log_tutor_booking_url_change();
+
+      COMMENT ON TABLE tutor_booking_url_history IS 'Tutor別予約URLの変更履歴・復元用スナップショット';
+    `,
+    down: `
+      DROP TRIGGER IF EXISTS trg_log_tutor_booking_url_change ON users;
+      DROP FUNCTION IF EXISTS log_tutor_booking_url_change();
+      DROP TABLE IF EXISTS tutor_booking_url_history;
+    `
   }
 ];
 
