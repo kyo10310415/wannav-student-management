@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { query } from '../db/connection.js';
+import { getClient, query } from '../db/connection.js';
 import bcrypt from 'bcryptjs';
 
 const app = new Hono();
@@ -46,47 +46,25 @@ async function requireAdmin(c, next) {
  */
 app.get('/', requireAdmin, async (c) => {
   try {
-    // Try to query with Discord fields
-    let result;
-    try {
-      result = await query(`
-        SELECT 
-          u.id, 
-          u.email, 
-          u.role, 
-          u.must_change_password, 
-          u.created_at, 
-          u.last_login,
-          u.discord_webhook_url,
-          u.discord_user_id,
-          u.job_title,
-          u.funnel_regular_booking_url,
-          u.funnel_pro_booking_url,
-          t.tutor_name as tutor_name,
-          t.employee_id as tutor_number
-        FROM users u
-        LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
-        ORDER BY u.created_at DESC
-      `);
-    } catch (discordError) {
-      // Fallback: Query without Discord fields if columns don't exist
-      console.warn('[Users] Discord columns not found, falling back to basic query:', discordError.message);
-      result = await query(`
-        SELECT 
-          u.id, 
-          u.email, 
-          u.role, 
-          u.must_change_password, 
-          u.created_at, 
-          u.last_login,
-          u.job_title,
-          t.tutor_name as tutor_name,
-          t.employee_id as tutor_number
-        FROM users u
-        LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
-        ORDER BY u.created_at DESC
-      `);
-    }
+    const result = await query(`
+      SELECT
+        u.id,
+        u.email,
+        u.role,
+        u.must_change_password,
+        u.created_at,
+        u.last_login,
+        u.discord_webhook_url,
+        u.discord_user_id,
+        u.job_title,
+        u.funnel_regular_booking_url,
+        u.funnel_pro_booking_url,
+        t.tutor_name as tutor_name,
+        t.employee_id as tutor_number
+      FROM users u
+      LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
+      ORDER BY u.created_at DESC
+    `);
     
     return c.json({
       success: true,
@@ -132,8 +110,33 @@ app.get('/consultation-staff', async (c) => {
   }
 });
 
+/** Tutor別予約URLの変更履歴を取得（管理者のみ） */
+app.get('/:id/booking-links/history', requireAdmin, async (c) => {
+  try {
+    const userId = c.req.param('id');
+    const userResult = await query('SELECT email FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return c.json({ success: false, error: 'ユーザーが見つかりません' }, 404);
+    }
+    const result = await query(
+      `SELECT id, previous_regular_url, previous_pro_url,
+              new_regular_url, new_pro_url, changed_by, change_source, changed_at
+         FROM tutor_booking_url_history
+        WHERE user_id = $1 OR LOWER(user_email) = LOWER($2)
+        ORDER BY changed_at DESC, id DESC
+        LIMIT 20`,
+      [userId, userResult.rows[0].email]
+    );
+    return c.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Get booking link history error:', error);
+    return c.json({ success: false, error: '予約URL変更履歴の取得に失敗しました' }, 500);
+  }
+});
+
 /** Tutor別のファネル判定用予約URLを更新（管理者のみ） */
 app.put('/:id/booking-links', requireAdmin, async (c) => {
+  let client;
   try {
     const userId = c.req.param('id');
     const { regularUrl = '', proUrl = '' } = await c.req.json();
@@ -143,25 +146,47 @@ app.put('/:id/booking-links', requireAdmin, async (c) => {
       }
     }
 
-    const result = await query(
-      `UPDATE users
-          SET funnel_regular_booking_url = NULLIF($1, ''),
-              funnel_pro_booking_url = NULLIF($2, ''),
-              updated_at = NOW()
-        WHERE id = $3
-          AND EXISTS (
-            SELECT 1 FROM tutors t WHERE LOWER(t.email) = LOWER(users.email)
-          )
-      RETURNING id`,
-      [String(regularUrl).trim(), String(proUrl).trim(), userId]
+    const normalizedRegularUrl = String(regularUrl).trim() || null;
+    const normalizedProUrl = String(proUrl).trim() || null;
+    client = await getClient();
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT set_config('app.booking_url_changed_by', $1, TRUE),
+              set_config('app.booking_url_change_source', 'user_management', TRUE)`,
+      [c.get('currentUser')?.email || 'unknown']
     );
-    if (result.rows.length === 0) {
+    const currentResult = await client.query(
+      `SELECT u.id, u.email, u.funnel_regular_booking_url, u.funnel_pro_booking_url
+         FROM users u
+        WHERE u.id = $1
+          AND EXISTS (
+            SELECT 1 FROM tutors t WHERE LOWER(t.email) = LOWER(u.email)
+          )
+        FOR UPDATE`,
+      [userId]
+    );
+    if (currentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return c.json({ success: false, error: 'Tutorと紐付くユーザーが見つかりません' }, 404);
     }
-    return c.json({ success: true, message: '予約URL設定を保存しました' });
+
+    const result = await client.query(
+      `UPDATE users
+          SET funnel_regular_booking_url = $1,
+              funnel_pro_booking_url = $2,
+              updated_at = NOW()
+        WHERE id = $3
+      RETURNING id`,
+      [normalizedRegularUrl, normalizedProUrl, userId]
+    );
+    await client.query('COMMIT');
+    return c.json({ success: true, data: result.rows[0], message: '予約URL設定を保存しました' });
   } catch (error) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('Update booking link settings error:', error);
     return c.json({ success: false, error: '予約URL設定の保存に失敗しました' }, 500);
+  } finally {
+    client?.release();
   }
 });
 
