@@ -5,30 +5,59 @@
 export function aggregateSatisfactionByTutorMonth(records) {
   const grouped = {};
 
-  for (const record of records || []) {
-    const tutorName = record.tutor_name;
+  for (const record of selectLatestSatisfactionRecords(records)) {
+    const tutorKey = record.tutor_employee_id || record.tutor_name;
     const yearMonth = record.year_month;
     const score = parseFloat(record.satisfaction_score);
 
-    if (!tutorName || !yearMonth || Number.isNaN(score)) continue;
+    if (!tutorKey || !yearMonth || Number.isNaN(score)) continue;
 
-    if (!grouped[tutorName]) grouped[tutorName] = {};
-    if (!grouped[tutorName][yearMonth]) {
-      grouped[tutorName][yearMonth] = {
+    if (!grouped[tutorKey]) grouped[tutorKey] = {};
+    if (!grouped[tutorKey][yearMonth]) {
+      grouped[tutorKey][yearMonth] = {
         scores: [],
         reasons: [],
-        studentNames: []
+        studentNames: [],
+        responses: [],
+        criteriaScores: {
+          empathy: [],
+          advice: [],
+          clarity: [],
+          approachability: []
+        }
       };
     }
 
-    const monthData = grouped[tutorName][yearMonth];
+    const monthData = grouped[tutorKey][yearMonth];
     monthData.scores.push(score);
+
+    const criteria = {
+      empathy: parseOptionalScore(record.empathy_score),
+      advice: parseOptionalScore(record.advice_score),
+      clarity: parseOptionalScore(record.clarity_score),
+      approachability: parseOptionalScore(record.approachability_score)
+    };
+    for (const [key, value] of Object.entries(criteria)) {
+      if (value !== null) monthData.criteriaScores[key].push(value);
+    }
+
+    monthData.responses.push({
+      studentId: record.student_id || null,
+      studentName: record.student_name || null,
+      timestamp: record.timestamp || null,
+      score,
+      reason: record.reason || null,
+      ...criteria
+    });
 
     if (record.reason) {
       monthData.reasons.push({
+        studentId: record.student_id || null,
         studentName: record.student_name,
         reason: record.reason,
-        score
+        score,
+        timestamp: record.timestamp || null,
+        ...criteria
       });
     }
     if (record.student_name) monthData.studentNames.push(record.student_name);
@@ -42,12 +71,62 @@ export function aggregateSatisfactionByTutorMonth(records) {
         average: data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length,
         count: data.scores.length,
         reasons: data.reasons,
-        studentNames: data.studentNames
+        studentNames: data.studentNames,
+        responses: data.responses,
+        criteriaAverages: Object.fromEntries(
+          Object.entries(data.criteriaScores).map(([key, scores]) => [
+            key,
+            scores.length > 0
+              ? scores.reduce((sum, value) => sum + value, 0) / scores.length
+              : null
+          ])
+        )
       };
     }
   }
 
   return result;
+}
+
+function parseOptionalScore(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const score = Number(value);
+  return Number.isFinite(score) ? score : null;
+}
+
+function parseYearMonthValue(yearMonth) {
+  const match = String(yearMonth || '').match(/^(\d{4})\/(\d{1,2})$/);
+  return match ? Number(match[1]) * 100 + Number(match[2]) : null;
+}
+
+function selectLatestSatisfactionRecords(records) {
+  const legacyRecords = [];
+  const latestByStudentMonth = new Map();
+
+  for (const record of records || []) {
+    const monthValue = parseYearMonthValue(record.year_month);
+    const studentId = normalizeStudentId(record.student_id);
+
+    // 2026年9月以前は既存集計を変えず、新フォーム分だけを1生徒・1カ月に絞る。
+    if (monthValue === null || monthValue < 202610 || !studentId) {
+      legacyRecords.push(record);
+      continue;
+    }
+
+    const key = `${studentId}|${record.year_month}`;
+    const existing = latestByStudentMonth.get(key);
+    const timestamp = new Date(record.timestamp || 0).getTime();
+    const existingTimestamp = existing ? new Date(existing.timestamp || 0).getTime() : -Infinity;
+    if (!existing || timestamp >= existingTimestamp) latestByStudentMonth.set(key, record);
+  }
+
+  return [...legacyRecords, ...latestByStudentMonth.values()];
+}
+
+export function getTutorSatisfactionMonthData(satisfactionData, tutor, yearMonth) {
+  if (!satisfactionData || !tutor) return undefined;
+  return satisfactionData[tutor.employee_id]?.[yearMonth]
+    || satisfactionData[tutor.tutor_name]?.[yearMonth];
 }
 
 export function getJstDateParts(date = new Date()) {

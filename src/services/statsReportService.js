@@ -6,6 +6,7 @@ import {
   calculateSatisfactionMetrics,
   getJstDateParts,
   getSatisfactionDenominator,
+  getTutorSatisfactionMonthData,
   isLessonCompletionFilterActive
 } from './tutorSatisfactionService.js';
 
@@ -119,8 +120,7 @@ export async function sendDailyStatsReport() {
       });
       
       // Get satisfaction data
-      const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
-      const currentMonthData = tutorSatisfactionData[currentYearMonth];
+      const currentMonthData = getTutorSatisfactionMonthData(satisfactionData, tutor, currentYearMonth);
       
       const metrics = calculateSatisfactionMetrics(currentMonthData, satisfactionDenominator);
       const satisfactionValue = metrics.satisfactionValue || 0;

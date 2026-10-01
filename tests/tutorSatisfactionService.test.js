@@ -7,6 +7,7 @@ import {
   calculateSatisfactionMetrics,
   getLegacySatisfactionDenominator,
   getSatisfactionDenominator,
+  getTutorSatisfactionMonthData,
   isLessonCompletionFilterActive
 } from '../src/services/tutorSatisfactionService.js';
 
@@ -20,6 +21,37 @@ test('aggregates satisfaction records by tutor and month', () => {
   assert.equal(result['Tutor A']['2026/8'].average, 8);
   assert.equal(result['Tutor A']['2026/8'].count, 2);
   assert.equal(result['Tutor A']['2026/8'].reasons.length, 1);
+});
+
+test('uses employee id and keeps only the latest response per student from October 2026', () => {
+  const result = aggregateSatisfactionByTutorMonth([
+    {
+      timestamp: '2026-10-01T01:00:00Z', year_month: '2026/10', student_id: ' s-1 ',
+      tutor_employee_id: 'T-1', satisfaction_score: '6', empathy_score: '5'
+    },
+    {
+      timestamp: '2026-10-02T01:00:00Z', year_month: '2026/10', student_id: 'S-1',
+      tutor_employee_id: 'T-1', satisfaction_score: '10', empathy_score: '9', advice_score: '8'
+    }
+  ]);
+
+  assert.equal(result['T-1']['2026/10'].count, 1);
+  assert.equal(result['T-1']['2026/10'].average, 10);
+  assert.equal(result['T-1']['2026/10'].criteriaAverages.empathy, 9);
+  assert.equal(result['T-1']['2026/10'].criteriaAverages.advice, 8);
+  assert.equal(result['T-1']['2026/10'].responses[0].studentId, 'S-1');
+});
+
+test('finds satisfaction by immutable employee id with tutor-name fallback', () => {
+  const byEmployee = {
+    'T-1': { '2026/10': { average: 9 } },
+    'Tutor A': { '2026/9': { average: 8 } }
+  };
+  assert.equal(getTutorSatisfactionMonthData(byEmployee, { employee_id: 'T-1', tutor_name: 'Tutor A' }, '2026/10').average, 9);
+  assert.equal(getTutorSatisfactionMonthData(byEmployee, { employee_id: 'T-1', tutor_name: 'Tutor A' }, '2026/9').average, 8);
+
+  const legacy = { 'Tutor A': { '2026/9': { average: 8 } } };
+  assert.equal(getTutorSatisfactionMonthData(legacy, { employee_id: 'T-1', tutor_name: 'Tutor A' }, '2026/9').average, 8);
 });
 
 test('activates the completion filter from the 26th JST', () => {

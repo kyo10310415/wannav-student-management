@@ -3,6 +3,7 @@ import { fetchSatisfactionFromCache } from '../services/cacheService.js';
 import { getCompletedStudentIdsForMonth } from '../services/lessonCompletionService.js';
 import {
   aggregateSatisfactionByTutorMonth,
+  getTutorSatisfactionMonthData,
   calculateSatisfactionMetricVariants,
   isLessonCompletionFilterActive
 } from '../services/tutorSatisfactionService.js';
@@ -83,7 +84,7 @@ export async function monthlyTutorSatisfactionExport() {
 
     for (const tutor of tutors) {
       const tutorName = tutor.tutor_name;
-      const monthData = (satisfactionData[tutorName] || {})[currentYearMonth];
+      const monthData = getTutorSatisfactionMonthData(satisfactionData, tutor, currentYearMonth);
 
       if (!monthData) {
         console.log(

@@ -184,7 +184,7 @@ export async function fetchSatisfactionFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'レッスン満足度データ!A2:G', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由, 学籍番号
+      range: 'レッスン満足度データ!A2:L',
     });
 
     const rows = response.data.values || [];
@@ -198,6 +198,11 @@ export async function fetchSatisfactionFromCache(spreadsheetId) {
       satisfaction_score: row[4] || null,
       reason: row[5] || null,
       student_id: row[6] || null,  // 学籍番号
+      empathy_score: row[7] || null,
+      advice_score: row[8] || null,
+      clarity_score: row[9] || null,
+      approachability_score: row[10] || null,
+      tutor_employee_id: row[11] || null,
     }));
   } catch (error) {
     console.error('Error fetching satisfaction from cache:', error);
