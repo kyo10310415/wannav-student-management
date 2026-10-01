@@ -8,7 +8,7 @@ let sessionToken = localStorage.getItem('sessionToken') || null;
 // State
 let students = [];
 let tutors = [];
-let satisfactionData = {}; // tutor_name -> { yearMonth -> { average, count, reasons } }
+let satisfactionData = {}; // tutor employee_id (legacy: tutor_name) -> monthly satisfaction data
 let satisfactionDataCacheError = false; // Google API障害時にtrueになる
 let satisfactionLessonCompletionByMonth = {}; // YYYY/M -> { loaded, completedStudentIds: Set }
 let tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} }; // Monthly helper/reschedule counts
@@ -528,6 +528,14 @@ async function loadSatisfactionData() {
     satisfactionData = {};
     satisfactionDataCacheError = false;
   }
+}
+
+function getTutorSatisfactionData(tutor) {
+  if (!tutor) return {};
+  return {
+    ...(satisfactionData[tutor.tutor_name] || {}),
+    ...(satisfactionData[tutor.employee_id] || {})
+  };
 }
 
 function getJstDateParts(date = new Date()) {
@@ -3537,7 +3545,7 @@ function renderTutorStatistics() {
       return;
     }
     
-    const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+    const tutorSatisfactionData = getTutorSatisfactionData(tutor);
     const currentMonthData = tutorSatisfactionData[selectedYearMonth];
 
     const snapForStats = tutorWeeklySnapshotData[tutor.notion_name] || null;
@@ -3627,7 +3635,7 @@ function renderTutorStatistics() {
         return;
       }
       
-      const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+      const tutorSatisfactionData = getTutorSatisfactionData(tutor);
       const currentMonthData = tutorSatisfactionData[selectedYearMonth];
 
       const snapForTeam = tutorWeeklySnapshotData[tutor.notion_name] || null;
@@ -3880,7 +3888,7 @@ function renderTutorRows() {
     const isKyoheiSensei = tutor.tutor_name === 'きょうへい先生';
     
     // Get satisfaction data for this tutor
-    const tutorSatisfactionData = satisfactionData[tutor.tutor_name] || {};
+    const tutorSatisfactionData = getTutorSatisfactionData(tutor);
     const currentMonthData = tutorSatisfactionData[selectedYearMonth];
     
     // ── 前週スナップショット取得 ────────────────────────────────────
@@ -3960,7 +3968,7 @@ function renderTutorRows() {
     // 満足度ボタン (表示月にデータがある場合のみ表示、きょうへい先生は非表示)
     const satisfactionButton = (!isKyoheiSensei && currentMonthData) ? 
       `<button 
-        onclick="showSatisfactionModal('${tutor.tutor_name}')" 
+        onclick="showSatisfactionModal('${tutor.employee_id}')"
         class="text-blue-600 hover:text-blue-800 ml-2"
         title="満足度詳細を表示">
         <i class="fas fa-chart-line"></i>
@@ -4531,7 +4539,7 @@ async function exportTutorSatisfactionToSheet() {
     // Data rows for each tutor
     activeTutors.forEach(tutor => {
       const tutorName = tutor.tutor_name;
-      const tutorSatisfactionData = satisfactionData[tutorName] || {};
+      const tutorSatisfactionData = getTutorSatisfactionData(tutor);
       
       console.log(`[Export] Processing tutor: ${tutorName}, has data:`, Object.keys(tutorSatisfactionData).length > 0);
       
@@ -4666,22 +4674,21 @@ async function exportTutorSatisfactionToSheet() {
 }
 
 // Show satisfaction modal for a tutor
-async function showSatisfactionModal(tutorName) {
+async function showSatisfactionModal(tutorEmployeeId) {
   const showOverallMetrics = canViewOverallSatisfactionMetrics();
-  const tutorSatisfactionData = satisfactionData[tutorName] || {};
+  const tutor = tutors.find(t => t.employee_id === tutorEmployeeId);
+  if (!tutor) {
+    alert('Tutor情報が見つかりません');
+    return;
+  }
+  const tutorName = tutor.tutor_name;
+  const tutorSatisfactionData = getTutorSatisfactionData(tutor);
   // 表示中の選択月を使用（currentMonthではなくselectedTutorYear/Monthを参照）
   const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
   const currentMonthData = tutorSatisfactionData[selectedYearMonth];
   
   if (!currentMonthData) {
     alert('表示月の満足度データがありません');
-    return;
-  }
-  
-  // Get tutor's notion_name for student count calculation
-  const tutor = tutors.find(t => t.tutor_name === tutorName);
-  if (!tutor) {
-    alert('Tutor情報が見つかりません');
     return;
   }
   
@@ -4712,54 +4719,39 @@ async function showSatisfactionModal(tutorName) {
   const completionFilterApplied = isLessonCompletionFilterActive(selectedTutorYear, selectedTutorMonth) &&
     satisfactionLessonCompletionByMonth[selectedYearMonth]?.loaded;
   
-  // Build reasons list, separated by score
-  const highScoreReasons = currentMonthData.reasons.filter(r => r.score >= 9);
-  const lowScoreReasons = currentMonthData.reasons.filter(r => r.score <= 8);
-  
-  const highScoreHtml = highScoreReasons.map(r => `
-    <div class="border-b border-gray-200 py-3">
-      <div class="flex justify-between items-start mb-1">
-        <span class="font-semibold text-gray-800">${r.studentName}</span>
-        <span class="text-sm text-green-600 font-semibold">評価: ${r.score}</span>
-      </div>
-      <p class="text-sm text-gray-600">${r.reason}</p>
-    </div>
-  `).join('');
-  
-  const lowScoreHtml = lowScoreReasons.map(r => `
-    <div class="border-b border-gray-200 py-3">
-      <div class="flex justify-between items-start mb-1">
-        <span class="font-semibold text-gray-800">${r.studentName}</span>
-        <span class="text-sm text-orange-600 font-semibold">評価: ${r.score}</span>
-      </div>
-      <p class="text-sm text-gray-600">${r.reason}</p>
-    </div>
-  `).join('');
-  
-  const reasonsHtml = `
-    ${highScoreReasons.length > 0 ? `
-      <div class="mb-4">
-        <h5 class="font-semibold text-green-700 mb-2 flex items-center">
-          <i class="fas fa-smile mr-2"></i>
-          高評価（9以上）${highScoreReasons.length}件
-        </h5>
-        <div class="border border-green-200 rounded-lg p-3 bg-green-50">
-          ${highScoreHtml}
+  const formatDetailScore = value => Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '-';
+  const studentNameById = new Map(students.map(student => [
+    normalizeSatisfactionStudentId(student.student_id),
+    student.name
+  ]));
+  const responseDetails = currentMonthData.responses || currentMonthData.reasons || [];
+  const reasonsHtml = responseDetails.map(response => {
+    const studentId = normalizeSatisfactionStudentId(response.studentId);
+    const studentName = studentNameById.get(studentId) || response.studentName || studentId || '生徒情報なし';
+    const answeredAt = response.timestamp
+      ? new Date(response.timestamp).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+      : '-';
+    return `
+      <details class="border border-gray-200 rounded-lg bg-white mb-2">
+        <summary class="cursor-pointer px-4 py-3 flex justify-between items-center hover:bg-gray-50">
+          <span class="font-semibold text-blue-700">${escapeHtml(studentName)}</span>
+          <span class="text-sm font-semibold ${response.score >= 9 ? 'text-green-600' : 'text-orange-600'}">評価: ${formatDetailScore(response.score)}</span>
+        </summary>
+        <div class="px-4 pb-4 text-sm">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+            <div><span class="text-gray-500">総合満足度</span><div class="font-semibold">${formatDetailScore(response.score)}</div></div>
+            <div><span class="text-gray-500">寄り添い</span><div class="font-semibold">${formatDetailScore(response.empathy)}</div></div>
+            <div><span class="text-gray-500">アドバイス</span><div class="font-semibold">${formatDetailScore(response.advice)}</div></div>
+            <div><span class="text-gray-500">分かりやすさ</span><div class="font-semibold">${formatDetailScore(response.clarity)}</div></div>
+            <div><span class="text-gray-500">相談しやすさ</span><div class="font-semibold">${formatDetailScore(response.approachability)}</div></div>
+          </div>
+          <div class="text-gray-500 mb-1">理由</div>
+          <p class="text-gray-700 whitespace-pre-wrap">${escapeHtml(response.reason || '記載なし')}</p>
+          <div class="text-xs text-gray-400 mt-3">学籍番号: ${escapeHtml(studentId || '-')} / 回答日時: ${escapeHtml(answeredAt)}</div>
         </div>
-      </div>
-    ` : ''}
-    ${lowScoreReasons.length > 0 ? `
-      <div>
-        <h5 class="font-semibold text-orange-700 mb-2 flex items-center">
-          <i class="fas fa-meh mr-2"></i>
-          改善余地（8以下）${lowScoreReasons.length}件
-        </h5>
-        <div class="border border-orange-200 rounded-lg p-3 bg-orange-50">
-          ${lowScoreHtml}
-        </div>
-      </div>
-    ` : ''}
-  `;
+      </details>
+    `;
+  }).join('') || '<p class="text-sm text-gray-500">表示できる回答詳細がありません。</p>';
   
   // Build historical chart data (all months with data)
   // 過去月を含め、各月に同じ25日締めの分母条件を適用する
@@ -4863,6 +4855,15 @@ async function showSatisfactionModal(tutorName) {
                 <div class="text-sm text-gray-600">全体満足度スコア</div>
                 <div class="text-3xl font-bold ${modalAllSatisfactionScoreColor}">${currentAllSatisfactionScore.toFixed(2)}</div>
               </div>` : ''}
+            </div>
+            <div class="border-t border-purple-200 mt-4 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-2">評価項目平均（10点満点）</div>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-white rounded p-3"><div class="text-xs text-gray-500">寄り添い</div><div class="text-xl font-bold text-purple-700">${formatDetailScore(currentMonthData.criteriaAverages?.empathy)}</div></div>
+                <div class="bg-white rounded p-3"><div class="text-xs text-gray-500">アドバイス</div><div class="text-xl font-bold text-purple-700">${formatDetailScore(currentMonthData.criteriaAverages?.advice)}</div></div>
+                <div class="bg-white rounded p-3"><div class="text-xs text-gray-500">分かりやすさ</div><div class="text-xl font-bold text-purple-700">${formatDetailScore(currentMonthData.criteriaAverages?.clarity)}</div></div>
+                <div class="bg-white rounded p-3"><div class="text-xs text-gray-500">相談しやすさ</div><div class="text-xl font-bold text-purple-700">${formatDetailScore(currentMonthData.criteriaAverages?.approachability)}</div></div>
+              </div>
             </div>
           </div>
           
