@@ -56,6 +56,7 @@ import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
 import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
 import { weeklyTutorSnapshot, monthlyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
+import { monthlyFunnelSnapshot } from './jobs/funnelMonthlySnapshot.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 import { recoverPendingBroadcastJobs } from './services/broadcastService.js';
 
@@ -339,6 +340,20 @@ cron.schedule('30 23 28-31 * *', async () => {
     console.log('[Tutor Monthly Snapshot] Completed:', result);
   } catch (error) {
     console.error('[Tutor Monthly Snapshot] Error:', error);
+  }
+}, {
+  timezone: 'Asia/Tokyo'
+});
+
+// Schedule monthly funnel snapshot (last day of each month at 23:45 JST)
+console.log('Monthly funnel snapshot: ENABLED (last day of month at 23:45 JST)');
+cron.schedule('45 23 28-31 * *', async () => {
+  console.log('[Funnel Monthly Snapshot] Checking month-end export...');
+  try {
+    const result = await monthlyFunnelSnapshot();
+    console.log('[Funnel Monthly Snapshot] Completed:', result);
+  } catch (error) {
+    console.error('[Funnel Monthly Snapshot] Error:', error);
   }
 }, {
   timezone: 'Asia/Tokyo'
