@@ -109,7 +109,7 @@ export function classifyFunnelDiscordMessages({
   };
 }
 
-async function fetchChannelMessages(channelUrl, startAt, endAt) {
+export async function fetchChannelMessages(channelUrl, startAt, endAt) {
   if (!discordClient.isReady()) throw new Error('Discord Botが接続されていません');
   const channelId = extractChannelId(channelUrl);
   if (!channelId) throw new Error('DiscordチャンネルURLが不正です');
@@ -133,6 +133,7 @@ async function fetchChannelMessages(channelUrl, startAt, endAt) {
     );
     if (!oldest || oldest.createdAt < startAt || batch.size < 100) break;
     before = oldest.id;
+    if (page === 99) throw new Error('履歴取得上限に達しました。取得期間を短くしてください');
   }
   return messages;
 }
