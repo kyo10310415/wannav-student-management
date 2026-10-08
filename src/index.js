@@ -59,6 +59,12 @@ import { weeklyTutorSnapshot, monthlyTutorSnapshot } from './jobs/tutorWeeklySna
 import { monthlyFunnelSnapshot } from './jobs/funnelMonthlySnapshot.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 import { recoverPendingBroadcastJobs } from './services/broadcastService.js';
+import { startDiscordReplyMonitor, checkDiscordReplyAlerts } from './services/discordReplyMonitor.js';
+
+startDiscordReplyMonitor();
+cron.schedule('*/5 * * * *', () => {
+  checkDiscordReplyAlerts().catch(error => console.error('[DiscordReplyMonitor] Check failed:', error.code || error.name));
+});
 
 const app = new Hono();
 
