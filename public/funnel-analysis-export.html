@@ -4,6 +4,7 @@
 <h1>ファネル分析データ取得</h1>
 <p>ログイン中の管理者が、対象月の記録と翌月7日までのDiscord履歴を取得します。</p>
 <input id="month" type="month" value="2026-09"><button id="start">分析データをダウンロード</button>
+<p><label>再取得する学籍番号（任意・空欄なら全対象者）<br><textarea id="studentIds" rows="3" cols="60"></textarea></label></p>
 <p id="progress" role="status"></p>
 <script>
 const progress = document.getElementById('progress');
@@ -25,7 +26,8 @@ document.getElementById('start').onclick = async () => {
     progress.textContent = '対象者を取得しています…';
     const data = await readExport(year, month);
     const details = data.funnel.data.cancellationBreakdown.details;
-    const candidateIds = new Set(Object.entries(details)
+    const selectedIds = document.getElementById('studentIds').value.trim();
+    const candidateIds = selectedIds ? new Set(selectedIds.split(/[\s,、]+/).filter(Boolean)) : new Set(Object.entries(details)
       .filter(([key]) => key !== 'completed')
       .flatMap(([, rows]) => rows.map(row => row.studentId || row.student_id))
       .filter(Boolean));

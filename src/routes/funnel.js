@@ -10,6 +10,18 @@ import { fetchStudentBroadcastInfo } from '../services/sheetsService.js';
 import { normalizeFunnelStudentId } from '../services/funnelService.js';
 
 const app = new Hono();
+let analysisBroadcastInfo;
+let analysisBroadcastInfoExpiresAt = 0;
+async function getAnalysisBroadcastInfo() {
+  if (!analysisBroadcastInfo || Date.now() >= analysisBroadcastInfoExpiresAt) {
+    analysisBroadcastInfoExpiresAt = Date.now() + 5 * 60 * 1000;
+    analysisBroadcastInfo = fetchStudentBroadcastInfo().catch(error => {
+      analysisBroadcastInfo = null;
+      throw error;
+    });
+  }
+  return analysisBroadcastInfo;
+}
 
 // 分析用の読み取り専用API。本文を含むため管理者だけに限定する。
 app.get('/analysis-export', requireLeaderOrAdmin, async (c) => {
@@ -27,7 +39,7 @@ app.get('/analysis-export', requireLeaderOrAdmin, async (c) => {
   try {
     const requestedId = normalizeFunnelStudentId(c.req.query('studentId'));
     if (requestedId) {
-      const info = (await fetchStudentBroadcastInfo()).find(row => normalizeFunnelStudentId(row.studentId) === requestedId);
+      const info = (await getAnalysisBroadcastInfo()).find(row => normalizeFunnelStudentId(row.studentId) === requestedId);
       if (!info?.chatUrl || !info?.discordId) return c.json({ error: 'Discord情報が未設定です' }, 404);
       const messages = await fetchChannelMessages(info.chatUrl, start, followupEnd);
       return c.json({ studentId: requestedId, channelUrl: info.chatUrl, messages: messages
