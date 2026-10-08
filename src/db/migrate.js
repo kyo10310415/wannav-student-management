@@ -1701,6 +1701,30 @@ const migrations = [
       DROP FUNCTION IF EXISTS log_tutor_booking_url_change();
       DROP TABLE IF EXISTS tutor_booking_url_history;
     `
+  },
+  {
+    version: 57,
+    name: 'discord_reply_monitor',
+    up: `
+      CREATE TABLE IF NOT EXISTS discord_reply_channels (
+        channel_id TEXT PRIMARY KEY,
+        last_message_id TEXT NOT NULL,
+        last_staff_message_id TEXT NOT NULL DEFAULT '0'
+      );
+      CREATE TABLE IF NOT EXISTS discord_reply_pending (
+        message_id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        guild_id TEXT NOT NULL,
+        student_id TEXT NOT NULL,
+        posted_at TIMESTAMPTZ NOT NULL,
+        resolved_at TIMESTAMPTZ,
+        tutor_notified_at TIMESTAMPTZ,
+        management_notified_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_discord_reply_pending_due
+        ON discord_reply_pending(posted_at) WHERE resolved_at IS NULL;
+    `,
+    down: `DROP TABLE IF EXISTS discord_reply_pending; DROP TABLE IF EXISTS discord_reply_channels;`
   }
 ];
 
