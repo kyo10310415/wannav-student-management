@@ -124,6 +124,7 @@ test('Responses uses one call and only the selected script; no fallback on failu
     assert.equal(grade.result.score,85);assert.equal(calls.length,1);assert.equal(calls[0].model,'gpt-6-sol');assert.equal(calls[0].store,false);assert.equal(calls[0].text.format.strict,true);
     const prompt=JSON.stringify(calls[0].input);
     assert.ok(prompt.includes('review_tutor'));assert.ok(prompt.includes('tutor_speaker_labels'));
+    for (const rule of ['文字起こし全文を時系列で読み','それだけで減点しない','理由を深掘り','不安の払拭や解決策の提示','再度意思確認','成果の否定と決めつけず','時系列で2〜4件引用','登録基準の配点や条件は変更しない']) assert.ok(prompt.includes(rule));
     assert.ok(prompt.includes(`審査${round}`));for(const other of [1,2,3,4].filter(n=>n!==round))assert.ok(!prompt.includes(`審査${other}`));
   }
   let calls=0;
@@ -219,7 +220,7 @@ function persistenceFixture(options={}) {
   const connection={query:async(sql,params)=>{
     queries.push({sql,params});
     if(sql.includes('pg_try_advisory_lock'))return{rows:[{locked:options.locked!==false}]};
-    if(sql.includes('WHERE fingerprint'))return{rows:row?.state==='succeeded'?[row]:[]};
+    if(sql.includes('WHERE fingerprint'))return{rows:row?.state==='succeeded' && row.fingerprint===params[0]?[row]:[]};
     if(sql.includes('AS monthly'))return{rows:[{monthly:options.monthly||0,user_hour:options.userHour||0}]};
     if(sql.includes('INSERT INTO extension_reviews')) {
       row={id:params[0],created_by:params[1],round:params[2],student_id:params[3],student_name:params[4],tutor_id:params[5],tutor_name:params[6],notion_page_id:params[7],document_id:params[8],fingerprint:params[9],settings_id:params[10],model:params[11],profile:JSON.parse(params[12]),target_match:JSON.parse(params[13]),state:'pending'};
@@ -252,6 +253,16 @@ test('grading persists immutable AI JSON, identity, version, target, usage and e
 test('same grading conditions reuse persisted result without another AI call',async()=>{
   const f=persistenceFixture();await f.service.generate(f.input,{id:1,role:'admin'});
   const reused=await f.service.generate(f.input,{id:1,role:'leader'});assert.equal(reused.reused,true);assert.equal(f.calls,1);
+});
+
+test('old evaluation policy results are not reused for a new grading request',async()=>{
+  const f=persistenceFixture();
+  const previous=await f.service.generate(f.input,{id:1,role:'admin'});
+  f.row.fingerprint='previous-policy-fingerprint';
+  const current=await f.service.generate(f.input,{id:1,role:'admin'});
+  assert.equal(current.reused,false);
+  assert.notEqual(current.id,previous.id);
+  assert.equal(f.calls,2);
 });
 test('regrading requires confirmation and persists a separate record',async()=>{
   const f=persistenceFixture();const first=await f.service.generate(f.input,{id:1,role:'admin'});
