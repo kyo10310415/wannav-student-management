@@ -1,7 +1,8 @@
 import pg from 'pg';
 const { Client } = pg;
 
-const connectionString = 'postgresql://wannav_user:BUFKQLq8tY7g1VEkItmd04cHhrTPe2eq@dpg-d5kbgqvgi27c739nefs0-a.oregon-postgres.render.com/wannav_extension';
+const connectionString = process.env.EXTERNAL_DATABASE_URL;
+if (!connectionString) throw new Error('EXTERNAL_DATABASE_URL is required');
 
 async function checkDatabase() {
   const client = new Client({ 

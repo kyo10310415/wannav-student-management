@@ -6,7 +6,7 @@ import axios from 'axios';
 const app = new Hono();
 
 // Discord Webhook URL for roulette win notifications
-const ROULETTE_WIN_WEBHOOK = 'https://discord.com/api/webhooks/1454123104698761260/V4dCIKzhu3OCc5FWLro0ttzj3dCsin5B4-kuWu1yxLUn_cIN68fiV4Iqjqmiox6jPR1d';
+const ROULETTE_WIN_WEBHOOK = process.env.DISCORD_ROULETTE_WEBHOOK_URL || process.env.DISCORD_STATS_WEBHOOK_URL;
 const ROLE_MENTION_ID = '1294923221107478571';
 
 /**
@@ -349,16 +349,20 @@ app.post('/spin', async (c) => {
           timestamp: new Date().toISOString()
         };
 
-        await axios.post(ROULETTE_WIN_WEBHOOK, {
-          content: `<@&${ROLE_MENTION_ID}>`,
-          username: 'WannaV Roulette',
-          avatar_url: 'https://cdn-icons-png.flaticon.com/512/3588/3588592.png',
-          embeds: [embed]
-        });
+        if (ROULETTE_WIN_WEBHOOK?.trim()) {
+          await axios.post(ROULETTE_WIN_WEBHOOK, {
+            content: `<@&${ROLE_MENTION_ID}>`,
+            username: 'WannaV Roulette',
+            avatar_url: 'https://cdn-icons-png.flaticon.com/512/3588/3588592.png',
+            embeds: [embed]
+          });
 
-        console.log(`[Roulette] Win notification sent to Discord for ${achievement.student_id}`);
+          console.log(`[Roulette] Win notification sent to Discord for ${achievement.student_id}`);
+        } else {
+          console.warn('[Roulette] Discord webhook is not configured; notification skipped');
+        }
       } catch (notificationError) {
-        console.error(`[Roulette] Failed to send Discord notification:`, notificationError.message);
+        console.error('[Roulette] Failed to send Discord notification');
         // Continue even if notification fails
       }
     }

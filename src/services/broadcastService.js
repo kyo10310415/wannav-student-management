@@ -756,7 +756,7 @@ async function _runBroadcastJob(jobId) {
       let discordId = null;
 
       if (job.is_test) {
-        webhookUrl = 'https://discord.com/api/webhooks/1282616705817903146/M4KSUtmoHYSDqySMBgtgjU0wZywkUkVtfh3KOOA-BNzgXMnwVnEphKwuleMXhFn60MYd';
+        webhookUrl = process.env.DISCORD_BROADCAST_TEST_WEBHOOK_URL;
         discordId = '766666980086120470';
       } else {
         const broadcastInfo = resolveBroadcastInfo(

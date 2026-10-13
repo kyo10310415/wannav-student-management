@@ -84,7 +84,7 @@ psql $DATABASE_URL
 
 **Option 2: ローカルpsql**
 ```bash
-psql "postgresql://wannav_student_management_user:9vkJU0jKJC8LBt2sSdvMSCT0s8TpRElH@dpg-cu1jqebqf0us73949s1g-a.oregon-postgres.render.com/wannav_student_management?sslmode=require"
+psql "postgresql://user:password@host:5432/database"
 # 上記のCREATE TABLE文をペースト
 ```
 

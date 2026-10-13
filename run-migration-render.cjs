@@ -2,7 +2,8 @@ const { Pool } = require('pg');
 const fs = require('fs');
 
 // Render.com の DATABASE_URL を使用
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://wannav_student_management_user:9vkJU0jKJC8LBt2sSdvMSCT0s8TpRElH@dpg-cu1jqebqf0us73949s1g-a.oregon-postgres.render.com/wannav_student_management';
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
