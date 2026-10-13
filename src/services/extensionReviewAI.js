@@ -23,7 +23,19 @@ export function extensionReviewClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: 90000, logLevel: 'off' });
 }
 
-export async function gradeExtensionReview({ transcript, config, round, model, tutorName, speakerLabels }, client = extensionReviewClient()) {
+export function reviewApiFailure(error) {
+  const status = Number.isInteger(error?.status) ? error.status : null;
+  const code = error?.code || error?.error?.code;
+  if (['credit_balance_exhausted','insufficient_quota','organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded'].includes(code)) return { category:'billing',status,message:'OpenAI APIの残高または利用上限が不足しています。所属組織のBilling・利用上限を確認してください' };
+  if (status === 401) return { category:'authentication',status,message:'OpenAI APIの認証に失敗しました。管理者がAPIキーの設定を確認してください' };
+  if (status === 403 || status === 404) return { category:'model_access',status,message:'指定モデルへのアクセス権限またはモデル設定を確認してください' };
+  if (status === 429) return { category:'rate_limit',status,message:'OpenAI APIのリクエスト上限に達しました。しばらく待ってから再実行してください' };
+  if (error?.name === 'APITimeoutError') return { category:'timeout',status,message:'OpenAI APIへの採点リクエストがタイムアウトしました。履歴を確認してください' };
+  if (status >= 500) return { category:'upstream',status,message:'OpenAI APIで一時的な障害が発生しました。しばらく待ってから再実行してください' };
+  return { category:'api_error',status,message:'指定モデルで採点できません。モデル・接続設定を確認してください。管理者はRenderのExtensionReviewログを確認してください' };
+}
+
+export async function gradeExtensionReview({ transcript, config, round, model, tutorName, speakerLabels, log = (data) => console.warn('[ExtensionReview]', data) }, client = extensionReviewClient()) {
   if (!config.criteria?.trim() || !config.scripts?.[round - 1]?.trim()) throw reviewError('採点基準と対象回数のスクリプトを登録してください', 409);
   if (transcript.length > config.limits.maxTranscriptChars) throw reviewError('文字起こしが設定上限を超えています。全文を切り捨てて採点はしません', 413);
   let usage = null;
@@ -53,7 +65,15 @@ export async function gradeExtensionReview({ transcript, config, round, model, t
     validateReviewResult(result, transcript, speakerLabels);
     return { result, usage: response.usage || null, model };
   } catch (error) {
-    if (error.safe) { error.apiUsage = usage; throw error; }
-    throw reviewError('指定モデルで採点できません。モデル利用権限・料金上限・接続設定を確認してください。モデル切替や自動再試行は行いません', 502);
+    if (error.safe) {
+      const category = error.message === '発言者・時刻の根拠を確認できません' ? 'evidence_attribution'
+        : error.message === '文字起こしに存在しない根拠引用を検出しました' ? 'evidence_quote'
+        : error.message.startsWith('AI応答が未完了') ? 'incomplete_response' : 'validation';
+      log({ stage:'response_validation',category,status:error.status || 502 });
+      error.apiUsage = usage; throw error;
+    }
+    const failure = reviewApiFailure(error);
+    log({ stage:'api',category:failure.category,status:failure.status });
+    throw reviewError(failure.message, 502);
   }
 }
