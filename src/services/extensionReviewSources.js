@@ -1,5 +1,22 @@
 import { getStudentNotionReadClient } from './notionService.js';
-import { PROFILE_KEYS, reviewError } from './extensionReviewRules.js';
+import { DEFAULT_REVIEW_MAPPING, PROFILE_KEYS, reviewError } from './extensionReviewRules.js';
+
+export function ageFromBirthDate(value, now = new Date()) {
+  if (typeof value !== 'string' || !(now instanceof Date) || !Number.isFinite(now.getTime())) return null;
+  const match = value.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  // Notion date properties may include an ISO timestamp. Treat the written date as the birthday.
+  const iso = !match && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value))
+    ? value.slice(0,10).match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  const parts = match || iso;
+  if (!parts) return null;
+  const [year,month,day] = parts.slice(1).map(Number);
+  const date = new Date(Date.UTC(year,month-1,day));
+  if (year < 1900 || date.getUTCFullYear() !== year || date.getUTCMonth() !== month-1 || date.getUTCDate() !== day) return null;
+  const today = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const currentYear = today.getUTCFullYear(), currentMonth = today.getUTCMonth()+1, currentDay = today.getUTCDate();
+  const age = currentYear - year - (currentMonth < month || (currentMonth === month && currentDay < day) ? 1 : 0);
+  return age >= 0 && age <= 120 ? age : null;
+}
 
 export function reviewPropertyValue(property) {
   if (!property) return null;
@@ -20,7 +37,8 @@ export function reviewPropertyValue(property) {
   }
 }
 
-export async function fetchReviewNotion(pageId, mapping, notion = getStudentNotionReadClient(), { inspectBlocks = false } = {}) {
+export async function fetchReviewNotion(pageId, mapping, notion = getStudentNotionReadClient(), { inspectBlocks = false, now = new Date() } = {}) {
+  if (!mapping || Object.keys(mapping).length === 0) mapping = DEFAULT_REVIEW_MAPPING;
   try {
     let requests = 0;
     async function read(work) {
@@ -96,7 +114,8 @@ export async function fetchReviewNotion(pageId, mapping, notion = getStudentNoti
           ? rows.filter(row => row.list).map(row => row.text)
           : rows.map(row => row.text).join('\n') || null;
       }
-      if (key === 'age' && typeof value === 'string' && /^\d{1,3}(?:歳)?$/.test(value.trim())) value = Number(value.trim().replace('歳', ''));
+      if (key === 'age' && (entry?.transform === 'ageFromBirthDate' || entry?.name === '生年月日')) value = ageFromBirthDate(value, now);
+      else if (key === 'age' && typeof value === 'string' && /^\d{1,3}(?:歳)?$/.test(value.trim())) value = Number(value.trim().replace('歳', ''));
       if (key === 'companyReasons' && typeof value === 'string') {
         const lines = value.split('\n').map(line => line.trim()).filter(Boolean);
         if (lines.length && lines.every(line => /^(?:[-•・]|\d+[.)、])\s*\S/.test(line))) value = lines.map(line => line.replace(/^(?:[-•・]|\d+[.)、])\s*/, ''));
