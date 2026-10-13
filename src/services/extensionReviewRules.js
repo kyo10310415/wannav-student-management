@@ -1,9 +1,16 @@
 import { createHash } from 'node:crypto';
 
 export const PROFILE_KEYS = ['streams', 'age', 'companyReasons', 'expenseConsent', 'classification'];
+export const DEFAULT_REVIEW_MAPPING = {
+  streams: { source: 'property', name: 'やってみたい配信' },
+  age: { source: 'property', name: '生年月日', transform: 'ageFromBirthDate' },
+  companyReasons: { source: 'property', name: '企業が良い理由' },
+  expenseConsent: { source: 'property', name: '実費負担への合意' },
+  classification: { source: 'property', name: '6分類' }
+};
 export const DEFAULT_REVIEW_SETTINGS = {
   criteria: '', scripts: ['', '', '', ''], template: '',
-  mapping: {}, speakerAliases: {},
+  mapping: DEFAULT_REVIEW_MAPPING, speakerAliases: {},
   target: { chat: '雑談', collaboration: 'コラボ', ageMin: 30, ageMax: 34, reasonMin: 2, pride: 'プライドが高い', yes: ['Yes'], no: ['No'] },
   prices: null,
   limits: { maxTranscriptChars: 100000, maxOutputTokens: 6000, monthlyCalls: 100 }
@@ -41,8 +48,9 @@ export function validateReviewSettings(value) {
   if (typeof value.criteria !== 'string' || value.criteria.length > 30000 || typeof value.template !== 'string' || value.template.length > 10000) throw reviewError('採点基準・テンプレートの長さが不正です');
   if (!Array.isArray(value.scripts) || value.scripts.length !== 4 || value.scripts.some(s => typeof s !== 'string' || s.length > 30000)) throw reviewError('スクリプトを4回分指定してください');
   for (const [key, entry] of Object.entries(value.mapping || {})) {
-    checkKeys(entry, ['source','name']);
+    checkKeys(entry, ['source','name','transform']);
     if (!PROFILE_KEYS.includes(key) || !['property', 'block'].includes(entry?.source) || typeof entry.name !== 'string' || entry.name.length > 100) throw reviewError('項目マッピングが不正です');
+    if (entry.transform !== undefined && (key !== 'age' || entry.transform !== 'ageFromBirthDate')) throw reviewError('項目マッピングの変換が不正です');
   }
   for (const [id,names] of Object.entries(value.speakerAliases || {})) if (id.length > 100 || !Array.isArray(names) || names.length > 10 || names.some(name => typeof name !== 'string' || !name.trim() || name.length > 100)) throw reviewError('Tutor発言者別名の設定が不正です');
   const t = value.target;
@@ -161,12 +169,17 @@ export function validateReviewResult(result, transcript, speakerLabels) {
 export function reviewMarkdown(result, profile, match, template = '') {
   const bullet = points => points.length ? points.map(p => `- ${p.text}\n${p.evidence.map(e => `  > ${e.quote}${e.speaker ? `（${e.speaker}）` : ''}${e.timestamp ? ` ${e.timestamp}` : ''}`).join('\n')}`).join('\n') : '- 該当なし';
   const grading = `## 【延長審査採点】\n### 総合評価\n${result.score} / 100点\n### 加点ポイント\n${bullet(result.bonuses)}\n### 減点ポイント\n${bullet(result.penalties)}\n### 改善できた点\n${result.improvements.map((p,i) => `${i+1}. ${p.text}`).join('\n') || '該当なし'}`;
-  const script = `## 【トークスクリプト】\n- 一致度: ${result.scriptMatch.score}%\n- オリジナリティ: ${result.originality.score}%\n${bullet([result.scriptMatch, result.originality])}`;
-  const person = `## 【生徒様の人物像】\n- 理想のターゲット像との一致率: ${match.rate === null ? '算出不可' : `${match.rate}%`}\n- 確認済み条件: ${match.matched}/${match.known}件一致（全6条件）\n${PROFILE_KEYS.map(k => `- ${({streams:'やってみたい配信',age:'年齢',companyReasons:'企業がいい理由',expenseConsent:'実費負担への合意',classification:'6分類'})[k]}: ${profile[k] === null || profile[k] === undefined ? '不明' : Array.isArray(profile[k]) ? profile[k].join('、') : String(profile[k])}`).join('\n')}`;
-  const factors = `## 【要因分析】\n### 良かった点\n${bullet(result.goodFactors)}\n### 課題点\n${bullet(result.issues)}\n### 総括\n${bullet([result.summary])}`;
+  const script = `【トークスクリプト】\n\n- **一致度：** ${result.scriptMatch.score}%\n- **オリジナリティ：** ${result.originality.score}%`;
+  const person = `【生徒様の人物像】\n\n**理想のターゲット像との一致率：${match.rate === null ? '算出不可' : `${match.rate}%`}**\n\n${PROFILE_KEYS.map(k => {
+    const value = profile[k];
+    const display = value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length)
+      ? '不明' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : Array.isArray(value) ? value.join('、') : String(value);
+    return `- **${({streams:'やってみたい配信',age:'年齢',companyReasons:'企業がいい理由',expenseConsent:'実費負担への合意',classification:'6分類'})[k]}：** ${display}`;
+  }).join('\n')}`;
+  const factors = `【要因分析】\n\n■ 良かった点\n\n${bullet(result.goodFactors)}\n\n■ 課題点\n\n${bullet(result.issues)}\n\n■ 総括\n\n${bullet([result.summary])}`;
   if (template.trim()) {
     if (!['grading', 'script', 'profile', 'factors'].every(k => template.includes(`{{${k}}}`))) throw reviewError('出力テンプレートには4つのセクション変数が必要です');
     return template.replace(/\{\{(grading|script|profile|factors)\}\}/g, (_, k) => ({ grading, script, profile: person, factors })[k]);
   }
-  return [grading, script, person, factors].join('\n\n');
+  return [grading, script, person, factors].join('\n\n---\n\n');
 }

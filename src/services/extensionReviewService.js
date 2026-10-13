@@ -4,7 +4,7 @@ import { fetchReviewTranscript } from './driveService.js';
 import { fetchReviewNotion } from './extensionReviewSources.js';
 import { gradeExtensionReview } from './extensionReviewAI.js';
 import { DEFAULT_REVIEW_SETTINGS, parseReviewUrl, reviewError, validateReviewSettings,
-  targetMatch, reviewFingerprint, estimateReviewCost, reviewMarkdown, validateReviewResult, resolveReviewSpeakers } from './extensionReviewRules.js';
+  DEFAULT_REVIEW_MAPPING, targetMatch, reviewFingerprint, estimateReviewCost, reviewMarkdown, validateReviewResult, resolveReviewSpeakers } from './extensionReviewRules.js';
 
 export function createExtensionReviewService({ db = query, connect = getClient, readNotion = fetchReviewNotion,
   readDoc = fetchReviewTranscript, grade = gradeExtensionReview,
@@ -12,7 +12,9 @@ export function createExtensionReviewService({ db = query, connect = getClient, 
   async function settings(id) {
     if (id && !/^\d+$/.test(String(id))) throw reviewError('基準バージョンが不正です');
     const rows = await db(`SELECT * FROM extension_review_settings ${id ? 'WHERE id = $1' : ''} ORDER BY id DESC LIMIT 1`, id ? [id] : []);
-    return rows.rows[0] || { id: null, config: structuredClone(DEFAULT_REVIEW_SETTINGS) };
+    const row = rows.rows[0] || { id: null, config: structuredClone(DEFAULT_REVIEW_SETTINGS) };
+    if (!row.config.mapping || Object.keys(row.config.mapping).length === 0) return { ...row, config: { ...row.config, mapping: structuredClone(DEFAULT_REVIEW_MAPPING) } };
+    return row;
   }
   function output(row, config) {
     if (!row) throw reviewError('採点結果が見つかりません', 404);
@@ -37,7 +39,6 @@ export function createExtensionReviewService({ db = query, connect = getClient, 
     const version = await settings();
     if (!version.id || !version.config.criteria.trim() || !version.config.scripts[input.round - 1]?.trim()) throw reviewError('採点基準と対象回数のスクリプトを管理者が登録してください', 409);
     validateReviewSettings(version.config);
-    if (!version.config.prices) throw reviewError('公式単価を設定してから採点してください', 409);
     const tutor = (await tutors()).find(t => t.employee_id === input.tutorId);
     if (!tutor) throw reviewError('選択した実施Tutorを確認してください');
     const source = await readNotion(notionId, version.config.mapping);

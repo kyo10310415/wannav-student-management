@@ -78,7 +78,7 @@ export function createExtensionReviewRoutes({ db = query, service = extensionRev
       await ai().models.retrieve(model); return model;
     });
     const settings = await service.settings();
-    checks.criteria = { ok: Boolean(settings.id && settings.config.criteria.trim()), data: { version: settings.id, registeredRounds: settings.config.scripts.map(s => Boolean(s.trim())), pricesConfigured: Boolean(settings.config.prices) } };
+    checks.criteria = { ok: Boolean(settings.id && settings.config.criteria.trim()), data: { version: settings.id, registeredRounds: settings.config.scripts.map(s => Boolean(s.trim())) } };
     if (input.notionUrl) await check('notion', async () => {
       const source = await notion(parseReviewUrl(input.notionUrl,'notion'), settings.config.mapping, undefined, { inspectBlocks: true });
       return { properties: source.propertySchema, blockHeadings: source.blockHeadings, availableFields: Object.fromEntries(Object.entries(source.profile).map(([key,value]) => [key,value !== null])) };

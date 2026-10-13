@@ -64,7 +64,7 @@ async function renderExtensionReviewPage() {
   const panel = document.getElementById('er-panel');
   try {
     if (erTab === 'run') {
-      panel.innerHTML = `<div class="grid md:grid-cols-2 gap-4">${erInputFields()}</div><button id="er-start" onclick="erGenerate()" class="bg-orange-600 text-white rounded px-5 py-2" ${erBusy ? 'disabled' : ''}>${erBusy ? '採点中…' : '採点開始'}</button><p class="text-sm text-gray-500">同一資料・基準の保存済み結果があれば再利用します。基準・対象回スクリプト・単価が未登録の場合は実行しません。</p>`;
+      panel.innerHTML = `<div class="grid md:grid-cols-2 gap-4">${erInputFields()}</div><button id="er-start" onclick="erGenerate()" class="bg-orange-600 text-white rounded px-5 py-2" ${erBusy ? 'disabled' : ''}>${erBusy ? '採点中…' : '採点開始'}</button><p class="text-sm text-gray-500">同一資料・基準の保存済み結果があれば再利用します。基準・対象回スクリプトが未登録の場合は実行しません。</p>`;
       if (erLastInput) {
         document.getElementById('er-round').value = erLastInput.round;
         document.getElementById('er-tutor').value = erLastInput.tutorId;
@@ -102,7 +102,6 @@ function erRenderResult() {
   if (!result) { panel.textContent = row.safe_error || '採点結果がまだありません'; return; }
   const points = (title, list) => `<h3 class="font-semibold mt-3">${title}</h3><ul class="list-disc pl-6">${list.map(p => `<li>${erEscape(p.text)}<details><summary class="text-sm text-orange-600 cursor-pointer">採点根拠</summary>${p.evidence.map(e => `<blockquote class="bg-gray-50 p-2 whitespace-pre-wrap">${erEscape(e.quote)}<small class="block">${erEscape(e.speaker || '発言者不明')} ${erEscape(e.timestamp || '時刻不明')}</small></blockquote>`).join('')}</details></li>`).join('') || '<li>該当なし</li>'}</ul>`;
   panel.innerHTML = `<div class="flex flex-wrap justify-between gap-3"><div><p>${erEscape(row.student_name)} / ${erEscape(row.tutor_name)} / ${row.round}回目</p><p class="text-sm text-gray-500">基準v${erEscape(row.settings_id)}・${erEscape(row.model)}・${row.confirmed_at ? '確定済み' : row.reviewed_at ? '確認済み' : 'AI一次評価'} ${row.edited_result ? '（管理者編集あり）' : ''}</p></div><div class="text-4xl font-bold text-orange-600">${result.score}<span class="text-sm"> / 100点</span></div></div>
-    <p class="text-sm">推定料金: ${row.estimated_cost === null ? '未算出' : `$${Number(row.estimated_cost).toFixed(6)}`} / 入力 ${row.usage?.input_tokens || 0} / 出力 ${row.usage?.output_tokens || 0} / キャッシュ ${row.usage?.input_tokens_details?.cached_tokens || 0}</p>
     <div class="flex flex-wrap gap-2"><button onclick="erCopy()" class="border rounded p-2">Markdownコピー</button><button onclick="erDownload()" class="border rounded p-2">Markdownダウンロード</button>
     <a href="https://docs.google.com/document/d/${encodeURIComponent(row.document_id)}/edit" target="_blank" rel="noopener noreferrer" class="border rounded p-2">元の文字起こし</a>
     <button onclick="erGenerate(true)" class="border rounded p-2">再採点</button>
@@ -151,7 +150,7 @@ async function erSearchHistory(offset) {
     sort: document.getElementById('er-sort').value, offset: String(offset), limit: '50' });
   try {
     const rows = await erRequest('/history?' + params); erHistoryOffset = offset;
-    document.getElementById('er-history-list').innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr>${['日時','生徒','Tutor','回数','スコア','状態','料金(USD)',''].map(h => `<th class="p-2">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr class="border-t"><td class="p-2">${erEscape(new Date(row.created_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}))}</td><td>${erEscape(row.student_name)}<br>${erEscape(row.student_id)}</td><td>${erEscape(row.tutor_name)}</td><td>${row.round}</td><td>${row.score ?? '-'}</td><td>${row.state === 'failed' ? erEscape(row.safe_error) : row.confirmed_at ? '確定' : row.reviewed_at ? '確認済み' : row.state === 'pending' ? '処理中' : 'AI一次評価'}</td><td>${row.estimated_cost === null ? '未算出' : Number(row.estimated_cost).toFixed(6)}</td><td><button onclick="erOpenResult('${row.id}')" class="text-orange-600">表示</button></td></tr>`).join('') || '<tr><td colspan="8">該当なし</td></tr>'}</tbody></table></div><div class="flex gap-3"><button onclick="erSearchHistory(${Math.max(0,offset-50)})" ${offset === 0 ? 'disabled' : ''}>前へ</button><span>${offset+1}〜${offset+rows.length}件 / ${rows[0]?.total || 0}件</span><button onclick="erSearchHistory(${offset+50})" ${rows.length < 50 ? 'disabled' : ''}>次へ</button></div>`;
+    document.getElementById('er-history-list').innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr>${['日時','生徒','Tutor','回数','スコア','状態',''].map(h => `<th class="p-2">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr class="border-t"><td class="p-2">${erEscape(new Date(row.created_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}))}</td><td>${erEscape(row.student_name)}<br>${erEscape(row.student_id)}</td><td>${erEscape(row.tutor_name)}</td><td>${row.round}</td><td>${row.score ?? '-'}</td><td>${row.state === 'failed' ? erEscape(row.safe_error) : row.confirmed_at ? '確定' : row.reviewed_at ? '確認済み' : row.state === 'pending' ? '処理中' : 'AI一次評価'}</td><td><button onclick="erOpenResult('${row.id}')" class="text-orange-600">表示</button></td></tr>`).join('') || '<tr><td colspan="7">該当なし</td></tr>'}</tbody></table></div><div class="flex gap-3"><button onclick="erSearchHistory(${Math.max(0,offset-50)})" ${offset === 0 ? 'disabled' : ''}>前へ</button><span>${offset+1}〜${offset+rows.length}件 / ${rows[0]?.total || 0}件</span><button onclick="erSearchHistory(${offset+50})" ${rows.length < 50 ? 'disabled' : ''}>次へ</button></div>`;
   } catch (error) { showNotification(error.response?.data?.error || '検索に失敗しました','error'); }
 }
 async function erRenderAnalysis() {
@@ -162,7 +161,7 @@ async function erRenderAnalysis() {
     const frequency = (title, values) => `<h4 class="font-semibold mt-2">${title}</h4><ul class="list-disc pl-5">${Object.entries(values).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([reason,count])=>`<li>${erEscape(reason)}：${count}件</li>`).join('') || '<li>該当なし</li>'}</ul>`;
     return averages('審査回数別',t.rounds)+averages('月別スコア推移',t.months)+frequency('主な減点理由',t.penalties)+frequency('改善項目の出現頻度',t.improvements);
   };
-  document.getElementById('er-panel').innerHTML = `<p class="text-sm text-gray-500">${erEscape(data.warning)}</p>${erAnalysisTutor ? '<button onclick="erAnalysisTutor=null;erRenderAnalysis()" class="border rounded p-2">すべてのTutorを表示</button>' : ''}<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Tutor</th><th>平均点</th><th>スクリプト一致率</th><th>件数</th><th>確定件数</th><th>詳細</th></tr></thead><tbody>${data.tutors.map(t => `<tr class="border-t"><td class="p-2">${erEscape(t.tutorName)}</td><td>${t.score.toFixed(1)}</td><td>${t.scriptMatch.toFixed(1)}%</td><td>${t.count}</td><td>${t.confirmed}</td><td><details><summary>回数別・月別・減点理由・改善頻度</summary>${detail(t)}</details></td></tr>`).join('') || '<tr><td>採点履歴なし</td></tr>'}</tbody></table></div><h3 class="font-bold">月間API利用量・推定料金（USD）</h3><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr>${['年月','採点件数','エラー','推定料金(USD)','未算出件数','入力token','出力token','キャッシュtoken'].map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${data.costs.map(c=>`<tr class="border-t"><td class="p-2">${erEscape(c.month)}</td><td>${c.calls}</td><td>${c.errors}</td><td>${c.estimated_cost === null ? '未算出' : Number(c.estimated_cost).toFixed(6)}</td><td>${c.unpriced}</td><td>${erEscape(c.input_tokens || 0)}</td><td>${erEscape(c.output_tokens || 0)}</td><td>${erEscape(c.cached_tokens || 0)}</td></tr>`).join('') || '<tr><td>利用履歴なし</td></tr>'}</tbody></table></div><p class="text-sm">料金合計は未算出分を含みません。減点理由・改善項目の頻度は同一文言の件数です。</p>`;
+  document.getElementById('er-panel').innerHTML = `<p class="text-sm text-gray-500">${erEscape(data.warning)}</p>${erAnalysisTutor ? '<button onclick="erAnalysisTutor=null;erRenderAnalysis()" class="border rounded p-2">すべてのTutorを表示</button>' : ''}<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Tutor</th><th>平均点</th><th>スクリプト一致率</th><th>件数</th><th>確定件数</th><th>詳細</th></tr></thead><tbody>${data.tutors.map(t => `<tr class="border-t"><td class="p-2">${erEscape(t.tutorName)}</td><td>${t.score.toFixed(1)}</td><td>${t.scriptMatch.toFixed(1)}%</td><td>${t.count}</td><td>${t.confirmed}</td><td><details><summary>回数別・月別・減点理由・改善頻度</summary>${detail(t)}</details></td></tr>`).join('') || '<tr><td>採点履歴なし</td></tr>'}</tbody></table></div><p class="text-sm">減点理由・改善項目の頻度は同一文言の件数です。</p>`;
 }
 async function erOpenTutorAnalysis(tutorId) {
   erAnalysisTutor = tutorId; erTab = 'analysis'; await changePage('extension-review');
@@ -174,21 +173,30 @@ async function erRenderSettings(version) {
   const area = (id,title,value) => `<label class="block font-medium">${title}<textarea id="${id}" class="border rounded p-2 w-full h-32 font-normal">${erEscape(value)}</textarea></label>`;
   document.getElementById('er-panel').innerHTML = `<h2 class="font-bold">基準v${erEscape(erSettings.id || '未登録')}</h2><select onchange="erRenderSettings(this.value)" class="border rounded p-2"><option value="">最新バージョン</option>${versions.map(v => `<option value="${v.id}">v${v.id} ${erEscape(v.created_at)}</option>`).join('')}</select><p class="text-sm">過去バージョンを選択して参照・コピーできます。保存は常に新しいバージョンを作り、過去の採点結果を変更しません。</p>
     ${area('er-criteria','Tutorのトーク内容の採点基準',config.criteria)}${config.scripts.map((s,i) => area(`er-script-${i}`,`${i+1}回目延長審査スクリプト`,s)).join('')}
-    ${area('er-template','出力テンプレート（空欄は標準形式。{{grading}} {{script}} {{profile}} {{factors}}を使用）',config.template)}
+    ${area('er-template','出力テンプレート（空欄で延長審査採点・トークスクリプト・人物像・要因分析を区切り線付きで出力。カスタム時は{{grading}} {{script}} {{profile}} {{factors}}すべてを使用）',config.template)}
     ${area('er-mapping','Notion項目マッピング(JSON)：streams / age / companyReasons / expenseConsent / classification',JSON.stringify(config.mapping,null,2))}
+    <button onclick="erApplyNotionMapping()" class="border rounded p-2">CSVに合わせた標準マッピングを入力</button>
+    <p class="text-sm">年齢は「生年月日」から採点当日（日本時間）の満年齢を計算します。空欄・不正日付は不明になります。ボタンで入力した後、新しいバージョンとして保存してください。</p>
     <p class="text-sm">例：{"streams":{"source":"property","name":"実際のプロパティ名"}}。本文の見出しはsourceをblockに指定。企業理由は複数選択・リレーション・箇条書き・件数のみ数え、自由文を推測で分割しません。実際の名前・型はAPI接続診断で確認してください。</p>
     ${area('er-speaker-aliases','Tutor発言者別名(JSON、Tutor番号→名前配列)。登録名と文字起こしの表記が異なる場合に設定',JSON.stringify(config.speakerAliases || {},null,2))}
     <p class="text-sm">${erTutors.map(t=>`${erEscape(t.tutor_name)}：${erEscape(t.employee_id)}`).join(' / ')}。例：{"Tutor番号":["文字起こしの実際の名前"]}。接続診断で発言者ラベルを確認できます。</p>
     ${area('er-target','ターゲット条件(JSON)',JSON.stringify(config.target,null,2))}
-    ${area('er-prices','公式単価(JSON、USD/100万token)。input / cachedInput / output、必要ならcacheWrite / longInput / longCachedInput / longOutput / longCacheWrite / longThreshold',JSON.stringify(config.prices,null,2))}
-    <a class="text-orange-600" href="https://developers.openai.com/api/docs/models/gpt-6-sol" target="_blank" rel="noopener noreferrer">公式モデル仕様・単価を確認</a>
     ${area('er-limits','利用上限(JSON)',JSON.stringify(config.limits,null,2))}
     <button onclick="erSaveSettings()" class="bg-orange-600 text-white p-2 rounded">新しいバージョンとして保存</button><button onclick="erPreviewSettings()" class="border rounded p-2 ml-2">プレビュー</button><pre id="er-settings-preview" class="whitespace-pre-wrap text-sm"></pre>`;
+}
+function erApplyNotionMapping() {
+  document.getElementById('er-mapping').value = JSON.stringify({
+    streams: {source:'property',name:'やってみたい配信'},
+    age: {source:'property',name:'生年月日',transform:'ageFromBirthDate'},
+    companyReasons: {source:'property',name:'企業が良い理由'},
+    expenseConsent: {source:'property',name:'実費負担への合意'},
+    classification: {source:'property',name:'6分類'}
+  }, null, 2);
 }
 function erReadSettings() {
   return { criteria: document.getElementById('er-criteria').value, scripts: [0,1,2,3].map(i => document.getElementById(`er-script-${i}`).value),
     template: document.getElementById('er-template').value, mapping: JSON.parse(document.getElementById('er-mapping').value), speakerAliases: JSON.parse(document.getElementById('er-speaker-aliases').value),
-    target: JSON.parse(document.getElementById('er-target').value), prices: JSON.parse(document.getElementById('er-prices').value), limits: JSON.parse(document.getElementById('er-limits').value) };
+    target: JSON.parse(document.getElementById('er-target').value), prices: null, limits: JSON.parse(document.getElementById('er-limits').value) };
 }
 function erPreviewSettings() { try { document.getElementById('er-settings-preview').textContent = JSON.stringify(erReadSettings(),null,2); } catch { showNotification('設定JSONが不正です','error'); } }
 async function erSaveSettings() {

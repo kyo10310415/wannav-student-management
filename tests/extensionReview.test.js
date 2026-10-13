@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { parseReviewUrl, DEFAULT_REVIEW_SETTINGS, targetMatch, estimateReviewCost, validateReviewSettings,
   validateReviewResult, reviewMarkdown, reviewFingerprint, resolveReviewSpeakers } from '../src/services/extensionReviewRules.js';
-import { reviewPropertyValue, fetchReviewNotion } from '../src/services/extensionReviewSources.js';
+import { reviewPropertyValue, fetchReviewNotion, ageFromBirthDate } from '../src/services/extensionReviewSources.js';
 import { fetchReviewTranscript } from '../src/services/driveService.js';
 import { gradeExtensionReview } from '../src/services/extensionReviewAI.js';
 import { createExtensionReviewRoutes } from '../src/routes/extensionReview.js';
@@ -41,6 +41,39 @@ test('parses property types without losing rich text or boolean false', () => {
   assert.deepEqual(reviewPropertyValue({type:'multi_select',multi_select:[{name:'A'},{name:'B'}]}),['A','B']);
   assert.equal(reviewPropertyValue({type:'formula',formula:{type:'number',number:32}}),32);
   assert.equal(reviewPropertyValue(undefined),null);
+});
+
+test('birth date calculates completed age on the current JST day, including birthdays and leap days', () => {
+  const now = new Date('2026-10-13T15:00:00Z'); // 2026/10/14 JST
+  assert.equal(ageFromBirthDate('1994-10-14',now),32);
+  assert.equal(ageFromBirthDate('1994/10/15',now),31);
+  assert.equal(ageFromBirthDate('1994/10/13',now),32);
+  assert.equal(ageFromBirthDate('1994-10-14',new Date('2026-10-13T14:59:59Z')),31);
+  assert.equal(ageFromBirthDate('2000-02-29',new Date('2026-02-28T03:00:00Z')),25);
+  assert.equal(ageFromBirthDate('2000-02-29',new Date('2026-03-01T03:00:00Z')),26);
+  assert.equal(ageFromBirthDate('1994-10-14T00:00:00+09:00',now),32);
+  for (const value of [null,'','不明','1994-02-30','2025-02-29','1994-13-01','2026-10-15','2027-01-01',32]) assert.equal(ageFromBirthDate(value,now),null);
+});
+
+test('CSV mapping reads exact Notion property names and calculates age without retaining birthdays', async () => {
+  const old=process.env.NOTION_STUDENT_DB_ID;
+  delete process.env.NOTION_STUDENT_DB_ID;
+  try {
+    const notion={pages:{retrieve:async()=>({properties:{
+      'やってみたい配信':{type:'multi_select',multi_select:[{name:'雑談'},{name:'コラボ'}]},
+      '生年月日':{type:'date',date:{start:'1994-10-14'}},
+      '企業が良い理由':{type:'rich_text',rich_text:[{plain_text:'- 理由1\n- 理由2'}]},
+      '実費負担への合意':{type:'checkbox',checkbox:true},
+      '6分類':{type:'select',select:{name:'プライドが高い'}}
+    }})}};
+    const source=await fetchReviewNotion('page',{},notion,{now:new Date('2026-10-13T15:00:00Z')});
+    assert.equal(source.profile.age,32);
+    assert.deepEqual(source.profile.companyReasons,['理由1','理由2']);
+    assert.equal(targetMatch(source.profile).rate,100);
+    assert.ok(!JSON.stringify(source.profile).includes('1994-10-14'));
+    assert.equal(validateReviewSettings(config()).mapping.age.transform,'ageFromBirthDate');
+    assert.throws(()=>validateReviewSettings({...config(),mapping:{streams:{source:'property',name:'配信',transform:'ageFromBirthDate'}}}));
+  } finally { if(old===undefined)delete process.env.NOTION_STUDENT_DB_ID;else process.env.NOTION_STUDENT_DB_ID=old; }
 });
 test('Notion direct read supports block pagination, child blocks and relation titles', async () => {
   const calls=[];
@@ -107,7 +140,16 @@ test('missing criteria, oversize transcript, incomplete/refused/malformed JSON s
 test('Markdown uses JS and custom template without another AI call', () => {
   const markdown=reviewMarkdown(result(),profile,targetMatch(profile));
   for(const heading of ['【延長審査採点】','【トークスクリプト】','【生徒様の人物像】','【要因分析】'])assert.ok(markdown.includes(heading));
-  assert.ok(markdown.includes('85 / 100'));assert.ok(markdown.includes('一致度: 70%'));assert.ok(markdown.includes('オリジナリティ: 60%'));
+  assert.ok(markdown.includes('85 / 100'));assert.ok(markdown.includes('**一致度：** 70%'));assert.ok(markdown.includes('**オリジナリティ：** 60%'));
+  assert.ok(markdown.includes('**理想のターゲット像との一致率：100%**'));
+  assert.ok(markdown.includes('- **企業がいい理由：** 理由1、理由2'));
+  for (const label of ['■ 良かった点','■ 課題点','■ 総括']) assert.ok(markdown.includes(label));
+  assert.equal(markdown.split('\n\n---\n\n').length,4);
+  const unknown = { ...profile, age:null, expenseConsent:false, streams:[] };
+  const unknownMarkdown = reviewMarkdown(result(),unknown,targetMatch(unknown));
+  assert.ok(unknownMarkdown.includes('一致率：算出不可'));
+  assert.ok(unknownMarkdown.includes('**やってみたい配信：** 不明'));
+  assert.ok(unknownMarkdown.includes('**実費負担への合意：** No'));
   assert.ok(reviewMarkdown(result(),profile,targetMatch(profile),'{{grading}}\n{{script}}\n{{profile}}\n{{factors}}').includes('85 / 100'));
 });
 test('cost excludes cached input from normal billing and does not invent unknown costs', () => {
@@ -169,7 +211,7 @@ function persistenceFixture(options={}) {
   const queries=[];
   const db=async(sql,params)=>{
     queries.push({sql,params});
-    if(sql.includes('FROM extension_review_settings'))return{rows:[{id:'1',config:config()}]};
+    if(sql.includes('FROM extension_review_settings'))return{rows:[{id:'1',config:options.noPrices ? {...config(),prices:null} : config()}]};
     if(sql.includes('SELECT DISTINCT'))return{rows:[{employee_id:'T1',tutor_name:'Test tutor'}]};
     if(sql.includes('FROM students'))return{rows:[{student_id:'ST1',name:'Test student'}]};
     return{rows:[]};
@@ -191,6 +233,16 @@ function persistenceFixture(options={}) {
   const input={round:1,tutorId:'T1',notionUrl:'https://app.notion.com/p/11111111222233334444555555555555',documentUrl:'https://docs.google.com/document/d/abcdefghijklm/edit'};
   return {service,input,queries,get row(){return row;},get calls(){return calls;},get releases(){return releases;}};
 }
+test('grading works without price registration and hides cost controls', async()=>{
+  const f=persistenceFixture({noPrices:true});
+  const saved=await f.service.generate(f.input,{id:1,role:'admin'});
+  assert.equal(saved.ai_result.score,85);
+  assert.equal(saved.estimated_cost,null);
+  assert.equal(f.calls,1);
+  const ui=readFileSync(new URL('../public/extension-review.js',import.meta.url),'utf8');
+  for(const label of ['er-prices','推定料金','料金(USD)','公式単価']) assert.ok(!ui.includes(label));
+});
+
 test('grading persists immutable AI JSON, identity, version, target, usage and estimated cost', async()=>{
   const f=persistenceFixture();const saved=await f.service.generate(f.input,{id:1,role:'admin'});
   assert.equal(saved.state,'succeeded');assert.equal(saved.settings_id,'1');assert.equal(saved.tutor_id,'T1');assert.equal(saved.target_match.rate,100);
