@@ -9,6 +9,18 @@ const tutorNotion = new Client({
   auth: process.env.NOTION_TUTOR_API_TOKEN || process.env.NOTION_API_TOKEN 
 });
 
+// New review reads use the same student credentials without changing existing sync clients.
+// The SDK's default warning logger may contain page IDs/API response details.
+let studentReviewReader;
+export function getStudentNotionReadClient() {
+  if (!studentReviewReader) studentReviewReader = new Client({
+    auth: process.env.NOTION_STUDENT_API_TOKEN || process.env.NOTION_API_TOKEN,
+    timeoutMs: 15000,
+    logger: () => {}
+  });
+  return studentReviewReader;
+}
+
 /**
  * Sleep function for rate limiting
  */

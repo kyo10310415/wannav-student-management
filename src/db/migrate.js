@@ -1725,6 +1725,56 @@ const migrations = [
         ON discord_reply_pending(posted_at) WHERE resolved_at IS NULL;
     `,
     down: `DROP TABLE IF EXISTS discord_reply_pending; DROP TABLE IF EXISTS discord_reply_channels;`
+  },
+  {
+    version: 58,
+    name: 'extension_review_ai',
+    up: `
+      CREATE TABLE IF NOT EXISTS extension_review_settings (
+        id BIGSERIAL PRIMARY KEY,
+        config JSONB NOT NULL,
+        created_by INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS extension_reviews (
+        id TEXT PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by INTEGER NOT NULL,
+        round INTEGER NOT NULL CHECK (round BETWEEN 1 AND 4),
+        student_id TEXT NOT NULL,
+        student_name TEXT NOT NULL,
+        tutor_id TEXT NOT NULL,
+        tutor_name TEXT NOT NULL,
+        notion_page_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        settings_id BIGINT NOT NULL REFERENCES extension_review_settings(id),
+        model TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'succeeded', 'failed')),
+        profile JSONB NOT NULL,
+        target_match JSONB NOT NULL,
+        speaker_labels JSONB NOT NULL,
+        ai_result JSONB,
+        edited_result JSONB,
+        usage JSONB,
+        estimated_cost NUMERIC(14,8),
+        safe_error TEXT,
+        reviewed_by INTEGER,
+        reviewed_at TIMESTAMPTZ,
+        confirmed_by INTEGER,
+        confirmed_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_extension_reviews_fingerprint ON extension_reviews(fingerprint) WHERE state = 'succeeded';
+      CREATE INDEX IF NOT EXISTS idx_extension_reviews_tutor_date ON extension_reviews(tutor_id, created_at);
+      CREATE TABLE IF NOT EXISTS extension_review_edits (
+        id BIGSERIAL PRIMARY KEY,
+        review_id TEXT NOT NULL REFERENCES extension_reviews(id),
+        result JSONB NOT NULL,
+        edited_by INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `,
+    down: `DROP TABLE IF EXISTS extension_review_edits; DROP TABLE IF EXISTS extension_reviews; DROP TABLE IF EXISTS extension_review_settings;`
   }
 ];
 

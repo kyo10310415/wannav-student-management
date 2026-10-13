@@ -36,6 +36,32 @@ function getAuthClient() {
   });
 }
 
+/** URL指定の審査用読み取り。既存議事録のタブ選択・フォールバックは変更しない。 */
+export async function fetchReviewTranscript(documentId, docsClient) {
+  try {
+    const docs = docsClient || google.docs({ version: 'v1', auth: getAuthClient() });
+    const { data } = await docs.documents.get({ documentId, includeTabsContent: true });
+    const tabs = flattenTabs(data.tabs || []);
+    const preferred = [...new Set(tabs.filter(tab => (tab.tabProperties?.title || '').includes('文字起こし')).flatMap(tab => flattenTabs([tab])))];
+    const selected = preferred.length ? preferred : tabs;
+    function read(content) {
+      return (content || []).map(element => {
+        if (element.paragraph) return (element.paragraph.elements || []).map(e => e.textRun?.content || '').join('');
+        if (element.table) return (element.table.tableRows || []).map(row => (row.tableCells || []).map(cell => read(cell.content)).join('')).join('');
+        if (element.tableOfContents) return read(element.tableOfContents.content);
+        return '';
+      }).join('');
+    }
+    const text = selected.length ? selected.map(tab => read(tab.documentTab?.body?.content)).filter(Boolean).join('\n') : read(data.body?.content);
+    if (!text.trim()) throw new Error('EmptyTranscript');
+    return { text, tabs: selected.map(tab => tab.tabProperties?.title || ''), documentId };
+  } catch (error) {
+    const status = Number(error?.response?.status || error?.code);
+    const message = status === 403 || status === 404 ? 'Googleドキュメントの共有権限・IDを確認してください' : 'Googleドキュメントを取得できません';
+    throw Object.assign(new Error(message), { safe: true, status: 502 });
+  }
+}
+
 /**
  * 日付文字列をファイル名から抽出する
  * "WannaVレッスン予約 (○○) - 2026/07/01 20:43 JST - Gemini によるメモ"

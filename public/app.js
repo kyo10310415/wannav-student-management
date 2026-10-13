@@ -156,6 +156,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'database';
   } else if (hash === 'funnel' && (currentUser?.role === 'admin' || currentUser?.role === 'leader')) {
     currentPage = 'funnel';
+  } else if (hash === 'extension-review' && ['admin','leader'].includes(currentUser?.role)) {
+    currentPage = 'extension-review';
   }
   // Default is 'today' (already set)
   
@@ -166,6 +168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Render header
 function renderHeader() {
+  if (typeof refreshExtensionReviewCapability === 'function') refreshExtensionReviewCapability();
   const app = document.getElementById('app');
   
   // Debug: Log current user info
@@ -187,6 +190,9 @@ function renderHeader() {
   ` : '';
 
   // Build funnel management button (leader or above)
+  const extensionReviewButton = currentUser && ['admin', 'leader'].includes(currentUser.role) && typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled ? `
+    <button onclick="changePage('extension-review')" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>
+  ` : '';
   const funnelManagementButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <button id="nav-funnel" onclick="changePage('funnel')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'funnel' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-filter mr-2"></i>ファネル管理
@@ -338,7 +344,7 @@ function renderHeader() {
               </button>
             </div>
             
-            ${userManagementButton || databaseManagementButton || funnelManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton || minutesButton || lessonContentsButton ? `
+            ${userManagementButton || databaseManagementButton || funnelManagementButton || vqDiagnosisButton || lessonReportsButton || rouletteWinnersButton || minutesButton || lessonContentsButton || extensionReviewButton ? `
               <!-- Divider -->
               <div class="w-px bg-white/30"></div>
               
@@ -350,6 +356,7 @@ function renderHeader() {
                 ${lessonReportsButton}
                 ${rouletteWinnersButton}
                 ${funnelManagementButton}
+                <span id="extension-review-nav">${extensionReviewButton}</span>
                 ${userManagementButton}
                 ${databaseManagementButton}
               </div>
@@ -933,6 +940,13 @@ async function renderApp() {
       return;
     }
     await renderLessonContentsPage();
+  } else if (currentPage === 'extension-review') {
+    if (!currentUser || !['admin','leader'].includes(currentUser.role)) {
+      currentPage = 'today';
+      await renderTodayLessonsPage();
+      return;
+    }
+    await renderExtensionReviewPage();
   } else if (currentPage === 'funnel') {
     if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
       showNotification('このページはリーダー以上のみアクセスできます', 'error');
@@ -3981,6 +3995,8 @@ function renderTutorRows() {
         title="表示月のレッスン品質評価を表示">
         <i class="fas fa-clipboard-check mr-1"></i>品質評価
       </button>`;
+    const extensionReviewTutorButton = typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled && ['admin','leader'].includes(currentUser?.role) ?
+      `<button data-tutor="${erEscape(tutor.employee_id)}" onclick="erOpenTutorAnalysis(this.dataset.tutor)" class="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded whitespace-nowrap">延長審査評価</button>` : '';
     
     // レッスン進捗ステータス
     const progressStatus = getTutorLessonProgressStatus(tutor.notion_name);
@@ -4081,7 +4097,7 @@ function renderTutorRows() {
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-          <div class="flex items-center">${tutor.tutor_name || '-'}${lessonQualityButton}</div>
+          <div class="flex items-center">${tutor.tutor_name || '-'}${lessonQualityButton}${extensionReviewTutorButton}</div>
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">

@@ -41,6 +41,7 @@ import dailyReportRoutes from './routes/dailyReports.js';
 import minutesRoutes from './routes/minutes.js';
 import lessonContentsRoutes from './routes/lessonContents.js';
 import funnelRoutes from './routes/funnel.js';
+import extensionReviewRoutes from './routes/extensionReview.js';
 
 // Services
 import { sendDailyReminders } from './services/reminderService.js';
@@ -112,6 +113,7 @@ app.route('/api/daily-reports', dailyReportRoutes);
 app.route('/api/minutes', minutesRoutes);
 app.route('/api/lesson-contents', lessonContentsRoutes);
 app.route('/api/funnel', funnelRoutes);
+app.route('/api/extension-review', extensionReviewRoutes);
 
 // Serve index.html for root
 app.get('/', (c) => {
@@ -130,6 +132,7 @@ app.get('/', (c) => {
         <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
         <script src="/app.js?v=${Date.now()}"></script>
+        <script src="/extension-review.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
