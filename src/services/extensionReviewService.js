@@ -3,7 +3,7 @@ import { query, getClient } from '../db/connection.js';
 import { fetchReviewTranscript } from './driveService.js';
 import { fetchReviewNotion } from './extensionReviewSources.js';
 import { gradeExtensionReview } from './extensionReviewAI.js';
-import { DEFAULT_REVIEW_SETTINGS, parseReviewUrl, reviewError, validateReviewSettings,
+import { DEFAULT_REVIEW_SETTINGS, EXTENSION_REVIEW_POLICY_VERSION, parseReviewUrl, reviewError, validateReviewSettings,
   DEFAULT_REVIEW_MAPPING, targetMatch, reviewFingerprint, estimateReviewCost, reviewMarkdown, validateReviewResult, resolveReviewSpeakers } from './extensionReviewRules.js';
 
 export function createExtensionReviewService({ db = query, connect = getClient, readNotion = fetchReviewNotion,
@@ -54,7 +54,8 @@ export function createExtensionReviewService({ db = query, connect = getClient, 
     const speakerLabels = resolveReviewSpeakers(document.text, [tutor.tutor_name,tutor.notion_name,tutor.name,...aliases]);
     const aiModel = model();
     const fingerprint = reviewFingerprint({ notionId, documentId, transcript: document.text, profile: source.profile,
-      tutorId: tutor.employee_id, speakerLabels, round: input.round, version: version.id, model: aiModel });
+      tutorId: tutor.employee_id, speakerLabels, round: input.round, version: version.id, model: aiModel,
+      evaluationPolicy: EXTENSION_REVIEW_POLICY_VERSION });
     const connection = await connect();
     let locked = false;
     try {

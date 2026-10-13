@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const PROFILE_KEYS = ['streams', 'age', 'companyReasons', 'expenseConsent', 'classification'];
+export const EXTENSION_REVIEW_POLICY_VERSION = 'context-v2';
 export const DEFAULT_REVIEW_MAPPING = {
   streams: { source: 'property', name: 'やってみたい配信' },
   age: { source: 'property', name: '生年月日', transform: 'ageFromBirthDate' },
