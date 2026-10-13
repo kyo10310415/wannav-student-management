@@ -1,0 +1,31 @@
+[extend]
+useDefault = true
+
+# Public Discord IDs are identifiers, not credentials. Tokens and webhook URLs are still scanned.
+[[allowlists]]
+targetRules = ['discord-client-id']
+regexes = ['''\d{17,20}''']
+
+# Explicit sample values only; do not exempt entire source/test directories.
+[[allowlists]]
+targetRules = ['curl-auth-header']
+regexes = ['''YOUR_SESSION_TOKEN''']
+
+[[allowlists]]
+targetRules = ['generic-api-key']
+regexes = ['''^abc123xyz456$''']
+
+[[allowlists]]
+paths = ['''(^|[/\\])node_modules[/\\]''', '''(^|[/\\])\.git[/\\]''']
+
+[[rules]]
+id = 'discord-webhook-url'
+description = 'Hardcoded Discord webhook credential URL'
+regex = '''https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api(?:/v\d+)?/webhooks/\d+/[A-Za-z0-9_-]{20,}'''
+
+[[rules]]
+id = 'database-password-url'
+description = 'Database connection URL with credentials'
+regex = '''(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s:/]+:[^\s@]+@[^\s'"`]+'''
+[[rules.allowlists]]
+regexes = ['''(?i)://[^\s:/]+:(?:password|your_password)@''']

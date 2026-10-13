@@ -5,6 +5,17 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+
+# Private keys and service-account credentials
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+google-credentials*.json
 
 # Runtime data
 pids

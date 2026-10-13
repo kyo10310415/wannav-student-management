@@ -13,9 +13,16 @@ import {
 /**
  * Send daily statistics report to Discord
  */
-export async function sendDailyStatsReport() {
+export async function sendDailyStatsReport({
+  http = axios,
+  query: queryDatabase = query,
+  fetchWanami = fetchAllWanamiUsageCounts,
+  fetchCompleted = getCompletedStudentIdsForMonth,
+  now: getNow = () => new Date(),
+  logger = console
+} = {}) {
   try {
-    const webhookUrl = process.env.DISCORD_STATS_WEBHOOK_URL || 'https://discord.com/api/webhooks/1454123104698761260/V4dCIKzhu3OCc5FWLro0ttzj3dCsin5B4-kuWu1yxLUn_cIN68fiV4Iqjqmiox6jPR1d';
+    const webhookUrl = process.env.DISCORD_STATS_WEBHOOK_URL;
     const roleId = process.env.DISCORD_STATS_ROLE_ID || '1294923221107478571';
     
     console.log('[Stats Report] Generating daily statistics report...');
@@ -26,8 +33,8 @@ export async function sendDailyStatsReport() {
     try {
       console.log('[Stats Report] Fetching extension statistics from internal API...');
       const [extensionResponse, extensionTeamResponse] = await Promise.all([
-        axios.get('http://localhost:3000/api/extensions/stats'),
-        axios.get('http://localhost:3000/api/extensions/by-team')
+        http.get('http://localhost:3000/api/extensions/stats'),
+        http.get('http://localhost:3000/api/extensions/by-team')
       ]);
       
       if (extensionResponse.data && extensionResponse.data.success) {
@@ -41,11 +48,11 @@ export async function sendDailyStatsReport() {
         console.log(`[Stats Report] Extension team stats loaded: ${extensionTeamStats.length} teams`);
       }
     } catch (error) {
-      console.error('[Stats Report] Error fetching extension data:', error.message);
+      logger.error('[Stats Report] Error fetching extension data');
     }
     
     // 1. Fetch all active tutors
-    const tutorsResult = await query(`
+    const tutorsResult = await queryDatabase(`
       SELECT employee_id, tutor_name, notion_name, team, status, job_type
       FROM tutors
       WHERE status = 'アクティブ' 
@@ -57,7 +64,7 @@ export async function sendDailyStatsReport() {
     console.log(`[Stats Report] Found ${tutors.length} active tutors`);
     
     // 2. Fetch all active students
-    const studentsResult = await query(`
+    const studentsResult = await queryDatabase(`
       SELECT student_id, name, homeroom_tutor, status, contract_plan
       FROM students
       WHERE status = 'アクティブ'
@@ -71,23 +78,23 @@ export async function sendDailyStatsReport() {
     let satisfactionData = {};
     try {
       console.log('[Stats Report] Fetching satisfaction data from internal API...');
-      const satisfactionResponse = await axios.get('http://localhost:3000/api/tutors/satisfaction/all');
+      const satisfactionResponse = await http.get('http://localhost:3000/api/tutors/satisfaction/all');
       if (satisfactionResponse.data && satisfactionResponse.data.success && satisfactionResponse.data.data) {
         satisfactionData = satisfactionResponse.data.data;
         console.log(`[Stats Report] Satisfaction data loaded for ${Object.keys(satisfactionData).length} tutors`);
       } else {
-        console.warn('[Stats Report] Satisfaction data structure unexpected:', satisfactionResponse.data);
+        logger.warn('[Stats Report] Satisfaction data structure unexpected');
       }
     } catch (error) {
-      console.error('[Stats Report] Error fetching satisfaction data:', error.message);
+      logger.error('[Stats Report] Error fetching satisfaction data');
     }
     
     // 4. Fetch Wanami usage counts
-    const now = new Date();
+    const now = getNow();
     const jstNow = getJstDateParts(now);
     const year = jstNow.year;
     const month = jstNow.month;
-    const wanamiUsageCounts = await fetchAllWanamiUsageCounts(year, month);
+    const wanamiUsageCounts = await fetchWanami(year, month);
     console.log(`[Stats Report] Found Wanami usage data for ${Object.keys(wanamiUsageCounts).length} students`);
     
     // 5. Calculate current month key
@@ -96,12 +103,12 @@ export async function sendDailyStatsReport() {
     let completedStudentIds = null;
     if (isLessonCompletionFilterActive(year, month, now)) {
       try {
-        const completion = await getCompletedStudentIdsForMonth(
+        const completion = await fetchCompleted(
           `${year}-${String(month).padStart(2, '0')}`
         );
         completedStudentIds = new Set(completion.completedStudentIds);
       } catch (error) {
-        console.error('[Stats Report] Lesson completion filter unavailable:', error.message);
+        logger.error('[Stats Report] Lesson completion filter unavailable');
       }
     }
     
@@ -241,7 +248,11 @@ export async function sendDailyStatsReport() {
     message += `https://wannav-student-management.onrender.com`;
     
     // 10. Send to Discord
-    await axios.post(webhookUrl, {
+    if (!webhookUrl?.trim()) {
+      logger.warn('[Stats Report] DISCORD_STATS_WEBHOOK_URL is not configured; Discord delivery skipped');
+      return { success: true, skipped: true, message: 'Stats report generated; Discord delivery skipped' };
+    }
+    await http.post(webhookUrl, {
       content: message,
       username: 'WannaV 統計Bot',
       avatar_url: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
@@ -251,7 +262,8 @@ export async function sendDailyStatsReport() {
     return { success: true, message: 'Stats report sent' };
     
   } catch (error) {
-    console.error('[Stats Report] Error sending daily statistics report:', error);
-    throw error;
+    logger.error('[Stats Report] Daily statistics report failed');
+    // Axios errors contain the request URL, headers and payload. Do not propagate them to callers.
+    throw new Error('Statistics report could not be generated or delivered');
   }
 }
