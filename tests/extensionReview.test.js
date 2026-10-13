@@ -6,7 +6,7 @@ import { parseReviewUrl, DEFAULT_REVIEW_SETTINGS, targetMatch, estimateReviewCos
   validateReviewResult, reviewMarkdown, reviewFingerprint, resolveReviewSpeakers } from '../src/services/extensionReviewRules.js';
 import { reviewPropertyValue, fetchReviewNotion, ageFromBirthDate } from '../src/services/extensionReviewSources.js';
 import { fetchReviewTranscript } from '../src/services/driveService.js';
-import { gradeExtensionReview } from '../src/services/extensionReviewAI.js';
+import { gradeExtensionReview, reviewApiFailure } from '../src/services/extensionReviewAI.js';
 import { createExtensionReviewRoutes } from '../src/routes/extensionReview.js';
 import { createExtensionReviewService } from '../src/services/extensionReviewService.js';
 
@@ -115,6 +115,42 @@ test('JSON validation rejects invented quotes, speakers, timestamps and invalid 
   }
   const wrongSpeaker = result(); wrongSpeaker.summary.evidence[0].speaker = 'Student';
   assert.throws(()=>validateReviewResult(wrongSpeaker,transcript));
+});
+
+test('turn validation accepts distant headers and ignores body headings, but rejects wrong attribution', () => {
+  const quote=point().evidence[0].quote;
+  for(const prefix of ['説明。'.repeat(500), '説明。'.repeat(150)+'\n補足：説明です。\n']) {
+    assert.equal(validateReviewResult(result(),'00:00:10\nTutor: '+prefix+quote,['Tutor']).score,85);
+  }
+  const normalized=result();
+  for(const p of [normalized.bonuses[0],normalized.improvements[0],normalized.goodFactors[0],normalized.scriptMatch,normalized.originality,normalized.summary]) p.evidence[0].timestamp='00:10';
+  assert.equal(validateReviewResult(normalized,transcript,['Tutor']).score,85);
+  assert.throws(()=>validateReviewResult(result(),'00:00:10\nTutor: 別の内容\nStudent: '+quote,['Tutor']));
+  assert.throws(()=>validateReviewResult(result(),'00:00:11\nTutor: '+quote,['Tutor']));
+  const later=transcript+'\n00:00:20\n'+quote;
+  const latest=result();
+  for(const p of [latest.bonuses[0],latest.improvements[0],latest.goodFactors[0],latest.scriptMatch,latest.originality,latest.summary]) {p.evidence[0].speaker='Student';p.evidence[0].timestamp='00:00:20';}
+  assert.equal(validateReviewResult(latest,later).score,85);
+});
+
+test('API failures classify billing and other causes without exposing credentials or raw errors', async () => {
+  const logs=[];
+  const secret='PRIVATE_TEST_SENTINEL';
+  const error=Object.assign(new Error(secret),{status:429,code:'credit_balance_exhausted',request:{body:secret}});
+  await assert.rejects(gradeExtensionReview({transcript,config:config(),round:1,model:'test-model',log:data=>logs.push(data)},
+    {responses:{create:async()=>{throw error;}}}), e=>e.safe && e.message.includes('残高') && !e.message.includes(secret));
+  assert.deepEqual(logs,[{stage:'api',category:'billing',status:429}]);
+  assert.ok(!JSON.stringify(logs).includes(secret));
+  for(const [err,category] of [[{status:401},'authentication'],[{status:403},'model_access'],[{status:429},'rate_limit'],[{name:'APITimeoutError'},'timeout'],[{status:503},'upstream']]) assert.equal(reviewApiFailure(err).category,category);
+});
+
+test('quota errors distinguish rolling hourly and monthly limits without starting AI', async()=>{
+  const hourly=persistenceFixture({userHour:10});
+  await assert.rejects(hourly.service.generate(hourly.input,{id:1,role:'admin'}),e=>e.status===429 && e.message.includes('直近1時間') && e.message.includes('失敗分を含む'));
+  assert.equal(hourly.calls,0);
+  const monthly=persistenceFixture({monthly:100});
+  await assert.rejects(monthly.service.generate(monthly.input,{id:1,role:'admin'}),e=>e.status===429 && e.message.includes('月間'));
+  assert.equal(monthly.calls,0);
 });
 test('Responses uses one call and only the selected script; no fallback on failures', async () => {
   for(const round of [1,2,3,4]) {

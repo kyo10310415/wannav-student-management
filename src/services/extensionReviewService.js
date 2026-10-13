@@ -69,7 +69,8 @@ export function createExtensionReviewService({ db = query, connect = getClient, 
         COUNT(*) FILTER (WHERE created_at >= (DATE_TRUNC('month', NOW() AT TIME ZONE 'Asia/Tokyo') AT TIME ZONE 'Asia/Tokyo'))::int AS monthly,
         COUNT(*) FILTER (WHERE created_by = $1 AND created_at >= NOW() - INTERVAL '1 hour')::int AS user_hour
         FROM extension_reviews`, [user.id])).rows[0];
-      if (counts.monthly >= version.config.limits.monthlyCalls || counts.user_hour >= 10) throw reviewError('採点件数の上限に達しました', 429);
+      if (counts.monthly >= version.config.limits.monthlyCalls) throw reviewError(`月間の採点件数上限に達しました（全体${counts.monthly}/${version.config.limits.monthlyCalls}件）。管理者が基準管理の利用上限を確認してください`, 429);
+      if (counts.user_hour >= 10) throw reviewError(`直近1時間の採点件数上限に達しました（このユーザー${counts.user_hour}/10件・失敗分を含む）。過去の試行から1時間経過すると順に再開できます`, 429);
       const id = randomUUID(), match = targetMatch(source.profile, version.config.target);
       await connection.query(`INSERT INTO extension_reviews
         (id, created_by, round, student_id, student_name, tutor_id, tutor_name, notion_page_id, document_id,

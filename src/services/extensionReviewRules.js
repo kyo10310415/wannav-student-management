@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const PROFILE_KEYS = ['streams', 'age', 'companyReasons', 'expenseConsent', 'classification'];
-export const EXTENSION_REVIEW_POLICY_VERSION = 'context-v2';
+export const EXTENSION_REVIEW_POLICY_VERSION = 'context-v2-turn-validation';
 export const DEFAULT_REVIEW_MAPPING = {
   streams: { source: 'property', name: 'やってみたい配信' },
   age: { source: 'property', name: '生年月日', transform: 'ageFromBirthDate' },
@@ -111,7 +111,38 @@ export function reviewFingerprint(input) {
 }
 
 export function transcriptSpeakerLabels(transcript) {
-  return [...new Set([...transcript.matchAll(/(?:^|\n)([^\n:：]{1,100})[:：]\s*/g)].map(match => match[1].trim()).filter(name => !/^\d+$/.test(name)))];
+  return [...new Set([...transcript.matchAll(/(?:^|\n)([^\n:：]{1,100})[:：][ \t]*/g)].map(match => match[1].trim()).filter(name => !/^\d+$/.test(name) && !['補足','注意','例','参考','備考'].includes(name)))];
+}
+
+function timeSeconds(value) {
+  if (typeof value !== 'string' || !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(value)) return null;
+  const parts = value.split(':').map(Number);
+  if (parts.at(-1) >= 60 || (parts.length === 3 && parts[1] >= 60)) return null;
+  return parts.length === 3 ? parts[0]*3600+parts[1]*60+parts[2] : parts[0]*60+parts[1];
+}
+
+export function transcriptTurns(transcript) {
+  const labels = new Set(transcriptSpeakerLabels(transcript));
+  const turns = [];
+  let timestamp = null, offset = 0;
+  for (const line of transcript.split('\n')) {
+    const time = line.trim().match(/^\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?$/);
+    if (time && timeSeconds(time[1]) !== null) {
+      timestamp = timeSeconds(time[1]);
+      if (turns.length) {
+        const speaker = turns.at(-1).speaker;
+        turns.at(-1).end = offset;
+        turns.push({start:offset,end:transcript.length,speaker,timestamp});
+      }
+    }
+    const header = line.match(/^([^:：\r\n]{1,100})[:：][ \t]*/);
+    if (header && labels.has(header[1].trim())) {
+      if (turns.length) turns.at(-1).end = offset;
+      turns.push({ start: offset, end: transcript.length, speaker: header[1].trim(), timestamp });
+    }
+    offset += line.length + 1;
+  }
+  return turns;
 }
 
 export function resolveReviewSpeakers(transcript, aliases) {
@@ -121,27 +152,22 @@ export function resolveReviewSpeakers(transcript, aliases) {
   return matches;
 }
 
-function checkPoint(point, transcript, metric = false) {
+function checkPoint(point, transcript, metric = false, turns = []) {
   checkKeys(point, metric ? ['text','evidence','score'] : ['text','evidence'], 502);
   if (!point || typeof point.text !== 'string' || !point.text.trim() || point.text.length > 3000 || !Array.isArray(point.evidence) || !point.evidence.length || point.evidence.length > 4) throw reviewError('採点根拠の構造が不正です', 502);
   for (const e of point.evidence) {
     checkKeys(e, ['quote','speaker','timestamp'], 502);
     if (!e || typeof e.quote !== 'string' || !e.quote.trim() || e.quote.length > 500) throw reviewError('根拠引用が不正です', 502);
     for (const key of ['speaker', 'timestamp']) if (e[key] !== null && (typeof e[key] !== 'string' || e[key].length > 100)) throw reviewError('発言者・時刻の形式が不正です', 502);
-    if (e.timestamp !== null && !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(e.timestamp)) throw reviewError('時刻の形式が不正です', 502);
+    if (e.timestamp !== null && timeSeconds(e.timestamp) === null) throw reviewError('時刻の形式が不正です', 502);
     if (transcript !== undefined) {
       let index = transcript.indexOf(e.quote), found = false, occurrences = 0;
       if (index < 0) throw reviewError('文字起こしに存在しない根拠引用を検出しました', 502);
       while (index >= 0) {
         if (++occurrences > 1000) throw reviewError('根拠引用が曖昧で特定できません', 502);
-        const context = transcript.slice(Math.max(0, index - 300), index + e.quote.length + 100);
-        const before = transcript.slice(Math.max(0, index - 1000), index);
-        const headers = [...before.matchAll(/(?:^|\n)([^\n:：]{1,100})[:：]\s*/g)].map(m => m[1].trim()).filter(name => !/^\d+$/.test(name));
-        const ownHeader = e.quote.match(/^([^\n:：]{1,100})[:：]/)?.[1]?.trim();
-        const speaker = ownHeader && !/^\d+$/.test(ownHeader) ? ownHeader : headers.at(-1);
-        const speakerValid = e.speaker === null || (speaker ? speaker === e.speaker : context.includes(e.speaker));
-        if (speakerValid && (e.timestamp === null || context.includes(e.timestamp))) { found = true; break; }
-        index = transcript.indexOf(e.quote, index + e.quote.length);
+        const turn = turns.find(t => t.start <= index && index + e.quote.length <= t.end);
+        if ((e.speaker === null || turn?.speaker === e.speaker) && (e.timestamp === null || turn?.timestamp === timeSeconds(e.timestamp))) { found = true; break; }
+        index = transcript.indexOf(e.quote, index + 1);
       }
       if (!found) throw reviewError('発言者・時刻の根拠を確認できません', 502);
     }
@@ -149,17 +175,18 @@ function checkPoint(point, transcript, metric = false) {
 }
 
 export function validateReviewResult(result, transcript, speakerLabels) {
+  const turns = transcript === undefined ? [] : transcriptTurns(transcript);
   checkKeys(result, ['score','bonuses','penalties','improvements','goodFactors','issues','scriptMatch','originality','summary'], 502);
   if (!result || !Number.isFinite(result.score) || result.score < 0 || result.score > 100) throw reviewError('総合評価が不正です', 502);
   for (const key of ['bonuses', 'penalties', 'improvements', 'goodFactors', 'issues']) {
     if (!Array.isArray(result[key]) || result[key].length > 15) throw reviewError('採点項目が不正です', 502);
-    result[key].forEach(p => checkPoint(p, transcript));
+    result[key].forEach(p => checkPoint(p, transcript, false, turns));
   }
   for (const key of ['scriptMatch', 'originality']) {
     if (!Number.isFinite(result[key]?.score) || result[key].score < 0 || result[key].score > 100) throw reviewError('一致度・オリジナリティが不正です', 502);
-    checkPoint(result[key], transcript, true);
+    checkPoint(result[key], transcript, true, turns);
   }
-  checkPoint(result.summary, transcript);
+  checkPoint(result.summary, transcript, false, turns);
   if (speakerLabels) {
     const points = [...result.bonuses,...result.penalties,...result.improvements,...result.goodFactors,...result.issues,result.scriptMatch,result.originality,result.summary];
     if (!points.some(point => point.evidence.some(e => speakerLabels.includes(e.speaker)))) throw reviewError('選択した実施Tutorの発言を採点根拠で確認できません', 502);
