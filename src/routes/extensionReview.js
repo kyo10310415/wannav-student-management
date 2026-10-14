@@ -21,7 +21,7 @@ export function createExtensionReviewRoutes({ db = query, service = extensionRev
       const user = (await db(`SELECT u.id, u.role FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.session_token = $1 AND s.expires_at > NOW()`, [token])).rows[0];
       if (!user) return c.json({ success: false, error: 'セッションが無効です' }, 401);
-      if (!['admin','leader'].includes(user.role)) return c.json({ success: false, error: 'リーダー以上のみ利用できます' }, 403);
+      if (user.role !== 'admin') return c.json({ success: false, error: '管理者のみ利用できます' }, 403);
       c.set('reviewUser', user);
       if (c.req.path.endsWith('/capabilities')) {
         return c.json({ success: true, data: { enabled: enabled(), canAdmin: user.role === 'admin' } });

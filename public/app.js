@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPage = 'database';
   } else if (hash === 'funnel' && (currentUser?.role === 'admin' || currentUser?.role === 'leader')) {
     currentPage = 'funnel';
-  } else if (hash === 'extension-review' && ['admin','leader'].includes(currentUser?.role)) {
+  } else if (hash === 'extension-review' && currentUser?.role === 'admin') {
     currentPage = 'extension-review';
   }
   // Default is 'today' (already set)
@@ -190,7 +190,7 @@ function renderHeader() {
   ` : '';
 
   // Build funnel management button (leader or above)
-  const extensionReviewButton = currentUser && ['admin', 'leader'].includes(currentUser.role) && typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled ? `
+  const extensionReviewButton = currentUser && currentUser.role === 'admin' && typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled ? `
     <button onclick="changePage('extension-review')" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>
   ` : '';
   const funnelManagementButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
@@ -941,7 +941,7 @@ async function renderApp() {
     }
     await renderLessonContentsPage();
   } else if (currentPage === 'extension-review') {
-    if (!currentUser || !['admin','leader'].includes(currentUser.role)) {
+    if (!currentUser || currentUser.role !== 'admin') {
       currentPage = 'today';
       await renderTodayLessonsPage();
       return;
@@ -3995,7 +3995,7 @@ function renderTutorRows() {
         title="表示月のレッスン品質評価を表示">
         <i class="fas fa-clipboard-check mr-1"></i>品質評価
       </button>`;
-    const extensionReviewTutorButton = typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled && ['admin','leader'].includes(currentUser?.role) ?
+    const extensionReviewTutorButton = typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled && currentUser?.role === 'admin' ?
       `<button data-tutor="${erEscape(tutor.employee_id)}" onclick="erOpenTutorAnalysis(this.dataset.tutor)" class="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded whitespace-nowrap">延長審査評価</button>` : '';
     
     // レッスン進捗ステータス
