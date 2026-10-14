@@ -161,6 +161,7 @@ test('Responses uses one call and only the selected script; no fallback on failu
     const prompt=JSON.stringify(calls[0].input);
     assert.ok(prompt.includes('review_tutor'));assert.ok(prompt.includes('tutor_speaker_labels'));
     for (const rule of ['文字起こし全文を時系列で読み','それだけで減点しない','理由を深掘り','不安の払拭や解決策の提示','再度意思確認','成果の否定と決めつけず','時系列で2〜4件引用','登録基準の配点や条件は変更しない']) assert.ok(prompt.includes(rule));
+    for (const rule of ['登録採点基準の優先','総合点・加点・減点にも反映','必要な説明・質問・意思確認','意味・役割が同じ言い換え','該当しない分岐','重要事項の省略を免責する理由にしない','該当する登録採点基準の項目を明記','固定配点や重みを捏造しない','重複減点','スクリプト遵守が登録基準にない場合']) assert.ok(prompt.includes(rule));
     assert.ok(prompt.includes(`審査${round}`));for(const other of [1,2,3,4].filter(n=>n!==round))assert.ok(!prompt.includes(`審査${other}`));
   }
   let calls=0;
