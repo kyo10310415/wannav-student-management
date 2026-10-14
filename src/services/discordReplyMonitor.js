@@ -183,7 +183,8 @@ export async function checkDiscordReplyAlerts() {
         await enqueue(async () => {
           await recoverChannel(row.channel_id, row.message_id);
           const channel = await client.channels.fetch(row.channel_id);
-          const message = await channel.messages.fetch({ message: row.message_id, cache: false });
+          // cache:false controls storage; force:true bypasses an existing stale message.
+          const message = await channel.messages.fetch({ message: row.message_id, cache: false, force: true });
           if (message.reactions.cache.some(reaction => reaction.count > 0)) {
             await query('UPDATE discord_reply_pending SET resolved_at = NOW() WHERE message_id = $1', [row.message_id]);
           }
