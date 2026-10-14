@@ -12,6 +12,12 @@ let staffIds = new Set();
 let refreshedAt = 0;
 let queue = Promise.resolve();
 let checking = false;
+const failedRecoveries = new Map();
+
+function rememberRecoveryFailure(channelId, cursor) {
+  const previous = failedRecoveries.get(channelId);
+  if (!previous || BigInt(cursor) < BigInt(previous)) failedRecoveries.set(channelId, cursor);
+}
 
 function enqueue(work) {
   queue = queue.then(work).catch(error => {
@@ -61,6 +67,14 @@ async function refreshDirectory() {
 }
 
 async function processMessage(message) {
+  try { await persistMessage(message); }
+  catch (error) {
+    rememberRecoveryFailure(message.channelId, (BigInt(message.id) - 1n).toString());
+    throw error;
+  }
+}
+
+async function persistMessage(message) {
   const student = channels.get(message.channelId);
   if (!student) return;
   const kind = classifyReplyMessage(message, student.studentDiscordId, staffIds);
@@ -74,9 +88,9 @@ async function processMessage(message) {
   } else if (kind === 'student') {
     await query(`INSERT INTO discord_reply_pending
       (message_id, channel_id, guild_id, student_id, posted_at, resolved_at)
-      SELECT $1, $2, $3, $4, $5,
-        CASE WHEN last_staff_message_id::numeric > $1::numeric OR $6::boolean THEN NOW() ELSE NULL END
-      FROM discord_reply_channels WHERE channel_id = $2 AND last_message_id::numeric < $1::numeric
+      SELECT $1::text, $2::text, $3::text, $4::text, $5::timestamptz,
+        CASE WHEN last_staff_message_id::numeric > $1::text::numeric OR $6::boolean THEN NOW() ELSE NULL END
+      FROM discord_reply_channels WHERE channel_id = $2::text AND last_message_id::numeric < $1::text::numeric
       ON CONFLICT DO NOTHING`,
     [message.id, message.channelId, message.guildId, student.student_id,
       new Date(message.createdTimestamp), message.reactions.cache.some(reaction => reaction.count > 0)]);
@@ -99,14 +113,24 @@ async function recoverAllChannels() {
   const result = await query('SELECT channel_id, last_message_id FROM discord_reply_channels');
   for (const row of result.rows) {
     if (!channels.has(row.channel_id)) continue;
-    try { await recoverChannel(row.channel_id, row.last_message_id); }
-    catch (error) { console.error('[DiscordReplyMonitor] Recovery failed:', row.channel_id, error.code || error.name); }
+    try {
+      await recoverChannel(row.channel_id, row.last_message_id);
+      failedRecoveries.delete(row.channel_id);
+    }
+    catch (error) {
+      rememberRecoveryFailure(row.channel_id, row.last_message_id);
+      console.error('[DiscordReplyMonitor] Recovery failed:', row.channel_id, error.code || error.name);
+    }
   }
 }
 
 export function startDiscordReplyMonitor() {
   client.on('messageCreate', message => enqueue(async () => {
     await refreshDirectory();
+    if (failedRecoveries.has(message.channelId)) {
+      await recoverChannel(message.channelId, failedRecoveries.get(message.channelId));
+      failedRecoveries.delete(message.channelId);
+    }
     await processMessage(message);
   }));
   client.on('messageReactionAdd', reaction => enqueue(async () => {
@@ -130,6 +154,23 @@ export async function checkDiscordReplyAlerts() {
     locked = (await lockClient.query('SELECT pg_try_advisory_lock(1294923221) AS locked')).rows[0].locked;
     if (!locked) return;
     await enqueue(refreshDirectory);
+    await enqueue(async () => {
+      // Retry a bounded batch; do not crawl all channels every five minutes.
+      const retries = [...failedRecoveries.entries()].slice(0, 10);
+      for (const [channelId, cursor] of retries) {
+        if (!channels.has(channelId)) { failedRecoveries.delete(channelId); continue; }
+        try {
+          await recoverChannel(channelId, cursor);
+          failedRecoveries.delete(channelId);
+          console.log('[DiscordReplyMonitor] Recovery succeeded:', channelId);
+        } catch (error) {
+          // Rotate failures so one inaccessible channel cannot starve other retries.
+          failedRecoveries.delete(channelId);
+          failedRecoveries.set(channelId, cursor);
+          console.error('[DiscordReplyMonitor] Recovery retry failed:', channelId, error.code || error.name);
+        }
+      }
+    });
     await queue;
     const result = await query(`SELECT * FROM discord_reply_pending
       WHERE resolved_at IS NULL AND posted_at <= NOW() - INTERVAL '12 hours'
