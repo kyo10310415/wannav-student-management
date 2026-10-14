@@ -4,7 +4,7 @@
 
 ## 実装と影響範囲
 
-- API: `/api/extension-review`。既存sessions/usersのBearerセッションで毎回認証し、admin/leaderのみ許可。crewは全API拒否。
+- API: `/api/extension-review`。既存sessions/usersのBearerセッションで毎回認証し、admin（管理者）のみ許可。leader/crewはcapabilitiesを含む全API拒否。画面・Tutor管理からの分析リンクも管理者専用。
 - UI: 「延長審査AI採点」の6タブ（実行・結果・履歴・Tutor分析・基準管理・接続診断）。Tutor管理に独立した分析へのリンクを追加。
 - 実行入力: 審査回数1〜4、**実際の実施Tutor**、Notion生徒ページURL、Google Docs URL。登録済みのアクティブTutorから選択し、当時の識別情報を結果に保存する。
 - 文字起こしの発言者ラベルを実施Tutorの登録名/Notion名/氏名/管理者登録別名と照合する。本人を特定できなければOpenAIを呼ばず停止し、採点結果にも本人の発言根拠が最低1件あることを検証する。別名は基準管理で後から登録・修正できる。
@@ -23,7 +23,7 @@ OPENAI_EXTENSION_REVIEW_MODEL=gpt-6-sol
 
 既存のDATABASE_URL、OPENAI_API_KEY、NOTION_STUDENT_API_TOKEN（既存のNOTION_API_TOKENへの互換fallbackあり）、NOTION_STUDENT_DB_ID、GOOGLE_CREDENTIALS_JSONを利用する。実値をGit/ブラウザー/ログへ渡さない。
 
-flag未設定/falseでは管理メニューを隠し、機能APIを拒否する。認証済みadmin/leaderにenabledの真偽を返すcapabilities APIだけは例外。OpenAI・Notion・Docs APIを呼ばない。メニュー設定の取得はセッションごとに最大1分キャッシュする。
+flag未設定/falseでは管理メニューを隠し、機能APIを拒否する。認証済みadminにenabledの真偽を返すcapabilities APIだけは例外。OpenAI・Notion・Docs APIを呼ばない。メニュー設定の取得はセッションごとに最大1分キャッシュする。
 
 ## 有効化・登録手順
 
@@ -73,7 +73,7 @@ API失敗は残高/課金上限、認証、モデルアクセス、レート制�
 - Docsは全タブを再帰展開し、文字起こしタブとその子タブを優先。該当なしなら全タブを読む。テーブル内の本文も再帰抽出し、発言者・時刻・原文を保持する。
 - 通常はResponses API 1回。Structured OutputsでJSONを取得し、ローカルで0〜100の範囲、必須構造、原文完全一致引用、付随する発言者/時刻を検査する。曖昧・未完了・拒否・不正JSONは採点成功として保存しない。
 - 意味の評価まで機械的に証明するものではない。人が引用・生徒意向・スクリプトとの差と対応品質を確認する。AI一次評価は保存後も維持し、管理者編集は別JSONと編集履歴へ保存する。
-- leaderは実行/閲覧/確認、adminは加えて基準編集/結果編集/確定/診断。確定済みはAPI側で編集拒否し、再採点は別レコードを作る。
+- adminのみ実行/閲覧/確認/基準編集/結果編集/確定/診断できる。確定済みはAPI側で編集拒否し、再採点は別レコードを作る。
 - 文字起こし全文をDBへ保存しない。保存するのはハッシュ、人物像スナップショット、結果と限定された根拠引用、ID、基準版、モデル、usage、推定料金、操作者・確認情報。
 - 出力テンプレートは`{{grading}} {{script}} {{profile}} {{factors}}`をすべて使用。空欄では延長審査採点、トークスクリプト（太字ラベルの一致度・オリジナリティ）、生徒様の人物像（太字の一致率と5項目）、要因分析（■ 良かった点・課題点・総括）の4セクションを区切り線付きで出力する。要因分析の根拠引用は保持する。設定済みのカスタムテンプレートは配置を維持し、各セクションの書式が更新される。保存済み結果のMarkdownは変更しない。MarkdownはJS生成で、UIではエスケープして表示する。
 - SDKエラー/資料内の命令をシステム指示にしない。モデル自動切替・自動再採点・無制限再試行はない。

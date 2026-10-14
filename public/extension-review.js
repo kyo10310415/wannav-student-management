@@ -17,12 +17,14 @@ async function erRequest(path, method = 'get', data) {
   const requestToken = sessionToken;
   const response = await axios({ url: `${API_BASE}/api/extension-review${path}`, method, data,
     headers: { Authorization: `Bearer ${requestToken}` } });
-  if (requestToken !== sessionToken || !currentUser || !['admin','leader'].includes(currentUser.role)) throw new Error('SessionChanged');
+  if (requestToken !== sessionToken || !currentUser || currentUser.role !== 'admin') throw new Error('SessionChanged');
   return response.data.data;
 }
 async function refreshExtensionReviewCapability() {
-  if (!currentUser || !['admin','leader'].includes(currentUser.role) || !sessionToken) {
+  if (!currentUser || currentUser.role !== 'admin' || !sessionToken) {
     extensionReviewFeatureEnabled = false; erCapabilityToken = null; erCapabilityPromise = null;
+    const slot = document.getElementById('extension-review-nav');
+    if (slot) slot.innerHTML = '';
     erResult = null; erSettings = null; erTutors = []; erLastInput = null; erBusy = false; erAnalysisTutor = null; return false;
   }
   if (erCapabilityToken === sessionToken && erCapabilityPromise && Date.now() < erCapabilityExpires) return erCapabilityPromise;

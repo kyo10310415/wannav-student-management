@@ -218,10 +218,15 @@ test('disabled feature hides capabilities and cannot invoke AI or sources', asyn
   assert.equal((await request(app,'/generate','POST',{})).status,403);assert.equal(calls,0);
   assert.equal((await (await request(app,'/capabilities')).json()).data.enabled,false);
 });
-test('leader can grade/read/review but cannot edit criteria, confirm, edit results or diagnose', async () => {
+test('leader is denied on every extension review endpoint', async () => {
   const app=routeFor('leader',true,{history:async()=>[],generate:async()=>({id:'id'}),review:async()=>({id:'id'})});
-  assert.equal((await request(app)).status,200);assert.equal((await request(app,'/generate','POST',{})).status,200);assert.equal((await request(app,'/results/id/review','POST',{})).status,200);
+  for(const[path,method]of [['/history','GET'],['/generate','POST'],['/results/id/review','POST'],['/capabilities','GET'],['/analysis','GET'],['/tutors','GET'],['/results/id','GET'],['/settings/versions','GET'],['/results/id/edits','GET']]) assert.equal((await request(app,path,method,{})).status,403);
   for(const[path,method]of [['/settings','POST'],['/settings','GET'],['/diagnostics','POST'],['/results/id','PUT'],['/results/id/confirm','POST']])assert.equal((await request(app,path,method,{})).status,403);
+});
+
+test('admin can grade, read and review extension results',async()=>{
+  const app=routeFor('admin',true,{history:async()=>[],generate:async()=>({id:'id'}),review:async()=>({id:'id'})});
+  for(const[path,method]of [['/history','GET'],['/generate','POST'],['/results/id/review','POST'],['/capabilities','GET']]) assert.equal((await request(app,path,method,{})).status,200);
 });
 test('API sanitizes unknown errors and rate limits requests', async () => {
   const app=routeFor('admin',true,{history:async()=>{throw new Error('PRIVATE_TEST_SENTINEL');}});
@@ -288,7 +293,7 @@ test('grading persists immutable AI JSON, identity, version, target, usage and e
 });
 test('same grading conditions reuse persisted result without another AI call',async()=>{
   const f=persistenceFixture();await f.service.generate(f.input,{id:1,role:'admin'});
-  const reused=await f.service.generate(f.input,{id:1,role:'leader'});assert.equal(reused.reused,true);assert.equal(f.calls,1);
+  const reused=await f.service.generate(f.input,{id:1,role:'admin'});assert.equal(reused.reused,true);assert.equal(f.calls,1);
 });
 
 test('old evaluation policy results are not reused for a new grading request',async()=>{
@@ -336,6 +341,19 @@ test('UI helpers escape untrusted content and discard responses after session ch
   assert.ok(context.erEscape('<script>"bad"</script>').includes('&lt;script&gt;'));
   context.currentUser={role:'admin'};context.sessionToken='old';context.axios=async()=>{context.sessionToken='new';return{data:{data:{private:true}}};};
   await assert.rejects(context.erRequest('/history'),/SessionChanged/);
+});
+
+test('leader UI hides feature navigation and clears cached review data without requesting API',async()=>{
+  const slot={innerHTML:'previous admin menu'};
+  let calls=0;
+  const context={currentUser:{role:'leader'},sessionToken:'leader-session',API_BASE:'',setTimeout,document:{getElementById:()=>slot},console,axios:async()=>{calls++;}};
+  vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../public/extension-review.js',import.meta.url),'utf8'),context);
+  vm.runInContext('extensionReviewFeatureEnabled=true; erResult={private:true};',context);
+  assert.equal(await context.refreshExtensionReviewCapability(),false);
+  assert.equal(slot.innerHTML,'');
+  assert.equal(vm.runInContext('erResult',context),null);
+  assert.equal(calls,0);
 });
 
 test('selected Tutor must match a source label and be represented in grading evidence',()=>{
