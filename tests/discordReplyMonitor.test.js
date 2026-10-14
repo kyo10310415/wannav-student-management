@@ -25,6 +25,45 @@ function monitor(overrides = {}) {
 
 const message = (id, author = 'student') => ({ id, channelId: 'channel', guildId: 'guild', author: { id: author }, createdTimestamp: Date.now(), reactions: { cache: { some: () => false } } });
 
+test('notification refresh bypasses stale cache and blocks both alerts for existing reactions', async () => {
+  const row = { message_id:'100',channel_id:'channel',guild_id:'guild',student_id:'ST1',posted_at:new Date(0),resolved_at:null,tutor_notified_at:null,management_notified_at:null };
+  let sends=0,forced=0;
+  const f=monitor({
+    query:async(sql)=>{
+      if(sql.includes('UPDATE discord_reply_pending SET resolved_at')) row.resolved_at=new Date();
+      if(sql.includes('SELECT * FROM discord_reply_pending')) return {rows:[row]};
+      return {rows:[]};
+    },
+    client:{isReady:()=>true,channels:{fetch:async id=>{
+      if(id!=='channel') return {send:async()=>{sends++;}};
+      return {messages:{fetch:async options=>{
+        if(!options.message) return new Map();
+        assert.equal(options.force,true); assert.equal(options.cache,false); forced++;
+        // A stale cached object has no reaction; only the forced REST fetch sees it.
+        return {reactions:{cache:{some:()=>options.force===true}}};
+      }}};
+    }}},
+    axios:{post:async()=>{sends++;}}
+  });
+  await f.context.checkDiscordReplyAlerts();
+  assert.equal(forced,1);assert.ok(row.resolved_at);assert.equal(sends,0);
+});
+
+test('failed reaction refresh leaves pending unchanged and sends no alerts',async()=>{
+  const row={message_id:'100',channel_id:'channel',posted_at:new Date(0),resolved_at:null};
+  let sends=0;
+  const f=monitor({
+    query:async sql=>({rows:sql.includes('SELECT * FROM discord_reply_pending')?[row]:[]}),
+    client:{isReady:()=>true,channels:{fetch:async()=>({send:async()=>{sends++;},messages:{fetch:async options=>{
+      if(!options.message)return new Map();
+      throw Object.assign(new Error('read failed'),{code:50001});
+    }}})}},
+    axios:{post:async()=>{sends++;}}
+  });
+  await f.context.checkDiscordReplyAlerts();
+  assert.equal(row.resolved_at,null);assert.equal(sends,0);
+});
+
 test('student insert uses one explicit text parameter type and numeric conversion only after text', async () => {
   const f = monitor();
   await f.context.processMessage(message('1559033920157384783'));
