@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { fetchLessonsForTomorrow } from './sheetsService.js';
+import { buildLessonReminderBody } from './lessonReminderContent.js';
 
 const client = new Client({
   intents: [
@@ -147,51 +148,9 @@ export async function sendReminder(studentId, lessonInfo) {
     );
     const studentName = studentResult.rows.length > 0 ? studentResult.rows[0].name : studentId;
 
-    // Use raw date string from spreadsheet (e.g., "2026/03/04 10:00:00")
-    const dateTimeStr = lessonInfo.lesson_date || '日時未設定';
-    
-    // Extract date and time parts for better formatting
-    let dateStr = dateTimeStr;
-    let timeStr = '';
-    if (dateTimeStr !== '日時未設定' && dateTimeStr.includes(' ')) {
-      const parts = dateTimeStr.split(' ');
-      dateStr = parts[0]; // "2026/03/04"
-      timeStr = parts[1]; // "10:00:00"
-      
-      // Remove seconds from time (10:00:00 -> 10:00)
-      if (timeStr && timeStr.split(':').length === 3) {
-        const timeParts = timeStr.split(':');
-        timeStr = `${timeParts[0]}:${timeParts[1]}`;
-      }
-    }
-
-    // Build reminder message
-    let message = '';
-    
-    if (studentInfo.discordId) {
-      message += `<@${studentInfo.discordId}>\n\n`;
-    }
-    
-    message += `${studentName}様\n\n`;
-    message += `明日はレッスンの予定になっております！\n`;
-    message += `忘れずにご参加ください！\n`;
-    message += `もしご都合が悪い場合は、必ず担任の先生にご連絡ください！\n\n`;
-    
-    if (timeStr) {
-      message += `**日時**: ${dateStr} ${timeStr}\n`;
-    } else {
-      message += `**日時**: ${dateTimeStr}\n`;
-    }
-    
-    if (lessonInfo.tutor_name) {
-      message += `**担任講師**: ${lessonInfo.tutor_name}\n`;
-    }
-    
-    if (lessonInfo.meet_link) {
-      message += `**Google Meetリンク**: ${lessonInfo.meet_link}\n`;
-    }
-    
-    message += `\nよろしくお願いいたします！`;
+    const message = buildLessonReminderBody(studentName, lessonInfo, {
+      discord: true, discordId: studentInfo.discordId
+    });
 
     // Send message
     await channel.send(message);
