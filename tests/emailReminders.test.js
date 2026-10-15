@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { buildLessonReminderBody } from '../src/services/lessonReminderContent.js';
+import { buildLessonReminderBody, parseLessonReminderDate } from '../src/services/lessonReminderContent.js';
 import { buildEmailReminderBatch, createEmailReminderRoutes, reminderTargetDate } from '../src/routes/emailReminders.js';
 
 const lesson={student_id:'ST1',lesson_date:'2026/10/16 20:00:00',tutor_name:'担当先生',meet_link:'https://meet.google.com/abc-defg-hij'};
@@ -20,6 +20,26 @@ test('batch uses tomorrow JST, normalizes IDs and times, deduplicates and exclud
   const data=buildEmailReminderBatch([lesson,{...lesson,student_id:' st1 ',lesson_date:'2026/10/16 20:00'}, {...lesson,lesson_date:'2026/10/17 20:00:00'}, {...lesson,lesson_date:'2026/10/16 25:00:00'}],[{student_id:'ST1',name:'生徒'}],'2026-10-16');
   assert.equal(data.items.length,1);assert.match(data.items[0].id,/^[a-f0-9]{64}$/);
   assert.ok(data.items[0].body.startsWith('生徒様'));
+});
+
+test('date-only E with separate J time is included with correct time and the same deduplication key',()=>{
+  const separated={...lesson,lesson_date:'2026/10/16',lesson_time:'20:00'};
+  const data=buildEmailReminderBatch([lesson,separated],[{student_id:'ST1',name:'テスト生徒'}],'2026-10-16');
+  assert.equal(data.items.length,1);
+  assert.equal(data.items[0].id,batch().items[0].id);
+  assert.equal(buildLessonReminderBody('テスト生徒',separated),batch().items[0].body);
+  assert.ok(buildLessonReminderBody('テスト生徒',separated,{discord:true}).includes('**日時**: 2026/10/16 20:00'));
+  assert.equal(parseLessonReminderDate({...separated,lesson_time:' 9:05:00 '}).timeKey,'09:05:00');
+  assert.equal(parseLessonReminderDate({...lesson,lesson_time:'21:00'}).timeKey,'20:00:00');
+});
+
+test('invalid/missing J times and invalid calendar dates never become midnight reminders',()=>{
+  for(const time of ['', '25:00','20:99','20:00:60','unknown']){
+    const invalid={...lesson,lesson_date:'2026/10/16',lesson_time:time};
+    assert.equal(parseLessonReminderDate(invalid),null);
+    assert.equal(buildEmailReminderBatch([invalid],[],'2026-10-16').items.length,0);
+  }
+  assert.equal(parseLessonReminderDate({...lesson,lesson_date:'2026/02/30 20:00'}),null);
 });
 test('dedicated email endpoint authenticates and respects flag before reading personal data',async()=>{
   let reads=0;

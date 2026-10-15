@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import { fetchLessonsForTomorrow } from '../services/sheetsService.js';
-import { buildLessonReminderBody } from '../services/lessonReminderContent.js';
+import { buildLessonReminderBody, parseLessonReminderDate } from '../services/lessonReminderContent.js';
 
 export function reminderTargetDate(now = new Date()) {
   return new Date(now.getTime() + (24 + 9) * 3600000).toISOString().slice(0, 10);
@@ -14,12 +14,10 @@ export function buildEmailReminderBatch(lessons, students, targetDate) {
   const items = new Map();
   for (const lesson of lessons) {
     const studentId = String(lesson.student_id || '').trim().toUpperCase();
-    const date = String(lesson.lesson_date || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (!studentId || !date) continue;
-    const dateKey = `${date[1]}-${date[2].padStart(2,'0')}-${date[3].padStart(2,'0')}`;
+    const parsed = parseLessonReminderDate(lesson);
+    if (!studentId || !parsed) continue;
+    const {dateKey, timeKey: time} = parsed;
     if (dateKey !== targetDate) continue;
-    const time = `${date[4].padStart(2,'0')}:${date[5]}:${date[6] || '00'}`;
-    if (Number(date[4]) > 23 || Number(date[5]) > 59 || Number(date[6] || 0) > 59) continue;
     const id = createHash('sha256').update(`${studentId}|${dateKey}|${time}`).digest('hex');
     if (!items.has(id)) items.set(id, { id, studentId, lessonDate:dateKey,
       subject:'【WannaV】明日のレッスンのご案内', body:buildLessonReminderBody(names.get(studentId) || studentId, lesson) });
