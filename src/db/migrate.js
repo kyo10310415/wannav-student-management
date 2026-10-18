@@ -1775,6 +1775,12 @@ const migrations = [
       );
     `,
     down: `DROP TABLE IF EXISTS extension_review_edits; DROP TABLE IF EXISTS extension_reviews; DROP TABLE IF EXISTS extension_review_settings;`
+  },
+  {
+    version: 59,
+    name: 'discord_reply_notification_preferences',
+    up: `ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_reply_alerts_enabled BOOLEAN NOT NULL DEFAULT TRUE;`,
+    down: `ALTER TABLE users DROP COLUMN IF EXISTS discord_reply_alerts_enabled;`
   }
 ];
 

@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyReplyMessage, buildReplyAlert, REPLY_ALERT_DELAY_MS, fetchReplyRecoveryMessages } from '../src/services/discordReplyRules.js';
+import { classifyReplyMessage, buildReplyAlert, REPLY_ALERT_DELAY_MS, fetchReplyRecoveryMessages, replyChatbotIds, isReplyChatbotQuestion } from '../src/services/discordReplyRules.js';
+
+test('only configured AI bot mentions and replies are excluded; ordinary posts remain eligible', async()=>{
+  const id='123456789012345678', other='223456789012345678';
+  const ids=replyChatbotIds(id+', '+other+' invalid');
+  assert.equal(ids.size,2);
+  assert.equal(await isReplyChatbotQuestion({mentions:{users:new Set([id])}},ids,()=>{throw new Error('Unexpected read');}),true);
+  assert.equal(await isReplyChatbotQuestion({reference:{messageId:'reference'}},ids,async()=>({author:{id}})),true);
+  assert.equal(await isReplyChatbotQuestion({reference:{messageId:'reference'}},ids,async()=>({author:{id:'staff'}})),false);
+  assert.equal(await isReplyChatbotQuestion({mentions:{users:new Set(['staff'])}},ids),false);
+  assert.equal(await isReplyChatbotQuestion({},ids),false);
+  assert.equal(await isReplyChatbotQuestion({reference:{messageId:'reference'}},new Set(),()=>{throw new Error('Unexpected read');}),false);
+  await assert.rejects(isReplyChatbotQuestion({reference:{messageId:'reference'}},ids,async()=>{throw new Error('Denied');}),/Denied/);
+});
 
 const staff = new Set(['200', '300']);
 test('recovery paginates beyond 100 and processes oldest first without replaying the cursor', async () => {

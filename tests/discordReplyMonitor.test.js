@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { classifyReplyMessage, buildReplyAlert, fetchReplyRecoveryMessages } from '../src/services/discordReplyRules.js';
+import { classifyReplyMessage, buildReplyAlert, fetchReplyRecoveryMessages, replyChatbotIds, isReplyChatbotQuestion } from '../src/services/discordReplyRules.js';
 
 function monitor(overrides = {}) {
   const calls = [], handlers = new Map();
   const context = {
     console: { log() {}, warn() {}, error() {} },
-    classifyReplyMessage, buildReplyAlert, fetchReplyRecoveryMessages,
+    classifyReplyMessage, buildReplyAlert, fetchReplyRecoveryMessages, replyChatbotIds, isReplyChatbotQuestion,
+    process: {env:{}},
     query: async (sql, params) => { calls.push({ sql, params }); return { rows: [] }; },
     getClient: async () => ({ query: async () => ({ rows: [{ locked: true }] }), release() {} }),
     client: { isReady: () => false, on: (event, fn) => handlers.set(event, fn), channels: { fetch: async () => ({ messages: { fetch: async () => new Map() } }) } },
@@ -16,6 +17,8 @@ function monitor(overrides = {}) {
     axios: { post: async () => { throw new Error('Unexpected external send'); } },
     ...overrides
   };
+  const originalQuery = context.query;
+  context.query = async (sql,params) => sql.includes('AS notification_user_id') ? {rows:overrides.replyTutors || [{notification_user_id:1,homeroom_tutor:'Tutor',discord_reply_alerts_enabled:true,job_title:'クルー'}]} : originalQuery(sql,params);
   vm.createContext(context);
   const source = readFileSync(new URL('../src/services/discordReplyMonitor.js', import.meta.url), 'utf8');
   vm.runInContext(source.replace(/^import .*;\r?\n/gm, '').replaceAll('export function ', 'function ').replaceAll('export async function ', 'async function '), context);
@@ -24,6 +27,60 @@ function monitor(overrides = {}) {
 }
 
 const message = (id, author = 'student') => ({ id, channelId: 'channel', guildId: 'guild', author: { id: author }, createdTimestamp: Date.now(), reactions: { cache: { some: () => false } } });
+
+test('OFF or missing/ambiguous assignment suppresses pending posts and both destinations',async()=>{
+  for(const tutors of [[],[{notification_user_id:1,homeroom_tutor:'Tutor',discord_reply_alerts_enabled:false}], [{homeroom_tutor:null}], [{notification_user_id:1},{notification_user_id:2}]]) {
+    let resolved=false,sends=0;
+    const row={message_id:'100',channel_id:'channel',student_id:'ST1',posted_at:new Date(0)};
+    const f=monitor({replyTutors:tutors,
+      query:async(sql)=>{if(sql.includes('UPDATE discord_reply_pending SET resolved_at'))resolved=true;return {rows:sql.includes('SELECT * FROM discord_reply_pending')?[row]:[]};},
+      client:{isReady:()=>true,channels:{fetch:async()=>{sends++;throw new Error('Must not access Discord when disabled');}}}
+    });
+    await f.context.processMessage(message('100'));
+    await f.context.checkDiscordReplyAlerts();
+    assert.equal(resolved,true);assert.equal(sends,0);
+  }
+});
+
+test('configured AI bot mention resolves only that student post',async()=>{
+  const f=monitor();f.context.process.env.DISCORD_REPLY_AI_BOT_IDS='123456789012345678';
+  const post={...message('100'),mentions:{users:new Set(['123456789012345678'])}};
+  await f.context.processMessage(post);
+  const insert=f.calls.find(c=>c.sql.includes('INSERT INTO discord_reply_pending'));
+  assert.equal(insert.params[5],true);
+  await f.context.processMessage(message('101'));
+  assert.equal(f.calls.filter(c=>c.sql.includes('INSERT INTO discord_reply_pending')).at(-1).params[5],false);
+});
+
+test('ON with an assigned Tutor preserves management and tutor alerts',async()=>{
+  const row={message_id:'100',channel_id:'channel',student_id:'ST1',guild_id:'guild',posted_at:new Date(0)};
+  let management=0,tutor=0;
+  const f=monitor({replyTutors:[{notification_user_id:1,homeroom_tutor:'Tutor',discord_reply_alerts_enabled:true,discord_user_id:'200',discord_webhook_url:'https://example.test/test'}],
+    query:async sql=>({rows:sql.includes('SELECT * FROM discord_reply_pending')?[row]:[]}),
+    client:{isReady:()=>true,channels:{fetch:async id=>id==='channel'?{messages:{fetch:async options=>options.message?message('100'):new Map()}}:{send:async()=>{management++;}}}},
+    axios:{post:async()=>{tutor++;}}
+  });
+  await f.context.checkDiscordReplyAlerts();assert.equal(management,1);assert.equal(tutor,1);
+});
+
+test('pending chatbot questions and preferences switched OFF during history recovery never alert',async()=>{
+  for(const scenario of ['bot','changed']) {
+    const row={message_id:'100',channel_id:'channel',student_id:'ST1',guild_id:'guild',posted_at:new Date(0)};
+    let resolved=false,sends=0,reads=0;
+    const f=monitor({
+      query:async sql=>{
+        if(sql.includes('UPDATE discord_reply_pending SET resolved_at'))resolved=true;
+        return {rows:sql.includes('SELECT * FROM discord_reply_pending')?[{...row,resolved_at:resolved?new Date():null}]:[]};
+      },
+      client:{isReady:()=>true,channels:{fetch:async()=>({send:async()=>{sends++;},messages:{fetch:async options=>options.message?{...message('100'),mentions:{users:new Set(scenario==='bot'?['123456789012345678']:[])}}:new Map()}})}},
+      axios:{post:async()=>{sends++;}}
+    });
+    f.context.process.env.DISCORD_REPLY_AI_BOT_IDS='123456789012345678';
+    if(scenario==='changed')f.context.loadCurrentReplyTutor=async()=>++reads===1?{homeroom_tutor:'Tutor'}:null;
+    await f.context.checkDiscordReplyAlerts();
+    assert.equal(resolved,true);assert.equal(sends,0);
+  }
+});
 
 test('notification refresh bypasses stale cache and blocks both alerts for existing reactions', async () => {
   const row = { message_id:'100',channel_id:'channel',guild_id:'guild',student_id:'ST1',posted_at:new Date(0),resolved_at:null,tutor_notified_at:null,management_notified_at:null };

@@ -1,5 +1,18 @@
 export const REPLY_ALERT_DELAY_MS = 12 * 60 * 60 * 1000;
 
+export function replyChatbotIds(value = '') {
+  return new Set(String(value).split(/[\s,]+/).filter(id => /^\d{17,20}$/.test(id)));
+}
+
+export async function isReplyChatbotQuestion(message, botIds, fetchReference) {
+  if (!botIds.size) return false;
+  if ([...botIds].some(id => message.mentions?.users?.has(id))) return true;
+  if (!message.reference?.messageId) return false;
+  // Do not infer from a missing/deleted reference. Failed reads hold the notification.
+  const reference = await fetchReference(message.reference.messageId);
+  return botIds.has(reference.author?.id);
+}
+
 export async function fetchReplyRecoveryMessages(fetchPage, cursor) {
   let before;
   const messages = [];
