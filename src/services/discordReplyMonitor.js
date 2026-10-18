@@ -2,7 +2,7 @@ import axios from 'axios';
 import { query, getClient } from '../db/connection.js';
 import { client } from './discordService.js';
 import { fetchStudentBroadcastInfo } from './sheetsService.js';
-import { classifyReplyMessage, buildReplyAlert, fetchReplyRecoveryMessages } from './discordReplyRules.js';
+import { classifyReplyMessage, buildReplyAlert, fetchReplyRecoveryMessages, replyChatbotIds, isReplyChatbotQuestion } from './discordReplyRules.js';
 
 const MANAGEMENT_CHANNEL = '1557730694166351912';
 const MANAGEMENT_ROLE = '1294923221107478571';
@@ -32,7 +32,7 @@ async function refreshDirectory() {
   const [info, students, users] = await Promise.all([
     fetchStudentBroadcastInfo(),
     query('SELECT student_id, name, homeroom_tutor FROM students'),
-    query(`SELECT u.discord_user_id, u.discord_webhook_url, t.notion_name, t.tutor_name
+    query(`SELECT u.discord_user_id, u.discord_webhook_url, u.discord_reply_alerts_enabled, t.notion_name, t.tutor_name
       FROM users u LEFT JOIN tutors t ON LOWER(u.email) = LOWER(t.email)
       WHERE COALESCE(u.job_title, '') <> '契約解除'`)
   ]);
@@ -86,6 +86,7 @@ async function persistMessage(message) {
       WHERE channel_id = $1 AND message_id::numeric < $2::numeric AND resolved_at IS NULL`,
     [message.channelId, message.id]);
   } else if (kind === 'student') {
+    const excluded = !await loadCurrentReplyTutor(student.student_id) || await chatbotQuestion(message);
     await query(`INSERT INTO discord_reply_pending
       (message_id, channel_id, guild_id, student_id, posted_at, resolved_at)
       SELECT $1::text, $2::text, $3::text, $4::text, $5::timestamptz,
@@ -93,11 +94,32 @@ async function persistMessage(message) {
       FROM discord_reply_channels WHERE channel_id = $2::text AND last_message_id::numeric < $1::text::numeric
       ON CONFLICT DO NOTHING`,
     [message.id, message.channelId, message.guildId, student.student_id,
-      new Date(message.createdTimestamp), message.reactions.cache.some(reaction => reaction.count > 0)]);
+      new Date(message.createdTimestamp), excluded || message.reactions.cache.some(reaction => reaction.count > 0)]);
   }
   await query(`UPDATE discord_reply_channels SET last_message_id =
     GREATEST(last_message_id::numeric, $2::numeric)::text WHERE channel_id = $1`,
   [message.channelId, message.id]);
+}
+
+async function chatbotQuestion(message) {
+  return isReplyChatbotQuestion(message, replyChatbotIds(process.env.DISCORD_REPLY_AI_BOT_IDS), async id => {
+    const channel = await client.channels.fetch(message.channelId);
+    return channel.messages.fetch({message:id,cache:false,force:true});
+  });
+}
+
+async function loadCurrentReplyTutor(studentId) {
+  const result = await query(`SELECT u.id AS notification_user_id, u.discord_reply_alerts_enabled,
+      u.discord_user_id, u.discord_webhook_url, u.job_title, s.homeroom_tutor
+    FROM students s
+    LEFT JOIN tutors t ON NULLIF(TRIM(s.homeroom_tutor), '') IS NOT NULL
+      AND (TRIM(t.notion_name) = TRIM(s.homeroom_tutor) OR TRIM(t.tutor_name) = TRIM(s.homeroom_tutor))
+    LEFT JOIN users u ON LOWER(u.email) = LOWER(t.email)
+    WHERE s.student_id = $1`, [studentId]);
+  // Ambiguous/missing assignments must not route notifications to the wrong Tutor.
+  if (result.rows.length !== 1) return null;
+  const tutor = result.rows[0];
+  return tutor.notification_user_id && tutor.homeroom_tutor?.trim() && tutor.discord_reply_alerts_enabled === true && tutor.job_title !== '契約解除' ? tutor : null;
 }
 
 // Recover missed posts after downtime, newest pages first, then process chronologically.
@@ -181,16 +203,27 @@ export async function checkDiscordReplyAlerts() {
       try {
         // Verify history/reactions immediately before alerting; failed reads never imply no reply.
         await enqueue(async () => {
+          let tutor = await loadCurrentReplyTutor(row.student_id);
+          if (!tutor) {
+            await query('UPDATE discord_reply_pending SET resolved_at = NOW() WHERE message_id = $1', [row.message_id]);
+            return;
+          }
           await recoverChannel(row.channel_id, row.message_id);
           const channel = await client.channels.fetch(row.channel_id);
           // cache:false controls storage; force:true bypasses an existing stale message.
           const message = await channel.messages.fetch({ message: row.message_id, cache: false, force: true });
-          if (message.reactions.cache.some(reaction => reaction.count > 0)) {
+          if (message.reactions.cache.some(reaction => reaction.count > 0) || await chatbotQuestion(message)) {
             await query('UPDATE discord_reply_pending SET resolved_at = NOW() WHERE message_id = $1', [row.message_id]);
           }
           const current = (await query('SELECT * FROM discord_reply_pending WHERE message_id = $1', [row.message_id])).rows[0];
           if (!current || current.resolved_at) return;
-          const content = buildReplyAlert({ ...row, student_name: student.name, tutor_name: student.homeroom_tutor });
+          // History recovery may take time; honor changes made while it was running.
+          tutor = await loadCurrentReplyTutor(row.student_id);
+          if (!tutor) {
+            await query('UPDATE discord_reply_pending SET resolved_at = NOW() WHERE message_id = $1', [row.message_id]);
+            return;
+          }
+          const content = buildReplyAlert({ ...row, student_name: student.name, tutor_name: tutor.homeroom_tutor });
           if (!current.management_notified_at) {
             const destination = await client.channels.fetch(MANAGEMENT_CHANNEL);
             await destination.send({ content: `<@&${MANAGEMENT_ROLE}>\n${content}`,
@@ -198,7 +231,6 @@ export async function checkDiscordReplyAlerts() {
             await query('UPDATE discord_reply_pending SET management_notified_at = NOW() WHERE message_id = $1', [row.message_id]);
           }
           if (!current.tutor_notified_at) {
-            const tutor = student.tutor;
             if (!tutor?.discord_webhook_url || !/^\d+$/.test(tutor.discord_user_id || '')) {
               console.warn('[DiscordReplyMonitor] Tutor notification settings missing:', row.student_id);
               return;

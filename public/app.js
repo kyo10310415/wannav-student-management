@@ -8324,6 +8324,7 @@ async function renderUsersPage() {
                       <i class="fab fa-discord mr-1"></i>
                       ${user.discord_webhook_url || user.discord_user_id ? '設定済み' : '未設定'}
                     </button>
+                    ${user.tutor_name ? `<label class="flex items-center gap-2 mt-2 text-xs" title="担当生徒の12時間未返信通知。OFFでTutor・管理側の両方を停止"><input type="checkbox" ${user.discord_reply_alerts_enabled !== false ? 'checked' : ''} onchange="updateUserReplyAlerts(${user.id}, this)">未返信通知</label>` : '<div class="text-xs text-gray-400 mt-2">未返信通知：Tutor未紐付け</div>'}
                   </td>
                   <td class="px-4 py-3 text-sm">
                     ${user.must_change_password ? '<span class="text-orange-600">はい</span>' : '<span class="text-gray-500">いいえ</span>'}
@@ -8685,6 +8686,21 @@ async function updateUserRole(userId, newRole) {
 /**
  * Update user job title
  */
+async function updateUserReplyAlerts(userId, input) {
+  const enabled = input.checked;
+  input.disabled = true;
+  try {
+    const response = await axios.put(`${API_BASE}/api/users/${userId}/reply-alerts`, { enabled }, {
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    });
+    if (!response.data.success) throw new Error(response.data.error || '更新に失敗しました');
+    showNotification(`未返信通知を${enabled ? 'ON' : 'OFF'}にしました（Tutor・管理側の両方）`, 'success');
+  } catch (error) {
+    input.checked = !enabled;
+    alert('未返信通知の更新に失敗しました: ' + (error.response?.data?.error || error.message));
+  } finally { input.disabled = false; }
+}
+
 async function updateUserJobTitle(userId, newJobTitle) {
   try {
     const response = await axios.put(`${API_BASE}/api/users/${userId}/job-title`, {

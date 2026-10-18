@@ -56,6 +56,7 @@ app.get('/', requireAdmin, async (c) => {
         u.last_login,
         u.discord_webhook_url,
         u.discord_user_id,
+        u.discord_reply_alerts_enabled,
         u.job_title,
         u.funnel_regular_booking_url,
         u.funnel_pro_booking_url,
@@ -320,6 +321,21 @@ app.put('/:id/job-title', requireAdmin, async (c) => {
 /**
  * Update user Discord settings (admin only)
  */
+app.put('/:id/reply-alerts', requireAdmin, async (c) => {
+  let body;
+  try { body = await c.req.json(); }
+  catch { return c.json({ success:false, error:'設定が不正です' },400); }
+  if (typeof body?.enabled !== 'boolean') return c.json({ success:false, error:'通知設定はON/OFFで指定してください' },400);
+  try {
+    const result = await query('UPDATE users SET discord_reply_alerts_enabled = $1, updated_at = NOW() WHERE id = $2 RETURNING id, discord_reply_alerts_enabled', [body.enabled,c.req.param('id')]);
+    if (!result.rows.length) return c.json({success:false,error:'ユーザーが見つかりません'},404);
+    return c.json({success:true,data:result.rows[0]});
+  } catch {
+    console.error('[DiscordReplyMonitor] Preference update failed');
+    return c.json({success:false,error:'未返信通知の設定更新に失敗しました'},500);
+  }
+});
+
 app.put('/:id/discord', requireAdmin, async (c) => {
   try {
     const userId = c.req.param('id');
