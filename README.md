@@ -431,7 +431,8 @@ npm run db:migrate
 ### 生徒 API
 
 - `GET /api/students` - 全生徒取得
-- `GET /api/students/sync` - Notionから同期
+- `GET /api/students/sync` - キャッシュから同期。キャッシュに存在しない生徒も物理削除せず、PRO開始月などの手入力値を保持する（退会等は同期元のステータスで管理）。
+- `PATCH /api/students/:id/pro-plan` - PRO開始日を更新。`proPlanStartDate` は実在する日付の `YYYY-MM-DD`（月初に正規化）、明示的なクリアは `null`。項目未指定・空文字・不正日付は400で拒否する。
 - `GET /api/students/:id` - 生徒詳細
 - `GET /api/students/tutor/:tutorName` - Tutor別生徒一覧
 

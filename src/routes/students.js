@@ -305,36 +305,19 @@ app.get('/sync', async (c) => {
       }
     }
 
-    // スプレッドシートに存在しない生徒をDBから削除
-    // ⚠️ 安全策: 削除対象がDB全体の20%を超える場合はキャッシュ異常とみなしてスキップ
-    let deletedCount = 0;
+    // キャッシュの一時欠落を退会・削除とみなさない。
+    // 物理削除すると再同期でPRO開始月などアプリ独自の入力値が失われる。
+    const deletedCount = 0;
     try {
       const cacheStudentIds = validStudents.map(s => s.student_id);
       const dbStudentsResult = await query('SELECT student_id FROM students');
       const dbStudentIds = dbStudentsResult.rows.map(r => r.student_id);
-      const toDelete = dbStudentIds.filter(id => !cacheStudentIds.includes(id));
-
-      if (toDelete.length > 0) {
-        const deletionRatio = toDelete.length / dbStudentIds.length;
-        if (deletionRatio > 0.2) {
-          console.warn(`⚠️ 削除対象が全体の${Math.round(deletionRatio * 100)}%（${toDelete.length}/${dbStudentIds.length}人）のため、キャッシュ異常とみなして削除をスキップします`);
-        } else {
-          console.log(`Found ${toDelete.length} students to delete: ${toDelete.join(', ')}`);
-          for (const studentId of toDelete) {
-            try {
-              await query('DELETE FROM students WHERE student_id = $1', [studentId]);
-              deletedCount++;
-              console.log(`✅ Deleted student: ${studentId}`);
-            } catch (deleteError) {
-              console.error(`❌ Error deleting student ${studentId}:`, deleteError.message);
-            }
-          }
-        }
-      } else {
-        console.log('No students to delete');
+      const missingStudents = dbStudentIds.filter(id => !cacheStudentIds.includes(id));
+      if (missingStudents.length > 0) {
+        console.warn(`Cache missing ${missingStudents.length} students; preserving existing DB records and manually entered values`);
       }
     } catch (deleteCheckError) {
-      console.error('Error checking for students to delete:', deleteCheckError.message);
+      console.error('Error checking for missing students:', deleteCheckError.message);
     }
 
     return c.json({
@@ -516,13 +499,18 @@ app.patch('/:id/pro-plan', async (c) => {
     const studentId = c.req.param('id');
     const { proPlanStartDate } = await c.req.json();
     
-    // Validate date format and ensure it's the 1st of the month
+    // null is the explicit clear operation used by the UI after confirmation.
+    // Missing/empty/invalid values must never silently erase a saved month.
     let formattedDate = null;
-    if (proPlanStartDate) {
-      const date = new Date(proPlanStartDate);
-      // Force to 1st of the month
-      date.setDate(1);
-      formattedDate = date.toISOString().split('T')[0];
+    if (proPlanStartDate !== null) {
+      if (typeof proPlanStartDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(proPlanStartDate)) {
+        return c.json({ success: false, error: 'PRO開始日はYYYY-MM-DD形式で指定してください（クリア時はnull）' }, 400);
+      }
+      const date = new Date(`${proPlanStartDate}T00:00:00.000Z`);
+      if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== proPlanStartDate || date.getUTCFullYear() < 1) {
+        return c.json({ success: false, error: 'PRO開始日が不正です' }, 400);
+      }
+      formattedDate = `${proPlanStartDate.slice(0, 7)}-01`;
     }
     
     // Update student
