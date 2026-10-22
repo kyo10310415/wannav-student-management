@@ -226,7 +226,8 @@ app.delete('/:id', async (c) => {
 app.post('/:id/comments', async (c) => {
   const { id } = c.req.param();
   try {
-    const { user_id, content } = await c.req.json();
+    const { content } = await c.req.json();
+    const user_id = c.get('authenticatedUser').id;
 
     if (!user_id || !content?.trim()) {
       return c.json({ success: false, error: '必須項目が不足しています' }, 400);

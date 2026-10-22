@@ -5,6 +5,47 @@ const API_BASE = '';
 let currentUser = null; // { id, email, role, tutorName, mustChangePassword }
 let sessionToken = localStorage.getItem('sessionToken') || null;
 
+// Attach credentials only to this application's API, never third-party URLs.
+function isOwnApi(url) {
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.origin === window.location.origin && parsed.pathname.startsWith('/api/');
+  } catch { return false; }
+}
+axios.interceptors.request.use(config => {
+  const base = new URL(config.baseURL || window.location.href, window.location.href);
+  const url = new URL(config.url || '', base);
+  if (sessionToken && isOwnApi(url.href)) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${sessionToken}`;
+  }
+  return config;
+});
+axios.interceptors.response.use(response => response, error => {
+  if (error.response?.status === 401 && isOwnApi(error.config?.url || '') && !error.config?.url?.includes('/api/auth/login')) {
+    sessionToken = null;
+    currentUser = null;
+    localStorage.removeItem('sessionToken');
+    showLoginPage();
+  }
+  return Promise.reject(error);
+});
+const browserFetch = window.fetch.bind(window);
+window.fetch = async (input, options = {}) => {
+  const url = input instanceof Request ? input.url : String(input);
+  if (!sessionToken || !isOwnApi(url)) return browserFetch(input, options);
+  const headers = new Headers(options.headers || (input instanceof Request ? input.headers : undefined));
+  headers.set('Authorization', `Bearer ${sessionToken}`);
+  const response = await browserFetch(input, { ...options, headers });
+  if (response.status === 401 && !new URL(url, window.location.href).pathname.startsWith('/api/auth/')) {
+    sessionToken = null;
+    currentUser = null;
+    localStorage.removeItem('sessionToken');
+    showLoginPage();
+  }
+  return response;
+};
+
 // State
 let students = [];
 let tutors = [];

@@ -59,6 +59,9 @@ import { monthlyRedListReset } from './jobs/redListMonthly.js';
 import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.js';
 import { weeklyTutorSnapshot, monthlyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
 import { monthlyFunnelSnapshot } from './jobs/funnelMonthlySnapshot.js';
+import { installApiAccess } from './security/apiAccess.js';
+import { configureInternalApi, internalFetch } from './security/internalApi.js';
+import { query } from './db/connection.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 import { recoverPendingBroadcastJobs } from './services/broadcastService.js';
 import { startDiscordReplyMonitor, checkDiscordReplyAlerts } from './services/discordReplyMonitor.js';
@@ -72,6 +75,7 @@ const app = new Hono();
 
 // Middleware
 app.use('*', cors());
+configureInternalApi(installApiAccess(app, { db: query }));
 
 // Serve static files from public directory
 // Use absolute path to avoid path issues
@@ -147,8 +151,8 @@ cron.schedule('0 * * * *', async () => {
   console.log('Running students & tutors auto-sync...');
   try {
     const [studentsRes, tutorsRes] = await Promise.all([
-      fetch(`http://localhost:${port}/api/students/sync`),
-      fetch(`http://localhost:${port}/api/tutors/sync`)
+      internalFetch('/api/students/sync'),
+      internalFetch('/api/tutors/sync')
     ]);
     const [studentsResult, tutorsResult] = await Promise.all([
       studentsRes.json(),
@@ -188,7 +192,7 @@ console.log('Helper request expiration check: ENABLED (runs every hour)');
 cron.schedule('0 * * * *', async () => {
   console.log('Running helper request expiration check...');
   try {
-    const response = await fetch(`http://localhost:${port}/api/helper-requests/check-expired`, {
+    const response = await internalFetch('/api/helper-requests/check-expired', {
       method: 'POST'
     });
     const result = await response.json();

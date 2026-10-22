@@ -1008,6 +1008,8 @@ function fetchAbsenceCounts() {
  * 外部DBからレッスン開始日を取得
  */
 function fetchLessonStartDates() {
+  const syncKey = PropertiesService.getScriptProperties().getProperty('GAS_SYNC_API_KEY');
+  if (!syncKey || syncKey.length < 32) throw new Error('GAS_SYNC_API_KEYをスクリプトプロパティに設定してください');
   Logger.log('レッスン開始日データ取得開始...');
   
   try {
@@ -1019,6 +1021,8 @@ function fetchLessonStartDates() {
       muteHttpExceptions: true
     };
     
+    options.headers['X-Sync-API-Key'] = syncKey;
+    options.followRedirects = false;
     const response = UrlFetchApp.fetch(BACKEND_API_URL, options);
     const statusCode = response.getResponseCode();
     

@@ -8,7 +8,7 @@
 
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
-import axios from 'axios';
+import { internalApi } from '../security/internalApi.js';
 import { fetchTutorSkillScores } from '../services/cacheService.js';
 
 const app = new Hono();
@@ -52,16 +52,13 @@ function calcRank(total) {
 /**
  * BASE URLを環境変数 or localhost から取得
  */
-function getBaseUrl() {
-  return process.env.INTERNAL_API_BASE || `http://localhost:${process.env.PORT || 3000}`;
-}
 
 /**
  * 今月の助っ人依頼数を取得 (GET /api/tutors/monthly-stats/:year/:month)
  */
 async function fetchHelperStats(year, month) {
   try {
-    const res = await axios.get(`${getBaseUrl()}/api/tutors/monthly-stats/${year}/${month}`);
+    const res = await internalApi.get(`/api/tutors/monthly-stats/${year}/${month}`);
     if (res.data.success) {
       return res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
     }
@@ -76,7 +73,7 @@ async function fetchHelperStats(year, month) {
  */
 async function fetchAttendanceStats(year, month) {
   try {
-    const res = await axios.get(`${getBaseUrl()}/api/schedules/absence-stats?year=${year}&month=${month}`);
+    const res = await internalApi.get(`/api/schedules/absence-stats?year=${year}&month=${month}`);
     if (res.data.success && res.data.data && res.data.data.stats) {
       // { tutor_email -> attendanceRate } マップを返す
       const map = {};
@@ -96,7 +93,7 @@ async function fetchAttendanceStats(year, month) {
  */
 async function fetchSatisfactionAll() {
   try {
-    const res = await axios.get(`${getBaseUrl()}/api/tutors/satisfaction/all`);
+    const res = await internalApi.get('/api/tutors/satisfaction/all');
     if (res.data.success) {
       return res.data.data || {};  // tutor_name -> { yearMonth -> { average, count } }
     }

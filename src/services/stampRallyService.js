@@ -1,6 +1,7 @@
 import { getPool } from '../db/connection.js';
 import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
 import axios from 'axios';
+import { internalApi } from '../security/internalApi.js';
 
 /**
  * 日次でスタンプラリー達成者をチェックし、Discord通知を送信
@@ -28,7 +29,7 @@ export async function checkStampRallyAchievements() {
     console.log('[StampRally] Notifications are ENABLED. Proceeding with achievement check...');
 
     // 全生徒のアンケート統計を取得（特典対象判定を含む）
-    const response = await axios.get('http://localhost:3000/api/survey/stats-all');
+    const response = await internalApi.get('/api/survey/stats-all');
     
     if (!response.data.success) {
       console.error('[StampRally] Failed to fetch survey stats');
@@ -84,7 +85,7 @@ export async function checkStampRallyAchievements() {
         }
 
         // ルーレットURL生成
-        const generateResponse = await axios.post('http://localhost:3000/api/roulette/generate', {
+        const generateResponse = await internalApi.post('/api/roulette/generate', {
           studentId: student.studentId,
           achievementType: student.achievementType
         });
@@ -208,7 +209,7 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
  */
 export async function recordSurveyResponse(studentId, responseMonth) {
   try {
-    const response = await axios.post('http://localhost:3000/api/survey/responses', {
+    const response = await internalApi.post('/api/survey/responses', {
       studentId,
       responseMonth
     });
