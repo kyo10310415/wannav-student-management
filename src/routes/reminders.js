@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { sendDailyReminders, testReminder } from '../services/reminderService.js';
-import { sendTestWebhook } from '../services/discordService.js';
+import { createWebhookTestHandler } from '../security/webhookTest.js';
+import { query } from '../db/connection.js';
+import axios from 'axios';
 import { sendDailyStatsReport } from '../services/statsReportService.js';
 
 const app = new Hono();
@@ -61,160 +63,10 @@ app.post('/test', async (c) => {
   }
 });
 
-/**
- * POST /api/reminders/test-notification
- * Test reminder notification with actual lesson data
- * Body: { webhookUrl: "...", discordUserId: "..." }
- */
-app.post('/test-notification', async (c) => {
-  try {
-    const { webhookUrl, discordUserId } = await c.req.json();
-    
-    if (!webhookUrl) {
-      return c.json({
-        success: false,
-        error: 'webhookUrl is required'
-      }, 400);
-    }
-    
-    console.log('[Test Notification] Fetching tomorrow\'s lessons...');
-    
-    // Get tomorrow's lessons
-    const { fetchLessonsForTomorrow } = await import('../services/sheetsService.js');
-    const lessons = await fetchLessonsForTomorrow();
-    
-    if (lessons.length === 0) {
-      return c.json({
-        success: false,
-        error: 'No lessons found for tomorrow'
-      }, 404);
-    }
-    
-    // Pick first lesson
-    const lesson = lessons[0];
-    
-    // Get student name from database
-    const { query } = await import('../db/connection.js');
-    const studentResult = await query(
-      'SELECT name FROM students WHERE student_id = $1',
-      [lesson.student_id]
-    );
-    const studentName = studentResult.rows.length > 0 ? studentResult.rows[0].name : lesson.student_id;
-    
-    console.log('[Test Notification] Using lesson:', {
-      student_id: lesson.student_id,
-      student_name: studentName,
-      tutor_name: lesson.tutor_name,
-      lesson_date: lesson.lesson_date
-    });
-    
-    // Use raw date string from spreadsheet (e.g., "2026/03/04 10:00:00")
-    const dateTimeStr = lesson.lesson_date || '日時未設定';
-    
-    // Build reminder message
-    let content = '';
-    if (discordUserId) {
-      content = `<@${discordUserId}>\n\n`;
-    }
-    content += `${studentName}様\n\n`;
-    content += `明日はレッスンの予定になっております！\n`;
-    content += `忘れずにご参加ください！\n`;
-    content += `もしご都合が悪い場合は、必ず担任の先生にご連絡ください！`;
-    
-    // Create embed
-    const embed = {
-      title: '📅 レッスンリマインド',
-      color: 0x5865F2, // Discord blue
-      fields: [
-        {
-          name: '日時',
-          value: dateTimeStr,
-          inline: false
-        },
-        {
-          name: '担任講師',
-          value: lesson.tutor_name || '未設定',
-          inline: false
-        },
-        {
-          name: 'Google Meetリンク',
-          value: lesson.meet_link || '（リンクなし）',
-          inline: false
-        }
-      ],
-      footer: {
-        text: 'よろしくお願いいたします！'
-      },
-      timestamp: new Date().toISOString()
-    };
-    
-    // Send webhook
-    const axios = (await import('axios')).default;
-    await axios.post(webhookUrl, {
-      content: content,
-      embeds: [embed]
-    });
-    
-    console.log('[Test Notification] ✅ Test notification sent successfully');
-    
-    return c.json({
-      success: true,
-      message: 'Test notification sent successfully',
-      lesson: {
-        student_id: lesson.student_id,
-        student_name: studentName,
-        tutor_name: lesson.tutor_name,
-        lesson_date: lesson.lesson_date,
-        title: lesson.title,
-        meet_link: lesson.meet_link
-      }
-    });
-  } catch (error) {
-    console.error('[Test Notification] Error:', error);
-    return c.json({
-      success: false,
-      error: error.message
-    }, 500);
-  }
-});
-
-/**
- * POST /api/reminders/test-webhook
- * Test webhook notification
- * Body: { webhookUrl: "...", discordUserId: "...", message: "..." }
- */
-app.post('/test-webhook', async (c) => {
-  try {
-    const { webhookUrl, discordUserId, message } = await c.req.json();
-    
-    if (!webhookUrl) {
-      return c.json({
-        success: false,
-        error: 'webhookUrl is required'
-      }, 400);
-    }
-    
-    const result = await sendTestWebhook(webhookUrl, discordUserId, message);
-    
-    if (result.success) {
-      return c.json({
-        success: true,
-        message: 'Test webhook sent successfully'
-      });
-    } else {
-      return c.json({
-        success: false,
-        error: result.error || result.reason
-      }, 500);
-    }
-  } catch (error) {
-    console.error('Error sending test webhook:', error);
-    return c.json({
-      success: false,
-      error: error.message
-    }, 500);
-  }
-});
+// Administrator-only synthetic delivery to a registered Discord webhook.
+const webhookTest = createWebhookTestHandler({ query, post: (...args) => axios.post(...args) });
+app.post('/test-notification', webhookTest);
+app.post('/test-webhook', webhookTest);
 
 /**
  * GET /api/reminders/test-student-info/:studentId
