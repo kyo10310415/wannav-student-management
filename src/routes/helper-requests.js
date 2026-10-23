@@ -55,6 +55,11 @@ app.get('/:id', async (c) => {
 app.post('/', async (c) => {
   try {
     const data = await c.req.json();
+    const actor = c.get('authenticatedUser');
+    if (actor.role === 'crew') {
+      data.requesting_tutor_id = actor.employee_id;
+      data.requesting_tutor_name = actor.tutor_name;
+    }
     
     const result = await query(`
       INSERT INTO helper_requests (
@@ -98,7 +103,10 @@ app.post('/', async (c) => {
 app.post('/:id/accept', async (c) => {
   try {
     const { id } = c.req.param();
-    const { tutor_id, tutor_name } = await c.req.json();
+    const submitted = await c.req.json();
+    const actor = c.get('authenticatedUser');
+    const tutor_id = actor.role === 'crew' ? actor.employee_id : submitted.tutor_id;
+    const tutor_name = actor.role === 'crew' ? actor.tutor_name : submitted.tutor_name;
     
     // Check if request exists and is not expired
     const checkResult = await query(`

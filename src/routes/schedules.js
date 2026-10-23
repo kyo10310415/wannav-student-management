@@ -626,7 +626,9 @@ app.post('/absence/:requestId/approve', async (c) => {
   try {
     const requestId = c.req.param('requestId');
     const body = await c.req.json();
-    const { leader_email, leader_name } = body;
+    const approver = c.get('authenticatedUser');
+    const leader_email = approver.email;
+    const leader_name = approver.tutor_name || approver.email;
     
     // Validation
     if (!leader_email || !leader_name) {

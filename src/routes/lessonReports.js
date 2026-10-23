@@ -21,9 +21,11 @@ app.post('/', async (c) => {
       lesson_number,
       pro_curriculum,
       pro_text_number,
-      reported_by,
-      tutor_name
+      tutor_name: suppliedTutorName
     } = body;
+    const reporter = c.get('authenticatedUser');
+    const reported_by = reporter.email;
+    const tutor_name = reporter.role === 'crew' ? reporter.tutor_name : suppliedTutorName;
 
     // バリデーション
     if (!student_id || !lesson_date || !lesson_result || !lesson_number) {
