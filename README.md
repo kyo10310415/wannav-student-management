@@ -780,3 +780,5 @@ npm run db:migrate
   - GASスクリプトの手動実行方法
   - トリガー設定の確認・設定方法
   - データフロー（Googleカレンダー → スプレッドシート �
+
+第5バッチのNode版・通知テスト・明示DB移行手順は [docs/security-batch-05.md](docs/security-batch-05.md) を参照。
