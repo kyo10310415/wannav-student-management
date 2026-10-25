@@ -782,3 +782,9 @@ npm run db:migrate
   - データフロー（Googleカレンダー → スプレッドシート �
 
 第5バッチのNode版・通知テスト・明示DB移行手順は [docs/security-batch-05.md](docs/security-batch-05.md) を参照。
+
+### 2026-10-25 第12バッチ依存更新
+
+Hono/Node adapter、Axios/form-data、Discord.js/RESTと関連推移依存を既存manifest範囲内でlock更新。認証・API・業務コード・DBスキーマ・環境設定は変更しません。Node22.23.4でinstall scripts無効のclean install、187テスト、差分チェック成功。HTTP adapterの保護付き静的配信・エンコードされたパス・JSON処理は架空fixtureで検証。
+
+稼働用audit: Critical0/High0/Moderate6/Low0。全依存audit: Critical0/High0/Moderate6/Low0。警告件数と実際の攻撃成立は別に評価します。Discordログイン・実通知・DB更新なし。Discordクライアント生成とRESTの模擬通信を検証。chart/canvas nativeの実描画は未試験。
