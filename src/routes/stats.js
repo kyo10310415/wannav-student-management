@@ -18,10 +18,10 @@ app.post('/send', async (c) => {
       message: '日次統計レポートを送信しました'
     });
   } catch (error) {
-    console.error('Error sending manual stats report:', error);
+    console.error('Error sending manual stats report:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Statistics report could not be sent'
     }, 500);
   }
 });

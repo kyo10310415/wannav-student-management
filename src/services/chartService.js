@@ -20,7 +20,7 @@ async function getCachedOrGenerate(cacheKey, generateFn) {
   const cached = chartCache.get(cacheKey);
   
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    console.log(`📦 キャッシュヒット: ${cacheKey}`);
+    console.log('📦 チャートキャッシュヒット');
     return cached.buffer;
   }
   
@@ -151,7 +151,7 @@ export async function generateVQRadarChart(data) {
       console.log('✅ レーダーチャート生成成功');
       return imageBuffer;
     } catch (error) {
-      console.error('❌ レーダーチャート生成エラー:', error);
+      console.error('❌ レーダーチャート生成エラー:');
       throw error;
     }
   });
@@ -306,7 +306,7 @@ export async function generateVQTrendChart(historyData) {
       console.log(`✅ 推移グラフ生成成功（${sortedData.length}件）`);
       return imageBuffer;
     } catch (error) {
-      console.error('❌ 推移グラフ生成エラー:', error);
+      console.error('❌ 推移グラフ生成エラー:');
       throw error;
     }
   });

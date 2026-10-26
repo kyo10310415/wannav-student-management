@@ -2,14 +2,16 @@ import { Client } from '@notionhq/client';
 
 // Support for separate tokens for student and tutor databases
 const studentNotion = new Client({ 
-  auth: process.env.NOTION_STUDENT_API_TOKEN || process.env.NOTION_API_TOKEN 
+  auth: process.env.NOTION_STUDENT_API_TOKEN || process.env.NOTION_API_TOKEN,
+  logger: () => {}
 });
 
 const tutorNotion = new Client({ 
-  auth: process.env.NOTION_TUTOR_API_TOKEN || process.env.NOTION_API_TOKEN 
+  auth: process.env.NOTION_TUTOR_API_TOKEN || process.env.NOTION_API_TOKEN,
+  logger: () => {}
 });
 
-// New review reads use the same student credentials without changing existing sync clients.
+// Review reads share student credentials and use a dedicated 15-second timeout.
 // The SDK's default warning logger may contain page IDs/API response details.
 let studentReviewReader;
 export function getStudentNotionReadClient() {
@@ -36,11 +38,11 @@ async function fetchWithRetry(fetchFunc, retries = 3, delay = 1000) {
     try {
       return await fetchFunc();
     } catch (error) {
-      console.error(`Attempt ${i + 1} failed:`, error.message);
+      console.error("[Notion] Request attempt failed");
       
       if (i < retries - 1) {
         const waitTime = delay * (i + 1); // Exponential backoff
-        console.log(`Retrying in ${waitTime}ms...`);
+        console.log("[Notion] Retrying request");
         await sleep(waitTime);
       } else {
         throw error;
@@ -75,16 +77,16 @@ export async function fetchStudents() {
       hasMore = response.has_more;
       startCursor = response.next_cursor;
 
-      console.log(`Fetched ${response.results.length} students, total so far: ${allResults.length}`);
+      console.log("[Notion] Student page loaded");
 
       // Add delay between requests to avoid rate limiting (every 3 pages)
       if (hasMore && pageCount % 3 === 0) {
-        console.log('Rate limiting: waiting 1 second...');
+        console.log("Rate limiting: waiting 1 second...");
         await sleep(1000);
       }
     }
 
-    console.log(`Finished fetching all ${allResults.length} students from Notion`);
+    console.log("[Notion] Student fetch completed");
 
     return allResults.map(page => {
       const props = page.properties;
@@ -100,7 +102,7 @@ export async function fetchStudents() {
       };
     });
   } catch (error) {
-    console.error('Error fetching students from Notion:', error);
+    console.error("Error fetching students from Notion:");
     throw error;
   }
 }
@@ -131,16 +133,16 @@ export async function fetchTutors() {
       hasMore = response.has_more;
       startCursor = response.next_cursor;
 
-      console.log(`Fetched ${response.results.length} tutors, total so far: ${allResults.length}`);
+      console.log("[Notion] Tutor page loaded");
 
       // Add delay between requests to avoid rate limiting (every 3 pages)
       if (hasMore && pageCount % 3 === 0) {
-        console.log('Rate limiting: waiting 1 second...');
+        console.log("Rate limiting: waiting 1 second...");
         await sleep(1000);
       }
     }
 
-    console.log(`Finished fetching all ${allResults.length} tutors from Notion`);
+    console.log("[Notion] Tutor fetch completed");
 
     return allResults.map(page => {
       const props = page.properties;
@@ -160,7 +162,7 @@ export async function fetchTutors() {
       };
     });
   } catch (error) {
-    console.error('Error fetching tutors from Notion:', error);
+    console.error("Error fetching tutors from Notion:");
     throw error;
   }
 }
