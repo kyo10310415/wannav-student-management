@@ -490,6 +490,55 @@ async function syncJobProgress(jobId, status = null) {
   return result.rows[0] || null;
 }
 
+function isExplicitGasBroadcastJob(job) {
+  return job.created_by === GAS_BROADCAST_CREATED_BY && job.target_status === 'explicit' && job.channel_type === 'chat';
+}
+
+async function getAuthorizedBroadcastJobTargets(jobId, { crewScopeOnly = false } = {}) {
+  const jobResult = await query(
+    `SELECT bj.*, bm.name AS message_name, bm.target_status, bm.target_tutor, bm.channel_type, creator.role AS creator_role, creator.email AS creator_email
+     FROM broadcast_jobs bj
+     JOIN broadcast_messages bm ON bm.id = bj.broadcast_id
+     LEFT JOIN users creator ON LOWER(creator.email) = LOWER(bj.created_by)
+     WHERE bj.job_id = $1`,
+    [jobId]
+  );
+  const job = jobResult.rows[0];
+  if (!job) throw new Error('Job not found');
+  if (!job.is_test && !isExplicitGasBroadcastJob(job) && (jobResult.rows.length !== 1 || !job.creator_email || !['admin', 'leader', 'crew'].includes(job.creator_role))) {
+    const error = new Error('送信ジョブの作成者権限を確認できません');
+    error.status = 403;
+    throw error;
+  }
+
+  const targetStatus = job.target_status === 'active' ? 'アクティブ' : job.target_status;
+  const targets = job.is_test
+    ? [{ student_id: 'TEST', name: 'Test User' }]
+    : (isExplicitGasBroadcastJob(job) || (crewScopeOnly && job.creator_role !== 'crew')) ? [] : await getTargetStudents(
+        targetStatus,
+        job.target_tutor,
+        job.creator_email,
+        job.creator_role
+      );
+
+  return { job, targets };
+}
+
+async function assertBroadcastRecipientAccess(jobId) {
+  const { job, targets } = await getAuthorizedBroadcastJobTargets(jobId, { crewScopeOnly: true });
+  if (job.is_test || isExplicitGasBroadcastJob(job) || job.creator_role !== 'crew') return;
+  const recipientResult = await query(
+    "SELECT student_id FROM broadcast_job_recipients WHERE job_id = $1 AND status IN ('pending', 'failed')",
+    [jobId]
+  );
+  const allowedIds = new Set(targets.map(student => String(student.student_id)));
+  if (recipientResult.rows.some(recipient => !allowedIds.has(String(recipient.student_id)))) {
+    const error = new Error('現在の作成者権限では送信対象を再開できません');
+    error.status = 403;
+    throw error;
+  }
+}
+
 /**
  * 旧実装の停止ジョブを、既存ログと現在の対象条件から復旧可能な状態に変換する。
  * 保存済み進捗内のログ欠落者と、その直後の1名は重複防止のため unknown とする。
@@ -501,27 +550,7 @@ async function prepareLegacyJobRecipients(jobId, userEmail, userRole) {
   );
   if (existing.rows[0].count > 0) return;
 
-  const jobResult = await query(
-    `SELECT bj.*, bm.name AS message_name, bm.target_status, bm.target_tutor, creator.role AS creator_role
-     FROM broadcast_jobs bj
-     JOIN broadcast_messages bm ON bm.id = bj.broadcast_id
-     LEFT JOIN users creator ON creator.email = bj.created_by
-     WHERE bj.job_id = $1`,
-    [jobId]
-  );
-  const job = jobResult.rows[0];
-  if (!job) throw new Error('Job not found');
-
-  const targetStatus = job.target_status === 'active' ? 'アクティブ' : job.target_status;
-  const targets = job.is_test
-    ? [{ student_id: 'TEST', name: 'Test User' }]
-    : await getTargetStudents(
-        targetStatus,
-        job.target_tutor,
-        job.created_by || userEmail,
-        job.message_name?.startsWith('[Scheduled]') ? 'leader' : (job.creator_role || userRole)
-      );
-
+  const { job, targets } = await getAuthorizedBroadcastJobTargets(jobId);
   if (!job.is_test && targets.length !== Number(job.total)) {
     throw new Error(
       `送信開始時から対象者数が変化しています（開始時 ${job.total}名、現在 ${targets.length}名）。` +
@@ -623,6 +652,7 @@ export async function resumeBroadcastJob(jobId, userEmail, userRole) {
     error.status = 403;
     throw error;
   }
+  await assertBroadcastRecipientAccess(jobId);
   await reconcileStaleBroadcastJobs(jobId);
   job = await getBroadcastJobStatus(jobId);
   if (!job) throw new Error('Job not found');
@@ -693,6 +723,7 @@ async function _runBroadcastJob(jobId) {
       [jobId]
     );
     if (startResult.rows.length === 0) return;
+    await assertBroadcastRecipientAccess(jobId);
 
     await query(
       `UPDATE broadcast_job_recipients

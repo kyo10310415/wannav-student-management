@@ -116,7 +116,7 @@ async function _runSnapshot({ isMonthly }) {
         completedStudentIds = new Set(completion.completedStudentIds);
       } catch (error) {
         lessonAdjustedCalculationAvailable = false;
-        console.error(`[Tutor ${label} Snapshot] Lesson completion filter unavailable:`, error.message);
+        console.error(`[Tutor ${label} Snapshot] Lesson completion filter unavailable:`);
       }
     }
 
@@ -174,7 +174,7 @@ async function _runSnapshot({ isMonthly }) {
           ]);
           savedCount++;
         } catch (err) {
-          console.error(`[Tutor ${label} Snapshot] DB error for ${tutor.notion_name}:`, err.message);
+          console.error('[Tutor Snapshot] Database save failed');
           skippedCount++;
         }
       } else if (!isMonthly) {
@@ -220,13 +220,10 @@ async function _runSnapshot({ isMonthly }) {
 
     if (legacySheetResult.success && lessonAdjustedSheetResult.success) {
       console.log(
-        `[Tutor ${label} Snapshot] Both sheet exports done: ${legacySheetResult.spreadsheetUrl}`
+        `[Tutor ${label} Snapshot] Both sheet exports done`
       );
     } else {
-      console.warn(`[Tutor ${label} Snapshot] Sheet export failed:`, {
-        legacy: legacySheetResult.error || null,
-        lessonAdjusted: lessonAdjustedSheetResult.error || null
-      });
+      console.warn(`[Tutor ${label} Snapshot] Sheet export failed:`);
     }
 
     return {
@@ -247,8 +244,8 @@ async function _runSnapshot({ isMonthly }) {
     };
 
   } catch (error) {
-    console.error(`[Tutor ${label} Snapshot] Fatal error:`, error);
-    return { success: false, error: error.message };
+    console.error(`[Tutor ${label} Snapshot] Fatal error:`);
+    return { success: false, error: 'Tutor snapshot export failed' };
   }
 }
 
@@ -437,7 +434,7 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, she
       });
 
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-      console.log(`[Snapshot Sheet] Created "${sheetName}": ${spreadsheetUrl}`);
+      console.log(`[Snapshot Sheet] Created "${sheetName}"`);
       return { success: true, spreadsheetUrl };
 
     } else {
@@ -551,13 +548,13 @@ async function exportSnapshotToSheet(sheetData, snapshotDate, snapshotLabel, she
       }
 
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-      console.log(`[Snapshot Sheet] Appended col ${nextColLetter} ("${snapshotLabel}") to "${sheetName}": ${spreadsheetUrl}`);
+      console.log(`[Snapshot Sheet] Appended col ${nextColLetter} ("${snapshotLabel}") to "${sheetName}"`);
       return { success: true, spreadsheetUrl };
     }
 
   } catch (error) {
-    console.error('[Snapshot Sheet] Error:', error);
-    return { success: false, error: error.message };
+    console.error('[Snapshot Sheet] Error:');
+    return { success: false, error: 'Tutor snapshot export failed' };
   }
 }
 
