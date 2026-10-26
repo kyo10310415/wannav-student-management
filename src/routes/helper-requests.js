@@ -20,8 +20,8 @@ app.get('/', async (c) => {
     
     return c.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error fetching helper requests:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching helper requests:');
+    return c.json({ success: false, error: 'Helper request operation failed' }, 500);
   }
 });
 
@@ -46,8 +46,8 @@ app.get('/:id', async (c) => {
     
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching helper request:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching helper request:');
+    return c.json({ success: false, error: 'Helper request operation failed' }, 500);
   }
 });
 
@@ -94,8 +94,8 @@ app.post('/', async (c) => {
     
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error creating helper request:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error creating helper request:');
+    return c.json({ success: false, error: 'Helper request operation failed' }, 500);
   }
 });
 
@@ -153,8 +153,8 @@ app.post('/:id/accept', async (c) => {
     
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error accepting helper request:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error accepting helper request:');
+    return c.json({ success: false, error: 'Helper request operation failed' }, 500);
   }
 });
 
@@ -194,8 +194,8 @@ app.post('/check-expired', async (c) => {
       message: `Updated ${expiredResult.rows.length} expired requests` 
     });
   } catch (error) {
-    console.error('Error checking expired requests:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error checking expired requests:');
+    return c.json({ success: false, error: 'Helper request operation failed' }, 500);
   }
 });
 
@@ -238,8 +238,8 @@ app.delete('/:id', async (c) => {
     
     return c.json({ success: true, message: 'Helper request deleted successfully' });
   } catch (error) {
-    console.error('Error deleting helper request:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error deleting helper request:');
+    return c.json({ success: false, error: 'Helper request operation failed' }, 500);
   }
 });
 

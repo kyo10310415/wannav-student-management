@@ -104,17 +104,17 @@ app.post('/', async (c) => {
       );
     }
 
-    console.log(`✅ レッスン報告保存: ${student_id} - ${lesson_date} - ${lesson_result}`);
+    console.log('[Lesson reports] Report saved');
 
     return c.json({
       success: true,
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('❌ レッスン報告保存エラー:', error);
+    console.error('❌ レッスン報告保存エラー:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report operation failed'
     }, 500);
   }
 });
@@ -139,10 +139,10 @@ app.get('/by-date/:date', async (c) => {
       count: result.rows.length
     });
   } catch (error) {
-    console.error('❌ レッスン報告取得エラー:', error);
+    console.error('❌ レッスン報告取得エラー:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report operation failed'
     }, 500);
   }
 });
@@ -173,10 +173,10 @@ app.get('/:studentId/:date', async (c) => {
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('❌ レッスン報告取得エラー:', error);
+    console.error('❌ レッスン報告取得エラー:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report operation failed'
     }, 500);
   }
 });
@@ -297,10 +297,10 @@ app.get('/', async (c) => {
       offset: parseInt(offset)
     });
   } catch (error) {
-    console.error('❌ レッスン報告検索エラー:', error);
+    console.error('❌ レッスン報告検索エラー:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report operation failed'
     }, 500);
   }
 });
@@ -325,17 +325,17 @@ app.delete('/:id', async (c) => {
       }, 404);
     }
 
-    console.log(`✅ レッスン報告削除: ID ${id}`);
+    console.log('[Lesson reports] Report deleted');
 
     return c.json({
       success: true,
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('❌ レッスン報告削除エラー:', error);
+    console.error('❌ レッスン報告削除エラー:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report operation failed'
     }, 500);
   }
 });

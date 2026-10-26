@@ -69,8 +69,8 @@ app.get('/students', async (c) => {
 
     return c.json({ success: true, data });
   } catch (error) {
-    console.error('[Handover] Error fetching students:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[Handover] Error fetching students:");
+    return c.json({ success: false, error: 'Handover operation failed' }, 500);
   }
 });
 
@@ -102,8 +102,8 @@ app.put('/students/:studentId/assignment', async (c) => {
 
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('[Handover] Error updating assignment:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[Handover] Error updating assignment:");
+    return c.json({ success: false, error: 'Handover operation failed' }, 500);
   }
 });
 
@@ -258,8 +258,8 @@ app.get('/tutor-sidebar', async (c) => {
 
     return c.json({ success: true, data });
   } catch (error) {
-    console.error('[Handover] Error fetching tutor sidebar:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[Handover] Error fetching tutor sidebar:");
+    return c.json({ success: false, error: 'Handover operation failed' }, 500);
   }
 });
 
@@ -341,8 +341,8 @@ app.get('/new-assignments', async (c) => {
       ...(selectedMonth === 'next' ? { next_month: targetMonth.label } : {})
     });
   } catch (error) {
-    console.error('[Handover] Error fetching new assignments:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[Handover] Error fetching new assignments:");
+    return c.json({ success: false, error: 'Handover operation failed' }, 500);
   }
 });
 
@@ -362,11 +362,11 @@ app.post('/reset', async (c) => {
       RETURNING id
     `);
 
-    console.log(`[Handover] Monthly reset: cleared ${result.rowCount} assignments`);
+    console.log("[Handover] Monthly reset completed");
     return c.json({ success: true, cleared: result.rowCount });
   } catch (error) {
-    console.error('[Handover] Error resetting assignments:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[Handover] Error resetting assignments:");
+    return c.json({ success: false, error: 'Handover operation failed' }, 500);
   }
 });
 
@@ -582,7 +582,7 @@ app.post('/export', async (c) => {
     }
 
     const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-    console.log(`[Handover Export] Wrote ${addedSheets.length} sheets to: ${spreadsheetUrl}`);
+    console.log("[Handover Export] Export completed");
 
     return c.json({
       success: true,
@@ -593,8 +593,8 @@ app.post('/export', async (c) => {
     });
 
   } catch (error) {
-    console.error('[Handover Export] Error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[Handover Export] Error:");
+    return c.json({ success: false, error: 'Handover operation failed' }, 500);
   }
 });
 
