@@ -22,7 +22,7 @@ function rememberRecoveryFailure(channelId, cursor) {
 function enqueue(work) {
   queue = queue.then(work).catch(error => {
     // Do not log webhook URLs or message contents.
-    console.error('[DiscordReplyMonitor] Operation failed:', error.code || error.name);
+    console.error('[DiscordReplyMonitor] Operation failed:');
   });
   return queue;
 }
@@ -141,7 +141,7 @@ async function recoverAllChannels() {
     }
     catch (error) {
       rememberRecoveryFailure(row.channel_id, row.last_message_id);
-      console.error('[DiscordReplyMonitor] Recovery failed:', row.channel_id, error.code || error.name);
+      console.error('[DiscordReplyMonitor] Recovery failed:');
     }
   }
 }
@@ -184,12 +184,12 @@ export async function checkDiscordReplyAlerts() {
         try {
           await recoverChannel(channelId, cursor);
           failedRecoveries.delete(channelId);
-          console.log('[DiscordReplyMonitor] Recovery succeeded:', channelId);
+          console.log('[DiscordReplyMonitor] Recovery succeeded:');
         } catch (error) {
           // Rotate failures so one inaccessible channel cannot starve other retries.
           failedRecoveries.delete(channelId);
           failedRecoveries.set(channelId, cursor);
-          console.error('[DiscordReplyMonitor] Recovery retry failed:', channelId, error.code || error.name);
+          console.error('[DiscordReplyMonitor] Recovery retry failed:');
         }
       }
     });
@@ -232,7 +232,7 @@ export async function checkDiscordReplyAlerts() {
           }
           if (!current.tutor_notified_at) {
             if (!tutor?.discord_webhook_url || !/^\d+$/.test(tutor.discord_user_id || '')) {
-              console.warn('[DiscordReplyMonitor] Tutor notification settings missing:', row.student_id);
+              console.warn('[DiscordReplyMonitor] Tutor notification settings missing:');
               return;
             }
             await axios.post(tutor.discord_webhook_url, {
@@ -242,7 +242,7 @@ export async function checkDiscordReplyAlerts() {
             await query('UPDATE discord_reply_pending SET tutor_notified_at = NOW() WHERE message_id = $1', [row.message_id]);
           }
         });
-      } catch (error) { console.error('[DiscordReplyMonitor] Alert failed:', error.code || error.name); }
+      } catch (error) { console.error('[DiscordReplyMonitor] Alert failed:'); }
     }
   } finally {
     try {
