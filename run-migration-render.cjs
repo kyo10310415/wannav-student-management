@@ -1,3 +1,4 @@
+const { getDatabaseConfig } = require('./src/db/connection-config.cjs');
 const { Pool } = require('pg');
 const fs = require('fs');
 
@@ -6,10 +7,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 
 const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: DATABASE_URL.includes('localhost') ? false : {
-    rejectUnauthorized: false
-  },
+  ...getDatabaseConfig(DATABASE_URL, process.env, true),
   connectionTimeoutMillis: 10000,
 });
 

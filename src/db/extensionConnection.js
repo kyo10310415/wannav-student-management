@@ -1,3 +1,4 @@
+import { getDatabaseConfig } from './connection-config.cjs';
 import pg from 'pg';
 const { Pool } = pg;
 
@@ -12,12 +13,7 @@ export function getExtensionPool() {
       return null;
     }
 
-    extensionPool = new Pool({
-      connectionString: extensionDbUrl,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    });
+    extensionPool = new Pool(getDatabaseConfig(extensionDbUrl));
 
     extensionPool.on('error', (err) => {
       console.error('Unexpected error on extension DB idle client', err);

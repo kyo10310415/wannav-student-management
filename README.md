@@ -788,3 +788,15 @@ npm run db:migrate
 Hono/Node adapter、Axios/form-data、Discord.js/RESTと関連推移依存を既存manifest範囲内でlock更新。認証・API・業務コード・DBスキーマ・環境設定は変更しません。Node22.23.4でinstall scripts無効のclean install、187テスト、差分チェック成功。HTTP adapterの保護付き静的配信・エンコードされたパス・JSON処理は架空fixtureで検証。
 
 稼働用audit: Critical0/High0/Moderate6/Low0。全依存audit: Critical0/High0/Moderate6/Low0。警告件数と実際の攻撃成立は別に評価します。Discordログイン・実通知・DB更新なし。Discordクライアント生成とRESTの模擬通信を検証。chart/canvas nativeの実描画は未試験。
+
+## DB接続のTLS方針（2026-10-26）
+
+主DB・延長DB・外部DB、および`check_external_db.js`・`run-migration.js`・`run-migration-render.cjs`の接続設定を`src/db/connection-config.cjs`へ集約しました。ESMのアプリとCJSの保守スクリプトが同じ設定を使用します。
+
+Render上（`RENDER=true`）の短い`dpg-...`内部ホストのみ、自己署名証明書を許容してTLSを必須にします。その他の接続先は証明書・ホスト名を検証し、失敗時に非検証・平文へ切り替えません。[Render公式の内部TLS仕様](https://render.com/docs/postgresql-creating-connecting)に合わせた限定例外であり、内部ネットワークの信頼に依存します。
+
+従来の主DB・マイグレーションのローカル平文互換は、明示許可された経路に限り、非production・非Render・loopbackかつTLS設定なしの場合だけ維持します。延長/外部DB・外部DB確認は、localhostでも従来どおりTLSを要求します。PGSSLMODEまたはURLのTLS指定があればローカル平文にはしません。
+
+URL内のSSL方針による上書きを防ぎ、`sslrootcert`/`sslcert`/`sslkey`のCA・クライアント証明書/鍵ファイルは保持します。`?host=`の接続先上書きと`NODE_TLS_REJECT_UNAUTHORIZED=0`は拒否します。読み込めない設定や証明書は値を含まない固定エラーになります。独自CAや非標準内部ホストでは信頼設定を確認してください。
+
+SQL・スキーマ・権限・DB認証情報・通知処理は変更しません。合成設定と模擬接続入口で検証し、実DB接続・TLS握手・マイグレーション・保守処理・本番の業務更新は実施していません。認証後の実DB業務は別途確認が必要です。既存のDB/保守ログ出力や過去ログは今回の変更対象外です。

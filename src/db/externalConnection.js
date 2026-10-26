@@ -1,3 +1,4 @@
+import { getDatabaseConfig } from './connection-config.cjs';
 import pg from 'pg';
 const { Pool } = pg;
 
@@ -12,12 +13,7 @@ export function getExternalPool() {
       return null;
     }
 
-    externalPool = new Pool({
-      connectionString: externalDbUrl,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    });
+    externalPool = new Pool(getDatabaseConfig(externalDbUrl));
 
     externalPool.on('error', (err) => {
       console.error('Unexpected error on external DB idle client', err);
