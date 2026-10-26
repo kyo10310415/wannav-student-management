@@ -44,7 +44,7 @@ export function resolveTutorBookingLink(student) {
     return { url: '', error: '担当Tutorが未設定です' };
   }
   if (!student?.booking_user_id) {
-    return { url: '', error: `担当Tutor（${tutorName}）がユーザー管理に登録されていません` };
+    return { url: '', error: '担当Tutorがユーザー管理に登録されていません' };
   }
 
   const url = String(
@@ -52,7 +52,7 @@ export function resolveTutorBookingLink(student) {
   ).trim();
   return {
     url,
-    error: url ? null : `担当Tutor（${tutorName}）の${lessonType}予約URLが未設定です`
+    error: url ? null : `担当Tutorの${lessonType}予約URLが未設定です`
   };
 }
 
@@ -113,7 +113,7 @@ export async function fetchChannelMessages(channelUrl, startAt, endAt) {
   if (!discordClient.isReady()) throw new Error('Discord Botが接続されていません');
   const channelId = extractChannelId(channelUrl);
   if (!channelId) throw new Error('DiscordチャンネルURLが不正です');
-  const channel = await discordClient.channels.fetch(channelId);
+  const channel = await discordClient.channels.fetch(channelId).catch(() => { throw new Error('Discord channel history could not be loaded'); });
   if (!channel?.isTextBased() || !channel.messages) {
     throw new Error('Discordチャンネルの履歴を取得できません');
   }
@@ -122,7 +122,7 @@ export async function fetchChannelMessages(channelUrl, startAt, endAt) {
   const endTimestamp = BigInt(Math.max(endAt.getTime(), Number(DISCORD_EPOCH)));
   let before = ((endTimestamp - DISCORD_EPOCH) << 22n).toString();
   for (let page = 0; page < 100; page++) {
-    const batch = await channel.messages.fetch({ limit: 100, before });
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => { throw new Error('Discord channel history could not be loaded'); });
     if (batch.size === 0) break;
     const pageMessages = [...batch.values()];
     for (const message of pageMessages) {
@@ -328,10 +328,10 @@ async function runFunnelDiscordScan(jobId, year, month) {
         }
       } catch (error) {
         errorCount++;
-        const errorMessage = error.message || 'Discord履歴の取得に失敗しました';
+        const errorMessage = 'Discord history scan failed';
         if (unreservedStudent) await upsertBookingCheck(jobId, bounds.yearMonth, unreservedStudent.student_id, null, errorMessage);
         for (const event of noShowEvents) await upsertNoShowCheck(jobId, bounds.yearMonth, event, null, errorMessage);
-        console.error(`[Funnel Discord] ${studentId}:`, errorMessage);
+        console.error('[Funnel Discord] Student scan failed');
       }
       processedCount++;
       await query(
@@ -354,9 +354,9 @@ async function runFunnelDiscordScan(jobId, year, month) {
       `UPDATE funnel_discord_scan_jobs
           SET status = 'failed', error_message = $2, completed_at = NOW()
         WHERE id = $1`,
-      [jobId, error.message]
+      [jobId, 'Discord scan failed']
     ).catch(() => {});
-    console.error('[Funnel Discord] Scan failed:', error);
+    console.error('[Funnel Discord] Scan failed');
   } finally {
     runningJobs.delete(jobId);
   }
@@ -364,33 +364,43 @@ async function runFunnelDiscordScan(jobId, year, month) {
 
 export async function startFunnelDiscordScan({ year, month, createdBy }) {
   const bounds = monthBounds(year, month);
-  await query(
-    `UPDATE funnel_discord_scan_jobs
+  try {
+    await query(
+      `UPDATE funnel_discord_scan_jobs
         SET status = 'failed', error_message = '処理が中断されました。再実行してください', completed_at = NOW()
       WHERE year_month = $1
         AND status IN ('pending', 'running')
         AND created_at < NOW() - INTERVAL '30 minutes'`,
-    [bounds.yearMonth]
-  );
-  const active = await query(
-    `SELECT * FROM funnel_discord_scan_jobs
+      [bounds.yearMonth]
+    );
+    const active = await query(
+      `SELECT * FROM funnel_discord_scan_jobs
       WHERE year_month = $1 AND status IN ('pending', 'running')
       ORDER BY created_at DESC LIMIT 1`,
-    [bounds.yearMonth]
-  );
-  if (active.rows[0]) return active.rows[0];
+      [bounds.yearMonth]
+    );
+    if (active.rows[0]) return active.rows[0];
 
-  const jobId = `funnel_${bounds.yearMonth}_${randomUUID()}`;
-  const result = await query(
-    `INSERT INTO funnel_discord_scan_jobs (id, year_month, created_by)
+    const jobId = `funnel_${bounds.yearMonth}_${randomUUID()}`;
+    const result = await query(
+      `INSERT INTO funnel_discord_scan_jobs (id, year_month, created_by)
      VALUES ($1, $2, $3) RETURNING *`,
-    [jobId, bounds.yearMonth, createdBy || 'unknown']
-  );
-  setImmediate(() => runFunnelDiscordScan(jobId, year, month));
-  return result.rows[0];
+      [jobId, bounds.yearMonth, createdBy || 'unknown']
+    );
+    setImmediate(() => runFunnelDiscordScan(jobId, year, month));
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Funnel Discord] startFunnelDiscordScan failed');
+    throw new Error('Discord scan could not be started');
+  }
 }
 
 export async function getFunnelDiscordScanJob(jobId) {
-  const result = await query(`SELECT * FROM funnel_discord_scan_jobs WHERE id = $1`, [jobId]);
-  return result.rows[0] || null;
+  try {
+    const result = await query(`SELECT * FROM funnel_discord_scan_jobs WHERE id = $1`, [jobId]);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('[Funnel Discord] getFunnelDiscordScanJob failed');
+    throw new Error('Discord scan status could not be loaded');
+  }
 }

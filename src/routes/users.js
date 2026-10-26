@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { getClient, query } from '../db/connection.js';
 import bcrypt from 'bcryptjs';
+import { generateTemporaryPassword } from '../security/temporaryPassword.js';
 
 const app = new Hono();
 
@@ -17,10 +18,16 @@ async function requireAdmin(c, next) {
     }, 401);
   }
   
-  const sessionResult = await query(
-    'SELECT u.role, u.email FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.session_token = $1 AND s.expires_at > NOW()',
-    [sessionToken]
-  );
+  let sessionResult;
+  try {
+    sessionResult = await query(
+      'SELECT u.role, u.email FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.session_token = $1 AND s.expires_at > NOW()',
+      [sessionToken]
+    );
+  } catch {
+    console.error('[Users] Admin session lookup failed');
+    return c.json({ success: false, error: '認証情報を確認できません' }, 500);
+  }
   
   if (sessionResult.rows.length === 0) {
     return c.json({
@@ -73,10 +80,10 @@ app.get('/', requireAdmin, async (c) => {
     });
     
   } catch (error) {
-    console.error('Get users error:', error);
+    console.error('Get users error:');
     return c.json({
       success: false,
-      error: `ユーザー一覧取得に失敗しました: ${error.message}`
+      error: 'ユーザー情報の処理に失敗しました'
     }, 500);
   }
 });
@@ -103,10 +110,10 @@ app.get('/consultation-staff', async (c) => {
     });
     
   } catch (error) {
-    console.error('Get consultation staff error:', error);
+    console.error('Get consultation staff error:');
     return c.json({
       success: false,
-      error: `コンサル担当者一覧取得に失敗しました: ${error.message}`
+      error: 'ユーザー情報の処理に失敗しました'
     }, 500);
   }
 });
@@ -130,7 +137,7 @@ app.get('/:id/booking-links/history', requireAdmin, async (c) => {
     );
     return c.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Get booking link history error:', error);
+    console.error('Get booking link history error:');
     return c.json({ success: false, error: '予約URL変更履歴の取得に失敗しました' }, 500);
   }
 });
@@ -184,7 +191,7 @@ app.put('/:id/booking-links', requireAdmin, async (c) => {
     return c.json({ success: true, data: result.rows[0], message: '予約URL設定を保存しました' });
   } catch (error) {
     if (client) await client.query('ROLLBACK').catch(() => {});
-    console.error('Update booking link settings error:', error);
+    console.error('Update booking link settings error:');
     return c.json({ success: false, error: '予約URL設定の保存に失敗しました' }, 500);
   } finally {
     client?.release();
@@ -225,9 +232,10 @@ app.post('/', requireAdmin, async (c) => {
       }, 400);
     }
     
-    // Create user with default password '1111'
-    const defaultPassword = '1111';
-    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+    // Issue a unique temporary password; persist only its hash.
+    c.header('Cache-Control', 'no-store');
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
     
     const result = await query(
       'INSERT INTO users (email, password_hash, role, must_change_password) VALUES ($1, $2, $3, TRUE) RETURNING id, email, role',
@@ -237,11 +245,12 @@ app.post('/', requireAdmin, async (c) => {
     return c.json({
       success: true,
       data: result.rows[0],
-      message: 'ユーザーを作成しました（初期パスワード: 1111）'
+      message: 'ユーザーを作成しました',
+      temporaryPassword
     });
     
   } catch (error) {
-    console.error('Create user error:', error);
+    console.error('Create user error:');
     return c.json({
       success: false,
       error: 'ユーザー作成に失敗しました'
@@ -282,7 +291,7 @@ app.put('/:id', requireAdmin, async (c) => {
     });
     
   } catch (error) {
-    console.error('Update user error:', error);
+    console.error('Update user error:');
     return c.json({
       success: false,
       error: 'ユーザー更新に失敗しました'
@@ -310,7 +319,7 @@ app.put('/:id/job-title', requireAdmin, async (c) => {
 
     return c.json({ success: true, message: '役職を更新しました' });
   } catch (error) {
-    console.error('Update job_title error:', error);
+    console.error('Update job_title error:');
     return c.json({ success: false, error: '役職の更新に失敗しました' }, 500);
   }
 });
@@ -363,7 +372,7 @@ app.put('/:id/discord', requireAdmin, async (c) => {
     });
     
   } catch (error) {
-    console.error('Update Discord settings error:', error);
+    console.error('Update Discord settings error:');
     return c.json({
       success: false,
       error: 'Discord設定の更新に失敗しました'
@@ -397,7 +406,7 @@ app.delete('/:id', requireAdmin, async (c) => {
     });
     
   } catch (error) {
-    console.error('Delete user error:', error);
+    console.error('Delete user error:');
     return c.json({
       success: false,
       error: 'ユーザー削除に失敗しました'

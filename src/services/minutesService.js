@@ -17,7 +17,11 @@ function getOpenAIClient() {
   if (_client) return _client;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
-  _client = new OpenAI({ apiKey });
+  try {
+    _client = new OpenAI({ apiKey });
+  } catch (error) {
+    throw new Error('AIクライアントを初期化できません');
+  }
   return _client;
 }
 
@@ -198,8 +202,8 @@ ${buildTranscriptPromptText(transcript)}`;
       notes:                parsed.notes                 || '',
     };
   } catch (err) {
-    console.error('[MinutesService] OpenAI error:', err.message);
-    throw new Error('AI議事録生成に失敗しました: ' + err.message);
+    console.error("[MinutesService] OpenAI error:");
+    throw new Error("AI議事録生成に失敗しました");
   }
 }
 
@@ -268,14 +272,14 @@ ${buildTranscriptPromptText(fullTranscript)}`;
       previousTargets
     );
   } catch (err) {
-    console.error('[MinutesService] Quality evaluation error:', err.message);
-    throw new Error('AIレッスン品質評価に失敗しました: ' + err.message);
+    console.error("[MinutesService] Quality evaluation error:");
+    throw new Error("AIレッスン品質評価に失敗しました");
   }
 }
 
 export function resolveMinutesGenerationResults(minutesResult, qualityResult) {
   if (minutesResult.status === 'rejected') {
-    throw minutesResult.reason;
+    throw new Error(minutesResult.reason?.message === 'OPENAI_API_KEY not configured' ? 'OPENAI_API_KEY not configured' : 'AI議事録生成に失敗しました');
   }
 
   return {
@@ -284,7 +288,7 @@ export function resolveMinutesGenerationResults(minutesResult, qualityResult) {
       ? qualityResult.value
       : null,
     qualityEvaluationError: qualityResult.status === 'rejected'
-      ? qualityResult.reason?.message || String(qualityResult.reason)
+      ? 'AIレッスン品質評価に失敗しました'
       : null
   };
 }
@@ -331,7 +335,7 @@ export async function buildMinutesResult(params) {
   } = resolveMinutesGenerationResults(minutesResult, qualityResult);
 
   if (qualityEvaluationError) {
-    console.warn('[MinutesService] Minutes generated without quality evaluation:', qualityEvaluationError);
+    console.warn("[MinutesService] Minutes generated without quality evaluation:");
   }
   const {
     today_lesson_summary,

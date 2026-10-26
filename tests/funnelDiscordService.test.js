@@ -71,7 +71,7 @@ test('reports missing tutor mapping and missing tutor-specific booking URLs', ()
     booking_user_id: 11,
     contract_plan: 'PROプラン',
     funnel_pro_booking_url: ''
-  }).error, /Tutor C.*PROプランレッスン予約URLが未設定/);
+  }).error, /担当TutorのPROプランレッスン予約URLが未設定/);
 });
 
 test('separates student follow-up and tutor reminder during the seven-day window', () => {

@@ -32,7 +32,7 @@ async function fetchSurveyRecords() {
       warning: null
     };
   } catch (error) {
-    console.error('[Funnel] Satisfaction data unavailable:', error.message);
+    console.error('[Funnel] Satisfaction data unavailable');
     return {
       records: [],
       available: false,
@@ -94,29 +94,30 @@ async function fetchDiscordInsights(targetYearMonth) {
  */
 export async function fetchFunnelDataForMonth(year, month) {
   const target = validateTargetMonth(year, month);
-  const startDate = `${target.year}-${String(target.month).padStart(2, '0')}-01`;
-  const nextYear = target.month === 12 ? target.year + 1 : target.year;
-  const nextMonth = target.month === 12 ? 1 : target.month + 1;
-  const nextMonthStart = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  try {
+    const startDate = `${target.year}-${String(target.month).padStart(2, '0')}-01`;
+    const nextYear = target.month === 12 ? target.year + 1 : target.year;
+    const nextMonth = target.month === 12 ? 1 : target.month + 1;
+    const nextMonthStart = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
-  const [
-    studentsResult,
-    tutorsResult,
-    reservationsResult,
-    completedResult,
-    lessonResultsResult,
-    lastCompletedResult,
-    rebookingResult,
-    survey,
-    discordInsights
-  ] = await Promise.all([
-    query(`
+    const [
+      studentsResult,
+      tutorsResult,
+      reservationsResult,
+      completedResult,
+      lessonResultsResult,
+      lastCompletedResult,
+      rebookingResult,
+      survey,
+      discordInsights
+    ] = await Promise.all([
+      query(`
       SELECT student_id, name, status, contract_plan, homeroom_tutor, lesson_start_date,
              payment_status_last_month, payment_status_current_month,
              payment_year_month_last, payment_year_month_current
         FROM students
     `),
-    query(`
+      query(`
       SELECT employee_id, name, tutor_name, notion_name
         FROM tutors
        WHERE status = 'アクティブ'
@@ -125,14 +126,14 @@ export async function fetchFunnelDataForMonth(year, month) {
          AND notion_name <> ''
        ORDER BY COALESCE(tutor_name, name, notion_name) ASC
     `),
-    query(`
+      query(`
       SELECT student_id, COUNT(*)::int AS reservation_count
         FROM lessons
        WHERE lesson_date >= $1::date
          AND lesson_date < $2::date
        GROUP BY student_id
     `, [startDate, nextMonthStart]),
-    query(`
+      query(`
       SELECT student_id, COUNT(*)::int AS completion_count
         FROM lesson_reports
        WHERE lesson_date >= $1::date
@@ -140,21 +141,21 @@ export async function fetchFunnelDataForMonth(year, month) {
          AND lesson_result = '実施済み'
        GROUP BY student_id
     `, [startDate, nextMonthStart]),
-    query(`
+      query(`
       SELECT student_id, lesson_result, COUNT(*)::int AS result_count
         FROM lesson_reports
        WHERE lesson_date >= $1::date
          AND lesson_date < $2::date
        GROUP BY student_id, lesson_result
     `, [startDate, nextMonthStart]),
-    query(`
+      query(`
       SELECT student_id, MAX(lesson_date)::date::text AS last_completed_date
         FROM lesson_reports
        WHERE lesson_date < $1::date
          AND lesson_result = '実施済み'
        GROUP BY student_id
     `, [nextMonthStart]),
-    query(`
+      query(`
       SELECT cancelled.id AS lesson_report_id,
              cancelled.student_id,
              next_lesson.lesson_date::text AS next_lesson_date,
@@ -177,28 +178,32 @@ export async function fetchFunnelDataForMonth(year, month) {
          AND cancelled.lesson_date < $2::date
          AND cancelled.lesson_result = '生徒様都合でリスケ'
     `, [startDate, nextMonthStart]),
-    fetchSurveyRecords(),
-    fetchDiscordInsights(`${target.year}-${String(target.month).padStart(2, '0')}`)
-  ]);
+      fetchSurveyRecords(),
+      fetchDiscordInsights(`${target.year}-${String(target.month).padStart(2, '0')}`)
+    ]);
 
-  const data = buildFunnelData({
-    students: studentsResult.rows,
-    tutors: tutorsResult.rows,
-    reservationRows: reservationsResult.rows,
-    completedRows: completedResult.rows,
-    lessonResultRows: lessonResultsResult.rows,
-    rebookingRows: rebookingResult.rows,
-    discordInsights,
-    lastCompletedRows: lastCompletedResult.rows,
-    surveyRecords: survey.records,
-    surveyAvailable: survey.available,
-    year: target.year,
-    month: target.month
-  });
-  data.discordScan = discordInsights.available ? discordInsights.scanJob : null;
+    const data = buildFunnelData({
+      students: studentsResult.rows,
+      tutors: tutorsResult.rows,
+      reservationRows: reservationsResult.rows,
+      completedRows: completedResult.rows,
+      lessonResultRows: lessonResultsResult.rows,
+      rebookingRows: rebookingResult.rows,
+      discordInsights,
+      lastCompletedRows: lastCompletedResult.rows,
+      surveyRecords: survey.records,
+      surveyAvailable: survey.available,
+      year: target.year,
+      month: target.month
+    });
+    data.discordScan = discordInsights.available ? discordInsights.scanJob : null;
 
-  return {
-    data,
-    warnings: survey.warning ? [survey.warning] : []
-  };
+    return {
+      data,
+      warnings: survey.warning ? [survey.warning] : []
+    };
+  } catch (error) {
+    console.error('[Funnel] Data could not be loaded');
+    throw new Error('Funnel data could not be loaded');
+  }
 }
