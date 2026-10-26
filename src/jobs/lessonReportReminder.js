@@ -153,10 +153,10 @@ async function sendLessonReportReminder() {
         
         if (dbReportResult.rows.length > 0) {
           hasReport = true;
-          console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: Report found in DATABASE`);
+          console.log('[Lesson Report Reminder] Report found in database');
         }
       } catch (dbError) {
-        console.error(`[Lesson Report Reminder] Database check error:`, dbError);
+        console.error(`[Lesson Report Reminder] Database check error:`);
       }
       
       // PRIORITY 2: If not in database, check SPREADSHEET (fallback)
@@ -175,7 +175,7 @@ async function sendLessonReportReminder() {
           
           if (completionData) {
             hasReport = true;
-            console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: Report found in SPREADSHEET on ${checkDateStr}`);
+            console.log('[Lesson Report Reminder] Report found in spreadsheet');
             break;
           }
         }
@@ -183,7 +183,7 @@ async function sendLessonReportReminder() {
       
       // If NO report exists in EITHER source, send reminder
       if (!hasReport) {
-        console.log(`[Lesson Report Reminder] Lesson ${lesson.student_id} on ${yesterdayStr}: NO REPORT - Sending reminder`);
+        console.log('[Lesson Report Reminder] Report missing, sending reminder');
         
         // Get tutor user
         const tutorUser = lesson.tutor_email ? usersByEmail[lesson.tutor_email.toLowerCase()] : null;
@@ -214,7 +214,7 @@ async function sendLessonReportReminder() {
             }
           }
         } else {
-          console.warn(`[Lesson Report Reminder] No Discord settings found for tutor: ${lesson.tutor_email}`);
+          console.warn('[Lesson Report Reminder] No Discord settings found for tutor');
         }
         
         // Small delay to avoid rate limiting
@@ -225,7 +225,7 @@ async function sendLessonReportReminder() {
     console.log(`[Lesson Report Reminder] Job completed. Sent ${remindersSent} reminders.`);
     
   } catch (error) {
-    console.error('[Lesson Report Reminder] Error:', error);
+    console.error('[Lesson Report Reminder] Error:');
   }
 }
 
@@ -305,10 +305,10 @@ async function sendDiscordReminder(webhookUrl, userId, lesson, recipientType) {
     
     await axios.post(webhookUrl, payload);
     
-    console.log(`[Lesson Report Reminder] Sent reminder to ${recipientType} for lesson ${lesson.student_id}`);
+    console.log('[Lesson Report Reminder] Reminder sent');
     
   } catch (error) {
-    console.error(`[Lesson Report Reminder] Failed to send Discord message:`, error.message);
+    console.error(`[Lesson Report Reminder] Failed to send Discord message:`);
   }
 }
 

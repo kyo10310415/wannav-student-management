@@ -51,8 +51,8 @@ app.get('/tutors', async (c) => {
     `);
     return c.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('[DailyReports] GET /tutors error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] GET /tutors error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -68,8 +68,8 @@ app.get('/reminder-setting', async (c) => {
     const enabled = result.rows[0]?.setting_value !== 'false';
     return c.json({ success: true, enabled });
   } catch (error) {
-    console.error('[DailyReports] GET /reminder-setting error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] GET /reminder-setting error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -86,11 +86,11 @@ app.put('/reminder-setting', async (c) => {
        WHERE setting_key = 'daily_report_reminder_enabled'`,
       [enabled ? 'true' : 'false']
     );
-    console.log(`[DailyReports] reminder-setting updated: ${enabled}`);
+    console.log("[DailyReports] Reminder setting updated");
     return c.json({ success: true, enabled: !!enabled });
   } catch (error) {
-    console.error('[DailyReports] PUT /reminder-setting error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] PUT /reminder-setting error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -167,8 +167,8 @@ app.get('/tutor/:tutorId', async (c) => {
       offset
     });
   } catch (error) {
-    console.error('[DailyReports] GET /tutor/:tutorId error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] GET /tutor/:tutorId error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -198,8 +198,8 @@ app.post('/', async (c) => {
 
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('[DailyReports] POST / error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] POST / error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -213,8 +213,8 @@ app.delete('/:id', async (c) => {
     await query(`DELETE FROM daily_reports WHERE id = $1`, [id]);
     return c.json({ success: true });
   } catch (error) {
-    console.error('[DailyReports] DELETE /:id error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] DELETE /:id error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -263,13 +263,13 @@ app.post('/:id/comments', async (c) => {
       commenterName: user.commenter_name || '',
       commentText:   content.trim(),
     }).catch(err => {
-      console.error('[DailyReports] Discord notification error (non-fatal):', err.message);
+      console.error("[DailyReports] Discord notification error (non-fatal):");
     });
 
     return c.json({ success: true, data: responseData });
   } catch (error) {
-    console.error('[DailyReports] POST /:id/comments error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] POST /:id/comments error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -296,7 +296,7 @@ async function sendCommentDiscordNotification({ reportId, commenterId, commenter
   `, [reportId]);
 
   if (reportResult.rows.length === 0) {
-    console.warn(`[DailyReports] Discord notify: report ${reportId} not found`);
+    console.warn("[DailyReports] Notification skipped: report not found");
     return;
   }
 
@@ -304,13 +304,13 @@ async function sendCommentDiscordNotification({ reportId, commenterId, commenter
 
   // 2. Discord Webhook が未設定なら送らない
   if (!report.discord_webhook_url) {
-    console.log(`[DailyReports] Discord notify: ${report.tutor_name} has no webhook — skip`);
+    console.log("[DailyReports] Notification skipped: webhook not configured");
     return;
   }
 
   // 3. 投稿者 = Tutor 本人なら送らない（自己コメント）
   if (String(report.tutor_user_id) === String(commenterId)) {
-    console.log(`[DailyReports] Discord notify: self-comment by ${report.tutor_name} — skip`);
+    console.log("[DailyReports] Notification skipped: self-comment");
     return;
   }
 
@@ -345,7 +345,7 @@ async function sendCommentDiscordNotification({ reportId, commenterId, commenter
     embeds:  [embed]
   });
 
-  console.log(`[DailyReports] Discord notify sent to ${report.tutor_name} for report ${reportId}`);
+  console.log("[DailyReports] Comment notification sent");
 }
 
 // ─────────────────────────────────────────────
@@ -358,8 +358,8 @@ app.delete('/comments/:commentId', async (c) => {
     await query(`DELETE FROM daily_report_comments WHERE id = $1`, [commentId]);
     return c.json({ success: true });
   } catch (error) {
-    console.error('[DailyReports] DELETE /comments/:commentId error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] DELETE /comments/:commentId error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 
@@ -376,8 +376,8 @@ app.get('/check/:tutorId/:date', async (c) => {
     );
     return c.json({ success: true, submitted: result.rows.length > 0 });
   } catch (error) {
-    console.error('[DailyReports] GET /check error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("[DailyReports] GET /check error:");
+    return c.json({ success: false, error: 'Daily report operation failed' }, 500);
   }
 });
 

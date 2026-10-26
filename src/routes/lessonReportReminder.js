@@ -21,10 +21,10 @@ app.post('/trigger', async (c) => {
     });
     
   } catch (error) {
-    console.error('[API] Error triggering lesson report reminder:', error);
+    console.error('[API] Error triggering lesson report reminder:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report reminder operation failed'
     }, 500);
   }
 });
@@ -154,10 +154,10 @@ app.get('/check-mapping', async (c) => {
     });
     
   } catch (error) {
-    console.error('[API] Error checking mapping:', error);
+    console.error('[API] Error checking mapping:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson report reminder operation failed'
     }, 500);
   }
 });
