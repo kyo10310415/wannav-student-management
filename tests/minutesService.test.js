@@ -11,7 +11,7 @@ test('quality evaluation failure does not discard generated minutes', () => {
 
   assert.deepEqual(result.generatedContent, { summary: 'generated' });
   assert.equal(result.lessonQualityEvaluation, null);
-  assert.equal(result.qualityEvaluationError, 'quality timeout');
+  assert.equal(result.qualityEvaluationError, 'AIレッスン品質評価に失敗しました');
 });
 
 test('minutes generation failure is still fatal', () => {
@@ -21,6 +21,6 @@ test('minutes generation failure is still fatal', () => {
       { status: 'rejected', reason: error },
       { status: 'fulfilled', value: { version: 2 } }
     ),
-    error
+    { message: 'AI議事録生成に失敗しました' }
   );
 });

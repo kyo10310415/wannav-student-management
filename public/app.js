@@ -8620,7 +8620,7 @@ function showCreateUserModal() {
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p class="text-sm text-blue-800">
             <i class="fas fa-info-circle mr-2"></i>
-            初期パスワードは <strong>1111</strong> に設定されます
+            ランダムな仮パスワードを発行し、作成後に管理者へ表示します
           </p>
         </div>
         
@@ -8680,7 +8680,7 @@ async function handleCreateUser(e) {
     });
     
     if (response.data.success) {
-      alert(response.data.message);
+      showIssuedTemporaryPassword(response.data);
       closeCreateUserModal();
       await renderUsersPage();
     } else {
@@ -8765,8 +8765,16 @@ async function updateUserJobTitle(userId, newJobTitle) {
 /**
  * Reset user password
  */
+function showIssuedTemporaryPassword(data) {
+  if (typeof data.temporaryPassword !== 'string' || !data.temporaryPassword) {
+    alert(data.message);
+    return;
+  }
+  alert(data.message + '\n\n仮パスワード: ' + data.temporaryPassword + '\n\nこの画面を閉じると再表示できません。安全な方法で本人へ伝えてください。次回ログイン時に変更が必要です。');
+}
+
 async function resetUserPassword(userId, email) {
-  if (!confirm(`${email} のパスワードを初期値（1111）にリセットしますか？\n次回ログイン時にパスワード変更が必須となります。`)) {
+  if (!confirm(`${email} のランダムな仮パスワードを発行しますか？\n次回ログイン時にパスワード変更が必須となります。`)) {
     return;
   }
   
@@ -8780,7 +8788,7 @@ async function resetUserPassword(userId, email) {
     });
     
     if (response.data.success) {
-      alert(response.data.message);
+      showIssuedTemporaryPassword(response.data);
       await renderUsersPage();
     } else {
       alert('エラー: ' + response.data.error);

@@ -19,13 +19,19 @@ async function requireTutorQualityExportAuth(c, next) {
     return c.json({ success: false, error: '認証が必要です' }, 401);
   }
 
-  const sessionResult = await query(
+  let sessionResult;
+  try {
+    sessionResult = await query(
     `SELECT 1
        FROM sessions
       WHERE session_token = $1
         AND expires_at > NOW()`,
     [sessionToken]
-  );
+    );
+  } catch {
+    console.error('[Tutors] Quality export session lookup failed');
+    return c.json({ success: false, error: 'Tutor operation failed' }, 500);
+  }
   if (sessionResult.rows.length === 0) {
     return c.json({ success: false, error: 'セッションが無効です' }, 401);
   }

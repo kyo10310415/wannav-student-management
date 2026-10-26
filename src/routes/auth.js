@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { generateTemporaryPassword } from '../security/temporaryPassword.js';
 
 const app = new Hono();
 
@@ -89,7 +90,7 @@ app.post('/login', async (c) => {
     });
     
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error:');
     return c.json({
       success: false,
       error: 'ログインに失敗しました'
@@ -111,7 +112,7 @@ app.post('/logout', async (c) => {
     return c.json({ success: true });
     
   } catch (error) {
-    console.error('Logout error:', error);
+    console.error('Logout error:');
     return c.json({
       success: false,
       error: 'ログアウトに失敗しました'
@@ -170,7 +171,7 @@ app.get('/verify', async (c) => {
     });
     
   } catch (error) {
-    console.error('Verify session error:', error);
+    console.error('Verify session error:');
     return c.json({
       success: false,
       error: 'セッション検証に失敗しました'
@@ -247,7 +248,7 @@ app.post('/change-password', async (c) => {
     });
     
   } catch (error) {
-    console.error('Change password error:', error);
+    console.error('Change password error:');
     return c.json({
       success: false,
       error: 'パスワード変更に失敗しました'
@@ -292,22 +293,30 @@ app.post('/reset-password', async (c) => {
       }, 403);
     }
     
-    // Reset password to default
-    const defaultPassword = '1111';
-    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+    // Issue a unique temporary password; keep the next-login change requirement.
+    c.header('Cache-Control', 'no-store');
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
     
     await query(
-      'UPDATE users SET password_hash = $1, must_change_password = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      `WITH updated_user AS (
+         UPDATE users
+            SET password_hash = $1, must_change_password = TRUE, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2
+          RETURNING id
+       )
+       DELETE FROM sessions WHERE user_id IN (SELECT id FROM updated_user)`,
       [passwordHash, userId]
     );
     
     return c.json({
       success: true,
-      message: 'パスワードを初期値（1111）にリセットしました'
+      message: '新しい仮パスワードを発行しました',
+      temporaryPassword
     });
     
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error('Reset password error:');
     return c.json({
       success: false,
       error: 'パスワードリセットに失敗しました'

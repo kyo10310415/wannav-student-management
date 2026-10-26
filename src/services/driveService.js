@@ -24,16 +24,20 @@ function getAuthClient() {
       credentials = JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
     }
   } catch (e) {
-    throw new Error('Failed to parse GOOGLE_CREDENTIALS_JSON: ' + e.message);
+    throw new Error("Failed to parse GOOGLE_CREDENTIALS_JSON");
   }
 
+  try {
   return new google.auth.GoogleAuth({
-    credentials,
-    scopes: [
-      'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/documents.readonly',
-    ],
-  });
+      credentials,
+      scopes: [
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/documents.readonly',
+      ],
+    });
+  } catch (error) {
+    throw new Error('Google authentication initialization failed');
+  }
 }
 
 /** URL指定の審査用読み取り。既存議事録のタブ選択・フォールバックは変更しない。 */
@@ -89,21 +93,25 @@ function dateFromStr(str) {
  * @param {string} studentId       - 学籍番号
  */
 export async function findStudentFolder(drive, parentFolderId, studentId) {
+  try {
   const escapedParentFolderId = escapeDriveQueryValue(parentFolderId);
-  const escapedStudentId = escapeDriveQueryValue(studentId);
-  const res = await drive.files.list({
-    // 親フォルダ全体を先頭から列挙すると、500件目より後ろの生徒を取りこぼす。
-    // 学籍番号を検索条件に含め、完全一致・前方一致候補だけを取得する。
-    q: `'${escapedParentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name contains '${escapedStudentId}' and trashed = false`,
-    fields: 'files(id, name)',
-    pageSize: 100,
-  });
-  const folders = res.data.files || [];
-  // フォルダ名が学籍番号と一致するものを探す（完全一致 or 前方一致）
-  const exact = folders.find(f => f.name === studentId);
-  if (exact) return exact.id;
-  const partial = folders.find(f => f.name.startsWith(studentId));
-  return partial ? partial.id : null;
+    const escapedStudentId = escapeDriveQueryValue(studentId);
+    const res = await drive.files.list({
+      // 親フォルダ全体を先頭から列挙すると、500件目より後ろの生徒を取りこぼす。
+      // 学籍番号を検索条件に含め、完全一致・前方一致候補だけを取得する。
+      q: `'${escapedParentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name contains '${escapedStudentId}' and trashed = false`,
+      fields: 'files(id, name)',
+      pageSize: 100,
+    });
+    const folders = res.data.files || [];
+    // フォルダ名が学籍番号と一致するものを探す（完全一致 or 前方一致）
+    const exact = folders.find(f => f.name === studentId);
+    if (exact) return exact.id;
+    const partial = folders.find(f => f.name.startsWith(studentId));
+    return partial ? partial.id : null;
+  } catch (error) {
+    throw new Error('Google Drive transcript lookup failed');
+  }
 }
 
 function escapeDriveQueryValue(value) {
@@ -191,7 +199,7 @@ async function getTranscriptFromDoc(docs, fileId) {
   if (rawTabs.length > 0) {
     const allTabs = flattenTabs(rawTabs);
 
-    console.log(`[Drive] Document tabs found: ${allTabs.map(t => `"${t.tabProperties?.title || '(無題)'}"`).join(', ')}`);
+    console.log("[Drive] Document tabs loaded");
 
     // 「文字起こし」という名前のタブを優先
     const transcriptTab = allTabs.find(t =>
@@ -199,20 +207,20 @@ async function getTranscriptFromDoc(docs, fileId) {
     );
 
     if (transcriptTab) {
-      console.log(`[Drive] Using tab: "${transcriptTab.tabProperties?.title}"`);
+      console.log("[Drive] Transcript tab selected");
       const body = transcriptTab.documentTab?.body;
       if (body) return extractTextFromBody(body);
     }
 
     // 「文字起こし」タブが見つからない場合は末尾タブ（フォールバック）
-    console.warn(`[Drive] "文字起こし" tab not found, falling back to last tab`);
+    console.warn("[Drive] Transcript tab unavailable; using last tab");
     const lastTab = allTabs[allTabs.length - 1];
     const body = lastTab?.documentTab?.body;
     if (body) return extractTextFromBody(body);
   }
 
   // タブがない場合はドキュメント本文を使用
-  console.warn(`[Drive] No tabs found, using document body`);
+  console.warn("[Drive] Using document body");
   const body = docData.body;
   if (body) return extractTextFromBody(body);
 
@@ -259,40 +267,44 @@ export async function fetchTranscript(studentId, lessonDateStr, parentFolderId) 
   const folderId = parentFolderId || process.env.LESSON_DRIVE_FOLDER_ID || '18YfaP1CrW5Lq_sAeVAR56tIRZR3GwMDS';
 
   const auth  = getAuthClient();
+  try {
   const drive = google.drive({ version: 'v3', auth });
-  const docs  = google.docs({ version: 'v1', auth });
+    const docs  = google.docs({ version: 'v1', auth });
 
-  // 1. 学籍番号フォルダを探す
-  const studentFolderId = await findStudentFolder(drive, folderId, studentId);
-  if (!studentFolderId) {
-    console.warn(`[Drive] Student folder not found for studentId="${studentId}" in parent="${folderId}"`);
-    return null;
+    // 1. 学籍番号フォルダを探す
+    const studentFolderId = await findStudentFolder(drive, folderId, studentId);
+    if (!studentFolderId) {
+      console.warn("[Drive] Student folder not found");
+      return null;
+    }
+
+    // 2. 今日・前日のメモファイルを探す
+    const files = await findMemoFilesForDate(drive, studentFolderId, lessonDateStr);
+    if (files.length === 0) {
+      console.warn("[Drive] No memo files found");
+      return null;
+    }
+
+    // 日付が一番新しいものを使用（重複防止: 同じ日付なら最初の1件）
+    const seen = new Set();
+    const unique = [];
+    for (const f of files) {
+      if (!seen.has(f.date)) { seen.add(f.date); unique.push(f); }
+    }
+    // 当日優先 → 前日
+    unique.sort((a, b) => b.date.localeCompare(a.date));
+    const target = unique[0];
+
+    // 3. ドキュメントから「文字起こし」タブのテキストを取得
+    const transcript = await getTranscriptFromDoc(docs, target.id);
+
+    return {
+      transcript,
+      fileId:   target.id,
+      fileName: target.name,
+      fileDate: target.date,
+    };
+  } catch (error) {
+    throw new Error('Google Drive transcript lookup failed');
   }
-
-  // 2. 今日・前日のメモファイルを探す
-  const files = await findMemoFilesForDate(drive, studentFolderId, lessonDateStr);
-  if (files.length === 0) {
-    console.warn(`[Drive] No memo files found for studentId="${studentId}" date="${lessonDateStr}"`);
-    return null;
-  }
-
-  // 日付が一番新しいものを使用（重複防止: 同じ日付なら最初の1件）
-  const seen = new Set();
-  const unique = [];
-  for (const f of files) {
-    if (!seen.has(f.date)) { seen.add(f.date); unique.push(f); }
-  }
-  // 当日優先 → 前日
-  unique.sort((a, b) => b.date.localeCompare(a.date));
-  const target = unique[0];
-
-  // 3. ドキュメントから「文字起こし」タブのテキストを取得
-  const transcript = await getTranscriptFromDoc(docs, target.id);
-
-  return {
-    transcript,
-    fileId:   target.id,
-    fileName: target.name,
-    fileDate: target.date,
-  };
 }
