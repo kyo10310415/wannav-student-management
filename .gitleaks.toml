@@ -29,3 +29,10 @@ description = 'Database connection URL with credentials'
 regex = '''(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s:/]+:[^\s@]+@[^\s'"`]+'''
 [[rules.allowlists]]
 regexes = ['''(?i)://[^\s:/]+:(?:password|your_password)@''']
+
+# Fixed, non-working TLS test fixtures only. Keep scanning real URLs and all test files/history.
+[[rules.allowlists]]
+regexes = [
+  '''^postgresql://fixture:fixture-only@(?:database\.example|dpg-fixture123-a)/fixture(?:\?sslmode=disable&ssl=0)?$''',
+  '''^postgresql://fixture%40user:p%40ss%3Aword@database\.example:5544/db%20name\?application_name=fixture&connect_timeout=5$''',
+]
