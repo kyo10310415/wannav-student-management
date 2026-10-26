@@ -39,14 +39,20 @@ async function requireMinutesManager(c, next) {
     return c.json({ success: false, error: '認証が必要です' }, 401);
   }
 
-  const sessionResult = await query(
+  let sessionResult;
+  try {
+    sessionResult = await query(
     `SELECT u.role
        FROM sessions s
        JOIN users u ON s.user_id = u.id
       WHERE s.session_token = $1
         AND s.expires_at > NOW()`,
     [sessionToken]
-  );
+    );
+  } catch (err) {
+    console.error('[Minutes] Manager session lookup failed');
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
+  }
   if (sessionResult.rows.length === 0) {
     return c.json({ success: false, error: 'セッションが無効です' }, 401);
   }
@@ -73,8 +79,8 @@ app.get('/templates', async (c) => {
     const result = await query('SELECT * FROM minutes_templates ORDER BY id ASC');
     return c.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error('[Minutes] GET /templates error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] GET /templates error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -98,8 +104,8 @@ app.put('/templates/:id', async (c) => {
     }
     return c.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[Minutes] PUT /templates/:id error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] PUT /templates/:id error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -126,8 +132,8 @@ app.get('/all', async (c) => {
       total:   parseInt(countRes.rows[0].total, 10),
     });
   } catch (err) {
-    console.error('[Minutes] GET /all error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] GET /all error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -146,8 +152,8 @@ app.get('/list/:studentId', async (c) => {
     );
     return c.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error('[Minutes] GET /list/:studentId error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] GET /list/:studentId error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -173,8 +179,8 @@ app.get('/previous-context/:studentId', async (c) => {
       }
     });
   } catch (err) {
-    console.error('[Minutes] GET /previous-context/:studentId error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] GET /previous-context/:studentId error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -188,8 +194,8 @@ app.get('/detail/:id', async (c) => {
     }
     return c.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[Minutes] GET /detail/:id error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] GET /detail/:id error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -225,8 +231,8 @@ app.post('/backfill', requireMinutesManager, async (c) => {
 
     return c.json({ success: true, data: result.state }, 202);
   } catch (err) {
-    console.error('[Minutes] POST /backfill error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] POST /backfill error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -274,7 +280,7 @@ app.post('/generate', async (c) => {
           lessonReference = resolveLessonReference(lrRes.rows[0]);
         }
       } catch (err) {
-        console.warn(`[Minutes] Could not fetch lesson_number from lesson_reports:`, err.message);
+        console.warn("[Minutes] Lesson number lookup failed");
       }
     }
 
@@ -286,7 +292,7 @@ app.post('/generate', async (c) => {
     }
 
     // 2. Drive から文字起こし取得
-    console.log(`[Minutes] Fetching transcript for ${studentId} on ${lessonDate}...`);
+    console.log("[Minutes] Fetching transcript");
     const driveResult = await fetchTranscript(studentId, lessonDate);
     if (!driveResult || !driveResult.transcript) {
       return c.json({
@@ -311,7 +317,7 @@ app.post('/generate', async (c) => {
     const template = tmplRes.rows[0] || { template_text: '{{summary}}\n\n{{notes}}' };
 
     // 5. AI で議事録生成
-    console.log(`[Minutes] Generating minutes with AI... (lessonKey=${lessonReference.lessonKey})`);
+    console.log("[Minutes] Generating minutes with AI");
     const [previousMinutesContext, resolvedTutor] = await Promise.all([
       getPreviousMinutesContext(studentId, lessonDate),
       resolveMinutesTutor(studentId, lessonDate)
@@ -374,8 +380,8 @@ app.post('/generate', async (c) => {
         : {})
     });
   } catch (err) {
-    console.error('[Minutes] POST /generate error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] POST /generate error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -393,8 +399,8 @@ app.put('/:id', async (c) => {
     }
     return c.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[Minutes] PUT /:id error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] PUT /:id error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 
@@ -405,8 +411,8 @@ app.delete('/:id', async (c) => {
     await query('DELETE FROM minutes WHERE id = $1', [id]);
     return c.json({ success: true, message: '削除しました' });
   } catch (err) {
-    console.error('[Minutes] DELETE /:id error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error("[Minutes] DELETE /:id error:");
+    return c.json({ success: false, error: 'Minutes operation failed' }, 500);
   }
 });
 

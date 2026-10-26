@@ -25,8 +25,8 @@ app.get('/', async (c) => {
     );
     return c.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error('[LessonContents] GET / error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('[LessonContents] GET / error:');
+    return c.json({ success: false, error: 'Lesson content operation failed' }, 500);
   }
 });
 
@@ -56,8 +56,8 @@ app.post('/', async (c) => {
     );
     return c.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[LessonContents] POST / error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('[LessonContents] POST / error:');
+    return c.json({ success: false, error: 'Lesson content operation failed' }, 500);
   }
 });
 
@@ -79,8 +79,8 @@ app.put('/:number', async (c) => {
     }
     return c.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[LessonContents] PUT /:number error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('[LessonContents] PUT /:number error:');
+    return c.json({ success: false, error: 'Lesson content operation failed' }, 500);
   }
 });
 
@@ -91,8 +91,8 @@ app.delete('/:number', async (c) => {
     await query('DELETE FROM lesson_contents WHERE lesson_number = $1', [num]);
     return c.json({ success: true, message: '削除しました' });
   } catch (err) {
-    console.error('[LessonContents] DELETE /:number error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('[LessonContents] DELETE /:number error:');
+    return c.json({ success: false, error: 'Lesson content operation failed' }, 500);
   }
 });
 
@@ -121,8 +121,8 @@ app.post('/bulk', async (c) => {
     }
     return c.json({ success: true, message: `${count}件を登録しました` });
   } catch (err) {
-    console.error('[LessonContents] POST /bulk error:', err);
-    return c.json({ success: false, error: err.message }, 500);
+    console.error('[LessonContents] POST /bulk error:');
+    return c.json({ success: false, error: 'Lesson content operation failed' }, 500);
   }
 });
 
