@@ -52,7 +52,7 @@ export async function monthlyRedListReset() {
       deleted: deleteResult.rowCount
     };
   } catch (error) {
-    console.error('[Red List Monthly] Error during monthly reset:', error);
-    throw error;
+    console.error('[Red List Monthly] Error during monthly reset');
+    throw new Error('Monthly red list reset failed');
   }
 }

@@ -48,8 +48,8 @@ app.get('/', async (c) => {
     const redLists = await getAllRedLists(yearMonth);
     return c.json({ success: true, data: redLists, count: redLists.length });
   } catch (error) {
-    console.error('Error fetching red lists:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching red lists:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -70,8 +70,8 @@ app.post('/update', async (c) => {
       data: result
     });
   } catch (error) {
-    console.error('Error updating red lists:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error updating red lists:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -89,8 +89,8 @@ app.post('/update/:studentId', async (c) => {
     const scores = await updateRedList(studentId, yearMonth);
     return c.json({ success: true, message: `Red list updated for ${studentId}`, data: scores });
   } catch (error) {
-    console.error('Error updating red list:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error updating red list:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -113,8 +113,8 @@ app.get('/history', async (c) => {
     );
     return c.json({ success: true, data: result.rows, count: result.rows.length });
   } catch (error) {
-    console.error('Error fetching red list history:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching red list history:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -138,8 +138,8 @@ app.get('/messages', async (c) => {
     );
     return c.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error fetching red list messages:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching red list messages:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -187,8 +187,8 @@ app.post('/messages', async (c) => {
     );
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error creating red list message:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error creating red list message:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -271,8 +271,8 @@ app.put('/messages/:id', async (c) => {
     }
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error updating red list message:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error updating red list message:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -286,8 +286,8 @@ app.delete('/messages/:id', async (c) => {
     await query('DELETE FROM red_list_messages WHERE id = $1', [id]);
     return c.json({ success: true });
   } catch (error) {
-    console.error('Error deleting red list message:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error deleting red list message:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -314,8 +314,8 @@ app.get('/messages/:id/image', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching message image:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching message image:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -336,8 +336,8 @@ app.get('/senders', async (c) => {
     );
     return c.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error fetching senders:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching senders:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -360,8 +360,8 @@ app.post('/senders', async (c) => {
     );
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error creating sender:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error creating sender:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -388,8 +388,8 @@ app.put('/senders/:id', async (c) => {
     }
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error updating sender:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error updating sender:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -403,8 +403,8 @@ app.delete('/senders/:id', async (c) => {
     await query('DELETE FROM red_list_senders WHERE id = $1', [id]);
     return c.json({ success: true });
   } catch (error) {
-    console.error('Error deleting sender:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error deleting sender:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -509,7 +509,7 @@ app.post('/discord/send', async (c) => {
     if (!sendResult.success) {
       return c.json({
         success: false,
-        error: sendResult.error || 'Discord への送信に失敗しました'
+        error: 'Discord への送信に失敗しました'
       }, 500);
     }
 
@@ -546,8 +546,8 @@ app.post('/discord/send', async (c) => {
 
     return c.json({ success: true, messageId: sendResult.id, assignedTo: assignedToName });
   } catch (error) {
-    console.error('Error sending red list discord message:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error sending red list discord message:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -629,7 +629,7 @@ app.post('/discord/test-send', async (c) => {
     if (!sendResult.success) {
       return c.json({
         success: false,
-        error: sendResult.error || 'テスト送信に失敗しました'
+        error: 'テスト送信に失敗しました'
       }, 500);
     }
 
@@ -640,8 +640,8 @@ app.post('/discord/test-send', async (c) => {
       testUserId: TEST_USER_ID
     });
   } catch (error) {
-    console.error('Error sending test discord message:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error sending test discord message:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -679,8 +679,8 @@ app.get('/discord/logs', async (c) => {
 
     return c.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error fetching discord logs:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching discord logs:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -715,11 +715,11 @@ app.patch('/:studentId/ex-rank', async (c) => {
       return c.json({ success: false, error: 'レコードが見つかりません' }, 404);
     }
 
-    console.log(`[Red List] EX rank ${ex_rank ? 'set' : 'cleared'} for ${studentId} (${yearMonth})${ex_reason ? ` reason: ${ex_reason}` : ''}`);
+    console.log('[Red List] EX rank updated');
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error updating EX rank:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error updating EX rank:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -782,8 +782,8 @@ app.patch('/:studentId/status', async (c) => {
 
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error updating red list status:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error updating red list status:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 
@@ -802,8 +802,8 @@ app.get('/:studentId', async (c) => {
     }
     return c.json({ success: true, data: redList });
   } catch (error) {
-    console.error('Error fetching red list:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error fetching red list:');
+    return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
 });
 

@@ -58,7 +58,7 @@ export async function calculateRedListScore(studentId, yearMonth) {
       }
     }
   } catch (error) {
-    console.error(`[Red List] Error checking satisfaction for ${studentId}:`, error);
+    console.error("[Red List] Satisfaction check failed");
   }
 
   // 2. レッスン欠席チェック (3点)
@@ -76,7 +76,7 @@ export async function calculateRedListScore(studentId, yearMonth) {
       scores.absence = 3;
     }
   } catch (error) {
-    console.error(`[Red List] Error checking absence for ${studentId}:`, error);
+    console.error("[Red List] Absence check failed");
   }
 
   // 3. アンケート未回答チェック (1点) - 前月
@@ -96,12 +96,12 @@ export async function calculateRedListScore(studentId, yearMonth) {
     
     if (surveyResult.rows[0].response_count === 0) {
       scores.survey = 1;
-      console.log(`[Red List] ${studentId} - Survey not responded in ${prevYearMonth}, adding 1 point`);
+      console.log("[Red List] Survey non-response score applied");
     } else {
-      console.log(`[Red List] ${studentId} - Survey responded in ${prevYearMonth}, no penalty`);
+      console.log("[Red List] Survey response confirmed");
     }
   } catch (error) {
-    console.error(`[Red List] Error checking survey for ${studentId}:`, error);
+    console.error("[Red List] Survey check failed");
   }
 
   // 4. リスケチェック (1点)
@@ -119,7 +119,7 @@ export async function calculateRedListScore(studentId, yearMonth) {
       scores.reschedule = 1;
     }
   } catch (error) {
-    console.error(`[Red List] Error checking reschedule for ${studentId}:`, error);
+    console.error("[Red List] Reschedule check failed");
   }
 
   // 5. 予約不足チェック (1点) - 毎月10日時点でその月の予約が2回以上入っているかチェック
@@ -134,10 +134,7 @@ export async function calculateRedListScore(studentId, yearMonth) {
     const currentMonth = jstTime.getMonth() + 1; // 0-indexed
     const currentDay = jstTime.getDate();
     
-    console.log(`[Red List] Reservation check for ${studentId}:`, {
-      targetMonth: yearMonth,
-      todayJST: `${currentYear}-${currentMonth}-${currentDay}`
-    });
+    console.log("[Red List] Reservation check started");
     
     // Only check if we're looking at current month AND today is 10th or later
     // OR if we're looking at a past month (after 10th)
@@ -149,7 +146,7 @@ export async function calculateRedListScore(studentId, yearMonth) {
     const shouldCheck = (isCheckingCurrentMonth && currentDay >= 10) || 
                         (isCheckingPastMonth && true); // Past months after 10th are always checked
     
-    console.log(`[Red List] ${studentId} - isCurrentMonth: ${isCheckingCurrentMonth}, isPastMonth: ${isCheckingPastMonth}, shouldCheck: ${shouldCheck}`);
+    console.log("[Red List] Reservation eligibility checked");
     
     if (shouldCheck) {
       // Count ALL reservations in the target month (not just up to 10th!)
@@ -174,19 +171,19 @@ export async function calculateRedListScore(studentId, yearMonth) {
       const reservationCount = parseInt(reservationResult.rows[0].reservation_count);
       const lessonDates = datesResult.rows.map(r => r.lesson_date);
       
-      console.log(`[Red List] ${studentId} - Total reservations in ${yearMonth}: ${reservationCount}`, lessonDates);
+      console.log("[Red List] Reservations loaded");
       
       if (reservationCount < 2) {
         scores.reservation = 1;
-        console.log(`[Red List] ${studentId} - Reservation insufficient (${reservationCount} < 2), adding 1 point`);
+        console.log("[Red List] Reservation shortage score applied");
       } else {
-        console.log(`[Red List] ${studentId} - Reservation sufficient (${reservationCount} >= 2), no penalty`);
+        console.log("[Red List] Reservation minimum satisfied");
       }
     } else {
-      console.log(`[Red List] ${studentId} - Skipping reservation check (not yet 10th of target month)`);
+      console.log("[Red List] Reservation check skipped");
     }
   } catch (error) {
-    console.error(`[Red List] Error checking reservations for ${studentId}:`, error);
+    console.error("[Red List] Reservation check failed");
   }
 
   // Calculate total and rank
@@ -248,7 +245,7 @@ export async function updateRedList(studentId, yearMonth = null) {
       scores.rank = 'none';
     }
     
-    console.log(`[Red List] ${studentId} - Reservation score locked at ${lockedReservationScore} point(s)`);
+    console.log("[Red List] Locked reservation score retained");
   }
 
   // ── EX ランク自動判定 ─────────────────────────────────────
@@ -283,10 +280,10 @@ export async function updateRedList(studentId, yearMonth = null) {
       // 直前2ヶ月もレッドリスト入りしていれば継続EX
       if (prev1InList) {
         autoExRank = true;
-        console.log(`[Red List] ${studentId} - Auto EX: consecutive red list (prev1=${prev1YM})`);
+        console.log("[Red List] Consecutive-month EX rank applied");
       }
     } catch (err) {
-      console.error(`[Red List] Error checking EX rank for ${studentId}:`, err.message);
+      console.error("[Red List] EX rank check failed");
     }
   }
 
@@ -359,7 +356,7 @@ export async function updateAllRedLists(yearMonth = null) {
     yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  console.log(`[Red List] Updating red list for all students (${yearMonth})...`);
+  console.log("[Red List] Batch update started");
 
   const studentsResult = await query(
     `SELECT student_id FROM students WHERE status = 'アクティブ'`
@@ -373,12 +370,12 @@ export async function updateAllRedLists(yearMonth = null) {
       await updateRedList(student.student_id, yearMonth);
       updated++;
     } catch (error) {
-      console.error(`[Red List] Error updating ${student.student_id}:`, error);
+      console.error("[Red List] Student update failed");
       errors++;
     }
   }
 
-  console.log(`[Red List] Update complete: ${updated} updated, ${errors} errors`);
+  console.log("[Red List] Batch update completed");
 
   return { updated, errors };
 }

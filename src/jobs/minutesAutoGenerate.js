@@ -73,7 +73,7 @@ async function runMinutesAutoGenerate(options) {
   const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
   const logPrefix = options.runType === 'backfill' ? '[MinutesBackfill]' : '[MinutesAutoGen]';
 
-  console.log(`${logPrefix} Start — range=${recentStart}..${today}`);
+  console.log("[MinutesJob] Job started");
 
   // ── 1. 直近7日間に実施済み報告がある生徒を取得 ──────────────────────
   // lessons.lesson_date は TIMESTAMP 型。DATE にキャストして比較する
@@ -101,16 +101,16 @@ async function runMinutesAutoGenerate(options) {
       [recentStart, today]
     );
   } catch (err) {
-    console.error(`${logPrefix} Failed to query lessons:`, err.message);
-    throw err;
+    console.error("[MinutesJob] Lesson query failed");
+    throw new Error('Minutes generation job failed');
   }
 
   const candidates = lessonsResult.rows;
   if (candidates.length === 0) {
-    console.log(`${logPrefix} No completed lessons found in the range. Skipping.`);
+    console.log("[MinutesJob] No completed lessons; skipped");
     return buildSummary({ candidates: 0 });
   }
-  console.log(`${logPrefix} ${candidates.length} lesson(s) found.`);
+  console.log("[MinutesJob] Candidates loaded");
 
   // ── 2. 厳格評価済みの議事録を除外し、旧判定は再評価対象にする ────────
   let existingResult;
@@ -128,8 +128,8 @@ async function runMinutesAutoGenerate(options) {
       [...studentIds, ...dates]
     );
   } catch (err) {
-    console.error(`${logPrefix} Failed to query existing minutes:`, err.message);
-    throw err;
+    console.error("[MinutesJob] Existing minutes query failed");
+    throw new Error('Minutes generation job failed');
   }
 
   const existingByKey = new Map(
@@ -154,13 +154,11 @@ async function runMinutesAutoGenerate(options) {
   const targets = [...newTargets, ...qualityTargets];
 
   if (targets.length === 0) {
-    console.log(`${logPrefix} All minutes already generated. Nothing to do.`);
+    console.log("[MinutesJob] All minutes already generated; skipped");
     return buildSummary({ candidates: candidates.length });
   }
   console.log(
-    `${logPrefix} ${newTargets.length} new target(s), `
-    + `${qualityTargets.length}/${legacyTargets.length} legacy target(s) to re-evaluate, `
-    + `${verifiedSet.size} verified skipped.`
+    "[MinutesJob] Targets prepared"
   );
 
   // ── 3. テンプレート取得（id=1 固定、なければデフォルト） ────────────
@@ -169,7 +167,7 @@ async function runMinutesAutoGenerate(options) {
     const tmplRes = await query('SELECT * FROM minutes_templates WHERE id = 1');
     if (tmplRes.rows.length > 0) template = tmplRes.rows[0];
   } catch (err) {
-    console.warn('[MinutesAutoGen] Could not fetch template, using default:', err.message);
+    console.warn("[MinutesAutoGen] Could not fetch template, using default:");
   }
 
   // ── 4. lesson_contents を全件取得しておく（番号→内容のMap） ─────────
@@ -178,7 +176,7 @@ async function runMinutesAutoGenerate(options) {
     const lcRes = await query('SELECT lesson_number, title, content FROM lesson_contents ORDER BY lesson_number ASC');
     lessonContentsIndex = buildLessonContentIndex(lcRes.rows);
   } catch (err) {
-    console.warn('[MinutesAutoGen] Could not fetch lesson_contents:', err.message);
+    console.warn("[MinutesAutoGen] Could not fetch lesson_contents:");
   }
 
   // ── 5. 各生徒について生成 ────────────────────────────────────────────
@@ -210,7 +208,7 @@ async function runMinutesAutoGenerate(options) {
           transcript = driveResult?.transcript || '';
         }
         if (!transcript) {
-          console.log(`${tag} No transcript found for strict re-evaluation — skip.`);
+          console.log("[MinutesJob] Transcript unavailable for re-evaluation; skipped");
           skipCount++;
           continue;
         }
@@ -227,7 +225,7 @@ async function runMinutesAutoGenerate(options) {
             WHERE id = $2`,
           [JSON.stringify(qualityEvaluation), existingMinute.id]
         );
-        console.log(`${tag} ✅ Legacy quality evaluation upgraded.`);
+        console.log("[MinutesJob] Legacy quality evaluation upgraded");
         successCount++;
         qualityUpdatedCount++;
         continue;
@@ -239,7 +237,7 @@ async function runMinutesAutoGenerate(options) {
         pro_text_number
       });
       if (!lessonReference) {
-        console.warn(`${tag} Could not resolve lesson reference — skip.`);
+        console.warn("[MinutesJob] Lesson reference unresolved; skipped");
         skipCount++;
         continue;
       }
@@ -247,7 +245,7 @@ async function runMinutesAutoGenerate(options) {
       // Drive から文字起こし取得
       const driveResult = await fetchTranscript(student_id, lesson_date);
       if (!driveResult || !driveResult.transcript) {
-        console.log(`${tag} No transcript found — skip.`);
+        console.log("[MinutesJob] Transcript unavailable; skipped");
         skipCount++;
         continue;
       }
@@ -257,7 +255,7 @@ async function runMinutesAutoGenerate(options) {
       const todayContent = todayRow ? `${todayRow.title}\n${todayRow.content}`.trim() : '';
       const nextContent = nextRow ? `${nextRow.title}\n${nextRow.content}`.trim() : '';
 
-      console.log(`${tag} lessonKey=${lessonReference.lessonKey}, todayContent=${todayContent ? '有り' : '無し'}, nextContent=${nextContent ? '有り' : '無し'}`);
+      console.log("[MinutesJob] Lesson content prepared");
 
       const [previousMinutesContext, resolvedTutor] = await Promise.all([
         getPreviousMinutesContext(student_id, lesson_date),
@@ -313,15 +311,15 @@ async function runMinutesAutoGenerate(options) {
       );
 
       if (qualityEvaluationError) {
-        console.warn(`${tag} ⚠️ Minutes generated; quality evaluation will be retried: ${qualityEvaluationError}`);
+        console.warn("[MinutesJob] Minutes generated; quality evaluation pending retry");
         qualityPendingCount++;
       } else {
-        console.log(`${tag} ✅ Generated successfully.`);
+        console.log("[MinutesJob] Minutes generated");
       }
       successCount++;
       generatedCount++;
     } catch (err) {
-      console.error(`${tag} ❌ Error:`, err.message);
+      console.error("[MinutesJob] Target processing failed");
       errorCount++;
     } finally {
       processedCount++;
@@ -338,8 +336,7 @@ async function runMinutesAutoGenerate(options) {
   }
 
   console.log(
-    `${logPrefix} Done — generated=${generatedCount}, qualityUpdated=${qualityUpdatedCount}, `
-    + `qualityPending=${qualityPendingCount}, skipped=${skipCount}, error=${errorCount}`
+    "[MinutesJob] Job completed"
   );
 
   return buildSummary({

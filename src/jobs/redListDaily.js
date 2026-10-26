@@ -21,7 +21,7 @@ export async function dailyRedListUpdate() {
     
     return result;
   } catch (error) {
-    console.error('[Red List Daily] Error during daily update:', error);
-    throw error;
+    console.error('[Red List Daily] Error during daily update');
+    throw new Error('Daily red list update failed');
   }
 }
