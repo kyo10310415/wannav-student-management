@@ -808,3 +808,11 @@ Google API SDKの推移依存`qs`を6.15.0から6.16.1へ更新し、関連す�
 本番/全依存auditはMedium6→5（Critical/High/Lowは0）です。残る5項目はuuidの[CVE-2026-41907](https://github.com/advisories/GHSA-w5hq-g745-h8pq)がgaxios/Google SDK/node-cronへ波及した警告です。gaxios6系列の最新版は現行6.7.1で、uuid9を外す互換patchは確認できません。導入コードの参照はgaxiosのmultipart境界・Google SDKのmultipart境界・cronタスク名で、いずれも引数なしのv4()です。脆弱性が対象とするv3/v5/v6の外部出力buffer経路は、この参照では見つかっていませんが、警告の解消やアプリ全体の安全を意味しません。
 
 回帰テストは実Googleapis144/GoogleAuth/OAuth2とqs serializerを使用し、HTTP adapterだけを模擬して複数rangeの文字/配列、token refreshのPOST形式と更新後token再利用を確認します。サービス側のJSON認証設定の読取り経路も合成値で通します。実Google・DB・通知・ジョブ・本番データへアクセスしません。実認証・実書込み、Google SDK/cronのメジャー移行は別途確認が必要です。
+
+## カレンダー処理のログ保護（2026-10-26）
+
+Calendarサービスは認証JSON/base64復号内容、Tutorメール/Calendar ID、予定のタイトル・説明・生徒ID・Meetリンクなどの個別データをログへ表示しません。ログには件数と処理段階だけを残します。認証解析・Tutor参照・取得/変換の上流例外も固定メッセージへ置換し、例外オブジェクトをログや呼出し元へ渡しません。
+
+レッスンの戻り値、認証形式、Calendar読取りスコープ、取得範囲、イベント重複除去、学籍番号による絞込み、失敗したカレンダーをスキップする既存動作は維持します。呼出し元のエラー本文は固定文へ変わります。過去のログは変更しません。他のサービス/DB側のログ出力をすべて保護したという意味ではありません。
+
+テストは合成認証情報と模擬Calendar/DBだけを使用します。実Calendarの取得、DB更新、リマインダー送付は実行しません。設定の詳細は管理画面で確認し、機密値をログやチャットへ貼らないでください。
