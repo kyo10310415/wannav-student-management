@@ -9,6 +9,19 @@ import {
 } from '../services/broadcastService.js';
 import { client as discordClient } from '../services/discordService.js';
 
+const SAFE_DELIVERY_ERRORS = new Set([
+  'Broadcast delivery failed',
+  'Broadcast worker stopped',
+  'Worker stopped while this recipient was being sent',
+  'Test webhook is not configured',
+  'No chat URL', 'No notice URL', 'No tips URL', 'No anken URL'
+]);
+
+function safeDeliveryError(value) {
+  if (value == null || value === '') return value;
+  return SAFE_DELIVERY_ERRORS.has(value) ? value : 'Broadcast delivery failed';
+}
+
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
 const MAX_TARGETS = 500;
 const MAX_CAMPAIGN_KEY_LENGTH = 250;
@@ -224,7 +237,7 @@ export function createGasBroadcastRoutes(overrides = {}) {
         total: result.total
       });
     } catch (error) {
-      console.error('[GAS Broadcast] Failed to enqueue broadcast:', error.message);
+      console.error('[GAS Broadcast] Failed to enqueue broadcast:');
       return c.json({ success: false, error: 'Failed to enqueue broadcast' }, 500);
     }
   });
@@ -263,7 +276,7 @@ export function createGasBroadcastRoutes(overrides = {}) {
         }
       });
     } catch (error) {
-      console.error('[GAS Broadcast] Failed to get job status:', error.message);
+      console.error('[GAS Broadcast] Failed to get job status:');
       return c.json({ success: false, error: 'Failed to get job status' }, 500);
     }
   });
@@ -296,12 +309,12 @@ export function createGasBroadcastRoutes(overrides = {}) {
           studentId: log.student_id,
           studentName: log.student_name,
           status: log.status,
-          errorMessage: log.error_message,
+          errorMessage: safeDeliveryError(log.error_message),
           sentAt: log.sent_at
         }))
       });
     } catch (error) {
-      console.error('[GAS Broadcast] Failed to get broadcast results:', error.message);
+      console.error('[GAS Broadcast] Failed to get broadcast results:');
       return c.json({ success: false, error: 'Failed to get broadcast results' }, 500);
     }
   });

@@ -73,7 +73,7 @@ export async function calculateStudentLessonStats() {
 
     return statsMap;
   } catch (error) {
-    console.error('❌ レッスン統計計算エラー:', error);
+    console.error('❌ レッスン統計計算エラー:');
     throw error;
   }
 }
@@ -152,7 +152,7 @@ export async function getStudentLessonStats(studentId) {
       total_reports: parseInt(row.total_reports) || 0
     };
   } catch (error) {
-    console.error(`❌ 生徒レッスン統計取得エラー (${studentId}):`, error);
+    console.error('[Lesson Report] Student statistics unavailable');
     throw error;
   }
 }
@@ -178,7 +178,7 @@ export async function getLessonReportsByDateRange(startDate, endDate) {
 
     return result.rows;
   } catch (error) {
-    console.error('❌ レッスン報告取得エラー:', error);
+    console.error('❌ レッスン報告取得エラー:');
     throw error;
   }
 }
@@ -227,7 +227,7 @@ export async function getDailyLessonSummary(date) {
 
     return summary;
   } catch (error) {
-    console.error('❌ 日次レッスンサマリー取得エラー:', error);
+    console.error('❌ 日次レッスンサマリー取得エラー:');
     throw error;
   }
 }
