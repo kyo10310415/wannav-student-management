@@ -15,7 +15,7 @@ app.get('/', async (c) => {
     try {
       schedules = await fetchSchedulesFromSheet();
     } catch (error) {
-      console.warn('⚠️ fetchSchedulesFromSheet failed (Google API error) — returning empty list:', error.message);
+      console.warn("⚠️ fetchSchedulesFromSheet failed (Google API error) — returning empty list:");
       return c.json({ success: true, data: [], cache_error: true });
     }
     
@@ -59,10 +59,10 @@ app.get('/', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error fetching schedules:', error);
+    console.error("Error fetching schedules:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });
@@ -233,15 +233,15 @@ app.post('/absence', async (c) => {
           );
           
           if (notificationResult.success) {
-            console.log(`[Discord] Absence notification sent to leader ${leader_email}`);
+            console.log("[Discord] Absence notification sent");
           } else {
-            console.error(`[Discord] Failed to send notification to ${leader_email}:`, notificationResult.error);
+            console.error("[Discord] Absence notification failed");
           }
         } else {
-          console.warn(`[Discord] No webhook URL found for leader ${leader_email}`);
+          console.warn("[Discord] Leader webhook not configured");
         }
       } catch (notifyError) {
-        console.error('[Discord] Error sending absence notification:', notifyError);
+        console.error("[Discord] Error sending absence notification:");
         // Don't fail the whole request if notification fails
       }
     }
@@ -257,10 +257,10 @@ app.post('/absence', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error creating absence request:', error);
+    console.error("Error creating absence request:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });
@@ -320,10 +320,10 @@ app.delete('/absence/:eventId/:tutorEmail', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error deleting absence request:', error);
+    console.error("Error deleting absence request:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });
@@ -381,7 +381,7 @@ app.get('/absence-stats', async (c) => {
     try {
       schedules = await fetchSchedulesFromSheet();
     } catch (error) {
-      console.warn('⚠️ fetchSchedulesFromSheet failed in absence-stats (Google API error) — using DB data only:', error.message);
+      console.warn("⚠️ fetchSchedulesFromSheet failed in absence-stats (Google API error) — using DB data only:");
       // schedules を空配列のまま続行（scheduled_count=0、attendance_rate=計算不可）
     }
     
@@ -472,10 +472,10 @@ app.get('/absence-stats', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error fetching absence stats:', error);
+    console.error("Error fetching absence stats:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });
@@ -540,10 +540,10 @@ app.get('/absence-requests', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error fetching absence requests:', error);
+    console.error("Error fetching absence requests:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });
@@ -611,10 +611,10 @@ app.get('/absence-requests/pending', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error fetching pending absence requests:', error);
+    console.error("Error fetching pending absence requests:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });
@@ -676,12 +676,12 @@ app.post('/absence/:requestId/approve', async (c) => {
       const { fetchTutorWebhooks } = await import('../services/sheetsService.js');
       const { notifyAbsenceApproval } = await import('../services/discordService.js');
       
-      console.log(`[Discord] Attempting to send approval notification to tutor: ${request.tutor_name}`);
+      console.log("[Discord] Sending absence approval");
       
       // Fetch tutor webhooks from WTCチャットURL sheet
       const tutorWebhookMap = await fetchTutorWebhooks();
-      console.log(`[Discord] Available tutor names in webhook map:`, Object.keys(tutorWebhookMap));
-      console.log(`[Discord] Looking for tutor name: "${request.tutor_name}"`);
+      console.log("[Discord] Available tutor names in webhook map:");
+      console.log("[Discord] Resolving tutor");
       
       // Find tutor's webhook data by matching name (exact match first)
       let tutorData = tutorWebhookMap[request.tutor_name];
@@ -696,13 +696,13 @@ app.post('/absence/:requestId/approve', async (c) => {
         
         if (matchedKey) {
           tutorData = tutorWebhookMap[matchedKey];
-          console.log(`[Discord] Found partial match: "${request.tutor_name}" → "${matchedKey}"`);
+          console.log("[Discord] Tutor matched");
         }
       }
       
       if (tutorData && tutorData.webhook) {
-        console.log(`[Discord] Found webhook for ${request.tutor_name}, webhook URL: ${tutorData.webhook.substring(0, 50)}...`);
-        console.log(`[Discord] Discord User ID: ${tutorData.discordUserId || 'Not set'}`);
+        console.log("[Discord] Tutor webhook resolved");
+        console.log("[Discord] Tutor delivery settings loaded");
         
         const approvalNotificationResult = await notifyAbsenceApproval(
           tutorData.webhook,
@@ -719,16 +719,16 @@ app.post('/absence/:requestId/approve', async (c) => {
         );
         
         if (approvalNotificationResult.success) {
-          console.log(`[Discord] ✅ Approval notification sent successfully to tutor ${request.tutor_name}`);
+          console.log("[Discord] Approval notification sent");
         } else {
-          console.error(`[Discord] ❌ Failed to send approval notification to ${request.tutor_name}:`, approvalNotificationResult.error);
+          console.error("[Discord] Approval notification failed");
         }
       } else {
-        console.warn(`[Discord] ⚠️ No webhook URL found for tutor "${request.tutor_name}"`);
-        console.warn(`[Discord] Available tutors:`, Object.keys(tutorWebhookMap).join(', '));
+        console.warn("[Discord] Tutor webhook not configured");
+        console.warn("[Discord] Available tutors:");
       }
     } catch (notifyError) {
-      console.error('[Discord] Error sending approval notification:', notifyError);
+      console.error("[Discord] Error sending approval notification:");
       // Don't fail the whole request if notification fails
     }
     
@@ -738,10 +738,10 @@ app.post('/absence/:requestId/approve', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error approving absence request:', error);
+    console.error("Error approving absence request:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Schedule operation failed'
     }, 500);
   }
 });

@@ -58,10 +58,10 @@ app.get('/', async (c) => {
       count: result.rows.length
     });
   } catch (error) {
-    console.error('Error fetching tutors:', error);
+    console.error("Error fetching tutors:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -85,9 +85,9 @@ app.get('/sync', async (c) => {
     let syncMeta = null;
     try {
       syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
-      console.log('Cache last sync:', syncMeta);
+      console.log("Cache last sync:");
     } catch (error) {
-      console.warn('Warning: Could not get cache sync time:', error.message);
+      console.warn("Warning: Could not get cache sync time:");
       // Continue without sync time
     }
     
@@ -96,9 +96,9 @@ app.get('/sync', async (c) => {
     try {
       tutors = await fetchTutorsFromCache(cacheSpreadsheetId);
     } catch (error) {
-      console.error('Error fetching tutors from cache:', error.message);
+      console.error("Error fetching tutors from cache:");
       // Google API が一時的に失敗した場合はDBの既存データで続行
-      console.warn('⚠️ Cache unavailable — skipping tutor sync, using existing DB data');
+      console.warn("⚠️ Cache unavailable — skipping tutor sync, using existing DB data");
       return c.json({
         success: true,
         message: 'Cache unavailable (Google API error) — using existing DB data',
@@ -135,11 +135,11 @@ app.get('/sync', async (c) => {
       return true;
     });
 
-    console.log(`Found ${tutors.length} tutors, ${validTutors.length} valid, ${skippedTutors.length} skipped`);
+    console.log("[Tutors] Tutor cache loaded");
     
     // Get list of employee_ids from cache
     const cacheEmployeeIds = validTutors.map(t => t.employee_id);
-    console.log(`Cache has ${cacheEmployeeIds.length} valid employee IDs`);
+    console.log("[Tutors] Valid employee IDs prepared");
     
     // Upsert tutors into database
     // ⚠️ 重要: responsible_section / student_capacity は手動入力値のため
@@ -182,7 +182,7 @@ app.get('/sync', async (c) => {
         );
         successCount++;
       } catch (error) {
-        console.error(`Error inserting tutor ${tutor.employee_id}:`, error.message);
+        console.error("[Tutors] Tutor insert failed");
         errorCount++;
       }
     }
@@ -203,27 +203,27 @@ app.get('/sync', async (c) => {
         // 安全チェック: 削除対象がDB全体の20%を超える場合は異常とみなしてスキップ
         const deletionRatio = toDelete.length / dbEmployeeIds.length;
         if (deletionRatio > 0.2) {
-          console.warn(`⚠️ 削除対象が全体の${Math.round(deletionRatio * 100)}%（${toDelete.length}/${dbEmployeeIds.length}人）のため、キャッシュ異常とみなして削除をスキップします`);
-          console.warn(`⚠️ 削除対象: ${toDelete.join(', ')}`);
+          console.warn("[Tutors] Tutor deletion skipped: safety threshold exceeded");
+          console.warn("[Tutors] Tutor deletion candidates omitted");
         } else {
-          console.log(`Found ${toDelete.length} tutors to delete: ${toDelete.join(', ')}`);
+          console.log("[Tutors] Tutor deletion candidates prepared");
           
           // Delete these tutors
           for (const employeeId of toDelete) {
             try {
               await query('DELETE FROM tutors WHERE employee_id = $1', [employeeId]);
               deletedCount++;
-              console.log(`✅ Deleted tutor: ${employeeId}`);
+              console.log("[Tutors] Tutor deleted");
             } catch (deleteError) {
-              console.error(`❌ Error deleting tutor ${employeeId}:`, deleteError.message);
+              console.error("[Tutors] Tutor deletion failed");
             }
           }
         }
       } else {
-        console.log('No tutors to delete');
+        console.log("No tutors to delete");
       }
     } catch (deleteCheckError) {
-      console.error('Error checking for tutors to delete:', deleteCheckError.message);
+      console.error("Error checking for tutors to delete:");
     }
     
     return c.json({
@@ -236,10 +236,10 @@ app.get('/sync', async (c) => {
       lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {
-    console.error('Error syncing tutors:', error);
+    console.error("Error syncing tutors:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -332,8 +332,8 @@ app.get('/quality/monthly/:employeeId/:year/:month', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching monthly tutor quality:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("Error fetching monthly tutor quality:");
+    return c.json({ success: false, error: 'Tutor operation failed' }, 500);
   }
 });
 
@@ -361,8 +361,8 @@ app.post('/quality/export', requireTutorQualityExportAuth, async (c) => {
     const result = await exportTutorQualitySnapshot(year, month);
     return c.json({ success: true, ...result });
   } catch (error) {
-    console.error('Error exporting tutor quality:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("Error exporting tutor quality:");
+    return c.json({ success: false, error: 'Tutor operation failed' }, 500);
   }
 });
 
@@ -391,10 +391,10 @@ app.get('/:id', async (c) => {
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error fetching tutor:', error);
+    console.error("Error fetching tutor:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -436,10 +436,10 @@ app.put('/:id/capacity', async (c) => {
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error updating tutor capacity:', error);
+    console.error("Error updating tutor capacity:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -473,8 +473,8 @@ app.put('/:id/section', async (c) => {
 
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error updating tutor section:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("Error updating tutor section:");
+    return c.json({ success: false, error: 'Tutor operation failed' }, 500);
   }
 });
 
@@ -497,11 +497,11 @@ app.get('/satisfaction/all', async (c) => {
     let satisfactionData = [];
     try {
       satisfactionData = await fetchSatisfactionFromCache(cacheSpreadsheetId);
-      console.log(`✅ fetchSatisfactionFromCache succeeded: ${satisfactionData.length} records`);
+      console.log("[Tutors] Satisfaction cache loaded");
     } catch (error) {
-      console.error('⚠️ fetchSatisfactionFromCache failed:', error.message);
-      console.error('  Error code:', error.code);
-      return c.json({ success: true, data: {}, cache_error: true, cache_error_message: error.message });
+      console.error("⚠️ fetchSatisfactionFromCache failed:");
+      console.error("  Error code:");
+      return c.json({ success: true, data: {}, cache_error: true, cache_error_message: 'Tutor operation failed' });
     }
     
     const result = aggregateSatisfactionByTutorMonth(satisfactionData);
@@ -511,10 +511,10 @@ app.get('/satisfaction/all', async (c) => {
       data: result
     });
   } catch (error) {
-    console.error('Error fetching satisfaction data:', error);
+    console.error("Error fetching satisfaction data:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -539,8 +539,11 @@ app.get('/monthly-stats/:year/:month', async (c) => {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
     
-    console.log(`[Tutor Monthly Stats] Fetching stats for ${year}/${month}`);
-    console.log(`[Tutor Monthly Stats] Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    console.log("[Tutors] Monthly statistics requested");
+    // Preserve the date validation previously performed while logging.
+    startDate.toISOString();
+    endDate.toISOString();
+    console.log("[Tutors] Monthly statistics dates prepared");
     
     // Get helper request counts (status='pending' or 'accepted' or 'completed')
     // Group by requesting_tutor_id (the tutor who requested help)
@@ -604,9 +607,9 @@ app.get('/monthly-stats/:year/:month', async (c) => {
       rescheduleByName[row.tutor_name] = parseInt(row.reschedule_count);
     });
     
-    console.log(`[Tutor Monthly Stats] Helper requests: ${helperRequestResult.rows.length} tutors`);
-    console.log(`[Tutor Monthly Stats] Helper accepted: ${helperAcceptedResult.rows.length} tutors`);
-    console.log(`[Tutor Monthly Stats] Reschedules: ${rescheduleResult.rows.length} tutors`);
+    console.log("[Tutors] Helper requests loaded");
+    console.log("[Tutors] Helper acceptances loaded");
+    console.log("[Tutors] Reschedule statistics loaded");
     
     return c.json({
       success: true,
@@ -616,10 +619,10 @@ app.get('/monthly-stats/:year/:month', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching monthly tutor stats:', error);
+    console.error("Error fetching monthly tutor stats:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -632,33 +635,29 @@ app.get('/monthly-stats/:year/:month', async (c) => {
  */
 app.post('/export-satisfaction', async (c) => {
   try {
-    console.log('[Export] Starting satisfaction export...');
+    console.log("[Export] Starting satisfaction export...");
     const { rows, sortedMonths, isManualExport, rowGroupSize: requestedRowGroupSize } = await c.req.json();
     const rowGroupSize = Number.isInteger(requestedRowGroupSize) && requestedRowGroupSize >= 1 && requestedRowGroupSize <= 10
       ? requestedRowGroupSize
       : 3;
     
-    console.log('[Export] Received data:', {
-      rowCount: rows?.length,
-      monthCount: sortedMonths?.length,
-      isManualExport
-    });
+    console.log("[Export] Received data:");
     
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
-      console.error('[Export] Invalid data format:', { rows, sortedMonths });
+      console.error("[Export] Invalid data format:");
       return c.json({
         success: false,
         error: 'Invalid data format'
       }, 400);
     }
     
-    console.log('[Export] Initializing Google Sheets API...');
+    console.log("[Export] Initializing Google Sheets API...");
     const { google } = await import('googleapis');
     const sheets = google.sheets('v4');
     
     // Get service account credentials
     if (!process.env.GOOGLE_CREDENTIALS_JSON) {
-      console.error('[Export] GOOGLE_CREDENTIALS_JSON not set');
+      console.error("[Export] GOOGLE_CREDENTIALS_JSON not set");
       return c.json({
         success: false,
         error: 'GOOGLE_CREDENTIALS_JSON not configured'
@@ -676,7 +675,7 @@ app.post('/export-satisfaction', async (c) => {
         credentials = JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
       }
     } catch (parseError) {
-      console.error('[Export] Failed to parse credentials:', parseError.message);
+      console.error("[Export] Failed to parse credentials:");
       return c.json({
         success: false,
         error: 'Invalid credentials format'
@@ -689,22 +688,22 @@ app.post('/export-satisfaction', async (c) => {
     });
     
     const authClient = await auth.getClient();
-    console.log('[Export] Authentication successful');
+    console.log("[Export] Authentication successful");
     
     // Use dedicated satisfaction spreadsheet
     const spreadsheetId = process.env.TUTOR_SATISFACTION_SHEET_ID || '1qlvFeFXYaA4Ul6R93qa7CiT4fdJHbrppUiI1tNl7bxg';
-    console.log('[Export] Using spreadsheet:', spreadsheetId);
+    console.log("[Export] Using spreadsheet:");
     
     if (isManualExport) {
       // Manual export: Create new sheet with all historical data
       const now = new Date();
       const sheetName = `Tutor満足度_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
       
-      console.log('[Export] Creating new sheet:', sheetName);
-      console.log('[Export] Data dimensions:', rows.length, 'rows x', sortedMonths.length + 2, 'columns');
+      console.log("[Export] Creating new sheet:");
+      console.log("[Export] Data dimensions:");
       
       // Create new sheet
-      console.log('[Export] Step 1: Creating sheet...');
+      console.log("[Export] Step 1: Creating sheet...");
       const addSheetResponse = await sheets.spreadsheets.batchUpdate({
         auth: authClient,
         spreadsheetId,
@@ -724,10 +723,10 @@ app.post('/export-satisfaction', async (c) => {
       });
       
       const newSheetId = addSheetResponse.data.replies[0].addSheet.properties.sheetId;
-      console.log('[Export] Sheet created with ID:', newSheetId);
+      console.log("[Export] Sheet created with ID:");
       
       // Write data
-      console.log('[Export] Step 2: Writing data...');
+      console.log("[Export] Step 2: Writing data...");
       await sheets.spreadsheets.values.update({
         auth: authClient,
         spreadsheetId,
@@ -737,10 +736,10 @@ app.post('/export-satisfaction', async (c) => {
           values: rows
         }
       });
-      console.log('[Export] Data written successfully');
+      console.log("[Export] Data written successfully");
       
       // Apply formatting
-      console.log('[Export] Step 3: Applying formatting...');
+      console.log("[Export] Step 3: Applying formatting...");
       const requests = [];
       
       // Freeze header row and first 2 columns
@@ -758,7 +757,7 @@ app.post('/export-satisfaction', async (c) => {
       });
       
       // Merge cells for each tutor's metric rows in column A.
-      console.log('[Export] Adding merge requests for', Math.ceil((rows.length - 1) / rowGroupSize), 'tutors');
+      console.log("[Export] Adding merge requests for");
       for (let i = 1; i < rows.length; i += rowGroupSize) {
         requests.push({
           mergeCells: {
@@ -775,7 +774,7 @@ app.post('/export-satisfaction', async (c) => {
       }
       
       // Apply formatting
-      console.log('[Export] Applying', requests.length, 'formatting requests...');
+      console.log("[Export] Applying");
       await sheets.spreadsheets.batchUpdate({
         auth: authClient,
         spreadsheetId,
@@ -783,12 +782,12 @@ app.post('/export-satisfaction', async (c) => {
           requests
         }
       });
-      console.log('[Export] Formatting applied successfully');
+      console.log("[Export] Formatting applied successfully");
       
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${newSheetId}`;
       
-      console.log(`[Export] Manual satisfaction data exported to ${sheetName}`);
-      console.log(`[Export] Spreadsheet URL: ${spreadsheetUrl}`);
+      console.log("[Tutors] Manual satisfaction export completed");
+      console.log("[Tutors] Spreadsheet link generated");
       
       return c.json({
         success: true,
@@ -891,7 +890,7 @@ app.post('/export-satisfaction', async (c) => {
           });
         }
         
-        console.log(`[Export] Created new sheet ${sheetName} with initial data`);
+        console.log("[Tutors] Satisfaction sheet created");
       } else {
         // Sheet exists, append new month's data
         sheetId = existingSheet.properties.sheetId;
@@ -909,7 +908,7 @@ app.post('/export-satisfaction', async (c) => {
         
         // Check if the new month already exists
         if (headerRow.includes(newMonth)) {
-          console.log(`[Export] Month ${newMonth} already exists in sheet, skipping`);
+          console.log("[Tutors] Existing month skipped");
           return c.json({
             success: true,
             message: `Month ${newMonth} already exists`,
@@ -942,7 +941,7 @@ app.post('/export-satisfaction', async (c) => {
           }
         });
         
-        console.log(`[Export] Appended new month ${newMonth} to ${sheetName}`);
+        console.log("[Tutors] Satisfaction month appended");
       }
       
       const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`;
@@ -954,11 +953,11 @@ app.post('/export-satisfaction', async (c) => {
       });
     }
   } catch (error) {
-    console.error('[Export] Error exporting satisfaction data:', error);
-    console.error('[Export] Error stack:', error.stack);
+    console.error("[Export] Error exporting satisfaction data:");
+    console.error("[Export] Error stack:");
     return c.json({
       success: false,
-      error: error.message || 'Unknown error occurred'
+      error: 'Tutor operation failed'
     }, 500);
   }
 });
@@ -1034,8 +1033,8 @@ app.get('/weekly-snapshot/latest', async (c) => {
       year_month: yearMonth
     });
   } catch (error) {
-    console.error('Error fetching weekly snapshot:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("Error fetching weekly snapshot:");
+    return c.json({ success: false, error: 'Tutor operation failed' }, 500);
   }
 });
 
@@ -1048,8 +1047,8 @@ app.post('/weekly-snapshot/trigger', async (c) => {
     const result = await weeklyTutorSnapshot();
     return c.json({ success: true, ...result });
   } catch (error) {
-    console.error('Error triggering weekly snapshot:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error("Error triggering weekly snapshot:");
+    return c.json({ success: false, error: 'Tutor operation failed' }, 500);
   }
 });
 
