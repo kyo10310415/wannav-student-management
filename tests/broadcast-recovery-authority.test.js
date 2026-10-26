@@ -133,3 +133,10 @@ test('a worker that does not acquire the existing atomic job claim never validat
   assert.equal(f.queries[0].sql.includes("SET status = 'running'"), true);
   assert.equal(f.queries.some(q => q.sql.includes('interrupted') || q.sql.includes('error_message = $2')), false);
 });
+
+test('GAS exemption requires the complete stored machine contract, not just creator name', async () => {
+  for (const patch of [{ channel_type: 'notice' }, { target_status: 'active' }, { created_by: owner }]) {
+    const f = await fixture({ gas: true, creator: null, role: 'unknown' }); Object.assign(f.job, patch);
+    await assert.rejects(() => f.module.assertBroadcastRecipientAccess('fixture-job'), error => error.status === 403);
+  }
+});
