@@ -17,10 +17,10 @@ app.get('/lesson-start-dates', async (c) => {
       count: Object.keys(lessonStartDates).length
     });
   } catch (error) {
-    console.error('Error fetching lesson start dates:', error);
+    console.error('Error fetching lesson start dates');
     return c.json({
       success: false,
-      error: error.message
+      error: 'External lesson start dates could not be loaded'
     }, 500);
   }
 });

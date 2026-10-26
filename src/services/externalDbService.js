@@ -28,8 +28,8 @@ export async function fetchLessonStartDates() {
     
     return lessonStartDates;
   } catch (error) {
-    console.error('[External DB] Error fetching lesson start dates:', error);
-    throw error;
+    console.error('[External DB] Error fetching lesson start dates');
+    throw new Error('External lesson start dates could not be loaded');
   }
 }
 
@@ -54,7 +54,7 @@ export function calculateContinuedMonths(startDate) {
     
     return Math.max(0, months);
   } catch (error) {
-    console.error('Error calculating continued months:', error);
+    console.error('Error calculating continued months');
     return 0;
   }
 }
