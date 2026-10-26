@@ -1,4 +1,5 @@
 import { getDatabaseConfig } from './connection-config.cjs';
+import { getQueryLogMetadata, privateDatabaseError } from './private-errors.js';
 import pg from 'pg';
 const { Pool } = pg;
 
@@ -6,10 +7,14 @@ let pool;
 
 export function getPool() {
   if (!pool) {
-    pool = new Pool(getDatabaseConfig(process.env.DATABASE_URL, process.env, true));
+    try {
+      pool = new Pool(getDatabaseConfig(process.env.DATABASE_URL, process.env, true));
+    } catch (error) {
+      throw privateDatabaseError(error, 'Database connection could not be initialized');
+    }
 
     pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err);
+      console.error('Unexpected error on idle database client');
       process.exit(-1);
     });
   }
@@ -20,7 +25,6 @@ export function getPool() {
 export async function query(text, params) {
   const pool = getPool();
   const start = Date.now();
-  const operation = text.trim().replace(/\s+/g, ' ').slice(0, 120);
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
@@ -30,21 +34,21 @@ export async function query(text, params) {
     // 本番で全SQLを出すと、一斉送信の進捗ポーリングだけでログが埋まる。
     // 明示的に有効化された場合と遅いSQLだけを、短い形式で記録する。
     if (verboseLogging || process.env.NODE_ENV !== 'production' || duration >= slowQueryMs) {
-      console.log('[DB] Query completed', { operation, duration, rows: res.rowCount });
+      console.log('[DB] Query completed', getQueryLogMetadata(text, duration, res.rowCount));
     }
     return res;
   } catch (error) {
-    console.error('[DB] Query failed', {
-      operation,
-      duration: Date.now() - start,
-      code: error.code,
-      message: error.message
-    });
-    throw error;
+    const safe = privateDatabaseError(error, 'Database query failed');
+    console.error('[DB] Query failed', getQueryLogMetadata(text, Date.now() - start));
+    throw safe;
   }
 }
 
 export async function getClient() {
   const pool = getPool();
-  return await pool.connect();
+  try {
+    return await pool.connect();
+  } catch (error) {
+    throw privateDatabaseError(error, 'Database client could not be acquired');
+  }
 }

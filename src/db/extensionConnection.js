@@ -1,4 +1,5 @@
 import { getDatabaseConfig } from './connection-config.cjs';
+import { getQueryLogMetadata, privateDatabaseError } from './private-errors.js';
 import pg from 'pg';
 const { Pool } = pg;
 
@@ -13,10 +14,14 @@ export function getExtensionPool() {
       return null;
     }
 
-    extensionPool = new Pool(getDatabaseConfig(extensionDbUrl));
+    try {
+      extensionPool = new Pool(getDatabaseConfig(extensionDbUrl));
+    } catch (error) {
+      throw privateDatabaseError(error, 'Extension database connection could not be initialized');
+    }
 
     extensionPool.on('error', (err) => {
-      console.error('Unexpected error on extension DB idle client', err);
+      console.error('Unexpected error on extension database idle client');
     });
 
     console.log('✅ Extension DB pool initialized');
@@ -33,10 +38,15 @@ export async function queryExtension(text, params) {
   }
 
   const start = Date.now();
-  const res = await pool.query(text, params);
-  const duration = Date.now() - start;
-  console.log('Executed extension query', { text, duration, rows: res.rowCount });
-  return res;
+  try {
+    const res = await pool.query(text, params);
+    const duration = Date.now() - start;
+    console.log('Executed extension query', getQueryLogMetadata(text, duration, res.rowCount));
+    return res;
+  } catch (error) {
+    console.error('Extension database query failed', getQueryLogMetadata(text, Date.now() - start));
+    throw privateDatabaseError(error, 'Extension database query failed');
+  }
 }
 
 export async function getExtensionClient() {
@@ -46,5 +56,9 @@ export async function getExtensionClient() {
     throw new Error('Extension database not configured');
   }
   
-  return await pool.connect();
+  try {
+    return await pool.connect();
+  } catch (error) {
+    throw privateDatabaseError(error, 'Extension database client could not be acquired');
+  }
 }

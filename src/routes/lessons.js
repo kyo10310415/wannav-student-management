@@ -21,10 +21,10 @@ app.get('/', async (c) => {
       count: result.rows.length
     });
   } catch (error) {
-    console.error('Error fetching lessons:', error);
+    console.error('Lesson list fetch failed');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Failed to fetch lessons'
     }, 500);
   }
 });
@@ -96,9 +96,6 @@ app.get('/sync/:year/:month', async (c) => {
       
       if (!studentTutor) {
         unmatchedStudents++;
-        if (unmatchedStudents <= 5) {
-          console.log(`Student not found or no tutor assigned: ${lesson.student_id}`);
-        }
         continue;
       }
       
@@ -107,9 +104,6 @@ app.get('/sync/:year/:month', async (c) => {
       if (lesson.tutor_calendar_id && studentTutor.email) {
         if (lesson.tutor_calendar_id.toLowerCase() !== studentTutor.email.toLowerCase()) {
           mismatchedTutors++;
-          if (mismatchedTutors <= 5) {
-            console.log(`Tutor mismatch for ${lesson.student_id}: calendar=${lesson.tutor_calendar_id}, expected=${studentTutor.email}`);
-          }
           continue; // Skip lessons that don't belong to the student's homeroom tutor
         }
       }
@@ -143,7 +137,7 @@ app.get('/sync/:year/:month', async (c) => {
         );
         validLessons++;
       } catch (insertError) {
-        console.error(`Error inserting lesson ${lesson.calendar_event_id}:`, insertError.message);
+        console.error('Calendar lesson upsert failed');
         invalidLessons++;
       }
     }
@@ -158,10 +152,10 @@ app.get('/sync/:year/:month', async (c) => {
       errors: invalidLessons
     });
   } catch (error) {
-    console.error('Error syncing lessons:', error);
+    console.error('Calendar lesson sync failed');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Failed to sync lessons'
     }, 500);
   }
 });
@@ -198,10 +192,10 @@ app.get('/month/:year/:month', async (c) => {
       month
     });
   } catch (error) {
-    console.error('Error fetching lessons for month:', error);
+    console.error('Monthly lesson fetch failed');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Failed to fetch monthly lessons'
     }, 500);
   }
 });
@@ -225,10 +219,10 @@ app.get('/student/:studentId', async (c) => {
       count: result.rows.length
     });
   } catch (error) {
-    console.error('Error fetching lessons by student:', error);
+    console.error('Student lesson fetch failed');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Failed to fetch student lessons'
     }, 500);
   }
 });
@@ -275,10 +269,10 @@ app.get('/stats/:year/:month', async (c) => {
       month
     });
   } catch (error) {
-    console.error('Error fetching lesson stats:', error);
+    console.error('Lesson statistics fetch failed');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Failed to fetch lesson statistics'
     }, 500);
   }
 });
@@ -302,9 +296,9 @@ app.get('/sync-from-sheet', async (c) => {
     let syncMeta = null;
     try {
       syncMeta = await getLastSyncTime(spreadsheetId);
-      console.log('Last GAS sync:', syncMeta);
+      console.log('GAS sync metadata loaded');
     } catch (error) {
-      console.warn('Warning: Could not get last sync time:', error.message);
+      console.warn('GAS sync metadata lookup failed');
       // Continue without sync time
     }
     
@@ -314,7 +308,7 @@ app.get('/sync-from-sheet', async (c) => {
       lessons = await fetchLessonsFromSheet(spreadsheetId);
       console.log(`Fetched ${lessons.length} lessons from Google Sheets`);
     } catch (error) {
-      console.error('Error syncing lessons from sheet:', error.message);
+      console.error('Google Sheets lesson fetch failed');
       // Google API が一時的に失敗した場合はスキップして成功を返す
       console.warn('⚠️ Google Sheets unavailable — skipping lesson sync, using existing DB data');
       return c.json({
@@ -366,12 +360,6 @@ app.get('/sync-from-sheet', async (c) => {
       
       if (!studentTutor) {
         unmatchedStudents++;
-        // Always log unmatched students for debugging (not just first 5)
-        console.log(`❌ Student not found or no tutor assigned:
-          Student ID: ${lesson.student_id}
-          Student Name: ${lesson.student_name || 'Unknown'}
-          Lesson Date: ${lesson.lesson_date}
-          Event ID: ${lesson.calendar_event_id}`);
         continue;
       }
       
@@ -379,12 +367,6 @@ app.get('/sync-from-sheet', async (c) => {
       if (lesson.tutor_email && studentTutor.email) {
         if (lesson.tutor_email.toLowerCase() !== studentTutor.email.toLowerCase()) {
           mismatchedTutors++;
-          // Always log mismatches for debugging (not just first 5)
-          console.log(`⚠️ Tutor mismatch for ${lesson.student_id} (${lesson.student_name || 'Unknown'}):
-            Sheet Tutor: ${lesson.tutor_email}
-            Expected (Homeroom): ${studentTutor.email} (${studentTutor.notion_name})
-            Lesson Date: ${lesson.lesson_date}
-            Event ID: ${lesson.calendar_event_id}`);
           continue;
         }
       }
@@ -418,15 +400,8 @@ app.get('/sync-from-sheet', async (c) => {
         );
         validLessons++;
         
-        // Log successful insertions for OLTS240592-BG specifically
-        if (lesson.student_id === 'OLTS240592-BG') {
-          console.log(`✅ Successfully synced lesson for ${lesson.student_id}:
-            Lesson Date: ${lesson.lesson_date}
-            Tutor: ${lesson.tutor_email}
-            Event ID: ${lesson.calendar_event_id}`);
-        }
       } catch (insertError) {
-        console.error(`Error inserting lesson ${lesson.calendar_event_id}:`, insertError.message);
+        console.error('Sheet lesson upsert failed');
         invalidLessons++;
       }
     }
@@ -469,7 +444,7 @@ app.get('/sync-from-sheet', async (c) => {
         console.log('No lessons to delete');
       }
     } catch (deleteError) {
-      console.error('Error deleting lessons:', deleteError);
+      console.error('Sheet lesson cleanup failed');
     }
     
     return c.json({
@@ -483,10 +458,10 @@ app.get('/sync-from-sheet', async (c) => {
       totalEventsInSheet: lessons.length
     });
   } catch (error) {
-    console.error('Error syncing lessons from sheet:', error);
+    console.error('Sheet lesson sync failed');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Failed to sync lessons from sheet'
     }, 500);
   }
 });
