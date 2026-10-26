@@ -800,3 +800,11 @@ Render上（`RENDER=true`）の短い`dpg-...`内部ホストのみ、自己署�
 URL内のSSL方針による上書きを防ぎ、`sslrootcert`/`sslcert`/`sslkey`のCA・クライアント証明書/鍵ファイルは保持します。`?host=`の接続先上書きと`NODE_TLS_REJECT_UNAUTHORIZED=0`は拒否します。読み込めない設定や証明書は値を含まない固定エラーになります。独自CAや非標準内部ホストでは信頼設定を確認してください。
 
 SQL・スキーマ・権限・DB認証情報・通知処理は変更しません。合成設定と模擬接続入口で検証し、実DB接続・TLS握手・マイグレーション・保守処理・本番の業務更新は実施していません。認証後の実DB業務は別途確認が必要です。既存のDB/保守ログ出力や過去ログは今回の変更対象外です。
+
+## Google SDK推移依存の互換更新（2026-10-26）
+
+Google API SDKの推移依存`qs`を6.15.0から6.16.1へ更新し、関連する`side-channel`/`side-channel-list`を互換範囲で更新しました。Googleapis144・gaxios6.7.1・node-cron3のメジャーは維持し、認証設定・API・SQL・ジョブの時刻設定は変更しません。[CVE-2026-82417](https://github.com/advisories/GHSA-4mjr-xmp4-gh2g)の修正版はqs6.16.0です。
+
+本番/全依存auditはMedium6→5（Critical/High/Lowは0）です。残る5項目はuuidの[CVE-2026-41907](https://github.com/advisories/GHSA-w5hq-g745-h8pq)がgaxios/Google SDK/node-cronへ波及した警告です。gaxios6系列の最新版は現行6.7.1で、uuid9を外す互換patchは確認できません。導入コードの参照はgaxiosのmultipart境界・Google SDKのmultipart境界・cronタスク名で、いずれも引数なしのv4()です。脆弱性が対象とするv3/v5/v6の外部出力buffer経路は、この参照では見つかっていませんが、警告の解消やアプリ全体の安全を意味しません。
+
+回帰テストは実Googleapis144/GoogleAuth/OAuth2とqs serializerを使用し、HTTP adapterだけを模擬して複数rangeの文字/配列、token refreshのPOST形式と更新後token再利用を確認します。サービス側のJSON認証設定の読取り経路も合成値で通します。実Google・DB・通知・ジョブ・本番データへアクセスしません。実認証・実書込み、Google SDK/cronのメジャー移行は別途確認が必要です。
