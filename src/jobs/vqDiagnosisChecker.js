@@ -13,7 +13,7 @@ import { generateVQRadarChart, generateVQTrendChart } from '../services/chartSer
  */
 export async function checkAndSendVQDiagnosis() {
   try {
-    console.log('🔄 VQ診断チェック開始...');
+    console.log("🔄 VQ診断チェック開始...");
     
     // システムが有効かチェック
     const statusResult = await dbQuery(
@@ -23,7 +23,7 @@ export async function checkAndSendVQDiagnosis() {
     const enabled = statusResult.rows[0]?.setting_value === 'true';
     
     if (!enabled) {
-      console.log('⚠️ VQ診断通知システムがOFFのため処理をスキップします');
+      console.log("⚠️ VQ診断通知システムがOFFのため処理をスキップします");
       return {
         success: false,
         message: 'システムがOFFです',
@@ -40,13 +40,13 @@ export async function checkAndSendVQDiagnosis() {
     const startRow = lastCheckedRow + 1; // 次の行から開始（ただし最小値は2）
     const actualStartRow = Math.max(startRow, 2); // ヘッダーの次の行が最小
     
-    console.log(`📊 前回チェック最終行: ${lastCheckedRow}, 開始行: ${actualStartRow}`);
+    console.log("[VQ diagnosis] Check range prepared");
     
     // スプレッドシートから新規診断結果を取得
     const { results, lastRow } = await fetchVQDiagnosisResults(actualStartRow);
     
     if (results.length === 0) {
-      console.log('ℹ️ 新規の診断結果はありません');
+      console.log("ℹ️ 新規の診断結果はありません");
       
       // 最終行が変わっていれば更新（行が削除された場合など）
       if (lastRow > 0 && lastRow !== lastCheckedRow) {
@@ -61,7 +61,7 @@ export async function checkAndSendVQDiagnosis() {
       };
     }
     
-    console.log(`📋 処理対象: ${results.length}件`);
+    console.log("[VQ diagnosis] Diagnosis batch loaded");
     
     let processed = 0;
     let errors = 0;
@@ -71,10 +71,10 @@ export async function checkAndSendVQDiagnosis() {
     for (const result of results) {
       try {
         // デバッグ: スプレッドシートから取得したデータを確認
-        console.log(`📋 処理中 行 ${result.rowNumber}:`);
-        console.log(`  学籍番号: "${result.studentId}"`);
-        console.log(`  診断タイプ: "${result.diagnosisType}"`);
-        console.log(`  診断日: "${result.diagnosisDate}"`);
+        console.log("[VQ diagnosis] Processing diagnosis");
+        console.log("[VQ diagnosis] Student lookup requested");
+        console.log("[VQ diagnosis] Diagnosis type loaded");
+        console.log("[VQ diagnosis] Diagnosis date loaded");
         
         // 学籍番号から生徒情報を取得
         const studentResult = await dbQuery(
@@ -83,8 +83,8 @@ export async function checkAndSendVQDiagnosis() {
         );
         
         if (studentResult.rows.length === 0) {
-          console.log(`⚠️ 生徒が見つかりません: "${result.studentId}" (行 ${result.rowNumber})`);
-          console.log(`  DB検索クエリ: SELECT id, name, discord_url FROM students WHERE student_id = '${result.studentId}' LIMIT 1`);
+          console.log("[VQ diagnosis] Student not found");
+          console.log("[VQ diagnosis] Student lookup returned no rows");
           errors++;
           
           // エラーでも「完了」をマーク（無限ループ防止）
@@ -113,10 +113,10 @@ export async function checkAndSendVQDiagnosis() {
         }
         
         const student = studentResult.rows[0];
-        console.log(`✅ 生徒情報取得: ${student.name} (ID: ${student.id})`);
+        console.log("[VQ diagnosis] Student loaded");
         
         if (!student.discord_url) {
-          console.log(`⚠️ Discord URLが設定されていません: ${student.name} (${result.studentId})`);
+          console.log("[VQ diagnosis] Discord URL not configured");
           errors++;
           
           updates.push({ rowNumber: result.rowNumber, value: '完了（Discord URL未設定）' });
@@ -151,19 +151,19 @@ export async function checkAndSendVQDiagnosis() {
           );
           if (imageResult.rows.length > 0) {
             typeImageUrl = imageResult.rows[0].image_url;
-            console.log(`📷 診断タイプ「${result.diagnosisType}」の画像を取得: ${typeImageUrl}`);
+            console.log("[VQ diagnosis] Type image loaded");
           }
         } catch (imageError) {
-          console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
+          console.warn("[VQ diagnosis] Type image lookup failed");
         }
         
         // 過去の診断履歴を取得（推移グラフ用）
         let historyData = [];
         try {
           historyData = await fetchVQDiagnosisByStudentId(result.studentId);
-          console.log(`📊 過去の診断履歴: ${historyData.length}件 (${student.name})`);
+          console.log("[VQ diagnosis] Diagnosis history loaded");
         } catch (historyError) {
-          console.warn(`⚠️ 履歴取得エラー: ${historyError.message}`);
+          console.warn("[VQ diagnosis] Diagnosis history lookup failed");
         }
         
         // レーダーチャート画像を生成
@@ -174,9 +174,9 @@ export async function checkAndSendVQDiagnosis() {
             streamingAccuracy: result.streamingAccuracy,
             revenueAccuracy: result.revenueAccuracy
           });
-          console.log(`📊 レーダーチャート生成成功: ${student.name}`);
+          console.log("[VQ diagnosis] Radar chart generated");
         } catch (chartError) {
-          console.warn(`⚠️ レーダーチャート生成エラー: ${chartError.message}`);
+          console.warn("[VQ diagnosis] Radar chart generation failed");
         }
         
         // 推移グラフ画像を生成（2件以上の場合）
@@ -184,9 +184,9 @@ export async function checkAndSendVQDiagnosis() {
         if (historyData.length >= 2) {
           try {
             trendChartBuffer = await generateVQTrendChart(historyData);
-            console.log(`📈 推移グラフ生成成功: ${student.name} (${historyData.length}件)`);
+            console.log("[VQ diagnosis] Trend chart generated");
           } catch (trendError) {
-            console.warn(`⚠️ 推移グラフ生成エラー: ${trendError.message}`);
+            console.warn("[VQ diagnosis] Trend chart generation failed");
           }
         }
         
@@ -201,11 +201,11 @@ export async function checkAndSendVQDiagnosis() {
         });
         
         // デバッグ: メッセージ内容をログ出力
-        console.log(`📝 メッセージ内容 (${student.name}):`);
-        console.log(`  診断タイプ: ${result.diagnosisType}`);
-        console.log(`  概要の長さ: ${result.overview ? result.overview.length : 0}文字`);
-        console.log(`  詳細の長さ: ${result.details ? result.details.length : 0}文字`);
-        console.log(`  メッセージ長: ${message.content ? message.content.length : 0}文字`);
+        console.log("[VQ diagnosis] Message prepared");
+        console.log("[VQ diagnosis] Message type prepared");
+        console.log("[VQ diagnosis] Message overview prepared");
+        console.log("[VQ diagnosis] Message details prepared");
+        console.log("[VQ diagnosis] Message content prepared");
         
         const discordResponse = await sendDiscordVQDiagnosis(
           student.discord_url, 
@@ -239,17 +239,17 @@ export async function checkAndSendVQDiagnosis() {
         // R列更新リストに追加
         updates.push({ rowNumber: result.rowNumber, value: '完了' });
         
-        console.log(`✅ Discord送信成功: ${student.name} (${result.studentId}) - 行 ${result.rowNumber}`);
+        console.log("[VQ diagnosis] Discord message sent");
         processed++;
         
       } catch (error) {
-        console.error(`❌ 処理エラー (${result.studentId}, 行 ${result.rowNumber}):`, error);
+        console.error("[VQ diagnosis] Diagnosis processing failed");
         errors++;
         
         // エラーでも「完了」をマーク（エラー詳細付き）
         updates.push({ 
           rowNumber: result.rowNumber, 
-          value: `完了（エラー: ${error.message.substring(0, 20)}）` 
+          value: '完了（エラー: 診断処理に失敗しました）'
         });
         
         // エラーをデータベースに記録
@@ -267,12 +267,12 @@ export async function checkAndSendVQDiagnosis() {
               result.details,
               result.diagnosisDate,
               'error',
-              error.message,
+              'VQ diagnosis processing failed',
               result.rowNumber
             ]
           );
         } catch (dbError) {
-          console.error('エラー記録の保存に失敗:', dbError);
+          console.error("エラー記録の保存に失敗:");
         }
       }
     }
@@ -281,9 +281,9 @@ export async function checkAndSendVQDiagnosis() {
     if (updates.length > 0) {
       try {
         await batchUpdateVQDiagnosisEmailStatus(updates);
-        console.log(`📝 スプレッドシート更新: ${updates.length}行`);
+        console.log("[VQ diagnosis] Sheet statuses updated");
       } catch (updateError) {
-        console.error('❌ スプレッドシート更新エラー:', updateError);
+        console.error("❌ スプレッドシート更新エラー:");
         // 更新失敗してもメイン処理は続行
       }
     }
@@ -293,7 +293,7 @@ export async function checkAndSendVQDiagnosis() {
       await updateLastCheckedRow(lastRow);
     }
     
-    console.log(`✅ VQ診断チェック完了: 成功 ${processed}件、エラー ${errors}件`);
+    console.log("[VQ diagnosis] Diagnosis check completed");
     
     return {
       success: true,
@@ -303,10 +303,10 @@ export async function checkAndSendVQDiagnosis() {
     };
     
   } catch (error) {
-    console.error('❌ VQ診断チェック全体エラー:', error);
+    console.error("❌ VQ診断チェック全体エラー:");
     return {
       success: false,
-      error: error.message,
+      error: 'VQ diagnosis processing failed',
       processed: 0,
       errors: 0
     };
@@ -326,9 +326,9 @@ async function updateLastCheckedRow(rowNumber) {
       [String(rowNumber)]
     );
     
-    console.log(`📌 最終チェック行を更新: ${rowNumber}`);
+    console.log("[VQ diagnosis] Last checked row updated");
   } catch (error) {
-    console.error('❌ 最終チェック行の更新エラー:', error);
+    console.error("❌ 最終チェック行の更新エラー:");
   }
 }
 
@@ -387,9 +387,9 @@ ${detailsWithUnderline}
 
   // メッセージ長を確認
   if (messageContent.length > 1900) {
-    console.warn(`⚠️ メッセージが長すぎます: ${messageContent.length}文字（推奨: 1900文字以内）`);
+    console.warn("[VQ diagnosis] Message exceeds recommended length");
   } else {
-    console.log(`✅ メッセージ長: ${messageContent.length}文字`);
+    console.log("[VQ diagnosis] Message length checked");
   }
 
   return {

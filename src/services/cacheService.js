@@ -33,8 +33,8 @@ export async function getSpreadsheetMetadata(spreadsheetId) {
       }))
     };
   } catch (error) {
-    console.error('Error fetching spreadsheet metadata:', error);
-    throw error;
+    console.error('Error fetching spreadsheet metadata:');
+    throw new Error('[Cache] getSpreadsheetMetadata failed');
   }
 }
 
@@ -59,16 +59,6 @@ export async function fetchStudentsFromCache(spreadsheetId) {
     
     console.log(`Fetched ${rows.length} students from cache spreadsheet`);
     
-    // Debug: Log first row to check column structure
-    if (rows.length > 0 && rows[0]) {
-      console.log('📋 Column count:', rows[0].length);
-      console.log('📋 Sample row (first student):');
-      console.log('  - Student ID (col 1):', rows[0][1]);
-      console.log('  - Name (col 2):', rows[0][2]);
-      console.log('  - YouTube ID (col 23):', rows[0][23]);
-      console.log('  - X ID (col 24):', rows[0][24]);
-    }
-
     return rows.map(row => {
       let yearMonthInfo = {};
       try {
@@ -106,8 +96,8 @@ export async function fetchStudentsFromCache(spreadsheetId) {
       };
     });
   } catch (error) {
-    console.error('Error fetching students from cache:', error);
-    throw error;
+    console.error('Error fetching students from cache:');
+    throw new Error('[Cache] fetchStudentsFromCache failed');
   }
 }
 
@@ -138,8 +128,8 @@ export async function fetchTutorsFromCache(spreadsheetId) {
       status: row[8] || null,
     }));
   } catch (error) {
-    console.error('Error fetching tutors from cache:', error);
-    throw error;
+    console.error('Error fetching tutors from cache:');
+    throw new Error('[Cache] fetchTutorsFromCache failed');
   }
 }
 
@@ -170,8 +160,8 @@ export async function fetchProgressFromCache(spreadsheetId) {
 
     return progressMap;
   } catch (error) {
-    console.error('Error fetching progress from cache:', error);
-    throw error;
+    console.error('Error fetching progress from cache:');
+    throw new Error('[Cache] fetchProgressFromCache failed');
   }
 }
 
@@ -205,8 +195,8 @@ export async function fetchSatisfactionFromCache(spreadsheetId) {
       tutor_employee_id: row[11] || null,
     }));
   } catch (error) {
-    console.error('Error fetching satisfaction from cache:', error);
-    throw error;
+    console.error('Error fetching satisfaction from cache:');
+    throw new Error('[Cache] fetchSatisfactionFromCache failed');
   }
 }
 
@@ -226,18 +216,6 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     const rows = response.data.values || [];
     console.log(`Fetched ${rows.length} satisfaction records for survey count`);
     
-    // Debug: Show first row structure
-    if (rows.length > 0) {
-      console.log('[Survey Debug] First row structure:');
-      console.log(`  - Column A (row[0]): "${rows[0][0] || '(empty)'}"`);
-      console.log(`  - Column B (row[1]): "${rows[0][1] || '(empty)'}"`);
-      console.log(`  - Column C (row[2]): "${rows[0][2] || '(empty)'}"`);
-      console.log(`  - Column D (row[3]): "${rows[0][3] || '(empty)'}"`);
-      console.log(`  - Column E (row[4]): "${rows[0][4] || '(empty)'}"`);
-      console.log(`  - Column F (row[5]): "${rows[0][5] || '(empty)'}"`);
-      console.log(`  - Column G (row[6]): "${rows[0][6] || '(empty)'}"`);
-    }
-
     // Helper function to normalize student_id
     const normalizeStudentId = (id) => {
       if (!id) return '';
@@ -256,34 +234,16 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
       if (rawStudentId && rawStudentId.toString().trim() !== '') {
         const normalizedId = normalizeStudentId(rawStudentId);
         
-        // Debug: Log first 3 normalization examples
-        if (index < 3) {
-          console.log(`[Survey Debug] Normalization example ${index + 1}:`);
-          console.log(`  - Original: "${rawStudentId}"`);
-          console.log(`  - Normalized: "${normalizedId}"`);
-        }
-        
         responseCountMap[normalizedId] = (responseCountMap[normalizedId] || 0) + 1;
       }
     });
     
     console.log(`Survey response counts calculated for ${Object.keys(responseCountMap).length} students`);
     
-    // Debug: Log first 5 student IDs and their counts
-    const sampleIds = Object.keys(responseCountMap).slice(0, 5);
-    console.log('[Survey Debug] Sample student IDs from spreadsheet (column G, normalized):');
-    if (sampleIds.length === 0) {
-      console.log('  ⚠️ NO STUDENT IDs FOUND - Column G might be empty!');
-    } else {
-      sampleIds.forEach(id => {
-        console.log(`  - "${id}": ${responseCountMap[id]} responses`);
-      });
-    }
-    
     return responseCountMap;
   } catch (error) {
-    console.error('Error fetching survey responses from cache:', error);
-    throw error;
+    console.error('Error fetching survey responses from cache:');
+    throw new Error('[Cache] fetchSurveyResponsesFromCache failed');
   }
 }
 
@@ -338,7 +298,7 @@ export async function fetchCurrentMonthSurveyResponses(spreadsheetId) {
     
     return currentMonthResponders;
   } catch (error) {
-    console.error('[Survey] Error fetching current month survey responses:', error);
+    console.error('[Survey] Error fetching current month survey responses:');
     return new Set();
   }
 }
@@ -390,7 +350,7 @@ export async function fetchMonthlyResponseHistory(spreadsheetId) {
     
     return responseHistory;
   } catch (error) {
-    console.error('[Survey] Error fetching monthly response history:', error);
+    console.error('[Survey] Error fetching monthly response history:');
     return new Map();
   }
 }
@@ -464,7 +424,7 @@ export async function fetchLessonCompletionStatus(spreadsheetId) {
     
     return completionMap;
   } catch (error) {
-    console.error('[Lesson Completion] Error fetching lesson completion status:', error);
+    console.error('[Lesson Completion] Error fetching lesson completion status:');
     return new Map();
   }
 }
@@ -511,24 +471,10 @@ export async function fetchExtensionResultsFromCache(spreadsheetId) {
     
     console.log(`[Extension] Extension results loaded for ${Object.keys(extensionResultsMap).length} students`);
     
-    // Debug: Log first 5 students with extension results
-    const sampleIds = Object.keys(extensionResultsMap)
-      .filter(id => extensionResultsMap[id])
-      .slice(0, 5);
-    
-    if (sampleIds.length > 0) {
-      console.log('[Extension Debug] Sample extension results:');
-      sampleIds.forEach(id => {
-        console.log(`  - "${id}": ${extensionResultsMap[id]}`);
-      });
-    } else {
-      console.log('  ⚠️ NO EXTENSION RESULTS FOUND - Column W might be empty!');
-    }
-    
     return extensionResultsMap;
   } catch (error) {
-    console.error('Error fetching extension results from cache:', error);
-    throw error;
+    console.error('Error fetching extension results from cache:');
+    throw new Error('[Cache] fetchExtensionResultsFromCache failed');
   }
 }
 
@@ -573,7 +519,7 @@ export async function fetchTutorSkillScores(spreadsheetId) {
     console.log(`[TutorSkill] Score map built for ${scoreMap.size} tutors`);
     return scoreMap;
   } catch (error) {
-    console.error('[TutorSkill] Error fetching tutor skill scores:', error);
+    console.error('[TutorSkill] Error fetching tutor skill scores:');
     return new Map(); // エラー時は空 Map を返してフォールバック
   }
 }
@@ -599,7 +545,7 @@ export async function getCacheSyncTime(spreadsheetId) {
     
     return null;
   } catch (error) {
-    console.error('Error fetching cache sync time:', error);
+    console.error('Error fetching cache sync time:');
     return null;
   }
 }
