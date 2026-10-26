@@ -3,8 +3,12 @@ import { query } from '../db/connection.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { generateTemporaryPassword } from '../security/temporaryPassword.js';
+import { validateNewPassword } from '../security/passwordPolicy.js';
+import { createLoginThrottle } from '../security/loginThrottle.js';
+import { bodyLimit } from 'hono/body-limit';
 
 const app = new Hono();
+const loginThrottle = createLoginThrottle();
 
 /**
  * Generate session token
@@ -16,15 +20,25 @@ function generateSessionToken() {
 /**
  * Login endpoint
  */
-app.post('/login', async (c) => {
+app.post('/login', bodyLimit({ maxSize: 16 * 1024,
+  onError: c => c.json({ success: false, error: 'ログイン情報が大きすぎます' }, 413) }), async (c) => {
+  let attempt;
   try {
-    const { email, password } = await c.req.json();
+    let body;
+    try { body = await c.req.json(); }
+    catch { return c.json({ success: false, error: 'ログイン情報が不正です' }, 400); }
+    const { email, password } = body || {};
     
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password || email.length > 320) {
       return c.json({
         success: false,
         error: 'メールアドレスとパスワードを入力してください'
       }, 400);
+    }
+    attempt = loginThrottle.begin(email);
+    if (!attempt.allowed) {
+      c.header('Retry-After', String(attempt.retryAfterSeconds));
+      return c.json({ success: false, error: 'ログインの試行が多すぎます。時間をおいて再試行してください' }, 429);
     }
     
     // Find user by email
@@ -34,6 +48,7 @@ app.post('/login', async (c) => {
     );
     
     if (userResult.rows.length === 0) {
+      attempt.finish('failure');
       return c.json({
         success: false,
         error: 'メールアドレスまたはパスワードが正しくありません'
@@ -46,6 +61,7 @@ app.post('/login', async (c) => {
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     
     if (!isValidPassword) {
+      attempt.finish('failure');
       return c.json({
         success: false,
         error: 'メールアドレスまたはパスワードが正しくありません'
@@ -75,6 +91,7 @@ app.post('/login', async (c) => {
       [user.id]
     );
     
+    attempt.finish('success');
     return c.json({
       success: true,
       data: {
@@ -95,6 +112,8 @@ app.post('/login', async (c) => {
       success: false,
       error: 'ログインに失敗しました'
     }, 500);
+  } finally {
+    attempt?.finish?.('error');
   }
 });
 
@@ -201,10 +220,11 @@ app.post('/change-password', async (c) => {
       }, 400);
     }
     
-    if (newPassword.length < 4) {
+    const passwordError = validateNewPassword(newPassword);
+    if (passwordError) {
       return c.json({
         success: false,
-        error: 'パスワードは4文字以上にしてください'
+        error: passwordError
       }, 400);
     }
     
@@ -238,8 +258,14 @@ app.post('/change-password', async (c) => {
     
     // Update password
     await query(
-      'UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [newPasswordHash, user_id]
+      `WITH updated_user AS (
+         UPDATE users
+            SET password_hash = $1, must_change_password = FALSE, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2 RETURNING id
+       )
+       DELETE FROM sessions
+        WHERE user_id IN (SELECT id FROM updated_user) AND session_token <> $3`,
+      [newPasswordHash, user_id, sessionToken]
     );
     
     return c.json({

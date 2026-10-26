@@ -5,12 +5,15 @@ import { inspect } from 'node:util';
 import vm from 'node:vm';
 import { Hono } from 'hono';
 import { generateTemporaryPassword } from '../src/security/temporaryPassword.js';
+import { validateNewPassword } from '../src/security/passwordPolicy.js';
+import { createLoginThrottle } from '../src/security/loginThrottle.js';
+import { bodyLimit } from 'hono/body-limit';
 
 const marker = 'SYNTHETIC_AUTH_PRIVATE';
 const json = (body, token = true) => ({ method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer fixture-session' } : {}) }, body: JSON.stringify(body) });
 async function fixture(file, { role = 'admin', valid = true, dbFail = false, writeFail = false } = {}) {
   const logs = [], queries = [], passwords = [];
-  const context = { Hono, generateTemporaryPassword,
+  const context = { Hono, generateTemporaryPassword, validateNewPassword, createLoginThrottle, bodyLimit,
     crypto: { randomBytes: () => ({ toString: () => 'a'.repeat(64) }) },
     bcrypt: { compare: async () => true, hash: async (password, cost) => { passwords.push(password); assert.equal(cost, 10); return 'synthetic-hash'; } },
     query: async (sql, params) => {

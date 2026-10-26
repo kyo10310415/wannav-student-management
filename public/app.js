@@ -8123,15 +8123,16 @@ function showChangePasswordPage(isFirstTime = false) {
           
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">
-              新しいパスワード（4文字以上）
+              新しいパスワード（15文字以上）
             </label>
             <input 
               type="password" 
               id="new-password" 
               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
               required
-              minlength="4"
+              minlength="15"
             />
+            <p class="mt-2 text-xs text-gray-600">15文字以上・UTF-8で72バイト以内。日本語や絵文字は1文字が複数バイトになります。</p>
           </div>
           
           <div>
@@ -8143,7 +8144,7 @@ function showChangePasswordPage(isFirstTime = false) {
               id="confirm-password" 
               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
               required
-              minlength="4"
+              minlength="15"
             />
           </div>
           
@@ -8181,6 +8182,17 @@ async function handleChangePassword(e, isFirstTime) {
     return;
   }
   
+  if (Array.from(newPassword).length < 15) {
+    errorDiv.textContent = '新しいパスワードは15文字以上にしてください';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+  if (new TextEncoder().encode(newPassword).length > 72) {
+    errorDiv.textContent = '新しいパスワードはUTF-8で72バイト以内にしてください';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
   try {
     const response = await axios.post(`${API_BASE}/api/auth/change-password`, {
       currentPassword,
