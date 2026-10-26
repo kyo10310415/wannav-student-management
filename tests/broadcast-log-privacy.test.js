@@ -94,6 +94,7 @@ test('worker stores fixed delivery errors and retains failed versus unknown prog
     const f = await fixture({ axios: { post: async () => { throw rawError(network ? undefined : { status: 400 }); } },
       query: async (sql, params) => {
         calls.push({ sql, params });
+        if (sql.includes('bm.name AS message_name')) return { rows: [{ is_test: true }] };
         if (sql.includes('RETURNING broadcast_jobs.*')) return { rows: [{ sent: 0, failed: network ? 0 : 1, unknown_count: network ? 1 : 0 }] };
         if (sql.includes('AS pending,') && sql.includes('AS unknown_count')) return { rows: [{ pending: 0, unknown_count: network ? 1 : 0 }] };
         if (sql.includes('SELECT bj.broadcast_id')) return { rows: [{ broadcast_id: 1, is_test: true, content: marker, channel_type: 'notice' }] };
@@ -124,7 +125,7 @@ test('fatal worker errors persist a fixed reason while preserving interrupted pr
 });
 
 test('crew ownership and running state validation retain status and messages', async () => {
-  const f = await fixture({ query: async sql => ({ rows: sql.includes('SELECT job_id') ? [] : [{ created_by: 'other', status: 'running' }] }) });
+  const f = await fixture({ query: async sql => ({ rows: sql.includes('SELECT job_id') ? [] : [{ created_by: 'other', status: 'running', creator_email: 'other', creator_role: 'leader' }] }) });
   await assert.rejects(() => f.module.resumeBroadcastJob('fixture', marker, 'crew'), error => error.status === 403 && error.message === 'この送信ジョブを再開する権限がありません');
   await assert.rejects(() => f.module.resumeBroadcastJob('fixture', marker, 'leader'), error => error.status === 409 && error.message === 'この送信ジョブは現在実行中です');
 });

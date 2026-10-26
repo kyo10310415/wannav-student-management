@@ -72,10 +72,7 @@ export async function monthlyTutorSatisfactionExport() {
         completedStudentIds = new Set(completion.completedStudentIds);
       } catch (error) {
         lessonAdjustedCalculationAvailable = false;
-        console.error(
-          '[Tutor Satisfaction Export] Lesson completion filter unavailable:',
-          error.message
-        );
+        console.error('[Tutor Satisfaction Export] Lesson completion filter unavailable:');
       }
     }
 
@@ -88,7 +85,7 @@ export async function monthlyTutorSatisfactionExport() {
 
       if (!monthData) {
         console.log(
-          `[Tutor Satisfaction Export] No data for ${tutorName} in ${currentYearMonth}`
+          '[Tutor Satisfaction Export] Tutor has no satisfaction data'
         );
         legacyRows.push(...emptyTutorRows(tutorName, '全体'));
         lessonAdjustedRows.push(...emptyTutorRows(tutorName, 'レッスン'));
@@ -140,13 +137,10 @@ export async function monthlyTutorSatisfactionExport() {
     const success = legacyResult.success && lessonAdjustedResult.success;
     if (success) {
       console.log(
-        `[Tutor Satisfaction Export] Both sheet exports complete: ${legacyResult.spreadsheetUrl}`
+        '[Tutor Satisfaction Export] Both sheet exports complete'
       );
     } else {
-      console.warn('[Tutor Satisfaction Export] One or more sheet exports failed:', {
-        legacy: legacyResult.error || null,
-        lessonAdjusted: lessonAdjustedResult.error || null
-      });
+      console.warn('[Tutor Satisfaction Export] One or more sheet exports failed:');
     }
 
     return {
@@ -170,8 +164,8 @@ export async function monthlyTutorSatisfactionExport() {
       }
     };
   } catch (error) {
-    console.error('[Tutor Satisfaction Export] Error during monthly export:', error);
-    return { success: false, error: error.message };
+    console.error('[Tutor Satisfaction Export] Error during monthly export:');
+    return { success: false, error: 'Tutor satisfaction export failed' };
   }
 }
 
@@ -214,7 +208,7 @@ async function createSheetContext() {
       ? JSON.parse(credString)
       : JSON.parse(Buffer.from(credString, 'base64').toString('utf-8'));
   } catch (error) {
-    console.error('[Tutor Satisfaction Export] Failed to parse credentials:', error.message);
+    console.error('[Tutor Satisfaction Export] Failed to parse credentials:');
     return { success: false, error: 'Invalid credentials format' };
   }
 
@@ -365,8 +359,8 @@ async function exportMonthlyRowsToSheet({
       spreadsheetUrl: spreadsheetUrl(spreadsheetId, sheetId)
     };
   } catch (error) {
-    console.error(`[Tutor Satisfaction Export] Failed to export ${sheetName}:`, error);
-    return { success: false, error: error.message };
+    console.error(`[Tutor Satisfaction Export] Failed to export ${sheetName}:`);
+    return { success: false, error: 'Tutor satisfaction export failed' };
   }
 }
 

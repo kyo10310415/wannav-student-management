@@ -72,7 +72,7 @@ export async function getActiveSchedules() {
     
     return result.rows;
   } catch (error) {
-    console.error('[Scheduler] Error getting active schedules:', error);
+    console.error("[Scheduler] Error getting active schedules:");
     throw error;
   }
 }
@@ -96,24 +96,28 @@ export async function executeScheduledBroadcast(scheduleId) {
     
     const schedule = scheduleResult.rows[0];
     
-    console.log('[Scheduler] Executing scheduled broadcast:', {
-      id: schedule.id,
-      name: schedule.name,
-      channelType: schedule.channel_type
-    });
+    console.log("[Scheduler] Executing scheduled broadcast:");
     
-    // Get target students
-    // For scheduled broadcasts, we need to determine the user's role
-    // For now, we'll assume 'leader' role for scheduled broadcasts
+    // Resolve the creator's current authority; scheduled delivery must not elevate crew.
+    const creatorResult = await query(
+      'SELECT email, role FROM users WHERE LOWER(email) = LOWER($1)',
+      [schedule.created_by]
+    );
+    const creator = creatorResult.rows.length === 1 ? creatorResult.rows[0] : null;
+    if (!creator || !['admin', 'leader', 'crew'].includes(creator.role)) {
+      throw new Error('Schedule creator is not authorized');
+    }
+
+    // Apply the same recipient restrictions as an interactive broadcast.
     const targetStudents = await getTargetStudents(
       schedule.target_status,
       schedule.target_tutor,
-      schedule.created_by,
-      'leader' // Scheduled broadcasts act as leader role
+      creator.email,
+      creator.role
     );
     
     if (targetStudents.length === 0) {
-      console.log('[Scheduler] No target students found for schedule:', schedule.id);
+      console.log("[Scheduler] No target students found for schedule:");
       return {
         success: false,
         error: 'No target students found'
@@ -141,11 +145,7 @@ export async function executeScheduledBroadcast(scheduleId) {
       [scheduleId]
     );
     
-    console.log('[Scheduler] Broadcast executed:', {
-      scheduleId,
-      sent: result.results.sent,
-      failed: result.results.failed
-    });
+    console.log("[Scheduler] Broadcast executed:");
     
     return {
       success: true,
@@ -154,10 +154,10 @@ export async function executeScheduledBroadcast(scheduleId) {
       failed: result.results.failed
     };
   } catch (error) {
-    console.error('[Scheduler] Error executing scheduled broadcast:', error);
+    console.error("[Scheduler] Error executing scheduled broadcast:");
     return {
       success: false,
-      error: error.message
+      error: ['Schedule not found or not enabled', 'Schedule creator is not authorized'].includes(error?.message) ? error.message : 'Scheduled broadcast operation failed'
     };
   }
 }
@@ -170,7 +170,7 @@ export async function checkAndExecuteSchedules() {
   try {
     const schedules = await getActiveSchedules();
     
-    console.log(`[Scheduler] Checking ${schedules.length} active schedules`);
+    console.log("[Scheduler] Schedule processing");
     
     // Use Japan time (JST) for comparison
     const now = new Date();
@@ -180,58 +180,37 @@ export async function checkAndExecuteSchedules() {
     const currentDayOfWeek = jstTime.getDay();
     const currentDayOfMonth = jstTime.getDate();
     
-    console.log('[Scheduler] Current JST time:', jstTime.toISOString(), {
-      minute: currentMinute,
-      hour: currentHour,
-      dayOfWeek: currentDayOfWeek,
-      dayOfMonth: currentDayOfMonth
-    });
+    // Preserve the existing invalid-date failure before logging.
+
+    jstTime.toISOString();
+
+    console.log("[Scheduler] Current JST time:");
     
     for (const schedule of schedules) {
       try {
-        console.log('[Scheduler] Checking schedule:', {
-          id: schedule.id,
-          name: schedule.name,
-          cron: schedule.schedule_cron,
-          last_sent: schedule.last_sent_at
-        });
+        console.log("[Scheduler] Checking schedule:");
         
         // Remove 'biweekly' marker if present for parsing
         const cronString = schedule.schedule_cron.replace(/\s+biweekly\s*$/, '').trim();
         const cronParts = cronString.split(' ');
         
         if (cronParts.length < 5) {
-          console.log('[Scheduler] Invalid cron expression:', schedule.schedule_cron, 'parsed:', cronString);
+          console.log("[Scheduler] Invalid cron expression:");
           continue;
         }
         
         const [minute, hour, dayOfMonth, month, dayOfWeek] = cronParts;
         
-        console.log('[Scheduler] Current time:', {
-          minute: currentMinute,
-          hour: currentHour,
-          dayOfWeek: currentDayOfWeek,
-          dayOfMonth: currentDayOfMonth
-        });
+        console.log("[Scheduler] Current time:");
         
-        console.log('[Scheduler] Cron parts:', {
-          minute,
-          hour,
-          dayOfMonth,
-          month,
-          dayOfWeek
-        });
+        console.log("[Scheduler] Cron parts:");
         
         // Check if current time matches cron expression
         const minuteMatch = minute === '*' || parseInt(minute) === currentMinute;
         const hourMatch = hour === '*' || parseInt(hour) === currentHour;
         const dayOfWeekMatch = dayOfWeek === '*' || parseInt(dayOfWeek) === currentDayOfWeek;
         
-        console.log('[Scheduler] Match results:', {
-          minuteMatch,
-          hourMatch,
-          dayOfWeekMatch
-        });
+        console.log("[Scheduler] Match results:");
         
         // For monthly schedules (day 1-7)
         let dayOfMonthMatch = dayOfMonth === '*';
@@ -239,7 +218,7 @@ export async function checkAndExecuteSchedules() {
           dayOfMonthMatch = true;
         }
         
-        console.log('[Scheduler] Day of month match:', dayOfMonthMatch);
+        console.log("[Scheduler] Day of month match:");
         
         if (minuteMatch && hourMatch && dayOfWeekMatch && dayOfMonthMatch) {
           // Check for biweekly schedules (cron expression contains 'biweekly')
@@ -253,11 +232,17 @@ export async function checkAndExecuteSchedules() {
             
             // Only send on even weeks (0, 2, 4, ...) from start date
             if (weeksSinceStart % 2 !== 0) {
-              console.log('[Scheduler] Biweekly schedule - skipping odd week:', schedule.id, schedule.name, `week ${weeksSinceStart} since`, startDate.toISOString());
+              // Preserve the existing invalid-date failure before logging.
+              startDate.toISOString();
+              console.log("[Scheduler] Biweekly schedule - skipping odd week:");
               continue;
             }
             
-            console.log('[Scheduler] Biweekly schedule - even week OK:', schedule.id, schedule.name, `week ${weeksSinceStart} since`, startDate.toISOString());
+            // Preserve the existing invalid-date failure before logging.
+
+            startDate.toISOString();
+
+            console.log("[Scheduler] Biweekly schedule - even week OK:");
           }
           
           // Check if already sent in the last hour to avoid duplicate sends
@@ -265,17 +250,17 @@ export async function checkAndExecuteSchedules() {
           const oneHourAgo = new Date(jstTime.getTime() - 60 * 60 * 1000);
           
           if (!lastSent || lastSent < oneHourAgo) {
-            console.log('[Scheduler] Executing schedule:', schedule.id, schedule.name);
+            console.log("[Scheduler] Executing schedule:");
             await executeScheduledBroadcast(schedule.id);
           } else {
-            console.log('[Scheduler] Schedule already sent recently:', schedule.id);
+            console.log("[Scheduler] Schedule already sent recently:");
           }
         }
       } catch (error) {
-        console.error('[Scheduler] Error processing schedule:', schedule.id, error);
+        console.error("[Scheduler] Error processing schedule:");
       }
     }
   } catch (error) {
-    console.error('[Scheduler] Error checking schedules:', error);
+    console.error("[Scheduler] Error checking schedules:");
   }
 }

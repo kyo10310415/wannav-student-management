@@ -14,17 +14,17 @@ app.get('/', async (c) => {
     let suspensions = [];
     try {
       suspensions = await fetchSuspensionData();
-      console.log(`✅ fetchSuspensionData succeeded: ${suspensions.length} records`);
+      console.log('✅ Suspension data loaded', { count: Number.isSafeInteger(suspensions.length) ? suspensions.length : 0 });
     } catch (error) {
-      console.error('⚠️ fetchSuspensionData failed:', error.message);
-      console.error('  Error code:', error.code);
-      console.error('  Error status:', error.status);
+      console.error('⚠️ fetchSuspensionData failed');
+      console.error('Suspension source error');
+      console.error('Suspension source unavailable');
       return c.json({
         success: true,
         data: [],
         count: 0,
         cache_error: true,
-        cache_error_message: error.message
+        cache_error_message: 'Suspension data could not be loaded'
       });
     }
     
@@ -34,10 +34,10 @@ app.get('/', async (c) => {
       count: suspensions.length
     });
   } catch (error) {
-    console.error('Error fetching suspension data:', error);
+    console.error('Error fetching suspension data');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Suspension data could not be loaded'
     }, 500);
   }
 });
