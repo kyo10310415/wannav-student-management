@@ -45,7 +45,7 @@ app.get('/', async (c) => {
     try {
       lessonStats = await calculateStudentLessonStats();
     } catch (error) {
-      console.warn('Warning: Could not calculate lesson stats for GET /students:', error.message);
+      console.warn('Warning: Could not calculate lesson stats for GET /students:');
     }
     
     // Calculate PRO plan continued months and merge lesson stats for each student
@@ -73,10 +73,10 @@ app.get('/', async (c) => {
       count: studentsWithStats.length
     });
   } catch (error) {
-    console.error('Error fetching students:', error);
+    console.error('Error fetching students:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -100,9 +100,9 @@ app.get('/sync', async (c) => {
     let syncMeta = null;
     try {
       syncMeta = await getCacheSyncTime(cacheSpreadsheetId);
-      console.log('Cache last sync:', syncMeta);
+      console.log('Cache sync metadata loaded');
     } catch (error) {
-      console.warn('Warning: Could not get cache sync time:', error.message);
+      console.warn('Warning: Could not get cache sync time:');
       // Continue without sync time
     }
     
@@ -112,7 +112,7 @@ app.get('/sync', async (c) => {
     try {
       students = await fetchStudentsFromCache(cacheSpreadsheetId);
     } catch (error) {
-      console.error('Error fetching students from cache:', error.message);
+      console.error('Error fetching students from cache:');
       // Google API が一時的に失敗した場合はDBの既存データで続行
       cacheUnavailable = true;
       console.warn('⚠️ Cache unavailable — skipping sync, using existing DB data');
@@ -145,7 +145,7 @@ app.get('/sync', async (c) => {
       progressMap = await fetchProgressFromCache(cacheSpreadsheetId);
       console.log(`Loaded ${Object.keys(progressMap).length} progress records`);
     } catch (error) {
-      console.warn('Warning: Could not fetch progress data:', error.message);
+      console.warn('Warning: Could not fetch progress data:');
       // Continue without progress data
     }
     
@@ -155,7 +155,7 @@ app.get('/sync', async (c) => {
       lessonStartDates = await fetchLessonStartDates();
       console.log(`Loaded ${Object.keys(lessonStartDates).length} lesson start dates`);
     } catch (error) {
-      console.warn('Warning: Could not fetch lesson start dates from external DB:', error.message);
+      console.warn('Warning: Could not fetch lesson start dates from external DB:');
       // Continue without lesson start dates
     }
     
@@ -171,7 +171,7 @@ app.get('/sync', async (c) => {
       studentTextTypeMap = await fetchStudentTextTypeMap();
       studentTextTypeSourceAvailable = true;
     } catch (error) {
-      console.warn('Warning: Could not fetch student text types:', error.message);
+      console.warn('Warning: Could not fetch student text types:');
     }
     
     // Get lesson statistics from lesson reports (優先使用)
@@ -180,7 +180,7 @@ app.get('/sync', async (c) => {
       lessonStats = await calculateStudentLessonStats();
       console.log(`Calculated lesson stats for ${Object.keys(lessonStats).length} students from lesson reports`);
     } catch (error) {
-      console.warn('Warning: Could not calculate lesson stats:', error.message);
+      console.warn('Warning: Could not calculate lesson stats:');
       // Continue without lesson stats
     }
     
@@ -300,7 +300,7 @@ app.get('/sync', async (c) => {
         );
         successCount++;
       } catch (error) {
-        console.error(`Error inserting student ${student.student_id}:`, error.message);
+        console.error('Error inserting student');
         errorCount++;
       }
     }
@@ -317,7 +317,7 @@ app.get('/sync', async (c) => {
         console.warn(`Cache missing ${missingStudents.length} students; preserving existing DB records and manually entered values`);
       }
     } catch (deleteCheckError) {
-      console.error('Error checking for missing students:', deleteCheckError.message);
+      console.error('Error checking for missing students:');
     }
 
     return c.json({
@@ -330,10 +330,10 @@ app.get('/sync', async (c) => {
       lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {
-    console.error('Error syncing students:', error);
+    console.error('Error syncing students:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -358,10 +358,10 @@ app.get('/tutor/:tutorName', async (c) => {
       count: result.rows.length
     });
   } catch (error) {
-    console.error('Error fetching students by tutor:', error);
+    console.error('Error fetching students by tutor:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -391,10 +391,10 @@ app.get('/wanami-usage-all', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching all Wanami usage counts:', error);
+    console.error('Error fetching all Wanami usage counts:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -425,10 +425,10 @@ app.get('/:id', async (c) => {
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error fetching student:', error);
+    console.error('Error fetching student:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -456,10 +456,10 @@ app.get('/:studentId/wanami-usage', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching Wanami usage count:', error);
+    console.error('Error fetching Wanami usage count:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -482,10 +482,10 @@ app.get('/:studentId/wanami-history', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching Wanami usage history:', error);
+    console.error('Error fetching Wanami usage history:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -539,10 +539,10 @@ app.patch('/:id/pro-plan', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error updating PRO plan start date:', error);
+    console.error('Error updating PRO plan start date:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Student operation failed'
     }, 500);
   }
 });
@@ -575,11 +575,10 @@ app.get('/debug-sheets', async (c) => {
       metadata
     });
   } catch (error) {
-    console.error('Error in debug-sheets:', error);
+    console.error('Error in debug-sheets:');
     return c.json({
       success: false,
-      error: error.message,
-      stack: error.stack
+      error: 'Student operation failed',
     }, 500);
   }
 });
