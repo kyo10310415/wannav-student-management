@@ -1,47 +1,43 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
-import { query } from './src/db/connection.js';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { validateNewPassword } from './src/security/passwordPolicy.js';
 
-/**
- * Create initial admin user
- * Usage: node create-admin.js <email> [password]
- */
-async function createAdmin() {
-  const email = process.argv[2] || 'admin@example.com';
-  const password = process.argv[3] || '1111';
-  
-  console.log(`Creating admin user: ${email}`);
-  
+/** Create an initial administrator without displaying credentials. */
+export async function createAdmin({ env = process.env, query, hash = bcrypt.hash, logger = console } = {}) {
+  const email = typeof env.ADMIN_EMAIL === 'string' ? env.ADMIN_EMAIL.trim().toLowerCase() : '';
+  const password = env.ADMIN_PASSWORD;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || validateNewPassword(password)) {
+    logger.error('ADMIN_EMAIL and a valid ADMIN_PASSWORD are required');
+    return 1;
+  }
+
   try {
-    // Check if user already exists
-    const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
-    
+    const runQuery = query || (await import('./src/db/connection.js')).query;
+    const existingUser = await runQuery('SELECT id FROM users WHERE email = $1', [email]);
     if (existingUser.rows.length > 0) {
-      console.log('❌ User already exists');
-      process.exit(1);
+      logger.error('Administrator creation refused: account already exists');
+      return 1;
     }
-    
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-    
-    // Create user
-    const result = await query(
+
+    const passwordHash = await hash(password, 10);
+    await runQuery(
       'INSERT INTO users (email, password_hash, role, must_change_password) VALUES ($1, $2, $3, $4) RETURNING id, email, role',
       [email, passwordHash, 'admin', true]
     );
-    
-    console.log('✅ Admin user created successfully:');
-    console.log(`   Email: ${result.rows[0].email}`);
-    console.log(`   Role: ${result.rows[0].role}`);
-    console.log(`   Password: ${password}`);
-    console.log('   Must change password on first login: yes');
-    
-    process.exit(0);
-    
+    logger.log('Administrator created; password change is required on first login');
+    return 0;
   } catch (error) {
-    console.error('❌ Error creating admin user:', error.message);
-    process.exit(1);
+    logger.error('Administrator creation failed');
+    return 1;
   }
 }
 
-createAdmin();
+export function isDirectInvocation(moduleUrl, entryPath = process.argv[1]) {
+  return Boolean(entryPath) && moduleUrl === pathToFileURL(resolve(entryPath)).href;
+}
+
+if (isDirectInvocation(import.meta.url)) {
+  process.exit(await createAdmin());
+}
