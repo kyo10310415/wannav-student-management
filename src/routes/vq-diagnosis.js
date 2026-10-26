@@ -27,10 +27,10 @@ app.get('/status', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ システム状態の取得エラー:', error);
+    console.error("❌ システム状態の取得エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -50,7 +50,7 @@ app.post('/toggle', async (c) => {
       [enabled ? 'true' : 'false']
     );
     
-    console.log(`✅ VQ診断通知システムを${enabled ? 'ON' : 'OFF'}にしました`);
+    console.log("[VQ diagnosis] Notification setting updated");
     
     return c.json({
       success: true,
@@ -58,10 +58,10 @@ app.post('/toggle', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ システム状態の更新エラー:', error);
+    console.error("❌ システム状態の更新エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -78,10 +78,10 @@ app.post('/check', async (c) => {
     return c.json(result);
     
   } catch (error) {
-    console.error('❌ VQ診断チェックエラー:', error);
+    console.error("❌ VQ診断チェックエラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -126,10 +126,10 @@ app.get('/history', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 履歴取得エラー:', error);
+    console.error("❌ 履歴取得エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -143,7 +143,7 @@ app.get('/student/:studentId', async (c) => {
   try {
     const studentId = c.req.param('studentId');
     
-    console.log(`📊 VQ診断履歴取得: ${studentId}`);
+    console.log("[VQ diagnosis] Student diagnosis history requested");
     
     // スプレッドシートから直接取得
     const results = await fetchVQDiagnosisByStudentId(studentId);
@@ -177,7 +177,7 @@ app.get('/student/:studentId', async (c) => {
       sheet_row_number: result.rowNumber
     }));
     
-    console.log(`✅ 取得件数: ${history.length}件 (${studentId})`);
+    console.log("[VQ diagnosis] Student diagnosis history loaded");
     
     return c.json({
       success: true,
@@ -187,10 +187,10 @@ app.get('/student/:studentId', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 生徒別履歴取得エラー:', error);
+    console.error("❌ 生徒別履歴取得エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -210,7 +210,7 @@ app.post('/resend-from-row', async (c) => {
       }, 400);
     }
     
-    console.log(`🔄 行 ${startRow} から再送信開始...`);
+    console.log("[VQ diagnosis] Row-range resend requested");
     
     // last_checked_rowを指定行の1つ前に設定
     await dbQuery(
@@ -231,10 +231,10 @@ app.post('/resend-from-row', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 再送信エラー:', error);
+    console.error("❌ 再送信エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -294,7 +294,7 @@ app.post('/resend/:id', async (c) => {
       [discordResponse?.id || null, id]
     );
     
-    console.log(`✅ 再送信成功: ${diagnosis.student_name}`);
+    console.log("[VQ diagnosis] Diagnosis resent");
     
     return c.json({
       success: true,
@@ -302,10 +302,10 @@ app.post('/resend/:id', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 再送信エラー:', error);
+    console.error("❌ 再送信エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -366,10 +366,10 @@ app.get('/images', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 画像設定取得エラー:', error);
+    console.error("❌ 画像設定取得エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -401,7 +401,7 @@ app.post('/images', async (c) => {
       [diagnosis_type, image_url]
     );
     
-    console.log(`✅ 画像設定保存: ${diagnosis_type} -> ${image_url}`);
+    console.log("[VQ diagnosis] Diagnosis image saved");
     
     return c.json({
       success: true,
@@ -409,10 +409,10 @@ app.post('/images', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 画像設定保存エラー:', error);
+    console.error("❌ 画像設定保存エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -437,7 +437,7 @@ app.delete('/images/:id', async (c) => {
       }, 404);
     }
     
-    console.log(`✅ 画像設定削除: ${result.rows[0].diagnosis_type}`);
+    console.log("[VQ diagnosis] Diagnosis image deleted");
     
     return c.json({
       success: true,
@@ -445,10 +445,10 @@ app.delete('/images/:id', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 画像設定削除エラー:', error);
+    console.error("❌ 画像設定削除エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -468,9 +468,11 @@ app.post('/test', async (c) => {
       }, 400);
     }
     
-    console.log('🧪 テスト送信開始...');
-    console.log(`📍 送信先: ${channelUrl.substring(0, 50)}...`);
-    console.log(`👤 ユーザーID: ${userId || 'なし'}`);
+    console.log("🧪 テスト送信開始...");
+    // Preserve the input-type check previously performed while logging.
+    channelUrl.substring(0, 50);
+    console.log("[VQ diagnosis] Test destination prepared");
+    console.log("[VQ diagnosis] Test recipient prepared");
     
     // スプレッドシートから全レコードを取得
     const { fetchVQDiagnosisResults } = await import('../services/sheetsService.js');
@@ -487,17 +489,17 @@ app.post('/test', async (c) => {
     const randomIndex = Math.floor(Math.random() * results.length);
     const selectedRecord = results[randomIndex];
     
-    console.log(`🎲 ランダム選択: 行 ${selectedRecord.rowNumber} (${selectedRecord.studentId})`);
-    console.log(`📊 スコア: SNS=${selectedRecord.snsAccuracy}%, 配信=${selectedRecord.streamingAccuracy}%, 収益=${selectedRecord.revenueAccuracy}%`);
+    console.log("[VQ diagnosis] Test diagnosis selected");
+    console.log("[VQ diagnosis] Test diagnosis scores loaded");
     
     // 過去の診断履歴を取得（推移グラフ用）
     const { fetchVQDiagnosisByStudentId } = await import('../services/sheetsService.js');
     let historyData = [];
     try {
       historyData = await fetchVQDiagnosisByStudentId(selectedRecord.studentId);
-      console.log(`📊 過去の診断履歴: ${historyData.length}件`);
+      console.log("[VQ diagnosis] Diagnosis history loaded");
     } catch (historyError) {
-      console.warn(`⚠️ 履歴取得エラー: ${historyError.message}`);
+      console.warn("[VQ diagnosis] Diagnosis history lookup failed");
     }
     
     // 診断タイプに対応する画像URLを取得
@@ -509,10 +511,10 @@ app.post('/test', async (c) => {
       );
       if (imageResult.rows.length > 0) {
         typeImageUrl = imageResult.rows[0].image_url;
-        console.log(`📷 診断タイプ画像: ${typeImageUrl}`);
+        console.log("[VQ diagnosis] Diagnosis image loaded");
       }
     } catch (imageError) {
-      console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
+      console.warn("[VQ diagnosis] Diagnosis image lookup failed");
     }
     
     // レーダーチャートを生成
@@ -524,9 +526,9 @@ app.post('/test', async (c) => {
         streamingAccuracy: selectedRecord.streamingAccuracy,
         revenueAccuracy: selectedRecord.revenueAccuracy
       });
-      console.log(`📊 レーダーチャート生成成功`);
+      console.log("[VQ diagnosis] Radar chart generated");
     } catch (chartError) {
-      console.warn(`⚠️ レーダーチャート生成エラー: ${chartError.message}`);
+      console.warn("[VQ diagnosis] Radar chart generation failed");
     }
     
     // 推移グラフを生成（2件以上の場合）
@@ -534,9 +536,9 @@ app.post('/test', async (c) => {
     if (historyData.length >= 2) {
       try {
         trendChartBuffer = await generateVQTrendChart(historyData);
-        console.log(`📈 推移グラフ生成成功: ${historyData.length}件`);
+        console.log("[VQ diagnosis] Trend chart generated");
       } catch (trendError) {
-        console.warn(`⚠️ 推移グラフ生成エラー: ${trendError.message}`);
+        console.warn("[VQ diagnosis] Trend chart generation failed");
       }
     }
     
@@ -554,20 +556,20 @@ app.post('/test', async (c) => {
     let details = selectedRecord.details || '（詳細なし）';
     
     // デバッグ: 取得データを確認
-    console.log(`📝 取得したデータ:`);
-    console.log(`  診断タイプ: ${selectedRecord.diagnosisType}`);
-    console.log(`  概要（元）: ${selectedRecord.overview ? selectedRecord.overview.length : 0}文字`);
-    console.log(`  詳細（元）: ${selectedRecord.details ? selectedRecord.details.length : 0}文字`);
+    console.log("[VQ diagnosis] Test diagnosis data prepared");
+    console.log("[VQ diagnosis] Diagnosis type prepared");
+    console.log("[VQ diagnosis] Diagnosis overview prepared");
+    console.log("[VQ diagnosis] Diagnosis details prepared");
     
     // 長すぎる場合は切り詰める
     if (overview.length > maxOverviewLength) {
       overview = overview.substring(0, maxOverviewLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
-      console.log(`  ⚠️ 概要を切り詰めました: ${maxOverviewLength}文字`);
+      console.log("[VQ diagnosis] Diagnosis overview truncated");
     }
     
     if (details.length > maxDetailsLength) {
       details = details.substring(0, maxDetailsLength) + '...\n\n（続きはスプレッドシートをご確認ください）';
-      console.log(`  ⚠️ 詳細を切り詰めました: ${maxDetailsLength}文字`);
+      console.log("[VQ diagnosis] Diagnosis details truncated");
     }
     
     // 概要と詳細の1行目にアンダーラインを追加
@@ -601,7 +603,7 @@ ${detailsWithUnderline}
 📊 合計点: ${selectedRecord.totalScore}点
 🧪 テスト送信 | 行番号: ${selectedRecord.rowNumber}`;
 
-    console.log(`📏 メッセージ長: ${messageContent.length}文字${messageContent.length > 1900 ? ' ⚠️ 長すぎ' : ' ✅'}`);
+    console.log("[VQ diagnosis] Message length checked");
 
     const message = {
       content: messageContent
@@ -619,7 +621,7 @@ ${detailsWithUnderline}
     );
     
     if (discordResponse.success) {
-      console.log('✅ テスト送信成功');
+      console.log("✅ テスト送信成功");
       return c.json({
         success: true,
         message: 'テスト送信が完了しました',
@@ -635,14 +637,14 @@ ${detailsWithUnderline}
         }
       });
     } else {
-      throw new Error(discordResponse.error || 'Discord送信失敗');
+      throw new Error('Discord送信失敗');
     }
     
   } catch (error) {
-    console.error('❌ テスト送信エラー:', error);
+    console.error("❌ テスト送信エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -656,7 +658,7 @@ app.post('/resend-from-row', async (c) => {
     const body = await c.req.json();
     const startRow = body.startRow || 595;
     
-    console.log(`🔄 VQ診断再送信開始: 行 ${startRow} から`);
+    console.log("[VQ diagnosis] Row-range resend requested");
     
     const checkAndSendVQDiagnosis = (await import('../jobs/vqDiagnosisChecker.js')).default;
     const result = await checkAndSendVQDiagnosis(startRow);
@@ -668,10 +670,10 @@ app.post('/resend-from-row', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ VQ診断再送信エラー:', error);
+    console.error("❌ VQ診断再送信エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -691,7 +693,7 @@ app.post('/resend-single-row', async (c) => {
       }, 400);
     }
     
-    console.log(`🔄 VQ診断 行 ${rowNumber} を単独再送信...`);
+    console.log("[VQ diagnosis] Single-row resend requested");
     
     // スプレッドシートから指定行のデータを取得（R列を無視）
     const { fetchVQDiagnosisResults } = await import('../services/sheetsService.js');
@@ -733,9 +735,9 @@ app.post('/resend-single-row', async (c) => {
     let historyData = [];
     try {
       historyData = await fetchVQDiagnosisByStudentId(result.studentId);
-      console.log(`📊 過去の診断履歴: ${historyData.length}件`);
+      console.log("[VQ diagnosis] Diagnosis history loaded");
     } catch (historyError) {
-      console.warn(`⚠️ 履歴取得エラー: ${historyError.message}`);
+      console.warn("[VQ diagnosis] Diagnosis history lookup failed");
     }
     
     // 診断タイプに対応する画像URLを取得
@@ -749,7 +751,7 @@ app.post('/resend-single-row', async (c) => {
         typeImageUrl = imageResult.rows[0].image_url;
       }
     } catch (imageError) {
-      console.warn(`⚠️ 画像URL取得エラー: ${imageError.message}`);
+      console.warn("[VQ diagnosis] Diagnosis image lookup failed");
     }
     
     // レーダーチャートを生成
@@ -762,7 +764,7 @@ app.post('/resend-single-row', async (c) => {
         revenueAccuracy: result.revenueAccuracy
       });
     } catch (chartError) {
-      console.warn(`⚠️ レーダーチャート生成エラー: ${chartError.message}`);
+      console.warn("[VQ diagnosis] Radar chart generation failed");
     }
     
     // 推移グラフを生成
@@ -771,7 +773,7 @@ app.post('/resend-single-row', async (c) => {
       try {
         trendChartBuffer = await generateVQTrendChart(historyData);
       } catch (trendError) {
-        console.warn(`⚠️ 推移グラフ生成エラー: ${trendError.message}`);
+        console.warn("[VQ diagnosis] Trend chart generation failed");
       }
     }
     
@@ -836,7 +838,7 @@ ${detailsWithUnderline}
     );
     
     if (!discordResponse.success) {
-      throw new Error(discordResponse.error || 'Discord送信失敗');
+      throw new Error('Discord送信失敗');
     }
     
     // R列に「完了」を記録
@@ -862,7 +864,7 @@ ${detailsWithUnderline}
       ]
     );
     
-    console.log(`✅ 行 ${rowNumber} の再送信成功: ${student.name}`);
+    console.log("[VQ diagnosis] Single-row resend completed");
     
     return c.json({
       success: true,
@@ -876,10 +878,10 @@ ${detailsWithUnderline}
     });
     
   } catch (error) {
-    console.error('❌ 単独行再送信エラー:', error);
+    console.error("❌ 単独行再送信エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
@@ -905,7 +907,7 @@ app.delete('/history/:id', async (c) => {
     }
     
     const deleted = result.rows[0];
-    console.log(`✅ 履歴削除成功: ${deleted.student_name} (${deleted.diagnosis_date})`);
+    console.log("[VQ diagnosis] Diagnosis history deleted");
     
     return c.json({
       success: true,
@@ -914,10 +916,10 @@ app.delete('/history/:id', async (c) => {
     });
     
   } catch (error) {
-    console.error('❌ 履歴削除エラー:', error);
+    console.error("❌ 履歴削除エラー:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'VQ diagnosis operation failed'
     }, 500);
   }
 });
