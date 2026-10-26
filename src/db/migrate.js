@@ -1818,8 +1818,8 @@ async function runMigrations() {
     
     console.log('All migrations completed successfully');
   } catch (error) {
-    console.error('Migration failed:', error);
-    throw error;
+    console.error('Database migration failed');
+    throw new Error('Database migration failed');
   }
 }
 
@@ -1831,7 +1831,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(0);
     })
     .catch((error) => {
-      console.error('Migration process failed:', error);
+      console.error('Migration process failed');
       process.exit(1);
     });
 }
