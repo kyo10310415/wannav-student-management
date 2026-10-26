@@ -55,24 +55,6 @@ app.get('/stats', async (c) => {
     const students = studentsResult.rows;
     console.log('  アクティブ生徒数:', students.length);
     
-    // Debug: Show sample student data
-    if (students.length > 0) {
-      console.log('  サンプル生徒データ:', {
-        student_id: students[0].student_id,
-        continued_months: students[0].continued_months,
-        status: students[0].status,
-        contract_plan: students[0].contract_plan
-      });
-    }
-    
-    // Debug: Count students by continued_months
-    const monthsDistribution = {};
-    students.forEach(s => {
-      const months = s.continued_months || 0;
-      monthsDistribution[months] = (monthsDistribution[months] || 0) + 1;
-    });
-    console.log('  継続月数分布:', monthsDistribution);
-
     // 延長審査データマップ作成
     const extensionMap = {};
     extensionData.forEach(ext => {
@@ -180,7 +162,7 @@ app.get('/stats', async (c) => {
       }
     };
 
-    console.log('  ✅ Stats calculated:', stats);
+    console.log('  ✅ Extension stats calculated');
 
     return c.json({
       success: true,
@@ -188,12 +170,10 @@ app.get('/stats', async (c) => {
     });
 
   } catch (error) {
-    console.error('❌ Error fetching extension stats:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Extension statistics could not be loaded');
     return c.json({
       success: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: 'Extension statistics could not be loaded'
     }, 500);
   }
 });
@@ -314,12 +294,10 @@ app.get('/by-tutor', async (c) => {
     });
 
   } catch (error) {
-    console.error('❌ Error fetching extension data by tutor:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Extension tutor statistics could not be loaded');
     return c.json({
       success: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: 'Extension tutor statistics could not be loaded'
     }, 500);
   }
 });
@@ -461,12 +439,10 @@ app.get('/by-team', async (c) => {
     });
 
   } catch (error) {
-    console.error('❌ Error fetching extension data by team:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Extension team statistics could not be loaded');
     return c.json({
       success: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: 'Extension team statistics could not be loaded'
     }, 500);
   }
 });

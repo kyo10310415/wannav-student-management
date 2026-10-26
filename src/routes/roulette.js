@@ -79,7 +79,7 @@ app.post('/generate', async (c) => {
         RETURNING id, achievement_date
       `, [rouletteUrl, existingAchievement.rows[0].id]);
       achievement = updateResult.rows[0];
-      console.log(`[Roulette] Updated existing achievement record ${achievement.id} for ${studentId}`);
+      console.log("[Roulette] Existing achievement updated");
     } else {
       // 新規作成
       const insertResult = await pool.query(`
@@ -89,10 +89,10 @@ app.post('/generate', async (c) => {
         RETURNING id, achievement_date
       `, [studentId, achievementType, rouletteUrl]);
       achievement = insertResult.rows[0];
-      console.log(`[Roulette] Created new achievement record ${achievement.id} for ${studentId}`);
+      console.log("[Roulette] Achievement created");
     }
 
-    console.log(`[Roulette] URL generated for ${studentId}: ${rouletteUrl}`);
+    console.log("[Roulette] Capability URL generated");
 
     return c.json({
       success: true,
@@ -108,10 +108,10 @@ app.post('/generate', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error generating roulette URL:', error);
+    console.error("Error generating roulette URL:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -201,10 +201,10 @@ app.get('/verify/:token', async (c) => {
       expiresAt
     });
   } catch (error) {
-    console.error('Error verifying roulette token:', error);
+    console.error("Error verifying roulette token:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -357,12 +357,12 @@ app.post('/spin', async (c) => {
             embeds: [embed]
           });
 
-          console.log(`[Roulette] Win notification sent to Discord for ${achievement.student_id}`);
+          console.log("[Roulette] Win notification sent");
         } else {
-          console.warn('[Roulette] Discord webhook is not configured; notification skipped');
+          console.warn("[Roulette] Discord webhook is not configured; notification skipped");
         }
       } catch (notificationError) {
-        console.error('[Roulette] Failed to send Discord notification');
+        console.error("[Roulette] Failed to send Discord notification");
         // Continue even if notification fails
       }
     }
@@ -374,7 +374,7 @@ app.post('/spin', async (c) => {
       WHERE id = $1
     `, [achievement.achievement_id]);
 
-    console.log(`[Roulette] ${achievement.student_id} - ${result} (${probability}%)`);
+    console.log("[Roulette] Draw completed");
 
     return c.json({
       success: true,
@@ -388,10 +388,10 @@ app.post('/spin', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error spinning roulette:', error);
+    console.error("Error spinning roulette:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -421,7 +421,7 @@ app.get('/result/:studentId', async (c) => {
         LIMIT 1
       `, [studentId]);
     } catch (error) {
-      console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
+      console.error("[Roulette] Error with is_test filter, using fallback query:");
       // Fallback to query without is_test column
       result = await pool.query(`
         SELECT 
@@ -450,10 +450,10 @@ app.get('/result/:studentId', async (c) => {
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error fetching roulette result:', error);
+    console.error("Error fetching roulette result:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -512,7 +512,7 @@ app.post('/test-draw', async (c) => {
         RETURNING id, result, probability, created_at
       `, [studentId, result, probability, 'test-draw-' + Date.now(), true]);
     } catch (error) {
-      console.error('[Roulette TEST] Error inserting with is_test column:', error.message);
+      console.error("[Roulette TEST] Error inserting with is_test column:");
       // Fallback to insert without is_test column
       insertResult = await pool.query(`
         INSERT INTO roulette_results 
@@ -524,7 +524,7 @@ app.post('/test-draw', async (c) => {
 
     const rouletteResult = insertResult.rows[0];
 
-    console.log(`[Roulette TEST] ${studentId} (${student.name}) - ${result} (${probability}%) - NO DISCORD NOTIFICATION`);
+    console.log("[Roulette] Test draw completed");
 
     return c.json({
       success: true,
@@ -539,10 +539,10 @@ app.post('/test-draw', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error in test draw:', error);
+    console.error("Error in test draw:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -564,7 +564,7 @@ app.post('/reset-test-results', async (c) => {
         RETURNING student_id
       `);
     } catch (error) {
-      console.error('[Roulette] Error deleting with is_test column:', error.message);
+      console.error("[Roulette] Error deleting with is_test column:");
       // Fallback: roulette_url が 'test-draw-' で始まるものを削除
       deleteResult = await pool.query(`
         DELETE FROM roulette_results
@@ -576,7 +576,7 @@ app.post('/reset-test-results', async (c) => {
     const deletedCount = deleteResult.rows.length;
     const deletedStudents = [...new Set(deleteResult.rows.map(r => r.student_id))];
     
-    console.log(`[Roulette] Deleted ${deletedCount} test results for ${deletedStudents.length} students`);
+    console.log("[Roulette] Test results deleted");
     
     return c.json({
       success: true,
@@ -587,10 +587,10 @@ app.post('/reset-test-results', async (c) => {
       }
     });
   } catch (error) {
-    console.error('[Roulette] Error resetting test results:', error);
+    console.error("[Roulette] Error resetting test results:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -635,7 +635,7 @@ app.get('/winners', async (c) => {
         ORDER BY r.student_id, r.created_at DESC
       `);
     } catch (error) {
-      console.error('[Roulette] Error with query, using fallback:', error.message);
+      console.error("[Roulette] Error with query, using fallback:");
       // Fallback without is_test column (but keep completed_at)
       result = await pool.query(`
         SELECT DISTINCT ON (r.student_id)
@@ -691,7 +691,7 @@ app.get('/winners', async (c) => {
       };
     });
 
-    console.log(`[Roulette] Found ${winners.length} ${tab} winners`);
+    console.log("[Roulette] Winners loaded");
 
     return c.json({
       success: true,
@@ -699,10 +699,10 @@ app.get('/winners', async (c) => {
       count: winners.length
     });
   } catch (error) {
-    console.error('Error fetching winners:', error);
+    console.error("Error fetching winners:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -716,7 +716,7 @@ app.patch('/winners/:id', async (c) => {
     const { id } = c.req.param();
     const { consultationStaff, status, completedAt } = await c.req.json();
     
-    console.log(`[Roulette PATCH] Updating winner ${id}:`, { consultationStaff, status, completedAt });
+    console.log("[Roulette] Winner update requested");
     
     const pool = getPool();
     
@@ -728,10 +728,10 @@ app.patch('/winners/:id', async (c) => {
       `);
     } catch (err) {
       hasCompletedAtColumn = false;
-      console.warn('[Roulette] completed_at column not available');
+      console.warn("[Roulette] completed_at column not available");
     }
     
-    console.log('[Roulette PATCH] hasCompletedAtColumn:', hasCompletedAtColumn);
+    console.log("[Roulette PATCH] hasCompletedAtColumn:");
     
     // Build update query dynamically
     const updates = [];
@@ -750,7 +750,7 @@ app.patch('/winners/:id', async (c) => {
       // If status is being changed to '実施済み', set completed_at to current time
       if (status === '実施済み' && hasCompletedAtColumn) {
         updates.push(`completed_at = CURRENT_TIMESTAMP`);
-        console.log('[Roulette PATCH] Adding completed_at = CURRENT_TIMESTAMP');
+        console.log("[Roulette PATCH] Adding completed_at = CURRENT_TIMESTAMP");
       }
     }
     
@@ -764,7 +764,7 @@ app.patch('/winners/:id', async (c) => {
       
       updates.push(`completed_at = $${paramIndex++}`);
       values.push(completedAt);
-      console.log('[Roulette PATCH] Setting completed_at to:', completedAt);
+      console.log("[Roulette PATCH] Setting completed_at to:");
     }
     
     if (updates.length === 0) {
@@ -783,8 +783,8 @@ app.patch('/winners/:id', async (c) => {
       RETURNING id, consultation_staff, status${hasCompletedAtColumn ? ', completed_at' : ''}
     `;
     
-    console.log('[Roulette PATCH] Query:', query);
-    console.log('[Roulette PATCH] Values:', values);
+    console.log("[Roulette PATCH] Query:");
+    console.log("[Roulette PATCH] Values:");
     
     const result = await pool.query(query, values);
     
@@ -795,17 +795,17 @@ app.patch('/winners/:id', async (c) => {
       }, 404);
     }
     
-    console.log(`[Roulette PATCH] Updated winner ${id} result:`, result.rows[0]);
+    console.log("[Roulette] Winner updated");
     
     return c.json({
       success: true,
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('[Roulette PATCH] Error updating winner:', error);
+    console.error("[Roulette PATCH] Error updating winner:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -842,7 +842,7 @@ app.get('/losers', async (c) => {
         ORDER BY r.student_id, r.created_at DESC
       `);
     } catch (error) {
-      console.error('[Roulette] Error with is_test filter, using fallback query:', error.message);
+      console.error("[Roulette] Error with is_test filter, using fallback query:");
       result = await pool.query(`
         SELECT DISTINCT ON (r.student_id)
           r.id,
@@ -885,7 +885,7 @@ app.get('/losers', async (c) => {
       };
     });
 
-    console.log(`[Roulette] Found ${losers.length} losers`);
+    console.log("[Roulette] Losers loaded");
 
     return c.json({
       success: true,
@@ -893,10 +893,10 @@ app.get('/losers', async (c) => {
       count: losers.length
     });
   } catch (error) {
-    console.error('Error fetching losers:', error);
+    console.error("Error fetching losers:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -953,7 +953,7 @@ app.get('/unopened', async (c) => {
       };
     });
 
-    console.log(`[Roulette] Found ${unopened.length} unopened`);
+    console.log("[Roulette] Unopened achievements loaded");
 
     return c.json({
       success: true,
@@ -961,10 +961,10 @@ app.get('/unopened', async (c) => {
       count: unopened.length
     });
   } catch (error) {
-    console.error('Error fetching unopened:', error);
+    console.error("Error fetching unopened:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -1028,7 +1028,7 @@ app.post('/test-send', async (c) => {
       VALUES ($1, $2, CURRENT_DATE, $3, CURRENT_TIMESTAMP)
     `, [studentId, 'test_send', rouletteUrl]);
 
-    console.log(`[Roulette Test] Achievement record created for ${studentId}`);
+    console.log("[Roulette] Test achievement created");
 
     // Discord通知を送信（sendStampRallyNotificationと同じロジックだが、テスト用）
     const { sendDiscordMessage } = await import('../services/discordService.js');
@@ -1059,7 +1059,7 @@ ${rouletteUrl}
     const result = await sendDiscordMessage(channelUrl, message);
 
     if (result.success) {
-      console.log(`[Roulette Test] Test notification sent to channel ${channelUrl} mentioning user ${discordUserId}`);
+      console.log("[Roulette] Test notification sent");
       
       return c.json({
         success: true,
@@ -1081,10 +1081,10 @@ ${rouletteUrl}
     }
 
   } catch (error) {
-    console.error('Error sending test notification:', error);
+    console.error("Error sending test notification:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });
@@ -1107,7 +1107,7 @@ app.post('/fix-completed-dates', async (c) => {
       LIMIT 10
     `);
     
-    console.log('[Roulette Fix] Current 実施済み records:', JSON.stringify(checkResult.rows, null, 2));
+    console.log("[Roulette Fix] Current 実施済み records:");
     
     // Update all records with status='実施済み' but completed_at=NULL
     const result = await pool.query(`
@@ -1117,7 +1117,7 @@ app.post('/fix-completed-dates', async (c) => {
       RETURNING id, student_id, status, completed_at
     `);
     
-    console.log(`[Roulette Fix] Updated ${result.rows.length} records with completed_at`);
+    console.log("[Roulette] Completion dates updated");
     
     return c.json({
       success: true,
@@ -1126,10 +1126,10 @@ app.post('/fix-completed-dates', async (c) => {
       updated: result.rows
     });
   } catch (error) {
-    console.error('Error fixing completed dates:', error);
+    console.error("Error fixing completed dates:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Roulette operation failed'
     }, 500);
   }
 });

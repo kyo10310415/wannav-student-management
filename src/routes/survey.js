@@ -241,7 +241,7 @@ async function getSurveyResponseCounts() {
     console.log(`[Survey] Survey response counts fetched and cached for ${Object.keys(surveyResponseCache).length} students`);
     return surveyResponseCache;
   } catch (error) {
-    console.error('[Survey] Error fetching survey response counts:', error);
+    console.error('[Survey] Error fetching survey response counts:');
     return surveyResponseCache || {}; // Return old cache if available
   }
 }
@@ -271,7 +271,7 @@ async function getCurrentMonthResponders() {
     console.log(`[Survey] Current month responders fetched and cached: ${currentMonthRespondersCache.size} students`);
     return currentMonthRespondersCache;
   } catch (error) {
-    console.error('[Survey] Error fetching current month responders:', error);
+    console.error('[Survey] Error fetching current month responders:');
     return currentMonthRespondersCache || new Set(); // Return old cache if available
   }
 }
@@ -307,7 +307,7 @@ app.get('/debug/:studentId', async (c) => {
       try {
         extensionResultsFromCache = await fetchExtensionResultsFromCache(cacheSpreadsheetId);
       } catch (error) {
-        console.error('[Survey Debug] Failed to load extension results from cache:', error.message);
+        console.error('[Survey Debug] Failed to load extension results from cache:');
       }
     }
     
@@ -484,10 +484,10 @@ app.get('/debug/:studentId', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error in survey debug:', error);
+    console.error('Error in survey debug:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -518,10 +518,10 @@ app.get('/responses/:studentId', async (c) => {
       data: result.rows
     });
   } catch (error) {
-    console.error('Error fetching survey responses:', error);
+    console.error('Error fetching survey responses:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -549,7 +549,7 @@ app.get('/stats-all', async (c) => {
         monthlyResponseHistory = await fetchMonthlyResponseHistory(satisfactionSpreadsheetId);
         console.log(`[Survey] Monthly response history loaded: ${monthlyResponseHistory.size} students`);
       } catch (error) {
-        console.error('[Survey] Failed to load monthly response history:', error.message);
+        console.error('[Survey] Failed to load monthly response history:');
       }
     }
     
@@ -581,7 +581,7 @@ app.get('/stats-all', async (c) => {
         extensionResultsFromCache = await fetchExtensionResultsFromCache(cacheSpreadsheetId);
         console.log(`[Survey] Extension results loaded from cache: ${Object.keys(extensionResultsFromCache).length} students`);
       } catch (error) {
-        console.error('[Survey] Failed to load extension results from cache:', error.message);
+        console.error('[Survey] Failed to load extension results from cache:');
       }
     }
     
@@ -618,7 +618,7 @@ app.get('/stats-all', async (c) => {
       `);
       console.log(`[Survey] Roulette results fetched: ${rouletteResult.rows.length} records`);
     } catch (error) {
-      console.error('[Survey] Error fetching roulette results:', error.message);
+      console.error('[Survey] Error fetching roulette results:');
       // If is_test column doesn't exist yet, fallback to simple query
       // Exclude test draws by checking roulette_url prefix
       rouletteResult = await pool.query(`
@@ -652,7 +652,7 @@ app.get('/stats-all', async (c) => {
         `);
         extensionResults = extResult.rows;
       } catch (error) {
-        console.warn('[Survey] Extension DB not available:', error.message);
+        console.warn('[Survey] Extension DB not available:');
       }
     }
     
@@ -688,13 +688,6 @@ app.get('/stats-all', async (c) => {
       
       // Debug: Log first 3 students
       if (debugCount < 3) {
-        console.log(`[Survey Debug] Student: "${studentName}" (${studentId})`);
-        console.log(`  - DB Student ID: "${studentId}"`);
-        console.log(`  - Normalized ID: "${normalizedStudentId}"`);
-        console.log(`  - Spreadsheet match: ${surveyResponseCounts[normalizedStudentId] !== undefined ? 'YES' : 'NO'}`);
-        console.log(`  - Response count: ${responseCount}`);
-        console.log(`  - Responded this month: ${respondedThisMonth ? 'YES' : 'NO'}`);
-        console.log(`  - Extension result (cache): ${extensionResultsFromCache[normalizedStudentId]}`);
         debugCount++;
       }
       
@@ -814,10 +807,10 @@ app.get('/stats-all', async (c) => {
       data: statsMap
     });
   } catch (error) {
-    console.error('Error fetching bulk survey stats:', error);
+    console.error('Error fetching bulk survey stats:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -868,17 +861,17 @@ app.post('/responses', async (c) => {
       RETURNING id, student_id, response_month, responded_at, created_at
     `, [studentId, responseMonth]);
 
-    console.log(`[Survey] Response recorded: ${studentId} - ${responseMonth}`);
+    console.log('[Survey] Response recorded');
 
     return c.json({
       success: true,
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error recording survey response:', error);
+    console.error('Error recording survey response:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -942,7 +935,7 @@ app.get('/stats/:studentId', async (c) => {
         LIMIT 1
       `, [studentId]);
     } catch (error) {
-      console.error('[Survey] Error fetching roulette result with is_test filter:', error.message);
+      console.error('[Survey] Error fetching roulette result with is_test filter:');
       // Fallback to query without is_test column
       rouletteResult = await pool.query(`
         SELECT 
@@ -976,7 +969,7 @@ app.get('/stats/:studentId', async (c) => {
             : extResult.rows[0].examination_result_2;
         }
       } catch (error) {
-        console.warn('Could not fetch extension result:', error.message);
+        console.warn('Could not fetch extension result:');
       }
     }
 
@@ -999,10 +992,10 @@ app.get('/stats/:studentId', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching survey stats:', error);
+    console.error('Error fetching survey stats:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -1061,7 +1054,7 @@ app.get('/eligible-students', async (c) => {
           extensionMap[ext.student_id] = ext;
         });
       } catch (error) {
-        console.warn('Could not fetch extension data:', error.message);
+        console.warn('Could not fetch extension data:');
       }
     }
 
@@ -1091,7 +1084,6 @@ app.get('/eligible-students', async (c) => {
       const eligibility = await checkEligibility(student, responseCount, responseRate, extensionResult, pool, studentResponseMonths);
 
       // デバッグ: 全生徒のログ出力
-      console.log(`[Survey Debug] ${student.student_id} (${student.name}): eligible=${eligibility.isEligible}, reason=${eligibility.reason}, type=${eligibility.achievementType || 'N/A'}, months=${continuedMonths}, rate=${responseRate}%, responses=${responseCount}`);
 
       if (eligibility.isEligible) {
         eligibleStudents.push({
@@ -1114,10 +1106,10 @@ app.get('/eligible-students', async (c) => {
       data: eligibleStudents
     });
   } catch (error) {
-    console.error('Error fetching eligible students:', error);
+    console.error('Error fetching eligible students:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -1170,11 +1162,9 @@ async function checkEligibility(student, responseCount, responseRate, extensionR
       return monthDate > achievementDate;
     });
     
-    console.log(`[Survey Debug] ${student.student_id}: Achievement date = ${achievementDate.toISOString().split('T')[0]}, Responses after = ${responsesAfterAchievement.length}, Months = [${responsesAfterAchievement.join(', ')}]`);
     
     // 達成日以降の6ヶ月連続回答チェック（リセット後）
     const consecutiveMonths = checkConsecutiveMonthsFromSpreadsheet(new Set(responsesAfterAchievement));
-    console.log(`[Survey Debug] ${student.student_id}: Consecutive months after achievement = ${consecutiveMonths}`);
     
     if (consecutiveMonths >= 6) {
       return { 
@@ -1288,10 +1278,10 @@ app.post('/check-stamp-rally', async (c) => {
       total: result.total
     });
   } catch (error) {
-    console.error('[Survey] Error in manual stamp rally check:', error);
+    console.error('[Survey] Error in manual stamp rally check:');
     return c.json({
       success: false,
-      error: error.message,
+      error: 'Survey operation failed',
       sent: 0,
       errors: 0
     }, 500);
@@ -1363,13 +1353,12 @@ app.post('/test-discord-webhook', async (c) => {
       }]
     };
     
-    console.log(`[Survey] Testing Discord webhook for ${studentId}`);
-    console.log(`[Survey] Webhook URL: ${webhookUrl.substring(0, 50)}...`);
+    console.log('[Survey] Testing Discord webhook');
     
     const axios = (await import('axios')).default;
     const response = await axios.post(webhookUrl, testMessage);
     
-    console.log(`[Survey] Discord response: status=${response.status}, data=${JSON.stringify(response.data)}`);
+    console.log('[Survey] Discord webhook request completed');
     
     return c.json({
       success: true,
@@ -1379,14 +1368,14 @@ app.post('/test-discord-webhook', async (c) => {
     });
     
   } catch (error) {
-    console.error('[Survey] Error testing Discord webhook:', error);
+    console.error('[Survey] Error testing Discord webhook:');
     if (error.response) {
-      console.error(`[Survey] Discord API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      console.error('[Survey] Discord API request failed');
     }
     return c.json({
       success: false,
-      error: error.message,
-      discordError: error.response?.data
+      error: 'Survey operation failed',
+      discordError: 'Discord webhook request failed'
     }, 500);
   }
 });
@@ -1426,10 +1415,10 @@ app.post('/reset-failed-notifications', async (c) => {
       studentIds: result.rows.map(r => r.student_id)
     });
   } catch (error) {
-    console.error('[Survey] Error resetting failed notifications:', error);
+    console.error('[Survey] Error resetting failed notifications:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
@@ -1452,10 +1441,10 @@ app.post('/clear-cache', async (c) => {
       message: 'Survey response cache cleared successfully'
     });
   } catch (error) {
-    console.error('[Survey] Error clearing cache:', error);
+    console.error('[Survey] Error clearing cache:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Survey operation failed'
     }, 500);
   }
 });
