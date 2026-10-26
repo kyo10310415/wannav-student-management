@@ -370,8 +370,7 @@ app.get('/jobs/:jobId', async (c) => {
   try {
     const user = c.get('user');
     const jobId = c.req.param('jobId');
-    await reconcileStaleBroadcastJobs();
-    const job = await getBroadcastJobStatus(jobId);
+    let job = await getBroadcastJobStatus(jobId);
 
     if (!job) {
       return c.json({ success: false, error: 'Job not found' }, 404);
@@ -379,6 +378,9 @@ app.get('/jobs/:jobId', async (c) => {
     if (user.role === 'crew' && job.created_by !== user.email) {
       return c.json({ success: false, error: 'この送信ジョブを表示する権限がありません' }, 403);
     }
+    await reconcileStaleBroadcastJobs(jobId);
+    job = await getBroadcastJobStatus(jobId);
+    if (!job) return c.json({ success: false, error: 'Job not found' }, 404);
 
     return c.json({
       success: true,

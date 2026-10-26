@@ -12,7 +12,7 @@ export function validateDiscordWebhook(value) {
 // Test delivery never loads real student, lesson or meeting data.
 export function createWebhookTestHandler({ query, post }) {
   return async c => {
-    if (c.get('user')?.role !== 'admin') return c.json({ success: false, error: '管理者権限が必要です' }, 403);
+    if (c.get('authenticatedUser')?.role !== 'admin') return c.json({ success: false, error: '管理者権限が必要です' }, 403);
     let body;
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: 'Invalid request' }, 400); }
     let records;
