@@ -46,7 +46,7 @@ export async function checkStampRallyAchievements() {
         }
         // achievementTypeが空の生徒をログ出力
         if (!stats.isEligible.achievementType) {
-          console.warn(`[StampRally] Warning: ${studentId} has no achievementType. isEligible:`, JSON.stringify(stats.isEligible));
+          console.warn('[StampRally] Eligible entry has no achievement type');
           return false; // achievementTypeがない場合は除外
         }
         return true;
@@ -80,7 +80,7 @@ export async function checkStampRallyAchievements() {
 
         // 既に達成記録があり、通知済みならスキップ
         if (achievementResult.rows.length > 0 && achievementResult.rows[0].notified_at) {
-          console.log(`[StampRally] ${student.studentId} already notified`);
+          console.log('[StampRally] Achievement already notified');
           continue;
         }
 
@@ -91,7 +91,7 @@ export async function checkStampRallyAchievements() {
         });
 
         if (!generateResponse.data.success) {
-          console.error(`[StampRally] Failed to generate roulette URL for ${student.studentId}: ${generateResponse.data.error || 'Unknown error'}`);
+          console.error('[StampRally] Failed to generate roulette URL');
           errors++;
           continue;
         }
@@ -108,7 +108,7 @@ export async function checkStampRallyAchievements() {
 
         if (notified) {
           notificationsSent++;
-          console.log(`[StampRally] Notification sent to ${student.studentId} (${notificationsSent}/${eligibleStudents.length})`);
+          console.log(`[StampRally] Notifications sent: ${notificationsSent}/${eligibleStudents.length}`);
         } else {
           errors++;
         }
@@ -117,8 +117,7 @@ export async function checkStampRallyAchievements() {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
       } catch (error) {
-        const errorDetail = error.response?.data?.error || error.message;
-        console.error(`[StampRally] Error processing ${student.studentId}: ${errorDetail}`);
+        console.error('[StampRally] Error processing achievement');
         errors++;
         
         // Wait even on error to avoid hammering the API
@@ -135,10 +134,10 @@ export async function checkStampRallyAchievements() {
       total: eligibleStudents.length
     };
   } catch (error) {
-    console.error('[StampRally] Error in daily achievement check:', error);
+    console.error('[StampRally] Error in daily achievement check');
     return {
       success: false,
-      error: error.message,
+      error: 'Stamp rally achievement check failed',
       sent: 0,
       errors: 0,
       total: 0
@@ -161,7 +160,7 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
     `, [studentId]);
 
     if (studentResult.rows.length === 0) {
-      console.error(`[StampRally] Student ${studentId} not found`);
+      console.error('[StampRally] Notification student not found');
       return false;
     }
 
@@ -169,18 +168,16 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
     const channelUrl = student.discord_url;
 
     if (!channelUrl) {
-      console.error(`[StampRally] No Discord channel URL for ${studentId}`);
+      console.error('[StampRally] No Discord channel URL configured');
       return false;
     }
 
-    console.log(`[StampRally] 📤 Sending Discord notification to ${studentId} (${studentName})`);
-    console.log(`[StampRally] Channel URL: ${channelUrl.substring(0, 50)}...`);
+    console.log('[StampRally] Sending Discord notification');
     
     // Discord Botを使ってチャンネルに送信
     const { sendStampRallyNotification: sendDiscordMessage } = await import('./discordService.js');
     const result = await sendDiscordMessage(channelUrl, studentName, rouletteUrl);
 
-    console.log(`[StampRally] Discord send result:`, result);
 
     // Discord送信が成功した場合のみ、通知日時を更新
     if (result.success) {
@@ -191,15 +188,15 @@ async function sendStampRallyNotification(studentId, studentName, rouletteUrl, p
           AND notified_at IS NULL
       `, [studentId]);
 
-      console.log(`[StampRally] ✅ Discord notification sent to ${studentId} (${studentName})`);
+      console.log('[StampRally] Discord notification sent');
       return true;
     } else {
-      console.error(`[StampRally] ❌ Discord send failed for ${studentId}: ${result.error || result.reason}`);
+      console.error('[StampRally] Discord send failed');
       return false;
     }
 
   } catch (error) {
-    console.error(`[StampRally] ❌ Error sending Discord notification to ${studentId}:`, error.message);
+    console.error('[StampRally] Error sending Discord notification');
     return false;
   }
 }
@@ -215,14 +212,14 @@ export async function recordSurveyResponse(studentId, responseMonth) {
     });
 
     if (response.data.success) {
-      console.log(`[StampRally] Response recorded: ${studentId} - ${responseMonth}`);
+      console.log('[StampRally] Response recorded');
       return true;
     } else {
-      console.error(`[StampRally] Failed to record response: ${response.data.error}`);
+      console.error('[StampRally] Failed to record response');
       return false;
     }
   } catch (error) {
-    console.error(`[StampRally] Error recording response:`, error.message);
+    console.error('[StampRally] Error recording response');
     return false;
   }
 }

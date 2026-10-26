@@ -48,7 +48,7 @@ async function fetchCurrentMonthResponders(spreadsheetId) {
     return responders;
     
   } catch (error) {
-    console.error('[Survey Reminder] Error fetching current month responders:', error.message);
+    console.error('[Survey Reminder] Error fetching current month responders');
     return new Set();
   }
 }
@@ -102,7 +102,7 @@ export async function sendSurveyReminderNotifications() {
         currentMonthResponders = await fetchCurrentMonthResponders(satisfactionSpreadsheetId);
         console.log(`[Survey Reminder] Current month responders: ${currentMonthResponders.size}`);
       } catch (error) {
-        console.error('[Survey Reminder] Failed to fetch current month responders:', error.message);
+        console.error('[Survey Reminder] Failed to fetch current month responders');
       }
     }
     
@@ -134,7 +134,7 @@ export async function sendSurveyReminderNotifications() {
         const hasResponded = currentMonthResponders.has(normalizedId);
         
         if (hasResponded) {
-          console.log(`[Survey Reminder] ${student.student_id} (${student.name}) - Already responded this month, skipping`);
+          console.log('[Survey Reminder] Already responded this month, skipping');
           continue;
         }
         
@@ -147,7 +147,7 @@ export async function sendSurveyReminderNotifications() {
         `, [student.student_id, targetDate]);
         
         if (existingNotification.rows.length > 0) {
-          console.log(`[Survey Reminder] ${student.student_id} - Already notified, skipping`);
+          console.log('[Survey Reminder] Already notified, skipping');
           continue;
         }
         
@@ -186,13 +186,13 @@ https://forms.gle/8ezQkdUheP82F2r2A
         `, [student.student_id, targetDate, 'survey_reminder_12h', response.data?.id || null, 'sent']);
         
         notificationsSent++;
-        console.log(`[Survey Reminder] ✅ Sent to ${student.student_id} (${student.name})`);
+        console.log('[Survey Reminder] Notification sent');
         
         // Rate limiting: 1 message per second
         await new Promise(resolve => setTimeout(resolve, 1000));
         
       } catch (error) {
-        console.error(`[Survey Reminder] ❌ Failed to send to ${student.student_id}:`, error.message);
+        console.error('[Survey Reminder] Notification failed');
         
         // エラーを記録
         try {
@@ -205,9 +205,9 @@ https://forms.gle/8ezQkdUheP82F2r2A
               status = EXCLUDED.status,
               error_message = EXCLUDED.error_message,
               sent_at = CURRENT_TIMESTAMP
-          `, [student.student_id, targetDate, 'survey_reminder_12h', 'failed', error.message]);
+          `, [student.student_id, targetDate, 'survey_reminder_12h', 'failed', 'Survey reminder failed']);
         } catch (dbError) {
-          console.error('[Survey Reminder] Failed to log error:', dbError.message);
+          console.error('[Survey Reminder] Failed to record notification failure');
         }
         
         notificationsFailed++;
@@ -217,7 +217,7 @@ https://forms.gle/8ezQkdUheP82F2r2A
     console.log(`[Survey Reminder] Complete - Sent: ${notificationsSent}, Failed: ${notificationsFailed}`);
     
   } catch (error) {
-    console.error('[Survey Reminder] Error:', error);
+    console.error('[Survey Reminder] Job failed');
   }
 }
 
