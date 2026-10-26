@@ -109,9 +109,9 @@ export async function notifyHelperRequestCreated(request) {
       embeds: [embed]
     });
 
-    console.log(`Discord notification sent for helper request #${request.id}`);
+    console.log('Discord helper request notification sent');
   } catch (error) {
-    console.error('Error sending Discord notification:', error);
+    console.error('Error sending Discord notification:');
   }
 }
 
@@ -193,9 +193,9 @@ export async function notifyHelperRequestAccepted(request) {
       embeds: [embed]
     });
 
-    console.log(`Discord notification sent for accepted helper request #${request.id}`);
+    console.log('Discord helper acceptance notification sent');
   } catch (error) {
-    console.error('Error sending Discord notification:', error);
+    console.error('Error sending Discord notification:');
   }
 }
 
@@ -243,6 +243,6 @@ export async function notifyHelperRequestsRescheduled(requests) {
 
     console.log(`Discord notification sent for ${requests.length} rescheduled requests`);
   } catch (error) {
-    console.error('Error sending Discord notification:', error);
+    console.error('Error sending Discord notification:');
   }
 }

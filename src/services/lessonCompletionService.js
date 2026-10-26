@@ -107,14 +107,14 @@ export async function resolveLessonCompletionItems(items) {
       if (lessonDate) reportsByKey.set(`${row.student_id}_${lessonDate}`, row);
     }
   } catch (error) {
-    console.error('[Lesson Completion] Database lookup failed, using spreadsheet fallback:', error.message);
+    console.error('[Lesson Completion] Database lookup failed, using spreadsheet fallback:');
   }
 
   let spreadsheetCache = null;
   try {
     spreadsheetCache = await getSpreadsheetCompletionCache();
   } catch (error) {
-    console.error('[Lesson Completion] Failed to load spreadsheet fallback:', error.message);
+    console.error('[Lesson Completion] Failed to load spreadsheet fallback:');
   }
 
   return normalizedItems.map(item => {
