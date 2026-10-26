@@ -24,10 +24,10 @@ app.post('/send', async (c) => {
       results
     });
   } catch (error) {
-    console.error('Error sending reminders:', error);
+    console.error('Error sending reminders:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Reminder operation failed'
     }, 500);
   }
 });
@@ -35,7 +35,7 @@ app.post('/send', async (c) => {
 /**
  * POST /api/reminders/test
  * Test reminder for a specific student
- * Body: { studentId: "OLTS240488-AR" }
+ * Body: { studentId: "STUDENT_EXAMPLE" }
  */
 app.post('/test', async (c) => {
   try {
@@ -55,10 +55,10 @@ app.post('/test', async (c) => {
       message: `Test reminder sent for student ${studentId}`
     });
   } catch (error) {
-    console.error('Error sending test reminder:', error);
+    console.error('Error sending test reminder:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Reminder operation failed'
     }, 500);
   }
 });
@@ -91,9 +91,7 @@ app.get('/test-student-info/:studentId', async (c) => {
     const spreadsheetId = '1iqrAhNjW8jTvobkur5N_9r9uUWFHCKqrhxM72X5z-iM';
     const sheetName = '❶RAW_生徒様情報';
     
-    console.log(`\n[Test] Fetching student info for: ${studentId}`);
-    console.log(`[Test] Spreadsheet: ${spreadsheetId}`);
-    console.log(`[Test] Sheet: ${sheetName}`);
+    console.log('[Reminders] Fetching student delivery information');
     
     // Fetch data from Google Sheets (B, G, M columns)
     const response = await sheets.spreadsheets.values.get({
@@ -108,7 +106,7 @@ app.get('/test-student-info/:studentId', async (c) => {
     const studentRow = rows.find(row => row[0] === studentId);
     
     if (!studentRow) {
-      console.warn(`[Test] Student ${studentId} not found`);
+      console.warn('[Reminders] Student not found');
       return c.json({
         success: false,
         error: `Student ${studentId} not found in Google Sheets`,
@@ -123,9 +121,7 @@ app.get('/test-student-info/:studentId', async (c) => {
     const discordId = studentRow[5] ? studentRow[5].trim() : null;
     const chatUrl = studentRow[11] ? studentRow[11].trim() : null;
 
-    console.log(`[Test] ✅ Student ${studentId} found:`);
-    console.log(`[Test]   Discord ID: ${discordId || '(not set)'}`);
-    console.log(`[Test]   Chat URL: ${chatUrl || '(not set)'}`);
+    console.log('[Reminders] Student delivery information found');
 
     return c.json({
       success: true,
@@ -138,11 +134,11 @@ app.get('/test-student-info/:studentId', async (c) => {
       }
     });
   } catch (error) {
-    console.error('[Test] Error fetching student info:', error);
+    console.error('[Test] Error fetching student info:');
     return c.json({
       success: false,
-      error: error.message,
-      details: error.response?.data?.error || null
+      error: 'Reminder operation failed',
+      details: null
     }, 500);
   }
 });
@@ -162,16 +158,6 @@ app.get('/test-lesson-data', async (c) => {
     
     console.log(`[Test] Found ${lessons.length} lessons for tomorrow`);
     
-    if (lessons.length > 0) {
-      console.log('[Test] Sample lesson data:');
-      lessons.slice(0, 3).forEach((lesson, index) => {
-        console.log(`\n[Test] Lesson ${index + 1}:`);
-        console.log(`[Test]   Student ID: ${lesson.student_id || '(not found)'}`);
-        console.log(`[Test]   Tutor: ${lesson.tutor_name || '(not found)'}`);
-        console.log(`[Test]   Date: ${lesson.lesson_date}`);
-        console.log(`[Test]   Title: ${lesson.title || '(not found)'}`);
-      });
-    }
     
     return c.json({
       success: true,
@@ -193,11 +179,10 @@ app.get('/test-lesson-data', async (c) => {
       }
     });
   } catch (error) {
-    console.error('[Test] Error fetching lesson data:', error);
+    console.error('[Test] Error fetching lesson data:');
     return c.json({
       success: false,
-      error: error.message,
-      stack: error.stack
+      error: 'Reminder operation failed'
     }, 500);
   }
 });
@@ -215,10 +200,10 @@ app.post('/send-stats-report', async (c) => {
       message: 'Statistics report sent successfully'
     });
   } catch (error) {
-    console.error('Error sending statistics report:', error);
+    console.error('Error sending statistics report:');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Reminder operation failed'
     }, 500);
   }
 });

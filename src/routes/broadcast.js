@@ -19,6 +19,23 @@ import { query } from '../db/connection.js';
 
 const app = new Hono();
 
+const SAFE_BROADCAST_ERRORS = new Set([
+  'Job not found',
+  'この送信ジョブを再開する権限がありません',
+  'この送信ジョブは現在実行中です',
+  '再送可能な未送信者はいません',
+  'この送信ジョブを確認済みにする権限がありません',
+  '確認が必要な送信ジョブではありません',
+  '送信開始時から対象者の内訳が変化しています。重複や対象外送信を防ぐため、このジョブは自動復旧できません。'
+]);
+
+function safeBroadcastError(error) {
+  const message = error?.message;
+  if (SAFE_BROADCAST_ERRORS.has(message)) return message;
+  if (typeof message === 'string' && /^送信開始時から対象者数が変化しています（開始時 [0-9]{1,9}名、現在 [0-9]{1,9}名）。重複や対象外送信を防ぐため、このジョブは自動復旧できません。$/.test(message)) return message;
+  return 'Broadcast operation failed';
+}
+
 function serializeBroadcastJob(job) {
   return {
     jobId:             job.job_id,
@@ -31,7 +48,7 @@ function serializeBroadcastJob(job) {
     pending:           Number(job.pending || 0),
     isTest:            job.is_test,
     updatedAt:         job.updated_at,
-    lastError:         job.last_error || null,
+    lastError:         job.last_error ? safeBroadcastError({ message: job.last_error }) : null,
     unknownRecipients: job.unknown_recipients || []
   };
 }
@@ -69,7 +86,7 @@ async function authMiddleware(c, next) {
     
     await next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    console.error('Auth middleware error:');
     return c.json({ success: false, error: 'Authentication failed' }, 401);
   }
 }
@@ -103,10 +120,10 @@ app.post('/preview', async (c) => {
       }))
     });
   } catch (error) {
-    console.error('Error getting preview:', error);
+    console.error('Error getting preview:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -166,10 +183,10 @@ app.post('/send', async (c) => {
       message: `送信ジョブを開始しました（対象: ${total}名）`
     });
   } catch (error) {
-    console.error('Error sending broadcast:', error);
+    console.error('Error sending broadcast:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -189,10 +206,10 @@ app.get('/templates', async (c) => {
       templates
     });
   } catch (error) {
-    console.error('Error getting templates:', error);
+    console.error('Error getting templates:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -230,10 +247,10 @@ app.post('/templates', async (c) => {
       templateId: result.id
     });
   } catch (error) {
-    console.error('Error saving template:', error);
+    console.error('Error saving template:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -254,10 +271,10 @@ app.delete('/templates/:id', async (c) => {
       message: 'Template deleted'
     });
   } catch (error) {
-    console.error('Error deleting template:', error);
+    console.error('Error deleting template:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -279,10 +296,10 @@ app.get('/logs', async (c) => {
       logs
     });
   } catch (error) {
-    console.error('Error getting logs:', error);
+    console.error('Error getting logs:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -300,8 +317,8 @@ app.get('/jobs/recoverable', async (c) => {
       job: job ? serializeBroadcastJob(job) : null
     });
   } catch (error) {
-    console.error('Error getting recoverable broadcast job:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error getting recoverable broadcast job:');
+    return c.json({ success: false, error: safeBroadcastError(error) }, 500);
   }
 });
 
@@ -319,9 +336,9 @@ app.post('/jobs/:jobId/resume', async (c) => {
       message: '未送信分の送信を再開しました'
     });
   } catch (error) {
-    console.error('Error resuming broadcast job:', error);
+    console.error('Error resuming broadcast job:');
     return c.json(
-      { success: false, error: error.message },
+      { success: false, error: safeBroadcastError(error) },
       error.status || 500
     );
   }
@@ -337,9 +354,9 @@ app.post('/jobs/:jobId/acknowledge', async (c) => {
     const job = await acknowledgeBroadcastJob(c.req.param('jobId'), user.email, user.role);
     return c.json({ success: true, job: serializeBroadcastJob(job) });
   } catch (error) {
-    console.error('Error acknowledging broadcast job:', error);
+    console.error('Error acknowledging broadcast job:');
     return c.json(
-      { success: false, error: error.message },
+      { success: false, error: safeBroadcastError(error) },
       error.status || 500
     );
   }
@@ -368,8 +385,8 @@ app.get('/jobs/:jobId', async (c) => {
       job: serializeBroadcastJob(job)
     });
   } catch (error) {
-    console.error('Error getting job status:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('Error getting job status:');
+    return c.json({ success: false, error: safeBroadcastError(error) }, 500);
   }
 });
 
@@ -412,10 +429,10 @@ app.get('/tutors', async (c) => {
       tutors: result.rows
     });
   } catch (error) {
-    console.error('Error getting tutors:', error);
+    console.error('Error getting tutors:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -461,12 +478,7 @@ app.post('/upload-image', async (c) => {
     // Generate unique image ID
     const imageId = `img_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
-    console.log('[Broadcast] Storing image in database:', {
-      imageId,
-      size: buffer.length,
-      type: file.type,
-      filename: file.name
-    });
+    console.log('[Broadcast] Storing image in database');
     
     // Store image in database
     await query(
@@ -475,7 +487,7 @@ app.post('/upload-image', async (c) => {
       [imageId, file.name, file.type, buffer.length, buffer, user.email]
     );
     
-    console.log('[Broadcast] Image stored successfully:', imageId);
+    console.log('[Broadcast] Image stored successfully');
     
     return c.json({
       success: true,
@@ -483,10 +495,10 @@ app.post('/upload-image', async (c) => {
       filename: file.name
     });
   } catch (error) {
-    console.error('Error storing image:', error);
+    console.error('Error storing image:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -499,10 +511,7 @@ app.get('/schedules', async (c) => {
   try {
     const user = c.get('user');
     
-    console.log('[Broadcast] GET /schedules called by:', {
-      email: user.email,
-      role: user.role
-    });
+    console.log('[Broadcast] Loading schedules');
     
     let sqlQuery = `
       SELECT id, name, content, image_url, channel_type, target_status, target_tutor, 
@@ -517,15 +526,12 @@ app.get('/schedules', async (c) => {
       const result = await query(sqlQuery, [user.email]);
       console.log('[Broadcast] Crew schedules found:', result.rows.length);
       if (result.rows.length > 0) {
-        console.log('[Broadcast] Sample schedule:', {
-          created_by: result.rows[0].created_by,
-          user_email: user.email
-        });
+        console.log('[Broadcast] Schedule sample available');
       } else {
-        console.log('[Broadcast] No schedules found for crew:', user.email);
+        console.log('[Broadcast] No schedules found for crew');
         // Check if any schedules exist at all
         const allSchedulesResult = await query(`SELECT COUNT(*) as count, created_by FROM broadcast_messages WHERE is_scheduled = true GROUP BY created_by`);
-        console.log('[Broadcast] All scheduled broadcasts:', allSchedulesResult.rows);
+        console.log(`[Broadcast] Schedule owner groups: ${allSchedulesResult.rows.length}`);
       }
       return c.json({
         success: true,
@@ -540,10 +546,10 @@ app.get('/schedules', async (c) => {
       });
     }
   } catch (error) {
-    console.error('Error getting schedules:', error);
+    console.error('Error getting schedules:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -643,10 +649,10 @@ app.post('/schedules', async (c) => {
       });
     }
   } catch (error) {
-    console.error('Error saving schedule:', error);
+    console.error('Error saving schedule:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -683,10 +689,10 @@ app.delete('/schedules/:id', async (c) => {
       message: 'Schedule deleted'
     });
   } catch (error) {
-    console.error('Error deleting schedule:', error);
+    console.error('Error deleting schedule:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -729,10 +735,10 @@ app.post('/schedules/:id/toggle', async (c) => {
       enabled: result.rows[0].schedule_enabled
     });
   } catch (error) {
-    console.error('Error toggling schedule:', error);
+    console.error('Error toggling schedule:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
@@ -745,7 +751,7 @@ app.get('/images/:imageId', async (c) => {
   try {
     const imageId = c.req.param('imageId');
     
-    console.log('[Broadcast] Retrieving image from database:', imageId);
+    console.log('[Broadcast] Retrieving image from database');
     
     const result = await query(
       'SELECT filename, content_type, image_data FROM broadcast_images WHERE image_id = $1',
@@ -761,12 +767,7 @@ app.get('/images/:imageId', async (c) => {
     
     const image = result.rows[0];
     
-    console.log('[Broadcast] Image retrieved:', {
-      imageId,
-      filename: image.filename,
-      contentType: image.content_type,
-      size: image.image_data.length
-    });
+    console.log('[Broadcast] Image retrieved');
     
     // Return image data
     return new Response(image.image_data, {
@@ -777,10 +778,10 @@ app.get('/images/:imageId', async (c) => {
       }
     });
   } catch (error) {
-    console.error('Error retrieving image:', error);
+    console.error('Error retrieving image:');
     return c.json({
       success: false,
-      error: error.message
+      error: safeBroadcastError(error)
     }, 500);
   }
 });
