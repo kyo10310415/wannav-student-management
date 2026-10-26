@@ -17,7 +17,7 @@ async function getAnalysisBroadcastInfo() {
     analysisBroadcastInfoExpiresAt = Date.now() + 5 * 60 * 1000;
     analysisBroadcastInfo = fetchStudentBroadcastInfo().catch(error => {
       analysisBroadcastInfo = null;
-      throw error;
+      throw new Error('Funnel broadcast information could not be loaded');
     });
   }
   return analysisBroadcastInfo;
@@ -60,8 +60,8 @@ app.get('/analysis-export', requireLeaderOrAdmin, async (c) => {
       limitations: ['生徒状態・担当Tutorは取得時点です。月末確定スナップショットとの照合が必要です。'],
       funnel, students: students.rows, lessons: lessons.rows, reports: reports.rows });
   } catch (error) {
-    console.error('[Funnel analysis export]', error.message);
-    return c.json({ error: error.message }, 500);
+    console.error('[Funnel analysis export]');
+    return c.json({ error: 'Funnel operation failed' }, 500);
   }
 });
 
@@ -71,14 +71,20 @@ async function requireLeaderOrAdmin(c, next) {
     return c.json({ success: false, error: '認証が必要です' }, 401);
   }
 
-  const sessionResult = await query(
-    `SELECT u.role, u.email
-       FROM sessions s
-       JOIN users u ON s.user_id = u.id
-      WHERE s.session_token = $1
-        AND s.expires_at > NOW()`,
-    [sessionToken]
-  );
+  let sessionResult;
+  try {
+    sessionResult = await query(
+      `SELECT u.role, u.email
+         FROM sessions s
+         JOIN users u ON s.user_id = u.id
+        WHERE s.session_token = $1
+          AND s.expires_at > NOW()`,
+      [sessionToken]
+    );
+  } catch (error) {
+    console.error('[Funnel] Failed to validate session');
+    return c.json({ success: false, error: 'Funnel operation failed' }, 500);
+  }
 
   if (sessionResult.rows.length === 0) {
     return c.json({ success: false, error: 'セッションが無効です' }, 401);
@@ -105,8 +111,8 @@ app.post('/discord-scan', requireLeaderOrAdmin, async (c) => {
     });
     return c.json({ success: true, data: job }, 202);
   } catch (error) {
-    console.error('[Funnel] Failed to start Discord scan:', error);
-    return c.json({ success: false, error: `Discord状況の更新を開始できませんでした: ${error.message}` }, 500);
+    console.error('[Funnel] Failed to start Discord scan:');
+    return c.json({ success: false, error: 'Funnel operation failed' }, 500);
   }
 });
 
@@ -116,8 +122,8 @@ app.get('/discord-scan/:jobId', requireLeaderOrAdmin, async (c) => {
     if (!job) return c.json({ success: false, error: '更新ジョブが見つかりません' }, 404);
     return c.json({ success: true, data: job });
   } catch (error) {
-    console.error('[Funnel] Failed to get Discord scan status:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('[Funnel] Failed to get Discord scan status:');
+    return c.json({ success: false, error: 'Funnel operation failed' }, 500);
   }
 });
 
@@ -135,8 +141,8 @@ app.get('/', requireLeaderOrAdmin, async (c) => {
       ...result
     });
   } catch (error) {
-    console.error('[Funnel] Failed to build funnel:', error);
-    return c.json({ success: false, error: `ファネルデータの取得に失敗しました: ${error.message}` }, 500);
+    console.error('[Funnel] Failed to build funnel:');
+    return c.json({ success: false, error: 'Funnel operation failed' }, 500);
   }
 });
 
