@@ -16,12 +16,12 @@ let isClientReady = false;
 
 // Initialize Discord client
 client.once('ready', () => {
-  console.log(`Discord bot logged in as ${client.user.tag}`);
+  console.log("[Discord] Client ready");
   isClientReady = true;
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN).catch(err => {
-  console.error('Failed to login to Discord:', err);
+  console.error("[Discord] Client login failed");
 });
 
 /**
@@ -37,7 +37,7 @@ function convertGoogleDriveUrl(url) {
   const match = url.match(/\/file\/d\/([^\/]+)/);
   if (match && match[1]) {
     const convertedUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
-    console.log(`Google Drive URL変換: ${url.substring(0, 50)}... → ${convertedUrl}`);
+    console.log("[Discord] Image URL converted");
     return convertedUrl;
   }
   
@@ -65,13 +65,13 @@ export async function getStudentDiscordInfo(studentId) {
     });
 
     const rows = response.data.values || [];
-    console.log(`Fetched ${rows.length} student records from Google Sheets`);
+    console.log("[Discord] Student contacts inspected", rows.length);
 
     // Find student by ID (B列 = index 0)
     const studentRow = rows.find(row => row[0] === studentId);
     
     if (!studentRow) {
-      console.warn(`Student ${studentId} not found in Google Sheets`);
+      console.warn("[Discord] Student contact missing");
       return {
         studentId: studentId,
         chatUrl: null,
@@ -86,10 +86,7 @@ export async function getStudentDiscordInfo(studentId) {
     const discordId = studentRow[5] ? studentRow[5].trim() : null;
     const chatUrl = studentRow[11] ? studentRow[11].trim() : null;
 
-    console.log(`Student ${studentId} found:`, {
-      discordId: discordId ? 'Set' : 'Not set',
-      chatUrl: chatUrl ? 'Set' : 'Not set'
-    });
+    console.log("[Discord] Contact lookup completed");
 
     return {
       studentId: studentId,
@@ -97,7 +94,7 @@ export async function getStudentDiscordInfo(studentId) {
       discordId: discordId
     };
   } catch (error) {
-    console.error(`Error fetching student Discord info for ${studentId}:`, error);
+    console.error("[Discord] Student contact lookup failed");
     // Return empty data on error
     return {
       studentId: studentId,
@@ -120,7 +117,7 @@ export async function sendReminder(studentId, lessonInfo) {
     const studentInfo = await getStudentDiscordInfo(studentId);
     
     if (!studentInfo.chatUrl) {
-      console.warn(`No Discord chat URL found for student ${studentId}`);
+      console.warn("[Discord] Reminder skipped: no contact");
       return;
     }
 
@@ -128,7 +125,7 @@ export async function sendReminder(studentId, lessonInfo) {
     // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
     const channelIdMatch = studentInfo.chatUrl.match(/channels\/\d+\/(\d+)/);
     if (!channelIdMatch) {
-      console.warn(`Invalid Discord URL for student ${studentId}: ${studentInfo.chatUrl}`);
+      console.warn("[Discord] Reminder skipped: invalid channel");
       return;
     }
 
@@ -136,7 +133,7 @@ export async function sendReminder(studentId, lessonInfo) {
     const channel = await client.channels.fetch(channelId);
 
     if (!channel || !channel.isTextBased()) {
-      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      console.warn("[Discord] Reminder skipped: unavailable channel");
       return;
     }
 
@@ -154,12 +151,12 @@ export async function sendReminder(studentId, lessonInfo) {
 
     // Send message
     await channel.send(message);
-    console.log(`Reminder sent to student ${studentId} (${studentName}) in channel ${channelId}`);
+    console.log("[Discord] Reminder sent");
     
     return true;
   } catch (error) {
-    console.error(`Error sending reminder for student ${studentId}:`, error);
-    throw error;
+    console.error("[Discord] Reminder delivery failed");
+    throw new Error('Discord operation failed');
   }
 }
 
@@ -168,10 +165,10 @@ export async function sendReminder(studentId, lessonInfo) {
  */
 export async function sendDailyReminders() {
   try {
-    console.log('Fetching tomorrow\'s lessons for reminders...');
+    console.log("[Discord] Daily reminders started");
     const lessons = await fetchLessonsForTomorrow();
     
-    console.log(`Found ${lessons.length} lessons for tomorrow`);
+    console.log("[Discord] Lessons selected", lessons.length);
     
     const results = [];
     for (const lesson of lessons) {
@@ -179,18 +176,18 @@ export async function sendDailyReminders() {
         await sendReminder(lesson.student_id, lesson);
         results.push({ success: true, studentId: lesson.student_id });
       } catch (error) {
-        console.error(`Failed to send reminder for student ${lesson.student_id}:`, error);
-        results.push({ success: false, studentId: lesson.student_id, error: error.message });
+        console.error("[Discord] Individual reminder failed");
+        results.push({ success: false, studentId: lesson.student_id, error: "Discord operation failed" });
       }
     }
     
     const successCount = results.filter(r => r.success).length;
-    console.log(`Sent ${successCount} out of ${lessons.length} reminders successfully`);
+    console.log("[Discord] Daily reminders finished", { total: lessons.length, sent: successCount });
     
     return results;
   } catch (error) {
-    console.error('Error in sendDailyReminders:', error);
-    throw error;
+    console.error("[Discord] Daily reminder lookup failed");
+    throw new Error('Discord operation failed');
   }
 }
 
@@ -219,7 +216,7 @@ export { client };
  */
 export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, absenceData, scheduleUrl = null) {
   if (!leaderWebhookUrl) {
-    console.log('No webhook URL provided, skipping absence notification');
+    console.log("[Discord] Absence webhook skipped");
     return { success: false, reason: 'No webhook URL' };
   }
 
@@ -309,12 +306,12 @@ export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, abse
     
     await axios.post(leaderWebhookUrl, payload);
 
-    console.log(`Absence notification sent to leader's webhook for ${tutor_name}`);
+    console.log("[Discord] Absence request sent");
     return { success: true };
     
   } catch (error) {
-    console.error('Error sending absence notification:', error.message);
-    return { success: false, error: error.message };
+    console.error("[Discord] Absence request failed");
+    return { success: false, error: "Discord operation failed" };
   }
 }
 
@@ -327,7 +324,7 @@ export async function notifyAbsenceRequest(leaderWebhookUrl, discordUserId, abse
  */
 export async function notifyAbsenceApproval(tutorWebhookUrl, discordUserId, approvalData) {
   if (!tutorWebhookUrl) {
-    console.log('No webhook URL provided, skipping approval notification');
+    console.log("[Discord] Approval webhook skipped");
     return { success: false, reason: 'No webhook URL' };
   }
 
@@ -400,12 +397,12 @@ export async function notifyAbsenceApproval(tutorWebhookUrl, discordUserId, appr
     
     await axios.post(tutorWebhookUrl, payload);
 
-    console.log(`Approval notification sent to tutor's webhook for ${tutor_name}`);
+    console.log("[Discord] Absence approval sent");
     return { success: true };
     
   } catch (error) {
-    console.error('Error sending approval notification:', error.message);
-    return { success: false, error: error.message };
+    console.error("[Discord] Absence approval failed");
+    return { success: false, error: "Discord operation failed" };
   }
 }
 
@@ -418,7 +415,7 @@ export async function notifyAbsenceApproval(tutorWebhookUrl, discordUserId, appr
  */
 export async function sendTestWebhook(webhookUrl, discordUserId = null, message = null) {
   if (!webhookUrl) {
-    console.log('No webhook URL provided');
+    console.log("[Discord] Test webhook skipped");
     return { success: false, reason: 'No webhook URL' };
   }
 
@@ -466,12 +463,12 @@ export async function sendTestWebhook(webhookUrl, discordUserId = null, message 
     
     await axios.post(webhookUrl, payload);
 
-    console.log(`Test webhook sent successfully to ${webhookUrl.substring(0, 50)}...`);
+    console.log("[Discord] Test webhook sent");
     return { success: true };
     
   } catch (error) {
-    console.error('Error sending test webhook:', error.message);
-    return { success: false, error: error.message };
+    console.error("[Discord] Test webhook failed");
+    return { success: false, error: "Discord operation failed" };
   }
 }
 
@@ -488,7 +485,7 @@ export async function sendStampRallyNotification(channelUrl, studentName, roulet
   }
 
   if (!channelUrl) {
-    console.log('No channel URL provided for stamp rally notification');
+    console.log("[Discord] Stamp notification skipped");
     return { success: false, reason: 'No channel URL' };
   }
 
@@ -497,7 +494,7 @@ export async function sendStampRallyNotification(channelUrl, studentName, roulet
     // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
     const channelIdMatch = channelUrl.match(/channels\/\d+\/(\d+)/);
     if (!channelIdMatch) {
-      console.warn(`Invalid Discord URL: ${channelUrl}`);
+      console.warn("[Discord] Stamp notification skipped: invalid channel");
       return { success: false, error: 'Invalid Discord URL format' };
     }
 
@@ -505,7 +502,7 @@ export async function sendStampRallyNotification(channelUrl, studentName, roulet
     const channel = await client.channels.fetch(channelId);
 
     if (!channel || !channel.isTextBased()) {
-      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      console.warn("[Discord] Stamp notification skipped: unavailable channel");
       return { success: false, error: 'Channel not found or invalid' };
     }
 
@@ -535,7 +532,7 @@ ${rouletteUrl}
     // メッセージを送信
     const sentMessage = await channel.send(message);
     
-    console.log(`Stamp rally notification sent to channel ${channelId} (message ID: ${sentMessage.id})`);
+    console.log("[Discord] Stamp notification sent");
     return { 
       success: true, 
       id: sentMessage.id, 
@@ -543,8 +540,8 @@ ${rouletteUrl}
     };
     
   } catch (error) {
-    console.error('Error sending stamp rally notification to Discord:', error.message);
-    return { success: false, error: error.message };
+    console.error("[Discord] Stamp notification failed");
+    return { success: false, error: "Discord operation failed" };
   }
 }
 
@@ -561,7 +558,7 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
   }
 
   if (!channelUrl) {
-    console.log('No channel URL provided for VQ diagnosis');
+    console.log("[Discord] VQ notification skipped");
     return { success: false, reason: 'No channel URL' };
   }
 
@@ -570,7 +567,7 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
     // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
     const channelIdMatch = channelUrl.match(/channels\/\d+\/(\d+)/);
     if (!channelIdMatch) {
-      console.warn(`Invalid Discord URL: ${channelUrl}`);
+      console.warn("[Discord] VQ notification skipped: invalid channel");
       return { success: false, error: 'Invalid Discord URL format' };
     }
 
@@ -578,7 +575,7 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
     const channel = await client.channels.fetch(channelId);
 
     if (!channel || !channel.isTextBased()) {
-      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      console.warn("[Discord] VQ notification skipped: unavailable channel");
       return { success: false, error: 'Channel not found or invalid' };
     }
 
@@ -637,7 +634,7 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
       files
     });
     
-    console.log(`VQ diagnosis sent to channel ${channelId} (message ID: ${sentMessage.id})`);
+    console.log("[Discord] VQ notification sent");
     return { 
       success: true, 
       id: sentMessage.id, 
@@ -645,8 +642,8 @@ export async function sendDiscordVQDiagnosis(channelUrl, messageData, attachment
     };
     
   } catch (error) {
-    console.error('Error sending VQ diagnosis to Discord:', error.message);
-    return { success: false, error: error.message };
+    console.error("[Discord] VQ notification failed");
+    return { success: false, error: "Discord operation failed" };
   }
 }
 
@@ -662,7 +659,7 @@ export async function sendDiscordMessage(channelUrl, message) {
   }
 
   if (!channelUrl) {
-    console.log('No channel URL provided');
+    console.log("[Discord] Message skipped");
     return { success: false, reason: 'No channel URL' };
   }
 
@@ -671,7 +668,7 @@ export async function sendDiscordMessage(channelUrl, message) {
     // Discord URLs format: https://discord.com/channels/SERVER_ID/CHANNEL_ID
     const channelIdMatch = channelUrl.match(/channels\/\d+\/(\d+)/);
     if (!channelIdMatch) {
-      console.warn(`Invalid Discord URL: ${channelUrl}`);
+      console.warn("[Discord] Message skipped: invalid channel");
       return { success: false, error: 'Invalid Discord URL format' };
     }
 
@@ -679,7 +676,7 @@ export async function sendDiscordMessage(channelUrl, message) {
     const channel = await client.channels.fetch(channelId);
 
     if (!channel || !channel.isTextBased()) {
-      console.warn(`Channel ${channelId} not found or is not a text channel`);
+      console.warn("[Discord] Message skipped: unavailable channel");
       return { success: false, error: 'Channel not found or invalid' };
     }
 
@@ -692,7 +689,7 @@ export async function sendDiscordMessage(channelUrl, message) {
       sentMessage = await channel.send(message);
     }
     
-    console.log(`Message sent to channel ${channelId} (message ID: ${sentMessage.id})`);
+    console.log("[Discord] Message sent");
     return { 
       success: true, 
       id: sentMessage.id, 
@@ -700,7 +697,7 @@ export async function sendDiscordMessage(channelUrl, message) {
     };
     
   } catch (error) {
-    console.error('Error sending message to Discord:', error.message);
-    return { success: false, error: error.message };
+    console.error("[Discord] Message failed");
+    return { success: false, error: "Discord operation failed" };
   }
 }
