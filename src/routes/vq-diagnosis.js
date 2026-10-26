@@ -282,6 +282,9 @@ app.post('/resend/:id', async (c) => {
     });
     
     const discordResponse = await sendDiscordVQDiagnosis(diagnosis.discord_url, message);
+    if (discordResponse?.success !== true) {
+      throw new Error('Discord送信失敗');
+    }
     
     // 送信履歴を更新
     await dbQuery(

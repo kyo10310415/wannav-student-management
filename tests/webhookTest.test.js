@@ -6,7 +6,7 @@ const valid = 'https://discord.com/api/webhooks/' + '1'.repeat(18) + '/' + 'a'.r
 function fixture(role, registered = valid) {
   const reads = [], posts = [];
   const app = new Hono();
-  app.use('*', async (c, next) => { c.set('user', { role }); await next(); });
+  app.use('*', async (c, next) => { c.set('authenticatedUser', { role }); await next(); });
   app.post('/test', createWebhookTestHandler({ query: async (...args) => {
     reads.push(args); return { rows: registered ? [{ discord_webhook_url: registered }] : [] };
   }, post: async (...args) => { posts.push(args); } }));

@@ -566,13 +566,13 @@ async function prepareLegacyJobRecipients(jobId, userEmail, userRole) {
   await syncJobProgress(jobId);
 }
 
-export async function reconcileStaleBroadcastJobs() {
+export async function reconcileStaleBroadcastJobs(jobId = null) {
   const staleResult = await query(
      `SELECT job_id
      FROM broadcast_jobs
-     WHERE (status = 'running' AND updated_at < NOW() - $1::interval)
-        OR (status = 'pending' AND updated_at < NOW() - $2::interval)`,
-    [STALE_JOB_INTERVAL, STALE_PENDING_JOB_INTERVAL]
+     WHERE ((status = 'running' AND updated_at < NOW() - $1::interval)
+        OR (status = 'pending' AND updated_at < NOW() - $2::interval))${jobId === null ? '' : ' AND job_id = $3'}`,
+    jobId === null ? [STALE_JOB_INTERVAL, STALE_PENDING_JOB_INTERVAL] : [STALE_JOB_INTERVAL, STALE_PENDING_JOB_INTERVAL, jobId]
   );
 
   for (const { job_id: jobId } of staleResult.rows) {
@@ -590,7 +590,6 @@ export async function reconcileStaleBroadcastJobs() {
 }
 
 export async function getLatestRecoverableBroadcastJob(userEmail, userRole) {
-  await reconcileStaleBroadcastJobs();
   const result = await query(
     `SELECT job_id
      FROM broadcast_jobs
@@ -602,7 +601,11 @@ export async function getLatestRecoverableBroadcastJob(userEmail, userRole) {
   if (result.rows.length === 0) return null;
 
   const jobId = result.rows[0].job_id;
+  const ownedJob = await getBroadcastJobStatus(jobId);
+  if (!ownedJob || ownedJob.created_by !== userEmail) return null;
+  await reconcileStaleBroadcastJobs(jobId);
   const beforePrepare = await getBroadcastJobStatus(jobId);
+  if (!beforePrepare) return null;
   const recoverable = ['pending', 'running', 'interrupted', 'needs_review', 'failed'].includes(beforePrepare.status)
     || (beforePrepare.status === 'completed' && Number(beforePrepare.failed) > 0);
   if (!recoverable) return null;
@@ -613,7 +616,6 @@ export async function getLatestRecoverableBroadcastJob(userEmail, userRole) {
 }
 
 export async function resumeBroadcastJob(jobId, userEmail, userRole) {
-  await reconcileStaleBroadcastJobs();
   let job = await getBroadcastJobStatus(jobId);
   if (!job) throw new Error('Job not found');
   if (userRole === 'crew' && job.created_by !== userEmail) {
@@ -621,6 +623,9 @@ export async function resumeBroadcastJob(jobId, userEmail, userRole) {
     error.status = 403;
     throw error;
   }
+  await reconcileStaleBroadcastJobs(jobId);
+  job = await getBroadcastJobStatus(jobId);
+  if (!job) throw new Error('Job not found');
   if (job.status === 'running') {
     const error = new Error('この送信ジョブは現在実行中です');
     error.status = 409;
