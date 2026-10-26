@@ -1,3 +1,4 @@
+import { getDatabaseConfig } from './src/db/connection-config.cjs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync } from 'fs';
@@ -7,9 +8,7 @@ const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
-});
+const pool = new Pool(getDatabaseConfig(process.env.DATABASE_URL, process.env, true));
 
 async function runMigration() {
   const client = await pool.connect();

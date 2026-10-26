@@ -1,3 +1,4 @@
+import { getDatabaseConfig } from './src/db/connection-config.cjs';
 import pg from 'pg';
 const { Client } = pg;
 
@@ -5,12 +6,7 @@ const connectionString = process.env.EXTERNAL_DATABASE_URL;
 if (!connectionString) throw new Error('EXTERNAL_DATABASE_URL is required');
 
 async function checkDatabase() {
-  const client = new Client({ 
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
+  const client = new Client(getDatabaseConfig(connectionString));
   
   try {
     await client.connect();
