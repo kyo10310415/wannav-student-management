@@ -126,7 +126,7 @@ async function sendDailyReportReminder() {
         );
         remindersSent++;
       } else {
-        console.warn(`[DailyReportReminder] No Discord webhook for tutor: ${tutor.tutor_name}`);
+        console.warn('[DailyReportReminder] No Discord webhook for tutor');
       }
 
       // チームリーダーへの通知
@@ -151,7 +151,7 @@ async function sendDailyReportReminder() {
 
     console.log(`[DailyReportReminder] Job completed. Sent ${remindersSent} notifications.`);
   } catch (error) {
-    console.error('[DailyReportReminder] Error:', error);
+    console.error('[DailyReportReminder] Job failed');
   }
 }
 
@@ -177,9 +177,9 @@ async function sendDiscordMessage(webhookUrl, userId, tutor, dateStr, recipientT
     };
 
     await axios.post(webhookUrl, { content: mention, embeds: [embed] });
-    console.log(`[DailyReportReminder] Sent to ${recipientType}: ${tutor.tutor_name}`);
+    console.log('[DailyReportReminder] Notification sent');
   } catch (error) {
-    console.error(`[DailyReportReminder] Failed to send Discord message:`, error.message);
+    console.error('[DailyReportReminder] Failed to send Discord message');
   }
 }
 
