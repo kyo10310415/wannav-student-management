@@ -23,10 +23,9 @@ function getCalendar() {
           // Assume it's base64 encoded - decode it
           try {
             const decoded = Buffer.from(credString, 'base64').toString('utf-8');
-            console.log('Decoded credentials (first 100 chars):', decoded.substring(0, 100));
             credentials = JSON.parse(decoded);
           } catch (decodeError) {
-            console.error('Failed to decode base64:', decodeError);
+            console.error('Calendar credential decoding failed');
             // Try parsing as-is as fallback
             credentials = JSON.parse(credString);
           }
@@ -35,9 +34,8 @@ function getCalendar() {
         throw new Error('GOOGLE_CREDENTIALS_JSON not found in environment variables');
       }
     } catch (error) {
-      console.error('Error parsing Google credentials:', error);
-      console.error('Credentials value (first 100 chars):', process.env.GOOGLE_CREDENTIALS_JSON?.substring(0, 100));
-      throw error;
+      console.error('Calendar credential parsing failed');
+      throw new Error('Google Calendar credentials could not be loaded');
     }
 
     const auth = new google.auth.GoogleAuth({
@@ -65,11 +63,11 @@ async function getCalendarIdsFromTutors() {
       throw new Error('No tutor calendar IDs available. Please sync tutors from Notion first.');
     }
     
-    console.log(`Found ${emails.length} tutor calendar(s): ${emails.join(', ')}`);
+    console.log(`Found ${emails.length} tutor calendar(s)`);
     return emails;
   } catch (error) {
-    console.error('Error fetching tutor emails:', error);
-    throw error;
+    console.error('Tutor calendar lookup failed');
+    throw new Error('Tutor calendars could not be loaded');
   }
 }
 
@@ -82,13 +80,12 @@ async function getCalendarIds() {
   if (process.env.GOOGLE_CALENDAR_IDS) {
     const ids = process.env.GOOGLE_CALENDAR_IDS.split(',').map(id => id.trim());
     console.log(`[Calendar] Using calendar IDs from GOOGLE_CALENDAR_IDS: ${ids.length} calendar(s)`);
-    console.log(`[Calendar] IDs: ${ids.join(', ')}`);
     return ids;
   }
   
   // Fallback to single calendar ID
   if (process.env.GOOGLE_CALENDAR_ID) {
-    console.log(`[Calendar] Using single calendar ID from GOOGLE_CALENDAR_ID: ${process.env.GOOGLE_CALENDAR_ID}`);
+    console.log('[Calendar] Using one configured calendar');
     return [process.env.GOOGLE_CALENDAR_ID];
   }
   
@@ -132,21 +129,21 @@ async function fetchEventsFromCalendar(calendarId, year, month) {
 export async function fetchLessonsForMonth(year, month) {
   try {
     const calendarIds = await getCalendarIds();
-    console.log(`Fetching lessons from ${calendarIds.length} calendar(s) for ${year}/${month}`);
+    console.log(`Fetching monthly lessons from ${calendarIds.length} calendar(s)`);
     
     // Fetch events from all calendars in parallel and track calendar ID
     const allEventsArrays = await Promise.all(
       calendarIds.map(async (calendarId) => {
         try {
           const events = await fetchEventsFromCalendar(calendarId, year, month);
-          console.log(`Calendar ${calendarId}: fetched ${events.length} events`);
+          console.log(`Calendar events fetched: ${events.length}`);
           // Add calendar_id to each event for tracking
           return events.map(event => ({
             ...event,
             source_calendar_id: calendarId
           }));
         } catch (error) {
-          console.error(`Error fetching events from calendar ${calendarId}:`, error.message);
+          console.error('Calendar event fetch failed');
           return []; // Return empty array if calendar fails
         }
       })
@@ -171,17 +168,6 @@ export async function fetchLessonsForMonth(year, month) {
     let eventsWithoutStudentId = 0;
     
     const lessons = Array.from(uniqueEvents.values()).map(event => {
-      // Log first 3 events to debug
-      if (eventsWithStudentId + eventsWithoutStudentId < 3) {
-        console.log('Raw event data:', JSON.stringify({
-          id: event.id,
-          summary: event.summary,
-          description: event.description?.substring(0, 200),
-          start: event.start,
-          source_calendar_id: event.source_calendar_id
-        }, null, 2));
-      }
-      
       // Extract student ID from description
       const studentId = extractStudentId(event.description || '');
       
@@ -189,10 +175,6 @@ export async function fetchLessonsForMonth(year, month) {
         eventsWithStudentId++;
       } else {
         eventsWithoutStudentId++;
-        // Log first 5 events without student ID
-        if (eventsWithoutStudentId <= 5) {
-          console.log(`Event without student ID: title="${event.summary}", description="${(event.description || '').substring(0, 100)}"`);
-        }
       }
       
       return {
@@ -211,8 +193,8 @@ export async function fetchLessonsForMonth(year, month) {
     console.log(`Found ${lessons.length} lessons with student IDs`);
     return lessons;
   } catch (error) {
-    console.error('Error fetching lessons from Google Calendar:', error);
-    throw error;
+    console.error('Monthly calendar lesson fetch failed');
+    throw new Error('Monthly calendar lessons could not be loaded');
   }
 }
 
@@ -315,17 +297,13 @@ export async function fetchLessonsForTomorrow() {
     const dayAfter = new Date(tomorrow);
     dayAfter.setDate(dayAfter.getDate() + 1);
 
-    console.log(`[Calendar] Current time (JST): ${jstNow.toISOString()}`);
-    console.log(`[Calendar] Tomorrow (JST): ${tomorrow.toISOString()}`);
-    console.log(`[Calendar] Day after (JST): ${dayAfter.toISOString()}`);
     console.log(`[Calendar] Fetching tomorrow's lessons from ${calendarIds.length} calendar(s)`);
-    console.log(`[Calendar] Calendar IDs:`, calendarIds);
 
     // Fetch events from all calendars in parallel
     const allEventsArrays = await Promise.all(
       calendarIds.map(async (calendarId, index) => {
         try {
-          console.log(`[Calendar] Fetching from calendar ${index + 1}/${calendarIds.length}: ${calendarId.substring(0, 20)}...`);
+          console.log(`[Calendar] Fetching calendar ${index + 1}/${calendarIds.length}`);
           const response = await calendar.events.list({
             calendarId: calendarId,
             timeMin: tomorrow.toISOString(),
@@ -337,7 +315,7 @@ export async function fetchLessonsForTomorrow() {
           console.log(`[Calendar] Found ${events.length} events in calendar ${index + 1}`);
           return events;
         } catch (error) {
-          console.error(`[Calendar] ❌ Error fetching events from calendar ${calendarId}:`, error.message);
+          console.error('[Calendar] Tomorrow event fetch failed');
           return []; // Return empty array if calendar fails
         }
       })
@@ -357,13 +335,6 @@ export async function fetchLessonsForTomorrow() {
     const totalEvents = uniqueEvents.size;
     console.log(`[Calendar] Total unique events found: ${totalEvents}`);
     
-    // Debug: Log raw event structure
-    if (totalEvents > 0) {
-      const firstEvent = Array.from(uniqueEvents.values())[0];
-      console.log(`[Calendar] Raw event object keys:`, Object.keys(firstEvent));
-      console.log(`[Calendar] Raw event sample:`, JSON.stringify(firstEvent, null, 2).substring(0, 500));
-    }
-    
     const allLessons = Array.from(uniqueEvents.values()).map(event => {
       const studentId = extractStudentId(event.description || '');
       
@@ -378,33 +349,13 @@ export async function fetchLessonsForTomorrow() {
       };
     });
     
-    // Log sample events BEFORE filtering
-    if (allLessons.length > 0) {
-      console.log(`[Calendar] Sample events (before student ID filter):`);
-      allLessons.slice(0, 3).forEach((lesson, i) => {
-        console.log(`[Calendar]   Event ${i + 1}:`);
-        console.log(`[Calendar]     Title: ${lesson.title}`);
-        console.log(`[Calendar]     Description (first 200 chars): ${(lesson.description || '(empty)').substring(0, 200)}`);
-        console.log(`[Calendar]     Extracted Student ID: ${lesson.student_id || '(NOT FOUND)'}`);
-        console.log(`[Calendar]     Extracted Tutor: ${lesson.tutor_name || '(NOT FOUND)'}`);
-        console.log(`[Calendar]     Meet Link: ${lesson.meet_link || '(NOT FOUND)'}`);
-      });
-    }
-    
     // Filter by student ID
     const lessons = allLessons.filter(lesson => lesson.student_id);
 
     console.log(`[Calendar] ✅ Found ${lessons.length} lessons for tomorrow (with student ID)`);
-    if (lessons.length > 0) {
-      console.log(`[Calendar] Sample lessons:`, lessons.slice(0, 2).map(l => ({
-        student_id: l.student_id,
-        tutor: l.tutor_name,
-        date: l.lesson_date
-      })));
-    }
     return lessons;
   } catch (error) {
-    console.error('Error fetching tomorrow\'s lessons:', error);
-    throw error;
+    console.error('Tomorrow calendar lesson fetch failed');
+    throw new Error('Tomorrow calendar lessons could not be loaded');
   }
 }
