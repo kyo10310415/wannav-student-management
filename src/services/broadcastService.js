@@ -29,7 +29,7 @@ export const GAS_BROADCAST_CREATED_BY = 'gas-broadcast';
 
 function logBroadcastDebug(message, details) {
   if (process.env.BROADCAST_VERBOSE_LOGGING === 'true') {
-    console.log(message, details ?? '');
+    console.log(message);
   }
 }
 
@@ -40,12 +40,7 @@ function logBroadcastDebug(message, details) {
  */
 export async function getTargetStudents(targetStatus, targetTutor, userEmail, userRole) {
   try {
-    console.log('[Broadcast] getTargetStudents called with:', {
-      targetStatus,
-      targetTutor,
-      userEmail,
-      userRole
-    });
+    console.log("[Broadcast] getTargetStudents called with:");
 
     let sqlQuery = `
       SELECT s.student_id, s.name, s.status, s.homeroom_tutor, s.contract_plan
@@ -94,11 +89,11 @@ export async function getTargetStudents(targetStatus, targetTutor, userEmail, us
     sqlQuery += ' ORDER BY s.student_id';
 
     const result = await query(sqlQuery, params);
-    console.log(`[Broadcast] Found ${result.rows.length} target students`);
+    console.log("[Broadcast] Target selection completed");
     return result.rows;
   } catch (error) {
-    console.error('[Broadcast] Error getting target students:', error);
-    throw error;
+    console.error("[Broadcast] Error getting target students:");
+    throw new Error('Broadcast operation failed');
   }
 }
 
@@ -119,8 +114,8 @@ function withTimeout(promise, ms, label) {
 }
 
 class DeliveryUncertainError extends Error {
-  constructor(message, cause) {
-    super(message, { cause });
+  constructor(message) {
+    super(message);
     this.name = 'DeliveryUncertainError';
     this.deliveryUncertain = true;
   }
@@ -203,21 +198,21 @@ async function _axiosPostWithRetry(url, requestFactory, label) {
       if (status === 429) {
         const retryAfterSec = parseFloat(err.response?.headers?.['retry-after'] || '1');
         const waitMs = Math.ceil(retryAfterSec * 1000) + 200;
-        console.warn(`[Broadcast] 429 Rate Limit. Waiting ${waitMs}ms before retry (attempt ${attempt}/${MAX_RETRIES})...`);
+        console.warn("[Broadcast] Rate limit retry scheduled");
         await new Promise(r => setTimeout(r, waitMs));
       } else if (!err.response) {
         // タイムアウトや接続断は、Discord側だけ成功している可能性がある。
         // 重複防止のため「失敗」ではなく送達不明として上位へ伝える。
-        throw new DeliveryUncertainError(`${label}: delivery result is unknown (${err.message})`, err);
+        throw new DeliveryUncertainError('Delivery result is unknown');
       } else {
         // 429 以外のエラーはリトライしない
-        throw err;
+        throw new Error('Broadcast operation failed');
       }
     } finally {
       clearTimeout(timeout);
     }
   }
-  throw lastError;
+  throw new Error('Broadcast operation failed');
 }
 
 // ─── Bot 送信 ─────────────────────────────────────────────────────────────────
@@ -257,9 +252,9 @@ async function sendViaBot(chatUrl, discordId, content, imageData) {
     );
   } catch (err) {
     if (err.message?.includes('timed out')) {
-      throw new DeliveryUncertainError(err.message, err);
+      throw new DeliveryUncertainError('Delivery result is unknown');
     }
-    throw err;
+    throw new Error('Broadcast operation failed');
   }
 
   return { success: true };
@@ -375,14 +370,14 @@ export async function enqueueBroadcast(messageData, targetStudents, userEmail, d
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    throw error;
+    throw new Error('Broadcast operation failed');
   } finally {
     client.release();
   }
 
   // バックグラウンドで送信開始（await しない）
   runBroadcastJob(jobId).catch(err => {
-    console.error(`[Broadcast] Background job ${jobId} crashed:`, err.message);
+    console.error("[Broadcast] Background job failed");
   });
 
   return { jobId, broadcastId, total, reused: false };
@@ -449,7 +444,7 @@ async function loadBroadcastImage(imageId) {
     [imageId]
   );
   if (result.rows.length === 0) {
-    console.warn('[Broadcast] Image not found in database:', imageId);
+    console.warn("[Broadcast] Image not found in database:");
     return null;
   }
   return result.rows[0];
@@ -564,7 +559,7 @@ async function prepareLegacyJobRecipients(jobId, userEmail, userRole) {
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    throw error;
+    throw new Error('Broadcast operation failed');
   } finally {
     client.release();
   }
@@ -654,7 +649,7 @@ export async function resumeBroadcastJob(jobId, userEmail, userRole) {
     [jobId]
   );
   dispatchBroadcastJob(jobId).catch(err => {
-    console.error(`[Broadcast] Resumed job ${jobId} crashed:`, err.message);
+    console.error("[Broadcast] Resumed job failed");
   });
   return getBroadcastJobStatus(jobId);
 }
@@ -720,10 +715,10 @@ async function _runBroadcastJob(jobId) {
     const imageData = await loadBroadcastImage(job.image_url);
     let broadcastInfoMap = new Map();
     if (!job.is_test && !usesExplicitTargets) {
-      console.log(`[Broadcast Job ${jobId}] Fetching student broadcast info from sheets...`);
+      console.log("[Broadcast] Loading recipient information");
       const studentBroadcastInfo = await fetchStudentBroadcastInfo();
       broadcastInfoMap = new Map(studentBroadcastInfo.map(s => [String(s.studentId), s]));
-      console.log(`[Broadcast Job ${jobId}] Sheet data loaded: ${studentBroadcastInfo.length} records`);
+      console.log("[Broadcast] Recipient information loaded");
     }
 
     const recipientResult = await query(
@@ -790,15 +785,15 @@ async function _runBroadcastJob(jobId) {
           await logBroadcastSend(job.broadcast_id, student, job.channel_type, webhookUrl, 'sent', null);
         } catch (err) {
           const status = (deliveryConfirmed || err.deliveryUncertain) ? 'unknown' : 'failed';
-          console.error(`[Broadcast Job ${jobId}] ${status} for ${student.student_id}: ${err.message}`);
-          await setRecipientStatus(jobId, student.student_id, status, err.message);
-          await logBroadcastSend(job.broadcast_id, student, job.channel_type, webhookUrl, status, err.message);
+          console.error("[Broadcast] Recipient delivery failed");
+          await setRecipientStatus(jobId, student.student_id, status, 'Broadcast delivery failed');
+          await logBroadcastSend(job.broadcast_id, student, job.channel_type, webhookUrl, status, 'Broadcast delivery failed');
         }
       }
 
       await syncJobProgress(jobId);
       if ((i + 1) % 50 === 0) {
-        console.log(`[Broadcast Job ${jobId}] Progress: ${i + 1}/${recipientResult.rows.length} attempted`);
+        console.log("[Broadcast] Job progress updated");
       }
       await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY_MS));
     }
@@ -813,9 +808,9 @@ async function _runBroadcastJob(jobId) {
     const { pending, unknown_count: unknownCount } = finalCounts.rows[0];
     const finalStatus = pending > 0 ? 'interrupted' : (unknownCount > 0 ? 'needs_review' : 'completed');
     const finalJob = await syncJobProgress(jobId, finalStatus);
-    console.log(`[Broadcast Job ${jobId}] Finished with status=${finalStatus}, sent=${finalJob.sent}, failed=${finalJob.failed}, unknown=${finalJob.unknown_count}`);
+    console.log("[Broadcast] Job completed");
   } catch (err) {
-    console.error(`[Broadcast Job ${jobId}] Fatal error:`, err.message);
+    console.error("[Broadcast] Job interrupted");
     await query(
       `UPDATE broadcast_job_recipients
        SET status = CASE WHEN status = 'sending' THEN 'unknown' ELSE status END,
@@ -823,7 +818,7 @@ async function _runBroadcastJob(jobId) {
            completed_at = CASE WHEN status = 'sending' THEN NOW() ELSE completed_at END,
            updated_at = NOW()
        WHERE job_id = $1 AND status IN ('pending', 'sending')`,
-      [jobId, `Worker stopped: ${err.message}`]
+      [jobId, 'Broadcast worker stopped']
     ).catch(() => {});
     await syncJobProgress(jobId, 'interrupted').catch(() => {});
   }
@@ -860,12 +855,12 @@ export async function recoverPendingBroadcastJobs() {
 
   for (const { job_id: jobId } of result.rows) {
     dispatchBroadcastJob(jobId).catch(err => {
-      console.error(`[Broadcast] Failed to recover pending job ${jobId}:`, err.message);
+      console.error("[Broadcast] Pending job recovery failed");
     });
   }
 
   if (result.rows.length > 0) {
-    console.log(`[Broadcast] Re-queued ${result.rows.length} pending job(s)`);
+    console.log("[Broadcast] Pending jobs requeued");
   }
   return result.rows.length;
 }
@@ -902,7 +897,7 @@ async function logBroadcastSend(broadcastId, student, channelType, webhookUrl, s
       ]
     );
   } catch (error) {
-    console.error('[Broadcast] Error logging send:', error);
+    console.error("[Broadcast] Error logging send:");
   }
 }
 
@@ -924,8 +919,8 @@ export async function getTemplates(userEmail, userRole) {
     const result = await query(sqlQuery, params);
     return result.rows;
   } catch (error) {
-    console.error('[Broadcast] Error getting templates:', error);
-    throw error;
+    console.error("[Broadcast] Error getting templates:");
+    throw new Error('Broadcast operation failed');
   }
 }
 
@@ -951,8 +946,8 @@ export async function saveTemplate(templateData, userEmail) {
       return { success: true, id: result.rows[0].id };
     }
   } catch (error) {
-    console.error('[Broadcast] Error saving template:', error);
-    throw error;
+    console.error("[Broadcast] Error saving template:");
+    throw new Error('Broadcast operation failed');
   }
 }
 
@@ -967,8 +962,8 @@ export async function deleteTemplate(templateId, userEmail, userRole) {
     await query(sqlQuery, params);
     return { success: true };
   } catch (error) {
-    console.error('[Broadcast] Error deleting template:', error);
-    throw error;
+    console.error("[Broadcast] Error deleting template:");
+    throw new Error('Broadcast operation failed');
   }
 }
 
@@ -1000,7 +995,7 @@ export async function getBroadcastLogs(broadcastId = null, limit = 100) {
     const result = await query(sqlQuery, params);
     return result.rows;
   } catch (error) {
-    console.error('[Broadcast] Error getting logs:', error);
-    throw error;
+    console.error("[Broadcast] Error getting logs:");
+    throw new Error('Broadcast operation failed');
   }
 }
