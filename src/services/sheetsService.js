@@ -28,19 +28,24 @@ export function getSheets() {
         throw new Error('GOOGLE_CREDENTIALS_JSON not found in environment variables');
       }
     } catch (error) {
-      console.error('Error parsing Google credentials:', error);
-      throw error;
+      console.error('[Sheets] getSheets failed');
+      throw new Error('[Sheets] getSheets failed');
     }
 
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: [
-        'https://www.googleapis.com/auth/spreadsheets.readonly',
-        'https://www.googleapis.com/auth/spreadsheets' // 書き込み権限も追加
-      ],
-    });
+    try {
+      const auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: [
+          'https://www.googleapis.com/auth/spreadsheets.readonly',
+          'https://www.googleapis.com/auth/spreadsheets' // 書き込み権限も追加
+        ],
+      });
 
-    sheets = google.sheets({ version: 'v4', auth });
+      sheets = google.sheets({ version: 'v4', auth });
+    } catch (error) {
+      console.error('[Sheets] getSheets failed');
+      throw new Error('[Sheets] getSheets failed');
+    }
   }
 
   return sheets;
@@ -80,8 +85,8 @@ export async function fetchStudentTextTypeMap() {
     console.log(`[Student Text Type] Loaded ${textTypeMap.size} student mappings`);
     return textTypeMap;
   } catch (error) {
-    console.error('[Student Text Type] Error fetching source data:', error);
-    throw error;
+    console.error('[Sheets] fetchStudentTextTypeMap failed');
+    throw new Error('[Sheets] fetchStudentTextTypeMap failed');
   }
 }
 
@@ -121,8 +126,8 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
     console.log(`Valid lessons with student ID: ${lessons.length}`);
     return lessons;
   } catch (error) {
-    console.error('Error fetching data from Google Sheets:', error);
-    throw error;
+    console.error('[Sheets] fetchLessonsFromSheet failed');
+    throw new Error('[Sheets] fetchLessonsFromSheet failed');
   }
 }
 
@@ -147,7 +152,7 @@ export async function getLastSyncTime(spreadsheetId) {
       validEvents: parseInt(row[2])
     };
   } catch (error) {
-    console.error('Error fetching sync metadata:', error);
+    console.error('[Sheets] getLastSyncTime failed');
     return null;
   }
 }
@@ -172,9 +177,7 @@ export async function fetchLessonsForTomorrow() {
     // Format as YYYY/M/D for comparison (match spreadsheet format)
     const tomorrowStr = `${tomorrow.getFullYear()}/${tomorrow.getMonth() + 1}/${tomorrow.getDate()}`;
     
-    console.log(`[Sheets] Fetching lessons for tomorrow: ${tomorrowStr}`);
-    console.log(`[Sheets] Spreadsheet ID: ${spreadsheetId}`);
-    console.log(`[Sheets] Sheet name: ${sheetName}`);
+    console.log('[Sheets] Fetching lessons for tomorrow');
     
     // Fetch all lessons from sheet
     const allLessons = await fetchLessonsFromSheet(spreadsheetId, sheetName);
@@ -236,21 +239,11 @@ export async function fetchLessonsForTomorrow() {
     console.log(`[Sheets] Total lessons in sheet: ${allLessons.length}`);
     console.log(`[Sheets] Lessons for tomorrow (with "レッスン/PROプラン/Proプラン" filter): ${tomorrowLessons.length}`);
     
-    if (tomorrowLessons.length > 0) {
-      console.log(`[Sheets] Sample lessons:`);
-      tomorrowLessons.slice(0, 3).forEach((lesson, i) => {
-        console.log(`[Sheets]   Lesson ${i + 1}:`);
-        console.log(`[Sheets]     Student: ${lesson.student_id}`);
-        console.log(`[Sheets]     Tutor (from DB): ${lesson.tutor_name}`);
-        console.log(`[Sheets]     Date (raw): ${lesson.lesson_date}`);
-        console.log(`[Sheets]     Title: ${lesson.title}`);
-      });
-    }
     
     return tomorrowLessons;
   } catch (error) {
-    console.error('[Sheets] Error fetching tomorrow\'s lessons:', error);
-    throw error;
+    console.error('[Sheets] fetchLessonsForTomorrow failed');
+    throw new Error('[Sheets] fetchLessonsForTomorrow failed');
   }
 }
 
@@ -331,7 +324,7 @@ export async function fetchAllWanamiUsageCounts(year = null, month = null) {
     
     return monthlyData[`${year}-${month}`] || {};
   } catch (error) {
-    console.error('[Wanami] Error fetching all usage counts:', error);
+    console.error('[Sheets] fetchAllWanamiUsageCounts failed');
     return {};
   }
 }
@@ -387,11 +380,10 @@ export async function fetchWanamiUsageCount(studentId, year = null, month = null
     });
 
     const count = matchingRecords.length;
-    console.log(`[Wanami] Student ${studentId}: ${count} records in ${year}/${month}`);
     
     return count;
   } catch (error) {
-    console.error('[Wanami] Error fetching usage count:', error);
+    console.error('[Sheets] fetchWanamiUsageCount failed');
     return 0; // Return 0 on error instead of throwing
   }
 }
@@ -449,11 +441,10 @@ export async function fetchWanamiUsageHistory(studentId) {
       return b.month - a.month;
     });
     
-    console.log(`[Wanami] Student ${studentId} history:`, history);
     
     return history;
   } catch (error) {
-    console.error('[Wanami] Error fetching usage history:', error);
+    console.error('[Sheets] fetchWanamiUsageHistory failed');
     return [];
   }
 }
@@ -487,7 +478,6 @@ export async function fetchSchedulesFromSheet() {
           // Google Sheetsの日時文字列（例: "2026/02/28 23:00" または "2026/02/28 23:00:00"）を
           // JSTとして解釈する
           const dateStr = row[4];
-          console.log('[DEBUG] Original date string from Sheets:', dateStr);
           
           // 日時文字列を直接JSTとして解釈
           // "YYYY/MM/DD HH:MM:SS" または "YYYY/MM/DD HH:MM" 形式を想定
@@ -495,7 +485,6 @@ export async function fetchSchedulesFromSheet() {
           
           if (match) {
             const [_, year, month, day, hour, minute, second] = match;
-            console.log('[DEBUG] Parsed components:', { year, month, day, hour, minute, second: second || '0' });
             
             // 日付部分（YYYY/MM/DD）- JSTで表示
             scheduleDate = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
@@ -503,7 +492,6 @@ export async function fetchSchedulesFromSheet() {
             // 時間部分（HH:MM）- JSTで表示
             scheduleTime = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
             
-            console.log('[DEBUG] Display values (JST):', { scheduleDate, scheduleTime });
             
             // JSTのタイムゾーンオフセット（UTC+9）
             const jstOffset = 9 * 60; // 9時間を分に変換
@@ -521,19 +509,16 @@ export async function fetchSchedulesFromSheet() {
             // JSTオフセットを引く（JSTからUTCへ変換）
             startDate = new Date(utcDate.getTime() - jstOffset * 60 * 1000);
             
-            console.log('[DEBUG] Stored UTC date:', startDate.toISOString());
           } else {
-            console.log('[DEBUG] Date string did not match expected format, using fallback');
             // フォールバック: 通常のDate解析（使われないはず）
             startDate = new Date(dateStr);
             
             scheduleDate = dateStr.split(' ')[0];
             scheduleTime = dateStr.split(' ')[1] || '';
             
-            console.log('[DEBUG] Fallback values:', { scheduleDate, scheduleTime });
           }
         } catch (error) {
-          console.error('Date parse error:', error);
+          console.error('[Sheets] fetchSchedulesFromSheet failed');
         }
       }
       
@@ -558,8 +543,8 @@ export async function fetchSchedulesFromSheet() {
     console.log(`Valid schedules: ${schedules.length}`);
     return schedules;
   } catch (error) {
-    console.error('Error fetching schedules from Google Sheets:', error);
-    throw error;
+    console.error('[Sheets] fetchSchedulesFromSheet failed');
+    throw new Error('[Sheets] fetchSchedulesFromSheet failed');
   }
 }
 
@@ -601,8 +586,8 @@ export async function fetchIndividualWebhooks(spreadsheetId = '1DvjTbwz2qhqwSnNq
     console.log(`Valid webhook mappings: ${Object.keys(webhookMap).length}`);
     return webhookMap;
   } catch (error) {
-    console.error('Error fetching individual webhooks from Google Sheets:', error);
-    throw error;
+    console.error('[Sheets] fetchIndividualWebhooks failed');
+    throw new Error('[Sheets] fetchIndividualWebhooks failed');
   }
 }
 
@@ -643,8 +628,8 @@ export async function fetchTutorWebhooks(spreadsheetId = '13rHnYHavM6Mm7JRC3n88X
     console.log(`Valid tutor webhook mappings: ${Object.keys(webhookMap).length}`);
     return webhookMap;
   } catch (error) {
-    console.error('Error fetching tutor webhooks from Google Sheets:', error);
-    throw error;
+    console.error('[Sheets] fetchTutorWebhooks failed');
+    throw new Error('[Sheets] fetchTutorWebhooks failed');
   }
 }
 
@@ -690,7 +675,7 @@ export async function fetchSuspensionData() {
           endDate.setDate(endDate.getDate() - 1); // -1日
           suspensionEndDate = endDate.toISOString().split('T')[0];
         } catch (error) {
-          console.error(`Error calculating end date for row ${index + 2}:`, error);
+          console.error('[Sheets] fetchSuspensionData failed');
         }
       }
       
@@ -706,8 +691,8 @@ export async function fetchSuspensionData() {
     console.log(`[Suspension] Processed ${suspensions.length} valid suspension records`);
     return suspensions;
   } catch (error) {
-    console.error('Error fetching suspension data from Google Sheets:', error);
-    throw error;
+    console.error('[Sheets] fetchSuspensionData failed');
+    throw new Error('[Sheets] fetchSuspensionData failed');
   }
 }
 
@@ -732,7 +717,7 @@ export async function fetchSuspensionMonthsMap() {
     console.log(`[Suspension Map] Created map for ${Object.keys(suspensionMap).length} students with suspension history`);
     return suspensionMap;
   } catch (error) {
-    console.error('Error creating suspension months map:', error);
+    console.error('[Sheets] fetchSuspensionMonthsMap failed');
     return {};
   }
 }
@@ -782,8 +767,8 @@ export async function fetchStudentBroadcastInfo() {
     console.log(`[Broadcast Info] Processed ${studentInfo.length} valid student records`);
     return studentInfo;
   } catch (error) {
-    console.error('[Broadcast Info] Error fetching student broadcast info:', error);
-    throw error;
+    console.error('[Sheets] fetchStudentBroadcastInfo failed');
+    throw new Error('[Sheets] fetchStudentBroadcastInfo failed');
   }
 }
 
@@ -805,7 +790,7 @@ export async function fetchVQDiagnosisResults(startRow = 2, endRow = null, ignor
       ? `${sheetName}!A${startRow}:U${endRow}`
       : `${sheetName}!A${startRow}:U`;
     
-    console.log(`📊 VQ診断データ取得開始: 行 ${startRow}${endRow ? ` 〜 ${endRow}` : ' から最後まで'}${ignoreRColumn ? ' (R列を無視)' : ''}`);
+    console.log('[Sheets] Fetching diagnosis results');
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -830,21 +815,18 @@ export async function fetchVQDiagnosisResults(startRow = 2, endRow = null, ignor
       // C列（学籍番号）が空の場合はスキップ
       const studentId = String(row[2] || '').trim();
       if (!studentId) {
-        console.log(`⚠️ 行 ${actualRow}: 学籍番号(C列)が空のためスキップ`);
         return;
       }
       
       // P列（診断タイプ）が空の場合はスキップ（まだ診断未完了）
       const diagnosisType = String(row[15] || '').trim();
       if (!diagnosisType) {
-        console.log(`⚠️ 行 ${actualRow}: 診断タイプが空のためスキップ (${studentId})`);
         return;
       }
       
       // R列（メール送信済み）をチェック（ignoreRColumn=trueの場合は無視）
       const emailSent = String(row[17] || '').trim();
       if (!ignoreRColumn && emailSent === '完了') {
-        console.log(`✅ 行 ${actualRow}: 送信済みのためスキップ (${studentId})`);
         return;
       }
       
@@ -873,16 +855,6 @@ export async function fetchVQDiagnosisResults(startRow = 2, endRow = null, ignor
       const overview = String(row[18] || '').trim();  // S列 (index 18)
       const details = String(row[19] || '').trim();   // T列 (index 19)
       
-      // デバッグ用: 最初の5件の詳細ログ出力
-      if (results.length < 5) {
-        console.log(`\n📋 デバッグ 行${actualRow}:`);
-        console.log(`  学籍番号 (C列/index 2): ${studentId}`);
-        console.log(`  診断タイプ (P列/index 15): ${diagnosisType}`);
-        console.log(`  送信フラグ (R列/index 17): ${emailSent}`);
-        console.log(`  概要 (S列/index 18): ${overview.substring(0, 50)}${overview.length > 50 ? '...' : ''} (${overview.length}文字)`);
-        console.log(`  詳細 (T列/index 19): ${details.substring(0, 50)}${details.length > 50 ? '...' : ''} (${details.length}文字)`);
-        console.log(`  全列数: ${row.length}`);
-      }
       
       results.push({
         rowNumber: actualRow,
@@ -912,8 +884,8 @@ export async function fetchVQDiagnosisResults(startRow = 2, endRow = null, ignor
     };
     
   } catch (error) {
-    console.error('❌ VQ診断データ取得エラー:', error);
-    throw error;
+    console.error('[Sheets] fetchVQDiagnosisResults failed');
+    throw new Error('[Sheets] fetchVQDiagnosisResults failed');
   }
 }
 
@@ -940,11 +912,11 @@ export async function updateVQDiagnosisEmailStatus(rowNumber, value = '完了') 
       }
     });
     
-    console.log(`✅ R列更新成功: 行 ${rowNumber} → "${value}"`);
+    console.log('[Sheets] Diagnosis email status updated');
     
   } catch (error) {
-    console.error(`❌ R列更新エラー (行 ${rowNumber}):`, error);
-    throw error;
+    console.error('[Sheets] updateVQDiagnosisEmailStatus failed');
+    throw new Error('[Sheets] updateVQDiagnosisEmailStatus failed');
   }
 }
 
@@ -975,8 +947,8 @@ export async function batchUpdateVQDiagnosisEmailStatus(updates) {
     console.log(`✅ R列一括更新成功: ${updates.length}件`);
     
   } catch (error) {
-    console.error('❌ R列一括更新エラー:', error);
-    throw error;
+    console.error('[Sheets] batchUpdateVQDiagnosisEmailStatus failed');
+    throw new Error('[Sheets] batchUpdateVQDiagnosisEmailStatus failed');
   }
 }
 
@@ -994,7 +966,6 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
     // A列からT列まで全データ取得（ヘッダー行の次から）
     const range = `${sheetName}!A2:T`;
     
-    console.log(`📊 VQ診断データ取得（学籍番号: ${studentId}）`);
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -1019,7 +990,6 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
       // P列（診断タイプ）が空の場合はスキップ
       const diagnosisType = String(row[15] || '').trim();
       if (!diagnosisType) {
-        console.log(`⚠️ 行 ${actualRow}: 診断タイプが空のためスキップ (${rowStudentId})`);
         return;
       }
       
@@ -1047,10 +1017,6 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
       const overview = String(row[18] || '').trim();  // S列 (index 18)
       const details = String(row[19] || '').trim();   // T列 (index 19)
       
-      // デバッグ用: 最初の1件のみログ出力
-      if (results.length === 0) {
-        console.log(`デバッグ (fetchVQDiagnosisByStudentId) 行${actualRow}: P(診断タイプ)=${diagnosisType}, S(概要)=${overview.substring(0, 30)}..., T(詳細)=${details.substring(0, 30)}...`);
-      }
       
       // R列（メール送信済み）
       const emailSent = String(row[17] || '').trim();
@@ -1073,12 +1039,12 @@ export async function fetchVQDiagnosisByStudentId(studentId) {
       });
     });
     
-    console.log(`📊 該当レコード: ${results.length}件 (学籍番号: ${studentId})`);
+    console.log(`[Sheets] Matching diagnosis records: ${results.length}`);
     
     return results;
     
   } catch (error) {
-    console.error(`❌ VQ診断データ取得エラー (学籍番号: ${studentId}):`, error);
-    throw error;
+    console.error('[Sheets] fetchVQDiagnosisByStudentId failed');
+    throw new Error('[Sheets] fetchVQDiagnosisByStudentId failed');
   }
 }

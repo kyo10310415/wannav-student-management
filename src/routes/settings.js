@@ -35,10 +35,10 @@ app.get('/:key', async (c) => {
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error fetching setting:', error);
+    console.error('Error fetching setting');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Settings operation failed'
     }, 500);
   }
 });
@@ -80,17 +80,17 @@ app.put('/:key', async (c) => {
       }, 404);
     }
 
-    console.log(`[Settings] Updated ${key} = ${value} by ${updatedBy}`);
+    console.log('[Settings] Updated');
 
     return c.json({
       success: true,
       data: result.rows[0]
     });
   } catch (error) {
-    console.error('Error updating setting:', error);
+    console.error('Error updating setting');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Settings operation failed'
     }, 500);
   }
 });
@@ -119,10 +119,10 @@ app.get('/', async (c) => {
       data: result.rows
     });
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    console.error('Error fetching settings');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Settings operation failed'
     }, 500);
   }
 });

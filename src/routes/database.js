@@ -60,8 +60,8 @@ app.get('/stats', async (c) => {
       );
 
     } catch (error) {
-      console.error('Error fetching main database stats:', error);
-      stats.mainDatabase.error = error.message;
+      console.error('Main database statistics could not be loaded');
+      stats.mainDatabase.error = 'Main database statistics could not be loaded';
     }
 
     // Extension Database Statistics (if available)
@@ -97,8 +97,8 @@ app.get('/stats', async (c) => {
         stats.extensionDatabase.totalRows = parseInt(extRowCountResult.rows[0].row_count);
 
       } catch (error) {
-        console.error('Error fetching extension database stats:', error);
-        stats.extensionDatabase.error = error.message;
+        console.error('Extension database statistics could not be loaded');
+        stats.extensionDatabase.error = 'Extension database statistics could not be loaded';
       }
     } else {
       stats.extensionDatabase.error = 'Extension database not configured';
@@ -110,10 +110,10 @@ app.get('/stats', async (c) => {
     });
 
   } catch (error) {
-    console.error('Error fetching database stats:', error);
+    console.error('Database statistics could not be loaded');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Database statistics could not be loaded'
     }, 500);
   }
 });
@@ -148,10 +148,10 @@ app.get('/connection-info', async (c) => {
     });
 
   } catch (error) {
-    console.error('Error fetching connection info:', error);
+    console.error('Database connection information could not be loaded');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Database connection information could not be loaded'
     }, 500);
   }
 });
@@ -175,10 +175,10 @@ app.get('/tables', async (c) => {
       tables: result.rows.map(row => row.tablename)
     });
   } catch (error) {
-    console.error('❌ Error listing tables:', error);
+    console.error('Database tables could not be loaded');
     return c.json({
       success: false,
-      error: error.message
+      error: 'Database tables could not be loaded'
     }, 500);
   }
 });
@@ -216,11 +216,10 @@ app.post('/migrate', async (c) => {
       lessonReportsTableExists: tableExists
     });
   } catch (error) {
-    console.error('❌ Migration error:', error);
+    console.error('Database migration failed');
     return c.json({
       success: false,
-      error: error.message,
-      stack: error.stack
+      error: 'Database migration failed'
     }, 500);
   }
 });
