@@ -797,8 +797,11 @@ app.get('/:studentId', async (c) => {
     const redList = await getRedList(studentId, yearMonth);
     if (!redList) {
       const scores = await calculateRedListScore(studentId, yearMonth || getCurrentYearMonth());
-      await updateRedList(studentId, yearMonth);
-      return c.json({ success: true, data: scores, message: 'Calculated and saved' });
+      if (['admin', 'leader'].includes(c.get('authenticatedUser')?.role)) {
+        await updateRedList(studentId, yearMonth);
+        return c.json({ success: true, data: scores, message: 'Calculated and saved' });
+      }
+      return c.json({ success: true, data: scores, message: 'Calculated' });
     }
     return c.json({ success: true, data: redList });
   } catch (error) {
