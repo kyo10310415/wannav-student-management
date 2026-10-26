@@ -70,7 +70,7 @@ app.get('/check', async (c) => {
         });
       }
     } catch (dbError) {
-      console.error('❌ Database query error:', dbError);
+      console.error("❌ Database query error:");
       // エラーの場合はスプレッドシートにフォールバック
     }
     
@@ -84,7 +84,7 @@ app.get('/check', async (c) => {
           lessonCompletionCache = await fetchLessonCompletionStatus(progressSpreadsheetId);
           lessonCompletionCacheTime = now;
         } catch (cacheError) {
-          console.error('❌ Cache fetch error:', cacheError);
+          console.error("❌ Cache fetch error:");
         }
       }
     }
@@ -148,10 +148,10 @@ app.get('/check', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error checking lesson completion:', error);
+    console.error("Error checking lesson completion:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson completion operation failed'
     }, 500);
   }
 });
@@ -173,10 +173,10 @@ app.post('/batch', async (c) => {
       }, 400);
     }
     
-    console.log(`[Lesson Completion Batch] Processing ${items.length} items`);
+    console.log("[Lesson Completion Batch] Processing items");
     const results = await resolveLessonCompletionItems(items);
     
-    console.log(`[Lesson Completion Batch] Returning ${results.length} results`);
+    console.log("[Lesson Completion Batch] Results prepared");
     
     return c.json({
       success: true,
@@ -185,10 +185,10 @@ app.post('/batch', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error in batch lesson completion check:', error);
+    console.error("Error in batch lesson completion check:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson completion operation failed'
     }, 500);
   }
 });
@@ -210,10 +210,12 @@ app.get('/completed-students', async (c) => {
       data
     });
   } catch (error) {
-    console.error('Error fetching completed students for month:', error);
+    console.error("Error fetching completed students for month:");
     return c.json({
       success: false,
-      error: error.message
+      error: error?.message === 'yearMonth is required (format: YYYY-MM)'
+        ? 'yearMonth is required (format: YYYY-MM)'
+        : 'Lesson completion operation failed'
     }, 400);
   }
 });
@@ -255,10 +257,10 @@ app.get('/month', async (c) => {
     });
     
   } catch (error) {
-    console.error('Error fetching monthly lesson completion:', error);
+    console.error("Error fetching monthly lesson completion:");
     return c.json({
       success: false,
-      error: error.message
+      error: 'Lesson completion operation failed'
     }, 500);
   }
 });

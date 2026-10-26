@@ -63,7 +63,7 @@ async function fetchHelperStats(year, month) {
       return res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
     }
   } catch (e) {
-    console.error('[TutorRedList] fetchHelperStats error:', e.message);
+    console.error('[TutorRedList] fetchHelperStats error:');
   }
   return { byEmployeeId: {}, rescheduleByName: {} };
 }
@@ -83,7 +83,7 @@ async function fetchAttendanceStats(year, month) {
       return map;
     }
   } catch (e) {
-    console.error('[TutorRedList] fetchAttendanceStats error:', e.message);
+    console.error('[TutorRedList] fetchAttendanceStats error:');
   }
   return {};
 }
@@ -98,7 +98,7 @@ async function fetchSatisfactionAll() {
       return res.data.data || {};  // tutor_name -> { yearMonth -> { average, count } }
     }
   } catch (e) {
-    console.error('[TutorRedList] fetchSatisfactionAll error:', e.message);
+    console.error('[TutorRedList] fetchSatisfactionAll error:');
   }
   return {};
 }
@@ -173,8 +173,8 @@ app.get('/', async (c) => {
       month,
     });
   } catch (error) {
-    console.error('[TutorRedList] GET / error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('[TutorRedList] GET / error:');
+    return c.json({ success: false, error: 'Tutor red list operation failed' }, 500);
   }
 });
 
@@ -239,7 +239,7 @@ app.post('/recalc', async (c) => {
       const satisfactionAvg = monthData ? (monthData.average * 10) : null;
 
       if (skillTotal !== null) {
-        console.log(`[TutorRedList] ${tutorName}(${tutorId}): skillTotal=${skillTotal} skillScoreLow=${skillScoreLow} skillScore=${skillScore}`);
+        console.log('[TutorRedList] Skill score evaluated');
       }
 
       if (rank) {
@@ -297,8 +297,8 @@ app.post('/recalc', async (c) => {
       month,
     });
   } catch (error) {
-    console.error('[TutorRedList] POST /recalc error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('[TutorRedList] POST /recalc error:');
+    return c.json({ success: false, error: 'Tutor red list operation failed' }, 500);
   }
 });
 
@@ -346,8 +346,8 @@ app.patch('/:tutorId/status', async (c) => {
 
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('[TutorRedList] PATCH /:tutorId/status error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('[TutorRedList] PATCH /:tutorId/status error:');
+    return c.json({ success: false, error: 'Tutor red list operation failed' }, 500);
   }
 });
 
@@ -369,8 +369,8 @@ app.delete('/:tutorId', async (c) => {
 
     return c.json({ success: true, message: 'レッドリストから削除しました' });
   } catch (error) {
-    console.error('[TutorRedList] DELETE /:tutorId error:', error);
-    return c.json({ success: false, error: error.message }, 500);
+    console.error('[TutorRedList] DELETE /:tutorId error:');
+    return c.json({ success: false, error: 'Tutor red list operation failed' }, 500);
   }
 });
 

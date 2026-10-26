@@ -68,7 +68,7 @@ import { startDiscordReplyMonitor, checkDiscordReplyAlerts } from './services/di
 
 startDiscordReplyMonitor();
 cron.schedule('*/5 * * * *', () => {
-  checkDiscordReplyAlerts().catch(error => console.error('[DiscordReplyMonitor] Check failed:', error.code || error.name));
+  checkDiscordReplyAlerts().catch(error => console.error('[DiscordReplyMonitor] Check failed:'));
 });
 
 const app = new Hono();
@@ -158,10 +158,10 @@ cron.schedule('0 * * * *', async () => {
       studentsRes.json(),
       tutorsRes.json()
     ]);
-    console.log(`Students sync: ${studentsResult.message || studentsResult.error}`);
-    console.log(`Tutors sync: ${tutorsResult.message || tutorsResult.error}`);
+    console.log('Students sync response received');
+    console.log('Tutors sync response received');
   } catch (error) {
-    console.error('Error in students & tutors auto-sync:', error);
+    console.error('Error in students & tutors auto-sync:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -178,7 +178,7 @@ if (process.env.DISCORD_REMINDERS_ENABLED !== 'false') {
       await sendDailyReminders();
       console.log('Daily reminders sent successfully');
     } catch (error) {
-      console.error('Error sending daily reminders:', error);
+      console.error('Error sending daily reminders:');
     }
   }, {
     timezone: 'Asia/Tokyo'
@@ -196,9 +196,9 @@ cron.schedule('0 * * * *', async () => {
       method: 'POST'
     });
     const result = await response.json();
-    console.log('Helper request expiration check completed:', result.message);
+    console.log('Helper request expiration check completed:');
   } catch (error) {
-    console.error('Error checking expired helper requests:', error);
+    console.error('Error checking expired helper requests:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -214,7 +214,7 @@ if (process.env.DISCORD_STATS_REPORT_ENABLED !== 'false') {
       await sendDailyStatsReport();
       console.log('Daily statistics report sent successfully');
     } catch (error) {
-      console.error('Error sending daily statistics report:', error);
+      console.error('Error sending daily statistics report:');
     }
   }, {
     timezone: 'Asia/Tokyo'
@@ -229,7 +229,7 @@ cron.schedule('0,30 * * * *', async () => {
   try {
     await checkAndExecuteSchedules();
   } catch (error) {
-    console.error('Error checking broadcast schedules:', error);
+    console.error('Error checking broadcast schedules:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -242,7 +242,7 @@ cron.schedule('0 10 * * *', async () => {
   try {
     await checkStampRallyAchievements();
   } catch (error) {
-    console.error('Error in stamp rally achievement check:', error);
+    console.error('Error in stamp rally achievement check:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -258,7 +258,7 @@ if (process.env.LESSON_REPORT_REMINDER_ENABLED !== 'false') {
       await sendLessonReportReminder();
       console.log('Lesson report reminders sent successfully');
     } catch (error) {
-      console.error('Error sending lesson report reminders:', error);
+      console.error('Error sending lesson report reminders:');
     }
   }, {
     timezone: 'Asia/Tokyo'
@@ -276,7 +276,7 @@ cron.schedule('0 * * * *', async () => {
     await sendSurveyReminderNotifications();
     console.log('Survey reminder check completed');
   } catch (error) {
-    console.error('Error in survey reminder notifications:', error);
+    console.error('Error in survey reminder notifications:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -292,7 +292,7 @@ cron.schedule('*/5 * * * *', async () => {
     await checkAndSendVQDiagnosis();
     console.log('VQ diagnosis check completed');
   } catch (error) {
-    console.error('Error in VQ diagnosis check:', error);
+    console.error('Error in VQ diagnosis check:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -307,7 +307,7 @@ cron.schedule('0 0 * * *', async () => {
     await dailyRedListUpdate();
     console.log('Daily red list update completed');
   } catch (error) {
-    console.error('Error in daily red list update:', error);
+    console.error('Error in daily red list update:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -322,7 +322,7 @@ cron.schedule('5 0 1 * *', async () => {
     await monthlyRedListReset();
     console.log('Monthly red list reset completed');
   } catch (error) {
-    console.error('Error in monthly red list reset:', error);
+    console.error('Error in monthly red list reset:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -334,9 +334,9 @@ cron.schedule('59 23 * * 0', async () => {
   console.log('[Tutor Weekly Snapshot] Running weekly snapshot at 23:59 JST on Sunday...');
   try {
     const result = await weeklyTutorSnapshot();
-    console.log('[Tutor Weekly Snapshot] Completed:', result);
+    console.log('[Tutor Weekly Snapshot] Completed:');
   } catch (error) {
-    console.error('[Tutor Weekly Snapshot] Error:', error);
+    console.error('[Tutor Weekly Snapshot] Error:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -352,9 +352,9 @@ cron.schedule('30 23 28-31 * *', async () => {
   console.log('[Tutor Monthly Snapshot] Running monthly snapshot at 23:30 JST...');
   try {
     const result = await monthlyTutorSnapshot();
-    console.log('[Tutor Monthly Snapshot] Completed:', result);
+    console.log('[Tutor Monthly Snapshot] Completed:');
   } catch (error) {
-    console.error('[Tutor Monthly Snapshot] Error:', error);
+    console.error('[Tutor Monthly Snapshot] Error:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -366,9 +366,9 @@ cron.schedule('45 23 28-31 * *', async () => {
   console.log('[Funnel Monthly Snapshot] Checking month-end export...');
   try {
     const result = await monthlyFunnelSnapshot();
-    console.log('[Funnel Monthly Snapshot] Completed:', result);
+    console.log('[Funnel Monthly Snapshot] Completed:');
   } catch (error) {
-    console.error('[Funnel Monthly Snapshot] Error:', error);
+    console.error('[Funnel Monthly Snapshot] Error:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -383,7 +383,7 @@ cron.schedule('0 14 * * *', async () => {
     await sendDailyReportReminder();
     console.log('[DailyReportReminder] Completed successfully');
   } catch (error) {
-    console.error('[DailyReportReminder] Error:', error);
+    console.error('[DailyReportReminder] Error:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -397,7 +397,7 @@ cron.schedule('0 * * * *', async () => {
   try {
     await minutesAutoGenerate();
   } catch (error) {
-    console.error('[MinutesAutoGen] Error:', error);
+    console.error('[MinutesAutoGen] Error:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -421,7 +421,7 @@ cron.schedule('10 0 10 * *', async () => {
     `);
     console.log(`[Handover] Monthly reset completed: cleared ${result.rowCount} assignments`);
   } catch (error) {
-    console.error('[Handover] Error in monthly handover reset:', error);
+    console.error('[Handover] Error in monthly handover reset:');
   }
 }, {
   timezone: 'Asia/Tokyo'
@@ -439,9 +439,9 @@ cron.schedule('0 23 28-31 * *', async () => {
     console.log('Running monthly tutor satisfaction export at 23:00 JST (last day of month)...');
     try {
       const result = await monthlyTutorSatisfactionExport();
-      console.log('Monthly tutor satisfaction export completed:', result);
+      console.log('Monthly tutor satisfaction export completed:');
     } catch (error) {
-      console.error('Error in monthly tutor satisfaction export:', error);
+      console.error('Error in monthly tutor satisfaction export:');
     }
   }
 }, {
@@ -461,14 +461,14 @@ serve({
 // Render再起動や一時的なプロセス競合で取り残された直近の pending 送信を回収する。
 // 30秒以上経過したものは中断扱いになり、利用者が対象を確認してから再開する。
 recoverPendingBroadcastJobs().catch(error => {
-  console.error('[Broadcast] Initial pending-job recovery failed:', error.message);
+  console.error('[Broadcast] Initial pending-job recovery failed:');
 });
 
 cron.schedule('*/1 * * * *', async () => {
   try {
     await recoverPendingBroadcastJobs();
   } catch (error) {
-    console.error('[Broadcast] Pending-job recovery failed:', error.message);
+    console.error('[Broadcast] Pending-job recovery failed:');
   }
 }, {
   timezone: 'Asia/Tokyo'
