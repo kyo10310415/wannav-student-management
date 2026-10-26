@@ -71,8 +71,8 @@ export function startMinutesBackfill({ startDate, endDate }) {
         ...backfillState,
         status: 'failed',
         completedAt: new Date().toISOString(),
-        summary: summary || null,
-        error: summary?.error || 'バックフィルを開始できませんでした'
+        summary: summary ? { ...summary, error: 'バックフィルを開始できませんでした' } : null,
+        error: 'バックフィルを開始できませんでした'
       };
       return;
     }
@@ -94,12 +94,12 @@ export function startMinutesBackfill({ startDate, endDate }) {
       error: null
     };
   }).catch(error => {
-    console.error('[MinutesBackfill] Fatal error:', error);
+    console.error('[MinutesBackfill] Fatal error');
     backfillState = {
       ...backfillState,
       status: 'failed',
       completedAt: new Date().toISOString(),
-      error: error?.message || String(error)
+      error: '議事録バックフィルに失敗しました'
     };
   });
 
