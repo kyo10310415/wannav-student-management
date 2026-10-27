@@ -35,6 +35,7 @@ const scriptPolicy = (sources) => secureHeaders({
 });
 const exportHeaders = scriptPolicy(["'self'"]);
 const cdnScriptHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com']);
+const redlistHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js']);
 const cdnScriptPages = new Set(['/redlist-update.html', '/test-discord.html', '/vq-resend.html']);
 
 export const browserSecurityHeaders = (c, next) => {
@@ -42,6 +43,7 @@ export const browserSecurityHeaders = (c, next) => {
   let pagePath = c.req.path;
   try { pagePath = decodeURI(pagePath); } catch { /* Invalid URIs are handled by routing/static serving. */ }
   if (pagePath === '/funnel-analysis-export.html') return exportHeaders(c, next);
+  if (pagePath === '/redlist.html') return redlistHeaders(c, next);
   if (cdnScriptPages.has(pagePath)) return cdnScriptHeaders(c, next);
   return defaultHeaders(c, next);
 };
