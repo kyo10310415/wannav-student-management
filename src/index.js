@@ -60,6 +60,7 @@ import { monthlyTutorSatisfactionExport } from './jobs/tutorSatisfactionExport.j
 import { weeklyTutorSnapshot, monthlyTutorSnapshot } from './jobs/tutorWeeklySnapshot.js';
 import { monthlyFunnelSnapshot } from './jobs/funnelMonthlySnapshot.js';
 import { installApiAccess } from './security/apiAccess.js';
+import { browserSecurityHeaders } from './security/browserHeaders.js';
 import { configureInternalApi, internalFetch } from './security/internalApi.js';
 import { query } from './db/connection.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
@@ -74,6 +75,7 @@ cron.schedule('*/5 * * * *', () => {
 const app = new Hono();
 
 // Middleware
+app.use('*', browserSecurityHeaders);
 app.use('*', cors());
 configureInternalApi(installApiAccess(app, { db: query }));
 
