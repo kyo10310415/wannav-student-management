@@ -1,0 +1,43 @@
+const progress = document.getElementById('progress');
+async function readExport(year, month, studentId) {
+  const params = new URLSearchParams({year, month});
+  if (studentId) params.set('studentId', studentId);
+  const response = await fetch('/api/funnel/analysis-export?' + params, {
+    headers: {Authorization: 'Bearer ' + (localStorage.getItem('sessionToken') || '')}
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || '取得に失敗しました');
+  return data;
+}
+document.getElementById('start').onclick = async () => {
+  const button = document.getElementById('start');
+  button.disabled = true;
+  try {
+    const [year, month] = document.getElementById('month').value.split('-').map(Number);
+    progress.textContent = '対象者を取得しています…';
+    const data = await readExport(year, month);
+    const details = data.funnel.data.cancellationBreakdown.details;
+    const selectedIds = document.getElementById('studentIds').value.trim();
+    const candidateIds = selectedIds ? new Set(selectedIds.split(/[\s,、]+/).filter(Boolean)) : new Set(Object.entries(details)
+      .filter(([key]) => key !== 'completed')
+      .flatMap(([, rows]) => rows.map(row => row.studentId || row.student_id))
+      .filter(Boolean));
+    data.discord = [];
+    let count = 0;
+    for (const studentId of candidateIds) {
+      progress.textContent = `Discord履歴を取得しています ${++count}/${candidateIds.size}名`;
+      try { data.discord.push(await readExport(year, month, studentId)); }
+      catch (error) { data.discord.push({studentId, error: error.message}); }
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `funnel-analysis-${year}-${String(month).padStart(2, '0')}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const errors = data.discord.filter(row => row.error).length;
+    progress.textContent = `取得完了：${candidateIds.size}名、取得失敗${errors}名。JSONをダウンロードしました。`;
+  } catch (error) { progress.textContent = error.message; }
+  finally { button.disabled = false; }
+};

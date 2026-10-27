@@ -890,6 +890,12 @@ DB管理APIと移行スクリプトも生のDB例外やstackを表示せず、�
 
 ## ブラウザー保護ヘッダー（2026-10-27）
 
+`redlist-update.html` と `funnel-analysis-export.html` は処理を外部JSへ移し、
+ページ単位で埋め込みscriptとHTMLイベント属性を禁止します。script要素の読込みは
+同じorigin内に限定し、レッドリスト更新だけ既存のTailwind CDNも許可します。
+このページ限定設定は文字コード化された同じURLにも適用します。他ページの移行、
+style制限、CDNの自己配信等は別工程で、全画面の厳格CSP化は未完了です。
+
 CSPの `form-action 'self'` により、通常のフォーム送信先を同じorigin内に限定します。
 既存フォームのJavaScript/API処理は維持します。この制限だけではfetch等の通信や
 スクリプトXSS全体を防止しません。外部サイトへのフォーム連携を追加する場合は、
