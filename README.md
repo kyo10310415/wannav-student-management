@@ -892,3 +892,7 @@ DB管理APIと移行スクリプトも生のDB例外やstackを表示せず、�
 全応答にnosniff、strict-origin-when-cross-origin、フレーム埋め込み禁止、CSPのbase-uri self/object-src none/frame-ancestors noneを適用します。HSTSは初回1日で、includeSubDomains/preloadは設定しません。HTTPS専用公開先での運用を前提とし、開発用HTTPではブラウザーはHSTSを適用しません。既存ダッシュボードは埋め込みでなく画面遷移を利用します。外部ポータルで正当なiframe利用が必要な場合は、許可元を確認してポリシーを変更してください。
 
 外部CDN・inline script/handler・style・画像blob/data・API・OAuth popupの既存動作を維持するため、script/default/style/connect等のCSP制限とcross-origin isolationは今回追加しません。スクリプトXSSを全面防止する厳格CSPではなく、nonce/hashを含む移行は別工程です。CSP違反の外部報告先やブラウザー機能の一括禁止も設定しません。
+
+## アンケート詳細診断の権限（2026-10-27）
+
+/api/survey/debug/:studentId は管理者専用です。氏名・在籍期間・開始日・成績・延長結果・過去の達成状況をまとめた診断情報のため、leader/crewと連携キーでは利用できません。通常のアンケート統計・回答履歴・対象者表示の権限やデータは変更しません。診断APIの管理者向け内容も維持します。
