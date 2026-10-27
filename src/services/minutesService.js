@@ -18,7 +18,7 @@ function getOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
   try {
-    _client = new OpenAI({ apiKey });
+    _client = new OpenAI({ apiKey, logLevel: 'off' });
   } catch (error) {
     throw new Error('AIクライアントを初期化できません');
   }
