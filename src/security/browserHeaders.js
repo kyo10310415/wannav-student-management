@@ -18,6 +18,7 @@ export const browserSecurityHeaders = secureHeaders({
   removePoweredBy: false,
   contentSecurityPolicy: {
     baseUri: ["'self'"],
+    formAction: ["'self'"],
     objectSrc: ["'none'"],
     frameAncestors: ["'none'"]
   }
