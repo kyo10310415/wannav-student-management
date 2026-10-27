@@ -7,7 +7,7 @@ const rawError = () => Object.assign(new Error(marker), { config: { url: marker,
 const diagnosis = (rowNumber = 2) => ({ rowNumber, studentId: marker, totalScore: 81, diagnosisType: marker,
   overview: marker, details: marker, diagnosisDate: marker, snsAccuracy: 21, streamingAccuracy: 29, revenueAccuracy: 31 });
 let sequence = 0;
-async function fixture({ fail, enabled = true, results = [diagnosis()], lastRow = 2, missing = false, noDiscord = false } = {}) {
+async function fixture({ fail, enabled = true, results = [diagnosis()], lastRow = 2, missing = false, noDiscord = false, sendResults } = {}) {
   const logs = [], queries = [], sends = [], updates = [], chartInputs = [], historyInputs = [], startRows = [];
   const errorAt = stage => { if (fail === stage) throw rawError(); };
   const deps = {
@@ -24,7 +24,7 @@ async function fixture({ fail, enabled = true, results = [diagnosis()], lastRow 
     fetchVQDiagnosisResults: async row => { startRows.push(row); errorAt('fetch'); return { results, lastRow }; },
     batchUpdateVQDiagnosisEmailStatus: async value => { updates.push(value); errorAt('sheet'); },
     fetchVQDiagnosisByStudentId: async value => { historyInputs.push(value); errorAt('history'); return [diagnosis(), diagnosis(3)]; },
-    sendDiscordVQDiagnosis: async (...args) => { sends.push(args); errorAt('send'); return { id: marker }; },
+    sendDiscordVQDiagnosis: async (...args) => { sends.push(args); errorAt('send'); return sendResults ? sendResults[sends.length - 1] : { success: true, id: marker }; },
     generateVQRadarChart: async value => { chartInputs.push(['radar', value]); errorAt('radar'); return Buffer.from('synthetic-radar'); },
     generateVQTrendChart: async value => { chartInputs.push(['trend', value]); errorAt('trend'); return Buffer.from('synthetic-trend'); },
     console: Object.fromEntries(['log', 'warn', 'error'].map(level => [level, (...args) => logs.push(inspect(args))]))
@@ -54,6 +54,31 @@ test('successful diagnosis preserves Discord content, charts, database record an
   assert.deepEqual(saved.params, [7, marker, 81, marker, marker, marker, marker, marker, 'sent', 2]);
   assert.deepEqual(f.updates, [[{ rowNumber: 2, value: '完了' }]]);
   assert.deepEqual(lastUpdate(f).params, ['2']); privateLogs(f);
+});
+
+test('failed or malformed Discord results never record a sent diagnosis or ordinary sheet completion', async () => {
+  for (const response of [{ success: false, error: marker }, null, undefined, {}, { success: 'true' }, { success: 1 }]) {
+    const f = await fixture({ sendResults: [response] });
+    assert.deepEqual(await f.run(), { success: true, processed: 0, errors: 1, lastRow: 2 });
+    assert.equal(f.sends.length, 1);
+    const saved = f.queries.filter(q => q.sql.includes('INSERT INTO vq_diagnosis_notifications'));
+    assert.equal(saved.length, 1); assert.equal(saved[0].sql.includes('error_message'), true);
+    assert.equal(saved[0].params[7], 'error'); assert.equal(saved[0].params[8], 'VQ diagnosis processing failed');
+    assert.deepEqual(f.updates, [[{ rowNumber: 2, value: '完了（エラー: 診断処理に失敗しました）' }]]);
+    assert.deepEqual(lastUpdate(f).params, ['2']); privateLogs(f);
+  }
+});
+
+test('Discord result failure keeps later diagnoses running and preserves successful delivery fields', async () => {
+  const f = await fixture({ results: [diagnosis(2), diagnosis(3)], lastRow: 3,
+    sendResults: [{ success: false, reason: marker }, { success: true, id: marker }] });
+  assert.deepEqual(await f.run(), { success: true, processed: 1, errors: 1, lastRow: 3 });
+  assert.equal(f.sends.length, 2);
+  const saved = f.queries.filter(q => q.sql.includes('INSERT INTO vq_diagnosis_notifications'));
+  assert.equal(saved[0].params[7], 'error');
+  assert.deepEqual(saved[1].params, [7, marker, 81, marker, marker, marker, marker, marker, 'sent', 3]);
+  assert.deepEqual(f.updates, [[{ rowNumber: 2, value: '完了（エラー: 診断処理に失敗しました）' }, { rowNumber: 3, value: '完了' }]]);
+  assert.deepEqual(lastUpdate(f).params, ['3']); privateLogs(f);
 });
 
 test('top-level settings and Sheets failures return fixed error without provider metadata', async () => {

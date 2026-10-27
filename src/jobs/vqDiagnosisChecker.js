@@ -216,6 +216,9 @@ export async function checkAndSendVQDiagnosis() {
             typeImage: typeImageUrl
           }
         );
+        if (discordResponse?.success !== true) {
+          throw new Error('Discord送信失敗');
+        }
         
         // データベースに記録
         await dbQuery(
