@@ -1,7 +1,7 @@
 import { secureHeaders } from 'hono/secure-headers';
 
 // Keep popup/SSO and external assets working; do not enable cross-origin isolation.
-export const browserSecurityHeaders = secureHeaders({
+const headerOptions = {
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: false,
   crossOriginOpenerPolicy: false,
@@ -22,4 +22,25 @@ export const browserSecurityHeaders = secureHeaders({
     objectSrc: ["'none'"],
     frameAncestors: ["'none'"]
   }
+};
+
+const defaultHeaders = secureHeaders(headerOptions);
+const scriptPolicy = (sources) => secureHeaders({
+  ...headerOptions,
+  contentSecurityPolicy: {
+    ...headerOptions.contentSecurityPolicy,
+    scriptSrcElem: sources,
+    scriptSrcAttr: ["'none'"]
+  }
 });
+const exportHeaders = scriptPolicy(["'self'"]);
+const redlistHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com']);
+
+export const browserSecurityHeaders = (c, next) => {
+  // Match the static server's URI decoding so encoded aliases retain the policy.
+  let pagePath = c.req.path;
+  try { pagePath = decodeURI(pagePath); } catch { /* Invalid URIs are handled by routing/static serving. */ }
+  if (pagePath === '/funnel-analysis-export.html') return exportHeaders(c, next);
+  if (pagePath === '/redlist-update.html') return redlistHeaders(c, next);
+  return defaultHeaders(c, next);
+};

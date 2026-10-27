@@ -54,3 +54,31 @@ test('production entry installs browser headers before CORS authentication and s
   assert.equal(position > 0, true);
   for (const target of ["app.use('*', cors())", 'configureInternalApi(installApiAccess', "app.use('/*', serveStatic"]) assert.equal(source.indexOf(target) > position, true);
 });
+
+test('migrated static pages block inline scripts and handlers without restricting other pages', async () => {
+  const app = fixture();
+  for (const path of ['/funnel-analysis-export.html', '/redlist-update.html']) {
+    const response = await app.request(path + '?fixture=1');
+    assert.equal(response.status, 200);
+    const csp = response.headers.get('Content-Security-Policy');
+    assert.match(csp, /script-src-elem 'self'/);
+    assert.match(csp, /script-src-attr 'none'/);
+    assert.equal(csp.includes('https://cdn.tailwindcss.com'), path === '/redlist-update.html');
+    assert.equal(/unsafe-inline|unsafe-eval/.test(csp), false);
+    const head = await app.request(path, { method: 'HEAD' });
+    assert.equal(head.headers.get('Content-Security-Policy'), csp);
+  }
+  for (const path of ['/redlist-update.js', '/funnel-analysis-export.js']) {
+    const response = await app.request(path);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('Content-Type'), /javascript/);
+    protectedResponse(response);
+  }
+  for (const path of ['/%66unnel-analysis-export.html', '/%72edlist-update.html']) {
+    const response = await app.request('http://localhost' + path);
+    assert.equal(response.status, 200, path);
+    assert.match(response.headers.get('Content-Security-Policy'), /script-src-attr 'none'/, path);
+  }
+  assert.equal((await app.request('http://localhost//redlist-update.html')).status, 404);
+  protectedResponse(await app.request('/roulette.html'));
+});
