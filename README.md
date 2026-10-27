@@ -896,3 +896,9 @@ DB管理APIと移行スクリプトも生のDB例外やstackを表示せず、�
 ## アンケート詳細診断の権限（2026-10-27）
 
 /api/survey/debug/:studentId は管理者専用です。氏名・在籍期間・開始日・成績・延長結果・過去の達成状況をまとめた診断情報のため、leader/crewと連携キーでは利用できません。通常のアンケート統計・回答履歴・対象者表示の権限やデータは変更しません。診断APIの管理者向け内容も維持します。
+
+## UUID推移依存の限定更新（2026-10-27）
+
+gaxios 6.7.1、googleapis-common 7.2.0、node-cron 3.0.3のUUIDだけを11.1.1へ固定overrideします。CVE-2026-41907の修正版です。確認した消費箇所は引数なしv4()で、脆弱性が成立するv3/v5/v6の外部buffer経路は利用していません。Google SDKやcron本体の大幅更新を避けるための限定措置であり、上流の宣言semver範囲外となる点を把握して維持してください。
+
+ロックには旧cron配下uuidを残さず、三者とも修正版へ解決することをnpm lsと専用テストで確認します。Node22.23.4/npm10.9.9での隔離npm ci --ignore-scripts、および既存ローカル環境でのnpm install --ignore-scriptsが成功。multipart、Googleのquery/OAuth輸送、cronの停止状態でのID生成、修正版のbuffer境界をmockで確認しました。上流を更新する際は、このoverrideを見直して再度互換性を検証してください。

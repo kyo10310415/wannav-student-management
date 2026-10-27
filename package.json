@@ -40,5 +40,16 @@
   },
   "engines": {
     "node": ">=22.23.4 <23"
+  },
+  "overrides": {
+    "gaxios": {
+      "uuid": "11.1.1"
+    },
+    "googleapis-common": {
+      "uuid": "11.1.1"
+    },
+    "node-cron": {
+      "uuid": "11.1.1"
+    }
   }
 }
