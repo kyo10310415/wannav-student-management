@@ -23,7 +23,7 @@ function protectedResponse(response) {
   assert.equal(response.headers.get('Strict-Transport-Security'), 'max-age=86400');
   assert.equal(response.headers.get('X-Frame-Options'), 'DENY');
   const csp = response.headers.get('Content-Security-Policy');
-  for (const directive of ["base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'"]) assert.equal(csp.includes(directive), true);
+  for (const directive of ["base-uri 'self'", "form-action 'self'", "object-src 'none'", "frame-ancestors 'none'"]) assert.equal(csp.includes(directive), true);
   assert.equal(/(?:default|script|style|connect|img|font)-src/.test(csp), false);
   for (const name of ['Cross-Origin-Opener-Policy','Cross-Origin-Embedder-Policy','Cross-Origin-Resource-Policy','Report-To','Reporting-Endpoints','Content-Security-Policy-Report-Only','Permissions-Policy']) assert.equal(response.headers.has(name), false, name);
 }
