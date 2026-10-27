@@ -82,7 +82,7 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     if (user.must_change_password && !['/api/auth/verify', '/api/auth/logout', '/api/auth/change-password'].includes(path)) {
       return c.json({ success: false, error: '先にパスワードを変更してください', code: 'PASSWORD_CHANGE_REQUIRED' }, 403);
     }
-    const adminOnly = ['/api/database', '/api/tutor-red-list', '/api/extension-review'];
+    const adminOnly = ['/api/database', '/api/tutor-red-list', '/api/extension-review', '/api/survey/debug'];
     if ((adminOnly.some(prefix => under(path, prefix)) ||
       (under(path, '/api/users') && !(method === 'GET' && path === '/api/users/consultation-staff')) ||
       path === '/api/auth/reset-password') && user.role !== 'admin') {
