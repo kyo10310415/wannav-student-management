@@ -57,24 +57,25 @@ test('production entry installs browser headers before CORS authentication and s
 
 test('migrated static pages block inline scripts and handlers without restricting other pages', async () => {
   const app = fixture();
-  for (const path of ['/funnel-analysis-export.html', '/redlist-update.html', '/test-discord.html', '/vq-resend.html']) {
+  for (const path of ['/funnel-analysis-export.html', '/redlist-update.html', '/test-discord.html', '/vq-resend.html', '/redlist.html']) {
     const response = await app.request(path + '?fixture=1');
     assert.equal(response.status, 200);
     const csp = response.headers.get('Content-Security-Policy');
     assert.match(csp, /script-src-elem 'self'/);
     assert.match(csp, /script-src-attr 'none'/);
     assert.equal(csp.includes('https://cdn.tailwindcss.com'), path !== '/funnel-analysis-export.html');
+    assert.equal(csp.includes('https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js'), path === '/redlist.html');
     assert.equal(/unsafe-inline|unsafe-eval/.test(csp), false);
     const head = await app.request(path, { method: 'HEAD' });
     assert.equal(head.headers.get('Content-Security-Policy'), csp);
   }
-  for (const path of ['/redlist-update.js', '/funnel-analysis-export.js', '/test-discord.js', '/vq-resend.js']) {
+  for (const path of ['/redlist-update.js', '/funnel-analysis-export.js', '/test-discord.js', '/vq-resend.js', '/redlist.js']) {
     const response = await app.request(path);
     assert.equal(response.status, 200);
     assert.match(response.headers.get('Content-Type'), /javascript/);
     protectedResponse(response);
   }
-  for (const path of ['/%66unnel-analysis-export.html', '/%72edlist-update.html', '/%74est-discord.html', '/%76q-resend.html']) {
+  for (const path of ['/%66unnel-analysis-export.html', '/%72edlist-update.html', '/%74est-discord.html', '/%76q-resend.html', '/%72edlist.html']) {
     const response = await app.request('http://localhost' + path);
     assert.equal(response.status, 200, path);
     assert.match(response.headers.get('Content-Security-Policy'), /script-src-attr 'none'/, path);
