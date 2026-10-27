@@ -38,7 +38,7 @@ async function refreshExtensionReviewCapability() {
     extensionReviewFeatureEnabled = data.enabled;
     if (changed) {
       const slot = document.getElementById('extension-review-nav');
-      if (slot) slot.innerHTML = data.enabled ? '<button onclick="changePage(\'extension-review\')" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>' : '';
+      if (slot) slot.innerHTML = data.enabled ? '<button data-er-read-action="open-page" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>' : '';
     }
     return data.enabled;
   }).catch(() => { if (erCapabilityToken === capabilityToken) extensionReviewFeatureEnabled = false; return false; });
@@ -61,7 +61,7 @@ async function renderExtensionReviewPage() {
   if (!tabs.some(([key]) => key === erTab)) erTab = 'run';
   document.getElementById('content').innerHTML = `<div class="space-y-4"><h1 class="text-2xl font-bold text-orange-700">延長審査AI採点</h1>
     <p class="text-sm text-gray-500">AIによる一次評価です。実施Tutorを選択し、管理者が確認・確定してください。既存のTutor品質指標とは独立しています。</p>
-    <div class="flex flex-wrap gap-2">${tabs.map(([key,label]) => `<button onclick="erSelectTab('${key}')" class="px-4 py-2 rounded ${erTab === key ? 'bg-orange-600 text-white' : 'bg-white border'}">${label}</button>`).join('')}</div>
+    <div class="flex flex-wrap gap-2">${tabs.map(([key,label]) => `<button data-er-read-action="select-tab" data-er-tab="${key}" class="px-4 py-2 rounded ${erTab === key ? 'bg-orange-600 text-white' : 'bg-white border'}">${label}</button>`).join('')}</div>
     <div id="er-panel" class="bg-white rounded-xl shadow p-5 space-y-4"></div></div>`;
   const panel = document.getElementById('er-panel');
   try {
@@ -143,7 +143,7 @@ async function erOpenResult(id) {
   } catch (error) { showNotification(error.response?.data?.error || '結果取得に失敗しました','error'); }
 }
 async function erRenderHistory() {
-  document.getElementById('er-panel').innerHTML = `<div class="grid md:grid-cols-3 gap-2"><input id="er-search" placeholder="生徒名・学籍番号" class="border rounded p-2"><select id="er-filter-tutor" class="border rounded p-2"><option value="">全Tutor</option>${erTutors.map(t => `<option value="${erEscape(t.employee_id)}">${erEscape(t.tutor_name)}</option>`).join('')}</select><select id="er-filter-round" class="border rounded p-2"><option value="">全審査回数</option>${[1,2,3,4].map(n => `<option>${n}</option>`).join('')}</select><input id="er-from" type="date" class="border rounded p-2"><input id="er-to" type="date" class="border rounded p-2"><select id="er-sort" class="border rounded p-2"><option value="date">日時順</option><option value="score">点数の高い順</option></select></div><button onclick="erSearchHistory(0)" class="border p-2 rounded">検索</button><div id="er-history-list"></div>`;
+  document.getElementById('er-panel').innerHTML = `<div class="grid md:grid-cols-3 gap-2"><input id="er-search" placeholder="生徒名・学籍番号" class="border rounded p-2"><select id="er-filter-tutor" class="border rounded p-2"><option value="">全Tutor</option>${erTutors.map(t => `<option value="${erEscape(t.employee_id)}">${erEscape(t.tutor_name)}</option>`).join('')}</select><select id="er-filter-round" class="border rounded p-2"><option value="">全審査回数</option>${[1,2,3,4].map(n => `<option>${n}</option>`).join('')}</select><input id="er-from" type="date" class="border rounded p-2"><input id="er-to" type="date" class="border rounded p-2"><select id="er-sort" class="border rounded p-2"><option value="date">日時順</option><option value="score">点数の高い順</option></select></div><button data-er-read-action="search-history" data-er-offset="0" class="border p-2 rounded">検索</button><div id="er-history-list"></div>`;
   await erSearchHistory(0);
 }
 async function erSearchHistory(offset) {
@@ -152,7 +152,7 @@ async function erSearchHistory(offset) {
     sort: document.getElementById('er-sort').value, offset: String(offset), limit: '50' });
   try {
     const rows = await erRequest('/history?' + params); erHistoryOffset = offset;
-    document.getElementById('er-history-list').innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr>${['日時','生徒','Tutor','回数','スコア','状態',''].map(h => `<th class="p-2">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr class="border-t"><td class="p-2">${erEscape(new Date(row.created_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}))}</td><td>${erEscape(row.student_name)}<br>${erEscape(row.student_id)}</td><td>${erEscape(row.tutor_name)}</td><td>${row.round}</td><td>${row.score ?? '-'}</td><td>${row.state === 'failed' ? erEscape(row.safe_error) : row.confirmed_at ? '確定' : row.reviewed_at ? '確認済み' : row.state === 'pending' ? '処理中' : 'AI一次評価'}</td><td><button onclick="erOpenResult('${row.id}')" class="text-orange-600">表示</button></td></tr>`).join('') || '<tr><td colspan="7">該当なし</td></tr>'}</tbody></table></div><div class="flex gap-3"><button onclick="erSearchHistory(${Math.max(0,offset-50)})" ${offset === 0 ? 'disabled' : ''}>前へ</button><span>${offset+1}〜${offset+rows.length}件 / ${rows[0]?.total || 0}件</span><button onclick="erSearchHistory(${offset+50})" ${rows.length < 50 ? 'disabled' : ''}>次へ</button></div>`;
+    document.getElementById('er-history-list').innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr>${['日時','生徒','Tutor','回数','スコア','状態',''].map(h => `<th class="p-2">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr class="border-t"><td class="p-2">${erEscape(new Date(row.created_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}))}</td><td>${erEscape(row.student_name)}<br>${erEscape(row.student_id)}</td><td>${erEscape(row.tutor_name)}</td><td>${row.round}</td><td>${row.score ?? '-'}</td><td>${row.state === 'failed' ? erEscape(row.safe_error) : row.confirmed_at ? '確定' : row.reviewed_at ? '確認済み' : row.state === 'pending' ? '処理中' : 'AI一次評価'}</td><td><button data-er-read-action="open-result" data-er-result-id="${erEscape(row.id)}" class="text-orange-600">表示</button></td></tr>`).join('') || '<tr><td colspan="7">該当なし</td></tr>'}</tbody></table></div><div class="flex gap-3"><button data-er-read-action="search-history" data-er-offset="${Math.max(0,offset-50)}" ${offset === 0 ? 'disabled' : ''}>前へ</button><span>${offset+1}〜${offset+rows.length}件 / ${rows[0]?.total || 0}件</span><button data-er-read-action="search-history" data-er-offset="${offset+50}" ${rows.length < 50 ? 'disabled' : ''}>次へ</button></div>`;
   } catch (error) { showNotification(error.response?.data?.error || '検索に失敗しました','error'); }
 }
 async function erRenderAnalysis() {
@@ -211,6 +211,31 @@ async function erDiagnose() {
     document.getElementById('er-diagnosis').textContent = JSON.stringify(data,null,2);
   } catch (error) { showNotification(error.response?.data?.error || '診断できませんでした','error'); }
 }
+
+// The app replaces navigation/content nodes; delegate only this read-only namespace.
+function erHandleReadClick(event) {
+  const button = event.target?.closest?.('button[data-er-read-action]');
+  if (!button || button.disabled) return;
+  const content = document.getElementById('content');
+  const navigation = document.getElementById('extension-review-nav');
+  if (!content?.contains(button) && !navigation?.contains(button)) return;
+  if (!currentUser || currentUser.role !== 'admin' || !sessionToken || !extensionReviewFeatureEnabled) return;
+  switch (button.dataset.erReadAction) {
+    case 'open-page': return changePage('extension-review');
+    case 'select-tab':
+      if (['run', 'result', 'history', 'analysis', 'settings', 'diagnostics'].includes(button.dataset.erTab)) return erSelectTab(button.dataset.erTab);
+      return;
+    case 'search-history': {
+      if (!/^\d+$/.test(button.dataset.erOffset || '')) return;
+      const offset = Number(button.dataset.erOffset);
+      if (Number.isSafeInteger(offset) && offset >= 0) return erSearchHistory(offset);
+      return;
+    }
+    case 'open-result':
+      if (button.dataset.erResultId) return erOpenResult(button.dataset.erResultId);
+  }
+}
+document.addEventListener('click', erHandleReadClick);
 
 // app.js initializes asynchronously; refresh once this script becomes available.
 refreshExtensionReviewCapability();

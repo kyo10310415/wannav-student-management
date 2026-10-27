@@ -336,7 +336,7 @@ test('migration runner applies only additional schema once and does not rewrite 
   assert.ok(!/ALTER TABLE (students|tutors)|DELETE FROM|UPDATE students|UPDATE tutors/.test(additions[0]));
 });
 test('UI helpers escape untrusted content and discard responses after session changes',async()=>{
-  const context={currentUser:null,sessionToken:null,API_BASE:'',setTimeout,document:{getElementById:()=>null},console};
+  const context={currentUser:null,sessionToken:null,API_BASE:'',setTimeout,document:{addEventListener(){},getElementById:()=>null},console};
   vm.createContext(context);
   vm.runInContext(readFileSync(new URL('../public/extension-review.js',import.meta.url),'utf8'),context);
   assert.ok(context.erEscape('<script>"bad"</script>').includes('&lt;script&gt;'));
@@ -347,7 +347,7 @@ test('UI helpers escape untrusted content and discard responses after session ch
 test('leader UI hides feature navigation and clears cached review data without requesting API',async()=>{
   const slot={innerHTML:'previous admin menu'};
   let calls=0;
-  const context={currentUser:{role:'leader'},sessionToken:'leader-session',API_BASE:'',setTimeout,document:{getElementById:()=>slot},console,axios:async()=>{calls++;}};
+  const context={currentUser:{role:'leader'},sessionToken:'leader-session',API_BASE:'',setTimeout,document:{addEventListener(){},getElementById:()=>slot},console,axios:async()=>{calls++;}};
   vm.createContext(context);
   vm.runInContext(readFileSync(new URL('../public/extension-review.js',import.meta.url),'utf8'),context);
   vm.runInContext('extensionReviewFeatureEnabled=true; erResult={private:true};',context);
@@ -390,7 +390,7 @@ test('Notion property pagination returns full rich text without guessing or trun
   } finally {if(old===undefined)delete process.env.NOTION_STUDENT_DB_ID;else process.env.NOTION_STUDENT_DB_ID=old;}
 });
 test('old capability response cannot overwrite a newly authenticated session',async()=>{
-  const context={currentUser:null,sessionToken:null,API_BASE:'',document:{getElementById:()=>null},console,setTimeout};vm.createContext(context);
+  const context={currentUser:null,sessionToken:null,API_BASE:'',document:{addEventListener(){},getElementById:()=>null},console,setTimeout};vm.createContext(context);
   vm.runInContext(readFileSync(new URL('../public/extension-review.js',import.meta.url),'utf8'),context);
   const pending={};context.axios=async options=>new Promise(resolve=>{pending[options.headers.Authorization]=resolve;});
   context.currentUser={role:'admin'};context.sessionToken='old';const old=context.refreshExtensionReviewCapability();
