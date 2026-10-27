@@ -113,3 +113,26 @@ test('failed delivery exposes neither Axios request data nor original error to c
     if (old === undefined) delete process.env.DISCORD_STATS_WEBHOOK_URL; else process.env.DISCORD_STATS_WEBHOOK_URL = old;
   }
 });
+
+test('team identity and satisfaction aggregates stay in the intended report but not operational logs', async t => {
+  const consoleLogs = [];
+  t.mock.method(console, 'log', (...args) => consoleLogs.push(args));
+  const old = process.env.DISCORD_STATS_WEBHOOK_URL;
+  try {
+    process.env.DISCORD_STATS_WEBHOOK_URL = 'https://example.invalid/test-webhook';
+    const fixture = fixtures();
+    const query = fixture.dependencies.query;
+    fixture.dependencies.query = async sql => {
+      const result = await query(sql);
+      if (sql.includes('FROM tutors')) result.rows.forEach(row => { row.team = 'SYNTHETIC_TEAM_PRIVATE'; });
+      return result;
+    };
+    fixture.dependencies.http.get = mockGet;
+    assert.equal((await sendDailyStatsReport(fixture.dependencies)).success, true);
+    assert.equal(fixture.posts[0].payload.content.includes('SYNTHETIC_TEAM_PRIVATE'), true);
+    assert.equal(JSON.stringify(consoleLogs).includes('SYNTHETIC_TEAM_PRIVATE'), false);
+    assert.equal(JSON.stringify(consoleLogs).includes('avg='), false);
+  } finally {
+    if (old === undefined) delete process.env.DISCORD_STATS_WEBHOOK_URL; else process.env.DISCORD_STATS_WEBHOOK_URL = old;
+  }
+});

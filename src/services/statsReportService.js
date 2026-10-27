@@ -176,7 +176,7 @@ export async function sendDailyStatsReport({
       
       const avgSatisfactionScore = validCount > 0 ? (teamSatisfactionScore / validCount).toFixed(2) : '-';
       
-      console.log(`[Stats Report] Team ${team}: ${teamTutors.length} tutors, ${validCount}/${teamTutors.length} with scores, avg=${avgSatisfactionScore}`);
+      console.log('[Stats Report] Team statistics calculated');
       
       return {
         team,
