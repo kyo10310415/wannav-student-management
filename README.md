@@ -890,6 +890,10 @@ DB管理APIと移行スクリプトも生のDB例外やstackを表示せず、�
 
 ## ブラウザー保護ヘッダー（2026-10-27）
 
+`test-discord.html` と `vq-resend.html` も外部JSとイベント登録へ移行済みで、
+ページ限定のscript要素制限とHTMLイベント属性禁止を適用します。VQ履歴の削除は
+現在の表示データを参照するイベント委譲を使い、既存の確認ダイアログを維持します。
+
 `redlist-update.html` と `funnel-analysis-export.html` は処理を外部JSへ移し、
 ページ単位で埋め込みscriptとHTMLイベント属性を禁止します。script要素の読込みは
 同じorigin内に限定し、レッドリスト更新だけ既存のTailwind CDNも許可します。

@@ -34,13 +34,14 @@ const scriptPolicy = (sources) => secureHeaders({
   }
 });
 const exportHeaders = scriptPolicy(["'self'"]);
-const redlistHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com']);
+const cdnScriptHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com']);
+const cdnScriptPages = new Set(['/redlist-update.html', '/test-discord.html', '/vq-resend.html']);
 
 export const browserSecurityHeaders = (c, next) => {
   // Match the static server's URI decoding so encoded aliases retain the policy.
   let pagePath = c.req.path;
   try { pagePath = decodeURI(pagePath); } catch { /* Invalid URIs are handled by routing/static serving. */ }
   if (pagePath === '/funnel-analysis-export.html') return exportHeaders(c, next);
-  if (pagePath === '/redlist-update.html') return redlistHeaders(c, next);
+  if (cdnScriptPages.has(pagePath)) return cdnScriptHeaders(c, next);
   return defaultHeaders(c, next);
 };
