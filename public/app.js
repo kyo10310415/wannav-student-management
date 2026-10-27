@@ -232,7 +232,7 @@ function renderHeader() {
 
   // Build funnel management button (leader or above)
   const extensionReviewButton = currentUser && currentUser.role === 'admin' && typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled ? `
-    <button onclick="changePage('extension-review')" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>
+    <button data-er-read-action="open-page" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>
   ` : '';
   const funnelManagementButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
     <button id="nav-funnel" onclick="changePage('funnel')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'funnel' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
