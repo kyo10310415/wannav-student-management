@@ -38,14 +38,14 @@ test('read-only entry/tab/history controls use namespaced data and preserve writ
   assert.match(source, /data-er-read-action="select-tab" data-er-tab=/);
   assert.match(source, /data-er-read-action="search-history" data-er-offset="0"/);
   assert.equal(/onclick="(?:erSelectTab|erSearchHistory|erOpenResult)\(/.test(source),false);
-  for (const action of ['erGenerate()','erReview(false)','erReview(true)','erSaveEdit()','erSaveSettings()']) assert.ok(source.includes(`onclick="${action}"`));
+  assert.equal(/\bon(?:click|change)=/.test(source),false);
   assert.ok(appSource.includes('data-er-read-action="open-tutor-analysis"'));
   assert.equal(appSource.includes('onclick="erOpenTutorAnalysis(this.dataset.tutor)"'),false);
 });
 
 test('one stable delegated listener handles nested targets and newly recreated navigation/content roots once', async () => {
   const f=fixture(); f.stubReads();
-  assert.equal(f.listeners.filter(l=>l.type==='click').length,1); assert.equal(f.listeners[0].type,'click'); assert.equal(f.listeners.filter(l=>l.type==='change').length,1);
+  assert.equal(f.listeners.filter(l=>l.type==='click'&&l.callback===f.context.erHandleReadClick).length,1); assert.equal(f.listeners[0].type,'click'); assert.equal(f.listeners.filter(l=>l.type==='change').length,1);
   await f.click(f.button('open-page',{},f.elements['extension-review-nav']),true);
   const old=f.elements.content;
   const obsolete=f.button('search-history',{erOffset:'0'},old);
@@ -54,7 +54,7 @@ test('one stable delegated listener handles nested targets and newly recreated n
   await f.click(f.button('select-tab',{erTab:'history'}),true);
   await f.click(f.button('open-page',{},f.elements['extension-review-nav']));
   assert.deepEqual(f.calls,[['open-page','extension-review'],['select-tab','history'],['open-page','extension-review']]);
-  assert.equal(f.listeners.filter(l=>l.type==='click').length,1); assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
+  assert.equal(f.listeners.filter(l=>l.type==='click'&&l.callback===f.context.erHandleReadClick).length,1); assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
 });
 
 test('disabled, outside, non-admin, missing-session and disabled-feature clicks do not dispatch or request', async () => {
@@ -193,7 +193,7 @@ test('settings renderer keeps encoded read URLs, versions and save control while
   const html=f.elements['er-panel'].innerHTML;
   assert.match(html,/<select data-er-settings-version/);
   assert.match(html,/data-er-read-action="apply-mapping"/); assert.match(html,/data-er-read-action="preview-settings"/);
-  assert.ok(html.includes('onclick="erSaveSettings()"'));
+  assert.ok(html.includes('data-er-action="save-settings"'));
   assert.equal(/on(?:click|change)="er(?:RenderSettings|ApplyNotionMapping|PreviewSettings)/.test(html),false);
   assert.equal(f.writes.length,0);
 });
