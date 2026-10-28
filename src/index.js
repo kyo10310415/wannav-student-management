@@ -176,6 +176,9 @@ app.get('/', (c) => {
         <script src="/user-update-events.js?v=${Date.now()}"></script>
         <script src="/red-list-save-events.js?v=${Date.now()}"></script>
         <script src="/red-list-delete-events.js?v=${Date.now()}"></script>
+        <script src="/broadcast-schedule-save-events.js?v=${Date.now()}"></script>
+        <script src="/broadcast-template-write-events.js?v=${Date.now()}"></script>
+        <script src="/vq-image-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);

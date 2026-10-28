@@ -134,3 +134,19 @@ test('template CRUD, validation and schedule not-found outcomes retain existing 
   assert.equal((await missing.app.request('/schedules/1', { method: 'DELETE', headers: auth })).status, 404);
   assert.equal((await missing.app.request('/schedules/1/toggle', request({}))).status, 404); safe(f); safe(missing);
 });
+
+test('template save rejects invalid JSON types values and IDs before service calls',async()=>{const f=await fixture();for(const body of [null,[],42,{name:{},content:'Synthetic'},{name:' ',content:'Synthetic'},{name:'Synthetic',content:[]},{name:'Synthetic',content:'Synthetic',id:0},{name:'Synthetic',content:'Synthetic',channelType:'invalid'},{name:'Synthetic',content:'Synthetic',imageUrl:{}}])assert.equal((await f.app.request('/templates',request(body))).status,400);assert.equal((await f.app.request('/templates',{...request({}),body:'{'})).status,400);assert.equal(f.calls.length,0)});
+test('template delete rejects unsafe IDs before service calls',async()=>{const f=await fixture();for(const id of['0','-1','1.5','9007199254740992','bad'])assert.equal((await f.app.request('/templates/'+id,{method:'DELETE',headers:auth})).status,400);assert.equal(f.calls.length,0)});
+test('missing or unauthorized template update/delete returns a fixed 404',async()=>{for(const method of['save','delete']){const f=await fixture({fail:[method],serviceError:Object.assign(new Error(marker),{status:404})});const r=await f.app.request('/templates'+(method==='delete'?'/7':''),method==='delete'?{method:'DELETE',headers:auth}:request({name:'Synthetic',content:'Synthetic',id:7}));assert.equal(r.status,404);assert.equal((await r.json()).error,'テンプレートが見つかりません');safe(f)}});
+test('schedule save rejects malformed body IDs and field types before business SQL',async()=>{
+ const f=await fixture();
+ for(const body of [null,[],42,{...schedule,id:0},{...schedule,id:'1;bad'},{...schedule,name:{}},{...schedule,content:[]},{...schedule,scheduleCron:[]},{...schedule,imageId:{}},{...schedule,scheduleEnabled:'true'}])assert.equal((await f.app.request('/schedules',request(body))).status,400);
+ assert.equal((await f.app.request('/schedules',{method:'POST',headers:{...auth,'Content-Type':'application/json'},body:'{'})).status,400);
+ assert.equal(f.queries.filter(x=>!x.sql.includes('FROM sessions')).length,0);assert.equal(f.calls.length,0);
+});
+
+test('schedule edit SQL keeps owner restriction and requires scheduled record type',async()=>{
+ const f=await fixture();assert.equal((await f.app.request('/schedules',request({...schedule,id:1}))).status,200);
+ const update=f.queries.find(x=>x.sql.includes('SET name = $1'));
+ assert.ok(update.sql.includes('WHERE id = $9 AND created_by = $10 AND is_scheduled = true'));assert.equal(update.params[9],email);assert.equal(f.calls.length,0);
+});

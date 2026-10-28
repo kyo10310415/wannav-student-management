@@ -383,12 +383,18 @@ app.get('/images', async (c) => {
  */
 app.post('/images', async (c) => {
   try {
-    const { diagnosis_type, image_url } = await c.req.json();
-    
-    if (!diagnosis_type || !image_url) {
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ success: false, error: '入力が不正です' }, 400);
+    const { diagnosis_type, image_url } = body;
+    let validUrl = false;
+    if (typeof image_url === 'string') {
+      try { validUrl = ['http:', 'https:'].includes(new URL(image_url).protocol); } catch { /* Reject malformed URLs. */ }
+    }
+    if (typeof diagnosis_type !== 'string' || !diagnosis_type.trim() || !validUrl) {
       return c.json({
         success: false,
-        error: '診断タイプと画像URLは必須です'
+        error: '診断タイプとhttpまたはhttpsの画像URLを入力してください'
       }, 400);
     }
     

@@ -964,12 +964,13 @@ export async function saveTemplate(templateData, userEmail) {
   try {
     const { id, name, content, imageUrl, channelType, targetTutor } = templateData;
     if (id) {
-      await query(
+      const result = await query(
         `UPDATE broadcast_messages
         SET name = $1, content = $2, image_url = $3, channel_type = $4, target_tutor = $5, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $6 AND created_by = $7`,
+        WHERE id = $6 AND created_by = $7 AND is_template = true RETURNING id`,
         [name, content, imageUrl, channelType, targetTutor, id, userEmail]
       );
+      if (!result.rows.length) throw Object.assign(new Error('Template not found'), { status: 404 });
       return { success: true, id };
     } else {
       const result = await query(
@@ -982,6 +983,7 @@ export async function saveTemplate(templateData, userEmail) {
       return { success: true, id: result.rows[0].id };
     }
   } catch (error) {
+    if (error?.status === 404) throw error;
     console.error("[Broadcast] Error saving template:");
     throw new Error('Broadcast operation failed');
   }
@@ -995,9 +997,11 @@ export async function deleteTemplate(templateId, userEmail, userRole) {
       sqlQuery += ' AND created_by = $2';
       params.push(userEmail);
     }
-    await query(sqlQuery, params);
+    const result = await query(sqlQuery + ' RETURNING id', params);
+    if (!result.rows.length) throw Object.assign(new Error('Template not found'), { status: 404 });
     return { success: true };
   } catch (error) {
+    if (error?.status === 404) throw error;
     console.error("[Broadcast] Error deleting template:");
     throw new Error('Broadcast operation failed');
   }

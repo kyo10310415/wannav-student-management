@@ -222,17 +222,22 @@ app.get('/templates', async (c) => {
 app.post('/templates', async (c) => {
   try {
     const user = c.get('user');
-    const templateData = await c.req.json();
+    let templateData;
+    try { templateData = await c.req.json(); } catch { return c.json({ success: false, error: '入力が不正です' }, 400); }
+    if (!templateData || typeof templateData !== 'object' || Array.isArray(templateData)) return c.json({ success: false, error: '入力が不正です' }, 400);
+    if (templateData.id != null && (!/^\d+$/.test(String(templateData.id)) || !Number.isSafeInteger(Number(templateData.id)) || Number(templateData.id) <= 0)) return c.json({ success: false, error: 'IDが不正です' }, 400);
+    if (templateData.channelType != null && !['notice', 'tips', 'anken', 'chat'].includes(templateData.channelType)) return c.json({ success: false, error: 'チャンネルが不正です' }, 400);
+    if (['imageUrl', 'targetTutor'].some(key => templateData[key] != null && typeof templateData[key] !== 'string')) return c.json({ success: false, error: '入力が不正です' }, 400);
     
     // Validate required fields
-    if (!templateData.name) {
+    if (typeof templateData.name !== 'string' || !templateData.name.trim()) {
       return c.json({
         success: false,
         error: 'Template name is required'
       }, 400);
     }
     
-    if (!templateData.content) {
+    if (typeof templateData.content !== 'string' || !templateData.content.trim()) {
       return c.json({
         success: false,
         error: 'Template content is required'
@@ -247,6 +252,7 @@ app.post('/templates', async (c) => {
       templateId: result.id
     });
   } catch (error) {
+    if (error?.status === 404) return c.json({ success: false, error: 'テンプレートが見つかりません' }, 404);
     console.error('Error saving template:');
     return c.json({
       success: false,
@@ -263,6 +269,7 @@ app.delete('/templates/:id', async (c) => {
   try {
     const user = c.get('user');
     const templateId = c.req.param('id');
+    if (!/^\d+$/.test(templateId) || !Number.isSafeInteger(Number(templateId)) || Number(templateId) <= 0) return c.json({ success: false, error: 'IDが不正です' }, 400);
     
     await deleteTemplate(templateId, user.email, user.role);
     
@@ -271,6 +278,7 @@ app.delete('/templates/:id', async (c) => {
       message: 'Template deleted'
     });
   } catch (error) {
+    if (error?.status === 404) return c.json({ success: false, error: 'テンプレートが見つかりません' }, 404);
     console.error('Error deleting template:');
     return c.json({
       success: false,
@@ -564,7 +572,12 @@ app.get('/schedules', async (c) => {
 app.post('/schedules', async (c) => {
   try {
     const user = c.get('user');
-    const scheduleData = await c.req.json();
+    let scheduleData;
+    try { scheduleData = await c.req.json(); } catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!scheduleData || typeof scheduleData !== 'object' || Array.isArray(scheduleData)) return c.json({ success: false, error: '入力が不正です' }, 400);
+    if (['name', 'content', 'scheduleCron'].some(key => typeof scheduleData[key] !== 'string' || !scheduleData[key].trim())) return c.json({ success: false, error: '名前・本文・スケジュールは文字列で入力してください' }, 400);
+    if (scheduleData.id != null && (!/^\d+$/.test(String(scheduleData.id)) || !Number.isSafeInteger(Number(scheduleData.id)) || Number(scheduleData.id) <= 0)) return c.json({ success: false, error: 'IDが不正です' }, 400);
+    if (['imageId', 'channelType', 'targetStatus', 'targetTutor'].some(key => scheduleData[key] != null && typeof scheduleData[key] !== 'string') || (scheduleData.scheduleEnabled != null && typeof scheduleData.scheduleEnabled !== 'boolean')) return c.json({ success: false, error: '設定の形式が不正です' }, 400);
     
     // Validate required fields
     if (!scheduleData.name) {
@@ -595,7 +608,7 @@ app.post('/schedules', async (c) => {
         SET name = $1, content = $2, image_url = $3, channel_type = $4, 
             target_status = $5, target_tutor = $6, schedule_cron = $7, 
             schedule_enabled = $8, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $9 AND created_by = $10
+        WHERE id = $9 AND created_by = $10 AND is_scheduled = true
         RETURNING id`,
         [
           scheduleData.name,

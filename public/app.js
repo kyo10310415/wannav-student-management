@@ -10186,7 +10186,7 @@ async function renderBroadcastPage() {
             <button onclick="sendBroadcast()" class="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-semibold">
               <i class="fas fa-paper-plane mr-2"></i>送信
             </button>
-            <button onclick="saveTemplate()" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
+            <button data-broadcast-template-write="save" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
               <i class="fas fa-save mr-2"></i>テンプレート保存
             </button>
           </div>
@@ -10793,38 +10793,8 @@ function _startBroadcastPolling(jobId, total, isTest) {
 /**
  * Save as template
  */
-async function saveTemplate() {
-  const content = document.getElementById('broadcast-content').value.trim();
-  const imageId = document.getElementById('broadcast-image-url').value.trim();
-  const channelType = document.getElementById('broadcast-channel-type').value;
-  const targetTutor = document.getElementById('broadcast-target-tutor').value;
-  
-  if (!content) {
-    showNotification('メッセージ内容を入力してください', 'error');
-    return;
-  }
-  
-  const name = prompt('テンプレート名を入力してください:');
-  if (!name) return;
-  
-  try {
-    const response = await axios.post(`${API_BASE}/api/broadcast/templates`, {
-      name,
-      content,
-      imageUrl: imageId || null,  // Send imageId as imageUrl for now
-      channelType,
-      targetTutor: targetTutor === 'all' ? null : targetTutor
-    }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
-    if (response.data.success) {
-      showNotification('✅ テンプレートを保存しました', 'success');
-    }
-  } catch (error) {
-    console.error('Error saving template:', error);
-    showNotification('テンプレートの保存に失敗しました', 'error');
-  }
+async function saveTemplate(button) {
+  return runBroadcastTemplateSave(button);
 }
 
 /**
@@ -10856,7 +10826,7 @@ async function showTemplatesModal() {
               <button onclick="loadTemplate(${t.id})" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition text-sm">
                 <i class="fas fa-download mr-1"></i>読込
               </button>
-              <button onclick="deleteTemplate(${t.id})" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition text-sm">
+              <button data-broadcast-template-write="delete" data-broadcast-template-id="${escapeHtml(String(t.id)).replace(/"/g, '&quot;')}" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition text-sm">
                 <i class="fas fa-trash mr-1"></i>削除
               </button>
             </div>
@@ -10933,24 +10903,8 @@ function loadTemplate(templateId) {
 /**
  * Delete template
  */
-async function deleteTemplate(templateId) {
-  if (!confirm('このテンプレートを削除しますか？')) {
-    return;
-  }
-  
-  try {
-    const response = await axios.delete(`${API_BASE}/api/broadcast/templates/${templateId}`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
-    if (response.data.success) {
-      showNotification('✅ テンプレートを削除しました', 'success');
-      showTemplatesModal(); // Reload modal
-    }
-  } catch (error) {
-    console.error('Error deleting template:', error);
-    showNotification('テンプレートの削除に失敗しました', 'error');
-  }
+async function deleteTemplate(templateId, button) {
+  return runBroadcastTemplateDelete(templateId, button);
 }
 
 /**
@@ -11150,14 +11104,13 @@ async function loadSchedules() {
       renderScheduleList(broadcastSchedules);
     }
   } catch (error) {
-    console.error('Error loading schedules:', error);
-    const errorMessage = error.response?.data?.error || error.message || '不明なエラー';
+    console.error('Error loading schedules');
     document.getElementById('schedule-list-container').innerHTML = `
       <p class="text-red-600 text-center py-8">
         <i class="fas fa-exclamation-triangle mr-2"></i>スケジュールの取得に失敗しました
       </p>
       <p class="text-xs text-gray-600 text-center">
-        エラー詳細: ${errorMessage}
+        時間をおいて再度お試しください
       </p>
     `;
   }
@@ -11212,19 +11165,19 @@ function renderScheduleList(schedules) {
         <div class="flex justify-between items-start mb-2">
           <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
-              <h3 class="text-lg font-semibold text-gray-800">${schedule.name}</h3>
+              <h3 class="text-lg font-semibold text-gray-800">${escapeHtml(schedule.name)}</h3>
               ${statusBadge}
             </div>
             <p class="text-sm text-purple-600 mb-1">
-              <i class="fas fa-clock mr-1"></i>${scheduleStr}
+              <i class="fas fa-clock mr-1"></i>${escapeHtml(scheduleStr)}
             </p>
             <p class="text-xs text-gray-600 mb-2">
-              <i class="fas fa-hashtag mr-1"></i>${schedule.channel_type} | 
-              <i class="fas fa-users mr-1"></i>${schedule.target_status} | 
-              <i class="fas fa-chalkboard-teacher mr-1"></i>${schedule.target_tutor || '全て'}
+              <i class="fas fa-hashtag mr-1"></i>${escapeHtml(schedule.channel_type)} |
+              <i class="fas fa-users mr-1"></i>${escapeHtml(schedule.target_status)} |
+              <i class="fas fa-chalkboard-teacher mr-1"></i>${escapeHtml(schedule.target_tutor || '全て')}
               ${schedule.image_url ? ' | <i class="fas fa-image text-purple-600 mr-1"></i>画像あり' : ''}
             </p>
-            <p class="text-sm text-gray-700 line-clamp-2">${schedule.content}</p>
+            <p class="text-sm text-gray-700 line-clamp-2">${escapeHtml(schedule.content)}</p>
             <p class="text-xs text-gray-500 mt-2">
               最終送信: ${lastSent}
             </p>
@@ -11255,6 +11208,8 @@ function renderScheduleList(schedules) {
  * Show schedule modal
  */
 function showScheduleModal(scheduleId = null) {
+  if (!sessionToken || !currentUser || !['admin', 'leader', 'crew'].includes(currentUser.role) || currentPage !== 'broadcast') return;
+  if (scheduleId != null && (!Number.isSafeInteger(scheduleId) || scheduleId <= 0 || !broadcastSchedules.some(row => Number(row.id) === scheduleId))) return;
   const schedule = scheduleId ? broadcastSchedules.find(s => s.id === scheduleId) : null;
   
   // Helper function to generate 30-minute interval time options
@@ -11272,7 +11227,7 @@ function showScheduleModal(scheduleId = null) {
   };
   
   const modalContent = `
-    <div class="max-w-2xl mx-auto">
+    <div id="broadcast-schedule-editor" class="max-w-2xl mx-auto">
       <h2 class="text-2xl font-bold mb-6">
         <i class="fas fa-clock mr-2 text-purple-600"></i>${schedule ? 'スケジュール編集' : '新規スケジュール作成'}
       </h2>
@@ -11283,7 +11238,7 @@ function showScheduleModal(scheduleId = null) {
           <label class="block text-sm font-semibold text-gray-700 mb-2">
             <i class="fas fa-tag mr-1"></i>スケジュール名
           </label>
-          <input type="text" id="schedule-name" value="${schedule ? schedule.name : ''}" placeholder="例: 毎週金曜日のお知らせ" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+          <input type="text" id="schedule-name" value="${escapeHtml(schedule ? schedule.name : '').replace(/"/g, '&quot;')}" placeholder="例: 毎週金曜日のお知らせ" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
         </div>
         
         <!-- Frequency -->
@@ -11369,7 +11324,7 @@ function showScheduleModal(scheduleId = null) {
           <label class="block text-sm font-semibold text-gray-700 mb-2">
             <i class="fas fa-comment-alt mr-1"></i>メッセージ内容
           </label>
-          <textarea id="schedule-content" rows="4" placeholder="送信するメッセージを入力してください..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">${schedule ? schedule.content : ''}</textarea>
+          <textarea id="schedule-content" rows="4" placeholder="送信するメッセージを入力してください..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">${escapeHtml(schedule ? schedule.content : '')}</textarea>
         </div>
         
         <!-- Image Upload for Schedule -->
@@ -11407,7 +11362,7 @@ function showScheduleModal(scheduleId = null) {
         <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition">
           <i class="fas fa-times mr-2"></i>キャンセル
         </button>
-        <button onclick="saveSchedule(${scheduleId})" class="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition">
+        <button data-broadcast-schedule-save class="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition">
           <i class="fas fa-save mr-2"></i>保存
         </button>
       </div>
@@ -11415,6 +11370,7 @@ function showScheduleModal(scheduleId = null) {
   `;
   
   showModal(modalContent);
+  registerBroadcastScheduleEditor(scheduleId);
   
   // Load tutors for selector
   if (broadcastTutors && broadcastTutors.length > 0) {
@@ -11468,6 +11424,9 @@ function showScheduleModal(scheduleId = null) {
  * Save schedule
  */
 async function saveSchedule(scheduleId = null) {
+  const state = beginBroadcastScheduleSave(scheduleId);
+  if (!state) return;
+  try {
   const name = document.getElementById('schedule-name').value.trim();
   const frequency = document.getElementById('schedule-frequency').value;
   const dayOfWeek = document.getElementById('schedule-day').value;
@@ -11485,6 +11444,10 @@ async function saveSchedule(scheduleId = null) {
   }
   
   // Validate time format (30-minute intervals)
+  if (!['weekly', 'biweekly', 'monthly'].includes(frequency) || !/^[0-6]$/.test(dayOfWeek) || !/^(?:[01]\d|2[0-3]):(?:00|30)$/.test(time)) {
+    showNotification('頻度・曜日・時刻を確認してください', 'error');
+    return;
+  }
   const [hour, minute] = time.split(':');
   if (minute !== '00' && minute !== '30') {
     showNotification('時刻は30分単位で設定してください（00分または30分）', 'error');
@@ -11508,8 +11471,7 @@ async function saveSchedule(scheduleId = null) {
     default:
       cronExpression = `${minute} ${hour} * * ${dayOfWeek}`;
   }
-  
-  try {
+
     const response = await axios.post(`${API_BASE}/api/broadcast/schedules`, {
       id: scheduleId,
       name,
@@ -11521,18 +11483,21 @@ async function saveSchedule(scheduleId = null) {
       scheduleCron: cronExpression,
       scheduleEnabled: enabled
     }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { 'Authorization': `Bearer ${state.token}` }
     });
     
+    if (!broadcastScheduleContextCurrent(state)) return;
+    if (!response.data.success) throw new Error('Schedule save failed');
     if (response.data.success) {
       showNotification(`✅ スケジュールを${scheduleId ? '更新' : '作成'}しました`, 'success');
       closeModal();
       await loadSchedules();
     }
   } catch (error) {
-    console.error('Error saving schedule:', error);
-    showNotification('スケジュールの保存に失敗しました: ' + (error.response?.data?.error || error.message), 'error');
-  }
+    if (!broadcastScheduleContextCurrent(state)) return;
+    console.error('Error saving schedule');
+    showNotification('スケジュールの保存に失敗しました', 'error');
+  } finally { finishBroadcastScheduleSave(state); }
 }
 
 /**
@@ -12544,7 +12509,7 @@ async function renderVQDiagnosisPage() {
               class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
             />
             <button 
-              onclick="saveVQDiagnosisImage()"
+              id="vq-image-save-btn" data-vq-image-action="save"
               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold"
             >
               <i class="fas fa-plus mr-2"></i>追加
@@ -12559,29 +12524,7 @@ async function renderVQDiagnosisPage() {
               <i class="fas fa-info-circle mr-2"></i>
               画像設定はまだありません
             </div>
-          ` : vqDiagnosisImages.map(img => `
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-              <div class="flex-1">
-                <div class="font-semibold text-gray-800">${img.diagnosis_type}</div>
-                <div class="text-sm text-gray-600 truncate">${img.image_url}</div>
-              </div>
-              <div class="flex items-center gap-2">
-                <a 
-                  href="${img.image_url}" 
-                  target="_blank" 
-                  class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition text-sm"
-                >
-                  <i class="fas fa-external-link-alt"></i>
-                </a>
-                <button 
-                  onclick="deleteVQDiagnosisImage(${img.id})"
-                  class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition text-sm"
-                >
-                  <i class="fas fa-trash"></i>
-                </button>
-              </div>
-            </div>
-          `).join('')}
+          ` : vqDiagnosisImages.map(img => renderVQImageSetting(img)).join('')}
         </div>
       </div>
       
@@ -13360,49 +13303,27 @@ async function manualCheckVQDiagnosis() {
  * VQ診断タイプの画像設定を保存
  */
 async function saveVQDiagnosisImage() {
+  const state = beginVQImageSave();
+  if (!state) return;
   try {
-    const diagnosisType = document.getElementById('new-diagnosis-type').value.trim();
-    const imageUrl = document.getElementById('new-image-url').value.trim();
-    
-    if (!diagnosisType) {
-      showNotification('診断タイプを入力してください', 'error');
+    const diagnosisType = state.typeInput.value.trim();
+    const imageUrl = state.urlInput.value.trim();
+    if (!diagnosisType || !vqImageSafeUrl(imageUrl)) {
+      showNotification('診断タイプとhttpまたはhttpsの画像URLを入力してください', 'error');
       return;
     }
-    
-    if (!imageUrl) {
-      showNotification('画像URLを入力してください', 'error');
-      return;
-    }
-    
-    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-      showNotification('有効なURLを入力してください（http:// または https:// で始まる）', 'error');
-      return;
-    }
-    
-    const response = await axios.post(
-      `${API_BASE}/api/vq-diagnosis/images`,
+    const response = await axios.post(`${API_BASE}/api/vq-diagnosis/images`,
       { diagnosis_type: diagnosisType, image_url: imageUrl },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    
-    if (response.data.success) {
-      showNotification('画像設定を保存しました', 'success');
-      
-      // フォームをクリア
-      document.getElementById('new-diagnosis-type').value = '';
-      document.getElementById('new-image-url').value = '';
-      
-      // ページを再読み込み
-      await renderVQDiagnosisPage();
-    }
-    
-  } catch (error) {
-    console.error('画像設定保存エラー:', error);
-    showNotification(
-      error.response?.data?.error || '画像設定の保存に失敗しました',
-      'error'
-    );
-  }
+      { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!vqImageSaveCurrent(state)) return;
+    if (!response.data.success) throw new Error('Image setting save failed');
+    showNotification('画像設定を保存しました', 'success');
+    state.typeInput.value = '';
+    state.urlInput.value = '';
+    await renderVQDiagnosisPage();
+  } catch {
+    if (vqImageSaveCurrent(state)) showNotification('画像設定の保存に失敗しました', 'error');
+  } finally { finishVQImageSave(state); }
 }
 
 /**
