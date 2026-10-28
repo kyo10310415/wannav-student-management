@@ -1,3 +1,4 @@
+import { limitBroadcastImageUpload } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ async function fixture({ role = 'crew', fail = [], serviceError, returnedJob = j
   const logs = [], calls = [], queries = [];
   const rawError = () => serviceError || Object.assign(new Error(marker), { config: { url: marker }, response: { data: marker } });
   const wrap = (name, value) => async (...args) => { calls.push({ name, args }); if (fail.includes(name)) throw rawError(); return value; };
-  const deps = { Hono, console: Object.fromEntries(['log', 'warn', 'error'].map(level => [level, (...args) => logs.push(inspect(args))])),
+  const deps = { Hono, limitBroadcastImageUpload, console: Object.fromEntries(['log', 'warn', 'error'].map(level => [level, (...args) => logs.push(inspect(args))])),
     getTargetStudents: wrap('targets', [student]), enqueueBroadcast: wrap('enqueue', { jobId: 'fixture-job', broadcastId: 1, total: 1 }),
     getBroadcastJobStatus: wrap('status', returnedJob), getLatestRecoverableBroadcastJob: wrap('recoverable', returnedJob),
     reconcileStaleBroadcastJobs: wrap('reconcile', undefined), resumeBroadcastJob: wrap('resume', returnedJob), acknowledgeBroadcastJob: wrap('acknowledge', returnedJob),

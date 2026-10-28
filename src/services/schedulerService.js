@@ -138,6 +138,9 @@ export async function executeScheduledBroadcast(scheduleId) {
     
     // Send broadcast
     const result = await sendBroadcast(messageData, targetStudents, schedule.created_by);
+    if (result?.success === false) {
+      return { success: false, error: 'Scheduled broadcast operation failed' };
+    }
     
     // Update last_sent_at
     await query(

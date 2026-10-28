@@ -1,3 +1,4 @@
+import { limitBroadcastImageUpload } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -55,7 +56,7 @@ async function fixture({ role = 'crew', legacy = false, noOwnJob = false, sessio
     throw new Error('Unexpected fixture SQL');
   };
   const forbidden = async () => { notifications.push(true); throw new Error('Forbidden real delivery boundary'); };
-  const deps = { Hono, query, getClient: async () => ({ query, release() {} }), classifyLegacyBroadcastRecipients,
+  const deps = { Hono, limitBroadcastImageUpload, query, getClient: async () => ({ query, release() {} }), classifyLegacyBroadcastRecipients,
     createKeyedJobDispatcher: () => ({ dispatch: async id => { dispatches.push(id); } }),
     axios: { post: forbidden, get: forbidden }, FormData: class {}, discordClient: {}, fetchStudentBroadcastInfo: forbidden };
   const key = 'broadcastJobAccessFixture' + sequence++;
