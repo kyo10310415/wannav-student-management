@@ -5,6 +5,16 @@ import { sendDiscordMessage, getStudentDiscordInfo } from '../services/discordSe
 
 const app = new Hono();
 
+async function readRedListSaveJson(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; } catch { return null; }
+}
+function validRedListText(value) { return typeof value === 'string' && value.trim().length > 0; }
+function validRedListId(value) { return /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0; }
+function validRedListBookingUrl(value) {
+  if (!validRedListText(value)) return false;
+  try { return ['http:', 'https:'].includes(new URL(value.trim()).protocol); } catch { return false; }
+}
+
 // ─────────────────────────────────────────
 // 認証ミドルウェア（Bearer トークン検証）
 // ─────────────────────────────────────────
@@ -167,12 +177,13 @@ app.post('/messages', async (c) => {
         imageContentType = imageFile.type;
       }
     } else {
-      const body = await c.req.json();
+      const body = await readRedListSaveJson(c);
+      if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
       title   = body.title;
       content = body.content;
     }
 
-    if (!title || !content) {
+    if (!validRedListText(title) || !validRedListText(content)) {
       return c.json({ success: false, error: 'title と content は必須です' }, 400);
     }
 
@@ -200,6 +211,7 @@ app.post('/messages', async (c) => {
 app.put('/messages/:id', async (c) => {
   try {
     const id = c.req.param('id');
+    if (!validRedListId(id)) return c.json({ success: false, error: 'IDが不正です' }, 400);
     const contentType = c.req.header('content-type') || '';
 
     let title, content, imageData, imageFilename, imageContentType, removeImage = false;
@@ -217,12 +229,13 @@ app.put('/messages/:id', async (c) => {
         imageContentType = imageFile.type;
       }
     } else {
-      const body = await c.req.json();
+      const body = await readRedListSaveJson(c);
+      if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
       title   = body.title;
       content = body.content;
     }
 
-    if (!title || !content) {
+    if (!validRedListText(title) || !validRedListText(content)) {
       return c.json({ success: false, error: 'title と content は必須です' }, 400);
     }
 
@@ -351,9 +364,11 @@ app.get('/senders', async (c) => {
 app.post('/senders', async (c) => {
   try {
     const user = c.get('user');
-    const { name, booking_url } = await c.req.json();
-    if (!name || !booking_url) {
-      return c.json({ success: false, error: '送信者名と予約URLは必須です' }, 400);
+    const body = await readRedListSaveJson(c);
+    if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { name, booking_url } = body;
+    if (!validRedListText(name) || !validRedListBookingUrl(booking_url)) {
+      return c.json({ success: false, error: '送信者名とhttpまたはhttpsの予約URLを入力してください' }, 400);
     }
     const result = await query(
       `INSERT INTO red_list_senders (name, booking_url, created_by)
@@ -375,9 +390,12 @@ app.post('/senders', async (c) => {
 app.put('/senders/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const { name, booking_url } = await c.req.json();
-    if (!name || !booking_url) {
-      return c.json({ success: false, error: '送信者名と予約URLは必須です' }, 400);
+    if (!validRedListId(id)) return c.json({ success: false, error: 'IDが不正です' }, 400);
+    const body = await readRedListSaveJson(c);
+    if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { name, booking_url } = body;
+    if (!validRedListText(name) || !validRedListBookingUrl(booking_url)) {
+      return c.json({ success: false, error: '送信者名とhttpまたはhttpsの予約URLを入力してください' }, 400);
     }
     const result = await query(
       `UPDATE red_list_senders

@@ -41,7 +41,7 @@ test('all nineteen red-list API error boundaries hide upstream data', async () =
   const targets = [['/'], ['/update', json({ yearMonth: '2026-10' })], ['/update/fixture', json({})], ['/history?yearMonth=2026-10'],
     ['/messages', auth], ['/messages', json({ title: marker, content: marker })], ['/messages/42', json({ title: marker, content: marker }, 'PUT')],
     ['/messages/42', { ...auth, method: 'DELETE' }], ['/messages/42/image', auth], ['/senders', auth],
-    ['/senders', json({ name: marker, booking_url: marker })], ['/senders/42', json({ name: marker, booking_url: marker }, 'PUT')],
+    ['/senders', json({ name: marker, booking_url: 'https://synthetic.example.invalid/' })], ['/senders/42', json({ name: marker, booking_url: 'https://synthetic.example.invalid/' }, 'PUT')],
     ['/senders/42', { ...auth, method: 'DELETE' }], ['/discord/send', json({ studentId: marker, yearMonth: '2026-10', messageContent: marker })],
     ['/discord/test-send', json({ messageId: 42 })], ['/discord/logs', auth], ['/fixture/ex-rank', json({ yearMonth: '2026-10', ex_rank: true, ex_reason: marker }, 'PATCH')],
     ['/fixture/status', json({ yearMonth: '2026-10', assigned_to: marker }, 'PATCH')], ['/fixture']];
@@ -67,7 +67,7 @@ test('message and sender CRUD retain caller identity, content parameters and suc
   const row = { id: 42, title: marker, content: marker, name: marker };
   const f = await fixture({ rows: [row] });
   for (const [path, options] of [['/messages', auth], ['/messages', json({ title: marker, content: marker })], ['/messages/42', json({ title: marker, content: marker }, 'PUT')],
-    ['/senders', auth], ['/senders', json({ name: marker, booking_url: marker })], ['/senders/42', json({ name: marker, booking_url: marker }, 'PUT')]]) {
+    ['/senders', auth], ['/senders', json({ name: marker, booking_url: 'https://synthetic.example.invalid/' })], ['/senders/42', json({ name: marker, booking_url: 'https://synthetic.example.invalid/' }, 'PUT')]]) {
     assert.equal((await f.app.request(path, options)).status, 200);
   }
   const insert = f.queries.find(({ sql }) => sql.includes('INSERT INTO red_list_messages'));
@@ -119,4 +119,25 @@ test('protected routes and existing validation/not-found statuses remain intact'
   assert.equal((await f.app.request('/fixture/ex-rank', json({ yearMonth: '2026-10', ex_rank: 'yes' }, 'PATCH'))).status, 400);
   assert.equal((await f.app.request('/messages/42', json({ title: marker, content: marker }, 'PUT'))).status, 404);
   safe(f);
+});
+
+test('message/sender saves reject malformed JSON, scalar bodies, non-string or whitespace fields before business SQL', async () => {
+ for (const [path, method] of [['/messages','POST'],['/messages/42','PUT'],['/senders','POST'],['/senders/42','PUT']]) {
+  for (const body of ['{','null','[]','42']) {
+   const f=await fixture(); const r=await f.app.request(path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer fixture'},body});
+   assert.equal(r.status,400,path);assert.equal(f.queries.filter(q=>!q.sql.includes('FROM sessions')).length,0);
+  }
+  const fields=path.startsWith('/messages')?[{title:[],content:'body'},{title:'title',content:{}},{title:'  ',content:'body'}]:[{name:[],booking_url:'https://fixture.invalid/'},{name:' ',booking_url:'https://fixture.invalid/'}];
+  for(const body of fields){const f=await fixture();assert.equal((await f.app.request(path,json(body,method))).status,400);assert.equal(f.queries.filter(q=>!q.sql.includes('FROM sessions')).length,0)}
+ }
+});
+test('sender saves reject active URL schemes while retaining normal HTTP/S URLs',async()=>{
+ for(const method of ['POST','PUT'])for(const value of ['javascript:alert(1)','data:text/html,SYNTHETIC','file:///synthetic','/relative','not a URL']){
+  const f=await fixture();assert.equal((await f.app.request(method==='POST'?'/senders':'/senders/42',json({name:'Synthetic',booking_url:value},method))).status,400);assert.equal(f.queries.filter(q=>!q.sql.includes('FROM sessions')).length,0);
+ }
+ for(const value of ['https://fixture.invalid/path?q=1','http://fixture.invalid/']){const f=await fixture({rows:[{id:42}]});assert.equal((await f.app.request('/senders',json({name:' Synthetic ',booking_url:' '+value+' '}))).status,200);assert.equal(f.queries.at(-1).params[1],value)}
+});
+test('message/sender edit reject invalid IDs before writing and retain 404 for absent records',async()=>{
+ for(const base of ['/messages','/senders'])for(const id of ['0','-1','1.5','9007199254740992','bad']){const f=await fixture();const body=base==='/messages'?{title:'Synthetic',content:'Synthetic'}:{name:'Synthetic',booking_url:'https://fixture.invalid/'};assert.equal((await f.app.request(base+'/'+id,json(body,'PUT'))).status,400);assert.equal(f.queries.filter(q=>!q.sql.includes('FROM sessions')).length,0)}
+ for(const base of ['/messages','/senders']){const f=await fixture();const body=base==='/messages'?{title:'Synthetic',content:'Synthetic'}:{name:'Synthetic',booking_url:'https://fixture.invalid/'};assert.equal((await f.app.request(base+'/42',json(body,'PUT'))).status,404)}
 });

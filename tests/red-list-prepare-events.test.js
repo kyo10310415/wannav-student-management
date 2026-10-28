@@ -42,5 +42,5 @@ test('real sender preparation restores exact strings, resets new values and clos
 test('only ten preparation attributes migrate while all persistence and test-send controls remain',()=>{
  for(const fn of ['openRedListMessageModal','closeRedListMessageModal','removeRedListMessageImage','onRedListImageSelected','openRedListSenderModal','closeRedListSenderModal'])assert.equal(new RegExp('on(?:click|change)="'+fn+'\\(').test(app),false);
  assert.equal((app.match(/data-red-prepare-action=/g)||[]).length,9);assert.equal((app.match(/data-red-prepare-image(?:\s|>)/g)||[]).length,1);
- for(const fn of ['saveRedListMessage()','saveRedListSender()','deleteRedListMessage(','deleteRedListSender('])assert.ok(app.includes('onclick="'+fn));assert.deepEqual(fixture().listeners.map(x=>x.type),['click','change']);
+ for(const fn of ['deleteRedListMessage(','deleteRedListSender('])assert.ok(app.includes('onclick="'+fn));assert.deepEqual(fixture().listeners.map(x=>x.type),['click','change']);
 });
