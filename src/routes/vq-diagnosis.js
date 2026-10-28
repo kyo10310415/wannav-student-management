@@ -6,6 +6,10 @@ import { fetchVQDiagnosisByStudentId } from '../services/sheetsService.js';
 
 const app = new Hono();
 
+function validHistoryStudentId(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 255 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
 // CORS設定
 app.use('/*', cors());
 
@@ -92,8 +96,12 @@ app.post('/check', async (c) => {
  */
 app.get('/history', async (c) => {
   try {
-    const limit = c.req.query('limit') || '100';
+    const limit = c.req.query('limit') ?? '100';
+    if (!/^[1-9][0-9]*$/.test(limit) || !Number.isSafeInteger(Number(limit)) || Number(limit) > 1000) {
+      return c.json({ success: false, error: 'Invalid history limit' }, 400);
+    }
     const studentId = c.req.query('student_id'); // 学籍番号でフィルター（オプション）
+    if (studentId && !validHistoryStudentId(studentId)) return c.json({ success: false, error: 'Invalid student ID' }, 400);
     
     let query = `
       SELECT 
@@ -142,6 +150,7 @@ app.get('/history', async (c) => {
 app.get('/student/:studentId', async (c) => {
   try {
     const studentId = c.req.param('studentId');
+    if (!validHistoryStudentId(studentId)) return c.json({ success: false, error: 'Invalid student ID' }, 400);
     
     console.log("[VQ diagnosis] Student diagnosis history requested");
     

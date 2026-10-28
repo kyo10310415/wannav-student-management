@@ -137,3 +137,38 @@ test('VQ image deletion rejects malformed IDs before settings SQL and preserves 
  const f=await fixture();for(const id of['0','-1','1.5','9007199254740992','bad'])assert.equal((await f.app.request('/images/'+id,{method:'DELETE'})).status,400);assert.equal(f.queries.length,0);
  const missing=await fixture({queryOverride:()=>({rows:[]})});assert.equal((await missing.app.request('/images/7',{method:'DELETE'})).status,404);assert.equal(missing.sends.length,0);assert.equal(missing.sheetCalls.length,0);
 });
+
+test('VQ history rejects unbounded limits and invalid student IDs before any backend read', async () => {
+  const f = await fixture();
+  for (const limit of ['', '0', '-1', '1.5', '1e3', '1001', '999999999999999999999', 'all']) {
+    assert.equal((await f.app.request('/history?limit=' + encodeURIComponent(limit))).status, 400);
+  }
+  for (const id of [' ', 'x'.repeat(256), 'x\ny']) {
+    assert.equal((await f.app.request('/history?student_id=' + encodeURIComponent(id))).status, 400);
+    assert.equal((await f.app.request('/student/' + encodeURIComponent(id))).status, 400);
+  }
+  assert.equal(f.queries.length, 0); assert.equal(f.sheetCalls.length, 0);
+});
+test('VQ history preserves bounded parameterized email and Unicode identifiers', async () => {
+  const f = await fixture();
+  const id = "合成'\"@example.invalid";
+  assert.equal((await f.app.request('/history?limit=1000&student_id=' + encodeURIComponent(id))).status, 200);
+  assert.deepEqual(f.queries.at(-1).params, [id, '1000']);
+  assert.equal((await f.app.request('/student/' + encodeURIComponent(id))).status, 200);
+  assert.deepEqual(f.sheetCalls, [['history', id]]);
+});
+
+test('VQ history endpoints retain shared admin leader access and reject crew or anonymous before history reads', async () => {
+  const { installApiAccess } = await import('../src/security/apiAccess.js');
+  for (const role of ['admin', 'leader', 'crew', null]) {
+    const f = await fixture(); const secured = new Hono();
+    installApiAccess(secured, { db: async () => ({ rows: [{ id: 1, role, must_change_password: false }] }) });
+    secured.route('/api/vq-diagnosis', f.app);
+    for (const path of ['/history', '/student/SYNTHETIC']) {
+      const response = await secured.request('/api/vq-diagnosis' + path, role ? { headers: { Authorization: 'Bearer ' + 'a'.repeat(64) } } : {});
+      assert.equal(response.status, role === null ? 401 : role === 'crew' ? 403 : 200);
+    }
+    if (role === 'crew' || role === null) { assert.equal(f.queries.length, 0); assert.equal(f.sheetCalls.length, 0); }
+    else { assert.equal(f.sheetCalls.length, 1); assert.equal(f.queries.length, 2); }
+  }
+});

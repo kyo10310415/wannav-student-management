@@ -12662,6 +12662,8 @@ function renderVQDiagnosisHistoryRows() {
     
     const studentIdCode = record.student_id_code || '-';
     const diagnosisDate = record.diagnosis_date || '-';
+    const rowId = Number(record.id);
+    const validRowId = Number.isSafeInteger(rowId) && rowId > 0;
     
     return `
       <tr class="hover:bg-gray-50">
@@ -12684,7 +12686,7 @@ function renderVQDiagnosisHistoryRows() {
           ${escapeHtml(record.student_name)}
         </td>
         <td class="px-6 py-4 text-sm text-gray-900">
-          <span class="font-bold text-purple-600">${record.total_score}点</span>
+          <span class="font-bold text-purple-600">${escapeHtml(String(record.total_score ?? ''))}点</span>
         </td>
         <td class="px-6 py-4 text-sm text-gray-900">
           <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-semibold">
@@ -12704,14 +12706,14 @@ function renderVQDiagnosisHistoryRows() {
         <td class="px-6 py-4 text-sm">
           <div class="flex gap-2">
             <button 
-              onclick="resendVQDiagnosis(${record.id})"
+              ${validRowId ? `data-vq-history-action="resend" data-vq-history-id="${rowId}"` : 'disabled'}
               class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-xs"
               title="再送信"
             >
               <i class="fas fa-redo mr-1"></i>再送信
             </button>
             <button 
-              onclick="deleteVQHistory(${record.id}, '${escapeHtml(record.student_name || studentIdCode)}')"
+              ${validRowId ? `data-vq-history-action="delete" data-vq-history-id="${rowId}"` : 'disabled'}
               class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition text-xs"
               title="履歴を削除"
             >
@@ -12745,9 +12747,9 @@ async function resendVQDiagnosis(id) {
     }
     
   } catch (error) {
-    console.error('再送信エラー:', error);
+    console.error('再送信エラー');
     showNotification(
-      error.response?.data?.error || '再送信に失敗しました',
+      '再送信に失敗しました',
       'error'
     );
   }
@@ -12781,19 +12783,22 @@ function escapeHtml(text) {
  * 生徒別のVQ診断履歴を表示
  */
 async function showStudentVQHistory(studentId) {
+  const state = beginStudentVQHistoryRead(studentId);
+  if (!state) return;
   try {
 
     
     const response = await axios.get(
-      `${API_BASE}/api/vq-diagnosis/student/${studentId}`,
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+      `${API_BASE}/api/vq-diagnosis/student/${encodeURIComponent(studentId)}`,
+      { headers: { 'Authorization': `Bearer ${state.token}` } }
     );
     
 
     
+    if (!studentVQHistoryReadCurrent(state)) return;
     const history = response.data.history || [];
     
-    console.log('取得した履歴件数:', history.length);
+
     
     if (history.length === 0) {
       showNotification('この生徒の診断履歴はありません', 'info');
@@ -12824,7 +12829,7 @@ async function showStudentVQHistory(studentId) {
               <div class="bg-purple-50 rounded-lg p-4">
                 <h4 class="text-md font-semibold text-gray-800 mb-3 text-center">
                   <i class="fas fa-chart-radar mr-2"></i>
-                  最新の正解率（${history[0].diagnosis_date || '日付不明'}）
+                  最新の正解率（${escapeHtml(history[0].diagnosis_date || '日付不明')}）
                 </h4>
                 <canvas id="vq-radar-chart" style="max-height: 300px;"></canvas>
               </div>
@@ -12848,7 +12853,7 @@ async function showStudentVQHistory(studentId) {
                 <div class="flex items-start justify-between mb-2">
                   <div>
                     <span class="text-sm font-semibold text-gray-700">診断 ${history.length - index}回目</span>
-                    ${record.diagnosis_date ? `<span class="ml-3 text-sm text-gray-600">診断日: ${record.diagnosis_date}</span>` : ''}
+                    ${record.diagnosis_date ? `<span class="ml-3 text-sm text-gray-600">診断日: ${escapeHtml(record.diagnosis_date)}</span>` : ''}
                   </div>
                   <span class="px-2 py-1 rounded-full text-xs font-semibold ${record.status === 'sent' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
                     ${record.status === 'sent' ? '送信済み' : 'エラー'}
@@ -12858,19 +12863,19 @@ async function showStudentVQHistory(studentId) {
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
                   <div>
                     <p class="text-xs text-gray-600">合計点</p>
-                    <p class="text-lg font-bold text-purple-600">${record.total_score}点</p>
+                    <p class="text-lg font-bold text-purple-600">${escapeHtml(String(record.total_score ?? ''))}点</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">SNS</p>
-                    <p class="text-sm font-semibold text-blue-600">${record.sns_score || 0}点</p>
+                    <p class="text-sm font-semibold text-blue-600">${escapeHtml(String(record.sns_score || 0))}点</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">配信</p>
-                    <p class="text-sm font-semibold text-green-600">${record.streaming_score || 0}点</p>
+                    <p class="text-sm font-semibold text-green-600">${escapeHtml(String(record.streaming_score || 0))}点</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">収益</p>
-                    <p class="text-sm font-semibold text-amber-600">${record.revenue_score || 0}点</p>
+                    <p class="text-sm font-semibold text-amber-600">${escapeHtml(String(record.revenue_score || 0))}点</p>
                   </div>
                 </div>
                 
@@ -12887,15 +12892,15 @@ async function showStudentVQHistory(studentId) {
                   <div class="grid grid-cols-3 gap-3">
                     <div class="text-center">
                       <p class="text-xs text-gray-500">SNS</p>
-                      <p class="text-lg font-bold text-blue-600">${record.sns_accuracy || 0}%</p>
+                      <p class="text-lg font-bold text-blue-600">${escapeHtml(String(record.sns_accuracy || 0))}%</p>
                     </div>
                     <div class="text-center">
                       <p class="text-xs text-gray-500">配信</p>
-                      <p class="text-lg font-bold text-green-600">${record.streaming_accuracy || 0}%</p>
+                      <p class="text-lg font-bold text-green-600">${escapeHtml(String(record.streaming_accuracy || 0))}%</p>
                     </div>
                     <div class="text-center">
                       <p class="text-xs text-gray-500">収益</p>
-                      <p class="text-lg font-bold text-amber-600">${record.revenue_accuracy || 0}%</p>
+                      <p class="text-lg font-bold text-amber-600">${escapeHtml(String(record.revenue_accuracy || 0))}%</p>
                     </div>
                   </div>
                 </div>
@@ -12938,14 +12943,17 @@ async function showStudentVQHistory(studentId) {
       </div>
     `;
     
+    state.modal = modal;
     document.body.appendChild(modal);
     
     // チャートを描画（モーダルがDOMに追加された後）
     setTimeout(() => {
-      renderVQDiagnosisCharts(history);
+      if (studentVQHistoryReadCurrent(state) && document.body.contains(modal)) renderVQDiagnosisCharts(history);
     }, 100);
     
   } catch (error) {
+    if (!studentVQHistoryReadCurrent(state)) return;
+    clearStudentVQHistoryRead();
     console.error('生徒別履歴取得エラー');
     showNotification('履歴の取得に失敗しました', 'error');
   }
@@ -13331,7 +13339,7 @@ async function deleteVQHistory(id, studentName) {
     );
     
     if (response.data.success) {
-      showNotification(`履歴を削除しました: ${studentName}`, 'success');
+      showNotification(`履歴を削除しました: ${escapeHtml(studentName)}`, 'success');
       
       // 履歴を再読み込み
       await loadVQDiagnosisData();
@@ -13339,9 +13347,9 @@ async function deleteVQHistory(id, studentName) {
     }
     
   } catch (error) {
-    console.error('履歴削除エラー:', error);
+    console.error('履歴削除エラー');
     showNotification(
-      error.response?.data?.error || '履歴の削除に失敗しました',
+      '履歴の削除に失敗しました',
       'error'
     );
   }
