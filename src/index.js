@@ -159,6 +159,11 @@ app.get('/', (c) => {
         <script src="/daily-history-events.js?v=${Date.now()}"></script>
         <script src="/handover-read-events.js?v=${Date.now()}"></script>
         <script src="/content-local-events.js?v=${Date.now()}"></script>
+        <script src="/absence-prepare-events.js?v=${Date.now()}"></script>
+        <script src="/daily-prepare-events.js?v=${Date.now()}"></script>
+        <script src="/minutes-template-events.js?v=${Date.now()}"></script>
+        <script src="/red-list-read-events.js?v=${Date.now()}"></script>
+        <script src="/tutor-red-month-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
