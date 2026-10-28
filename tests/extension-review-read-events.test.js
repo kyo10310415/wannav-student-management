@@ -44,7 +44,7 @@ test('read-only entry/tab/history controls use namespaced data and preserve writ
 
 test('one stable delegated listener handles nested targets and newly recreated navigation/content roots once', async () => {
   const f=fixture(); f.stubReads();
-  assert.equal(f.listeners.length,1); assert.equal(f.listeners[0].type,'click');
+  assert.equal(f.listeners.filter(l=>l.type==='click').length,1); assert.equal(f.listeners[0].type,'click'); assert.equal(f.listeners.filter(l=>l.type==='change').length,1);
   await f.click(f.button('open-page',{},f.elements['extension-review-nav']),true);
   const old=f.elements.content;
   const obsolete=f.button('search-history',{erOffset:'0'},old);
@@ -53,7 +53,7 @@ test('one stable delegated listener handles nested targets and newly recreated n
   await f.click(f.button('select-tab',{erTab:'history'}),true);
   await f.click(f.button('open-page',{},f.elements['extension-review-nav']));
   assert.deepEqual(f.calls,[['open-page','extension-review'],['select-tab','history'],['open-page','extension-review']]);
-  assert.equal(f.listeners.length,1); assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
+  assert.equal(f.listeners.filter(l=>l.type==='click').length,1); assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
 });
 
 test('disabled, outside, non-admin, missing-session and disabled-feature clicks do not dispatch or request', async () => {
@@ -141,4 +141,70 @@ test('delegated history response is discarded when authentication changes during
   f.context.sessionToken='new-synthetic-session'; resolve({data:{data:[row()]}}); await pending;
   assert.equal(f.elements['er-history-list'].innerHTML,''); assert.equal(vm.runInContext('erHistoryOffset',f.context),100);
   assert.equal(f.requests.length,1); assert.equal(f.requests[0].method,'get'); assert.equal(f.writes.length,0);
+});
+
+
+test('settings version changes use the current content root and enforce admin/session/feature/disabled guards', async () => {
+  const f=fixture();
+  f.context.erRenderSettings=async version=>f.calls.push(['settings',version]);
+  const change=f.listeners.find(l=>l.type==='change').callback;
+  const node={value:'synthetic & version',disabled:false,root:f.elements.content};
+  node.closest=selector=>selector==='select[data-er-settings-version]'?node:null;
+  await change({target:node});
+  assert.deepEqual(f.calls,[['settings','synthetic & version']]);
+  node.disabled=true; await change({target:node}); node.disabled=false;
+  f.elements.content=f.element(); await change({target:node}); node.root=f.elements.content;
+  for (const role of ['crew','leader']) { f.context.currentUser={role}; await change({target:node}); }
+  f.context.currentUser={role:'admin'}; f.context.sessionToken=''; await change({target:node});
+  f.context.sessionToken='synthetic-session'; vm.runInContext('extensionReviewFeatureEnabled=false',f.context); await change({target:node});
+  await change({target:{}});
+  assert.equal(f.calls.length,1); assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
+});
+
+test('mapping and preview remain local, render text safely and report malformed JSON without saving', async () => {
+  const f=fixture();
+  for (const id of ['er-criteria','er-script-0','er-script-1','er-script-2','er-script-3','er-template','er-mapping','er-speaker-aliases','er-target','er-limits','er-settings-preview']) f.elements[id]=f.element();
+  for (const id of ['er-mapping','er-speaker-aliases','er-target','er-limits']) f.elements[id].value='{}';
+  f.elements['er-criteria'].value='<script>synthetic</script>';
+  await f.click(f.button('apply-mapping'),true);
+  assert.equal(JSON.parse(f.elements['er-mapping'].value).age.transform,'ageFromBirthDate');
+  await f.click(f.button('preview-settings'),true);
+  assert.equal(JSON.parse(f.elements['er-settings-preview'].textContent).criteria,'<script>synthetic</script>');
+  assert.equal(f.elements['er-settings-preview'].innerHTML,'');
+  const previous=f.elements['er-settings-preview'].textContent;
+  f.elements['er-mapping'].value='{'; await f.click(f.button('preview-settings'));
+  assert.equal(f.notices.length,1); assert.equal(f.elements['er-settings-preview'].textContent,previous);
+  f.context.currentUser={role:'crew'}; await f.click(f.button('apply-mapping'));
+  assert.equal(f.elements['er-mapping'].value,'{');
+  assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
+});
+
+test('settings renderer keeps encoded read URLs, versions and save control while removing local inline handlers', async () => {
+  const f=fixture();
+  const config={criteria:'synthetic',scripts:['','','',''],template:'',mapping:{},target:{},limits:{}};
+  f.context.axios=async options=>{f.requests.push(options);return {data:{data:options.url.endsWith('/versions')?[{id:1,created_at:'synthetic'}]:{id:1,config}}}};
+  const change=f.listeners.find(l=>l.type==='change').callback;
+  const node={value:'synthetic & version',root:f.elements.content,closest:()=>node};
+  await change({target:node});
+  assert.equal(f.requests[0].url,'/api/extension-review/settings?id='+encodeURIComponent(node.value));
+  assert.equal(f.requests[1].url,'/api/extension-review/settings/versions');
+  assert.ok(f.requests.every(r=>r.method==='get'));
+  const html=f.elements['er-panel'].innerHTML;
+  assert.match(html,/<select data-er-settings-version/);
+  assert.match(html,/data-er-read-action="apply-mapping"/); assert.match(html,/data-er-read-action="preview-settings"/);
+  assert.ok(html.includes('onclick="erSaveSettings()"'));
+  assert.equal(/on(?:click|change)="er(?:RenderSettings|ApplyNotionMapping|PreviewSettings)/.test(html),false);
+  assert.equal(f.writes.length,0);
+});
+
+
+test('settings latest-version reads and changed-session response discard do not save', async () => {
+  const f=fixture(); let resolve;
+  f.context.axios=options=>{f.requests.push(options);return new Promise(done=>{resolve=done})};
+  const node={value:'',root:f.elements.content,closest:()=>node};
+  const pending=f.listeners.find(l=>l.type==='change').callback({target:node});
+  assert.equal(f.requests[0].url,'/api/extension-review/settings');
+  f.context.sessionToken='changed-session'; resolve({data:{data:{id:1,config:{}}}});
+  await assert.rejects(pending,/SessionChanged/);
+  assert.equal(f.elements['er-panel'].innerHTML,''); assert.equal(f.requests.length,1); assert.equal(f.writes.length,0);
 });

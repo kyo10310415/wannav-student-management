@@ -927,3 +927,5 @@ CSPの `form-action 'self'` により、通常のフォーム送信先を同じo
 gaxios 6.7.1、googleapis-common 7.2.0、node-cron 3.0.3のUUIDだけを11.1.1へ固定overrideします。CVE-2026-41907の修正版です。確認した消費箇所は引数なしv4()で、脆弱性が成立するv3/v5/v6の外部buffer経路は利用していません。Google SDKやcron本体の大幅更新を避けるための限定措置であり、上流の宣言semver範囲外となる点を把握して維持してください。
 
 ロックには旧cron配下uuidを残さず、三者とも修正版へ解決することをnpm lsと専用テストで確認します。Node22.23.4/npm10.9.9での隔離npm ci --ignore-scripts、および既存ローカル環境でのnpm install --ignore-scriptsが成功。multipart、Googleのquery/OAuth輸送、cronの停止状態でのID生成、修正版のbuffer境界をmockで確認しました。上流を更新する際は、このoverrideを見直して再度互換性を検証してください。
+
+延長審査AIの設定バージョン切替・標準マッピング入力・プレビューも外部JSのイベント委譲を使用します。管理者限定を維持し、入力・プレビューはブラウザー内だけで処理します。保存ボタンの動作とrootのCSPは変更しません。
