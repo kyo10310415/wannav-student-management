@@ -7968,6 +7968,7 @@ async function verifySession() {
  * Show login page
  */
 function showLoginPage() {
+  if (typeof clearAllBroadcastAuthenticatedImages === 'function') clearAllBroadcastAuthenticatedImages();
   closeEditDiscordModal();
   if (typeof clearAllRedListAuthenticatedImages === 'function') clearAllRedListAuthenticatedImages();
   const app = document.getElementById('app');
@@ -9805,6 +9806,7 @@ function showModal(content) {
   // Remove existing modal if any
   const existingModal = document.getElementById('broadcast-modal');
   if (existingModal) {
+    if (typeof clearBroadcastImagesWithin === 'function') clearBroadcastImagesWithin(existingModal);
     existingModal.remove();
   }
   
@@ -9817,6 +9819,7 @@ function showModal(content) {
 function closeModal() {
   const modal = document.getElementById('broadcast-modal');
   if (modal) {
+    if (typeof clearBroadcastImagesWithin === 'function') clearBroadcastImagesWithin(modal);
     modal.remove();
   }
 }
@@ -10876,8 +10879,7 @@ function loadTemplate(templateId) {
     
     // Show image preview from server
     const previewImg = document.getElementById('broadcast-image-preview-img');
-    previewImg.src = `${API_BASE}/api/broadcast/images/${imageId}`;
-    document.getElementById('broadcast-image-preview').classList.remove('hidden');
+    loadBroadcastAuthenticatedImage(previewImg, imageId, document.getElementById('broadcast-image-preview'));
     
     // Show upload status message
     const statusElement = document.getElementById('broadcast-image-upload-status');
@@ -10886,6 +10888,7 @@ function loadTemplate(templateId) {
     statusElement.classList.remove('hidden');
   } else {
     // Clear image
+    clearBroadcastAuthenticatedImage(document.getElementById('broadcast-image-preview-img'), document.getElementById('broadcast-image-preview'));
     document.getElementById('broadcast-image-url').value = '';
     document.getElementById('broadcast-image-preview').classList.add('hidden');
     document.getElementById('broadcast-image-upload-status').classList.add('hidden');
@@ -11005,80 +11008,14 @@ function renderBroadcastLogs() {
  * Handle image upload
  */
 async function handleImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  
-  // Validate file size (max 8MB)
-  if (file.size > 8 * 1024 * 1024) {
-    showNotification('画像ファイルが大きすぎます（最大8MB）', 'error');
-    return;
-  }
-  
-  // Validate file type
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  if (!allowedTypes.includes(file.type)) {
-    showNotification('対応していないファイル形式です', 'error');
-    return;
-  }
-  
-  // Show upload status
-  const statusElement = document.getElementById('broadcast-image-upload-status');
-  statusElement.className = 'mt-2 text-blue-600';
-  statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>アップロード中...';
-  statusElement.classList.remove('hidden');
-  
-  try {
-    // Create FormData
-    const formData = new FormData();
-    formData.append('image', file);
-    
-    // Upload to server
-    const response = await axios.post(`${API_BASE}/api/broadcast/upload-image`, formData, {
-      headers: {
-        'Authorization': `Bearer ${sessionToken}`,
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-    
-    if (response.data.success) {
-      const imageId = response.data.imageId;
-      const filename = response.data.filename;
-      
-      // Store imageId in hidden field
-      document.getElementById('broadcast-image-url').value = imageId;
-      
-      // Show preview using a placeholder or local object URL
-      const previewImg = document.getElementById('broadcast-image-preview-img');
-      
-      // Create object URL for preview
-      const objectUrl = URL.createObjectURL(file);
-      previewImg.src = objectUrl;
-      document.getElementById('broadcast-image-preview').classList.remove('hidden');
-      
-      // Update status
-      statusElement.className = 'mt-2 text-green-600';
-      statusElement.innerHTML = `<i class="fas fa-check-circle mr-2"></i>アップロード完了: ${filename}`;
-      
-      showNotification('✅ 画像をアップロードしました', 'success');
-    } else {
-      throw new Error(response.data.error || 'Upload failed');
-    }
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    console.error('Error details:', error.response?.data);
-    
-    const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-    
-    statusElement.className = 'mt-2 text-red-600';
-    statusElement.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i>アップロード失敗: ${errorMessage}`;
-    showNotification(`画像のアップロードに失敗しました: ${errorMessage}`, 'error');
-  }
+  return uploadBroadcastPreviewImage(event, 'broadcast');
 }
 
 /**
  * Remove image preview
  */
 function removeImagePreview() {
+  clearBroadcastAuthenticatedImage(document.getElementById('broadcast-image-preview-img'), document.getElementById('broadcast-image-preview'));
   document.getElementById('broadcast-image-url').value = '';
   document.getElementById('broadcast-image-file').value = '';
   document.getElementById('broadcast-image-preview').classList.add('hidden');
@@ -11183,13 +11120,13 @@ function renderScheduleList(schedules) {
             </p>
           </div>
           <div class="flex flex-col gap-2 ml-4">
-            <button onclick="toggleSchedule(${schedule.id})" class="px-3 py-1 rounded ${enabled ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'} text-white text-xs transition">
+            <button data-broadcast-schedule-action="toggle" data-broadcast-schedule-id="${schedule.id}" class="px-3 py-1 rounded ${enabled ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'} text-white text-xs transition">
               <i class="fas fa-${enabled ? 'pause' : 'play'} mr-1"></i>${enabled ? '無効化' : '有効化'}
             </button>
             <button onclick="editSchedule(${schedule.id})" class="px-3 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white text-xs transition">
               <i class="fas fa-edit mr-1"></i>編集
             </button>
-            <button onclick="deleteSchedule(${schedule.id})" class="px-3 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-xs transition">
+            <button data-broadcast-schedule-action="delete" data-broadcast-schedule-id="${schedule.id}" class="px-3 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-xs transition">
               <i class="fas fa-trash mr-1"></i>削除
             </button>
           </div>
@@ -11400,8 +11337,7 @@ function showScheduleModal(scheduleId = null) {
       
       // Show image preview from server
       const previewImg = document.getElementById('schedule-image-preview-img');
-      previewImg.src = `${API_BASE}/api/broadcast/images/${imageId}`;
-      document.getElementById('schedule-image-preview').classList.remove('hidden');
+    loadBroadcastAuthenticatedImage(previewImg, imageId, document.getElementById('schedule-image-preview'));
       
       const statusElement = document.getElementById('schedule-image-upload-status');
       statusElement.className = 'mt-2 text-green-600';
@@ -11503,21 +11439,8 @@ async function saveSchedule(scheduleId = null) {
 /**
  * Toggle schedule enabled/disabled
  */
-async function toggleSchedule(scheduleId) {
-  try {
-    const response = await axios.post(`${API_BASE}/api/broadcast/schedules/${scheduleId}/toggle`, {}, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
-    if (response.data.success) {
-      const status = response.data.enabled ? '有効' : '無効';
-      showNotification(`✅ スケジュールを${status}にしました`, 'success');
-      await loadSchedules();
-    }
-  } catch (error) {
-    console.error('Error toggling schedule:', error);
-    showNotification('スケジュールの切り替えに失敗しました', 'error');
-  }
+async function toggleSchedule(scheduleId, button) {
+  return runBroadcastScheduleAction('toggle', scheduleId, button);
 }
 
 /**
@@ -11530,24 +11453,8 @@ function editSchedule(scheduleId) {
 /**
  * Delete schedule
  */
-async function deleteSchedule(scheduleId) {
-  if (!confirm('このスケジュールを削除しますか？\nこの操作は取り消せません。')) {
-    return;
-  }
-  
-  try {
-    const response = await axios.delete(`${API_BASE}/api/broadcast/schedules/${scheduleId}`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
-    if (response.data.success) {
-      showNotification('✅ スケジュールを削除しました', 'success');
-      await loadSchedules();
-    }
-  } catch (error) {
-    console.error('Error deleting schedule:', error);
-    showNotification('スケジュールの削除に失敗しました', 'error');
-  }
+async function deleteSchedule(scheduleId, button) {
+  return runBroadcastScheduleAction('delete', scheduleId, button);
 }
 
 // Store schedules globally
@@ -11557,80 +11464,14 @@ let broadcastSchedules = [];
  * Handle image upload for schedule
  */
 async function handleScheduleImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  
-  // Validate file size (max 8MB)
-  if (file.size > 8 * 1024 * 1024) {
-    showNotification('画像ファイルが大きすぎます（最大8MB）', 'error');
-    return;
-  }
-  
-  // Validate file type
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  if (!allowedTypes.includes(file.type)) {
-    showNotification('対応していないファイル形式です', 'error');
-    return;
-  }
-  
-  // Show upload status
-  const statusElement = document.getElementById('schedule-image-upload-status');
-  statusElement.className = 'mt-2 text-purple-600';
-  statusElement.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>アップロード中...';
-  statusElement.classList.remove('hidden');
-  
-  try {
-    // Create FormData
-    const formData = new FormData();
-    formData.append('image', file);
-    
-    // Upload to server
-    const response = await axios.post(`${API_BASE}/api/broadcast/upload-image`, formData, {
-      headers: {
-        'Authorization': `Bearer ${sessionToken}`,
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-    
-    if (response.data.success) {
-      const imageId = response.data.imageId;
-      const filename = response.data.filename;
-      
-      // Store imageId in hidden field
-      document.getElementById('schedule-image-id').value = imageId;
-      
-      // Show preview using a placeholder or local object URL
-      const previewImg = document.getElementById('schedule-image-preview-img');
-      
-      // Create object URL for preview
-      const objectUrl = URL.createObjectURL(file);
-      previewImg.src = objectUrl;
-      document.getElementById('schedule-image-preview').classList.remove('hidden');
-      
-      // Update status
-      statusElement.className = 'mt-2 text-green-600';
-      statusElement.innerHTML = `<i class="fas fa-check-circle mr-2"></i>アップロード完了: ${filename}`;
-      
-      showNotification('✅ 画像をアップロードしました', 'success');
-    } else {
-      throw new Error(response.data.error || 'Upload failed');
-    }
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    console.error('Error details:', error.response?.data);
-    
-    const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-    
-    statusElement.className = 'mt-2 text-red-600';
-    statusElement.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i>アップロード失敗: ${errorMessage}`;
-    showNotification(`画像のアップロードに失敗しました: ${errorMessage}`, 'error');
-  }
+  return uploadBroadcastPreviewImage(event, 'schedule');
 }
 
 /**
  * Remove image preview for schedule
  */
 function removeScheduleImagePreview() {
+  clearBroadcastAuthenticatedImage(document.getElementById('schedule-image-preview-img'), document.getElementById('schedule-image-preview'));
   document.getElementById('schedule-image-id').value = '';
   document.getElementById('schedule-image-file').value = '';
   document.getElementById('schedule-image-preview').classList.add('hidden');
@@ -13329,31 +13170,8 @@ async function saveVQDiagnosisImage() {
 /**
  * VQ診断タイプの画像設定を削除
  */
-async function deleteVQDiagnosisImage(imageId) {
-  try {
-    if (!confirm('この画像設定を削除しますか？')) {
-      return;
-    }
-    
-    const response = await axios.delete(
-      `${API_BASE}/api/vq-diagnosis/images/${imageId}`,
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    
-    if (response.data.success) {
-      showNotification('画像設定を削除しました', 'success');
-      
-      // ページを再読み込み
-      await renderVQDiagnosisPage();
-    }
-    
-  } catch (error) {
-    console.error('画像設定削除エラー:', error);
-    showNotification(
-      error.response?.data?.error || '画像設定の削除に失敗しました',
-      'error'
-    );
-  }
+async function deleteVQDiagnosisImage(imageId, button) {
+  return runVQImageDelete(imageId, button);
 }
 
 /**

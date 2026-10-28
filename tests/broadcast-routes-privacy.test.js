@@ -8,6 +8,7 @@ const marker = 'SYNTHETIC_BROADCAST_ROUTE_PRIVATE';
 const email = 'fixture@example.test';
 const job = { job_id: 'fixture-job', broadcast_id: 1, status: 'needs_review', total: '2', sent: '1', failed: '0', unknown_count: '1', pending: '0',
   is_test: false, updated_at: 'fixture-time', last_error: marker, unknown_recipients: [{ student_id: marker }], created_by: email };
+const fixturePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
 const student = { student_id: marker, name: marker, homeroom_tutor: marker };
 const auth = { Authorization: 'Bearer fixture-session' };
 const request = (body, method = 'POST') => ({ method, headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -26,7 +27,7 @@ async function fixture({ role = 'crew', fail = [], serviceError, returnedJob = j
       queries.push({ sql, params });
       if (sql.includes('FROM sessions')) { if (authFail) throw rawError(); return { rows: session ? [{ user_id: 1, email, role }] : [] }; }
       if (fail.includes('db')) throw rawError();
-      if (sql.includes('FROM broadcast_images')) return { rows: [{ filename: 'fixture.png', content_type: 'image/png', image_data: Buffer.from('fixture-bytes') }] };
+      if (sql.includes('FROM broadcast_images')) return { rows: [{ filename: 'fixture.png', content_type: 'image/png', image_data: fixturePng }] };
       if (sql.includes('SELECT COUNT(*)')) return { rows: [{ count: 1, created_by: marker }] };
       if ((emptySchedules && sql.includes('WHERE is_scheduled')) || noOwnerRow) return { rows: [], rowCount: 0 };
       return { rows: [{ id: 1, created_by: marker, content: marker, schedule_enabled: true }], rowCount: 1 };
@@ -111,13 +112,13 @@ test('crew schedule filtering and update/delete/toggle ownership parameters rema
 
 test('image upload and retrieval keep bytes, owner, type and headers without metadata logs', async () => {
   for (const fail of [[], ['db']]) {
-    const f = await fixture({ fail }); const form = new FormData(); form.append('image', new File(['fixture-bytes'], marker + '.png', { type: 'image/png' }));
+    const f = await fixture({ fail }); const form = new FormData(); form.append('image', new File([fixturePng], marker + '.png', { type: 'image/png' }));
     const response = await f.app.request('/upload-image', { method: 'POST', headers: auth, body: form });
     assert.equal(response.status, fail.length ? 500 : 200);
     if (!fail.length) {
       const insert = f.queries.find(call => call.sql.includes('INSERT INTO broadcast_images'));
-      assert.equal(insert.params[1], marker + '.png'); assert.equal(insert.params[2], 'image/png'); assert.equal(insert.params[4].toString(), 'fixture-bytes'); assert.equal(insert.params[5], email);
-      const image = await f.app.request('/images/fixture', { headers: auth }); assert.equal(await image.text(), 'fixture-bytes'); assert.equal(image.headers.get('Content-Type'), 'image/png');
+      assert.equal(insert.params[1], marker + '.png'); assert.equal(insert.params[2], 'image/png'); assert.deepEqual(insert.params[4], fixturePng); assert.equal(insert.params[5], email);
+      const image = await f.app.request('/images/fixture', { headers: auth }); assert.deepEqual(Buffer.from(await image.arrayBuffer()), fixturePng); assert.equal(image.headers.get('Content-Type'), 'image/png');
     } else assert.equal((await response.json()).error, 'Broadcast operation failed');
     safe(f);
   }
@@ -149,4 +150,25 @@ test('schedule edit SQL keeps owner restriction and requires scheduled record ty
  const f=await fixture();assert.equal((await f.app.request('/schedules',request({...schedule,id:1}))).status,200);
  const update=f.queries.find(x=>x.sql.includes('SET name = $1'));
  assert.ok(update.sql.includes('WHERE id = $9 AND created_by = $10 AND is_scheduled = true'));assert.equal(update.params[9],email);assert.equal(f.calls.length,0);
+});
+
+test('schedule toggle and delete reject unsafe IDs without business SQL',async()=>{
+ const f=await fixture();
+ for(const id of ['0','-1','1.5','9007199254740992','bad'])for(const[path,options]of [['/schedules/'+id,{method:'DELETE',headers:auth}],['/schedules/'+id+'/toggle',request({})]])assert.equal((await f.app.request(path,options)).status,400);
+ assert.equal(f.queries.filter(x=>!x.sql.includes('FROM sessions')).length,0);assert.equal(f.calls.length,0);
+});
+
+test('schedule action APIs preserve manager scope and crew owner limits plus missing 404',async()=>{
+ for(const role of ['crew','leader','admin']){
+  const f=await fixture({role});
+  assert.equal((await f.app.request('/schedules/7',{method:'DELETE',headers:auth})).status,200);
+  assert.equal((await f.app.request('/schedules/7/toggle',request({}))).status,200);
+  const writes=f.queries.filter(x=>!x.sql.includes('FROM sessions'));
+  assert.equal(writes.length,2);
+  for(const write of writes){assert.ok(write.sql.includes('is_scheduled = true'));assert.equal(write.sql.includes('AND created_by = $2'),role==='crew');assert.deepEqual(write.params,role==='crew'?['7',email]:['7']);}
+ }
+ const missing=await fixture({noOwnerRow:true});
+ assert.equal((await missing.app.request('/schedules/7',{method:'DELETE',headers:auth})).status,404);
+ assert.equal((await missing.app.request('/schedules/7/toggle',request({}))).status,404);
+ const anonymous=await fixture();assert.equal((await anonymous.app.request('/schedules/7',{method:'DELETE'})).status,401);assert.equal((await anonymous.app.request('/schedules/7/toggle',{method:'POST'})).status,401);assert.equal(anonymous.queries.length,0);
 });

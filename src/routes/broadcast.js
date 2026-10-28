@@ -18,6 +18,19 @@ import { query } from '../db/connection.js';
 // No need for in-memory storage
 
 const app = new Hono();
+function broadcastInlineImageType(bytes) {
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg';
+  if (bytes.length >= 6 && ['GIF87a','GIF89a'].includes(bytes.subarray(0,6).toString('ascii'))) return 'image/gif';
+  if (bytes.length >= 12 && bytes.subarray(0,4).toString('ascii') === 'RIFF' && bytes.subarray(8,12).toString('ascii') === 'WEBP') return 'image/webp';
+  return null;
+}
+function broadcastImageDisposition(inline, filename) {
+  const name = typeof filename === 'string' && filename ? filename : 'image';
+  const encoded = encodeURIComponent(name.toWellFormed()).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+  return `${inline ? 'inline' : 'attachment'}; filename="image"; filename*=UTF-8''${encoded}`;
+}
+
 
 const SAFE_BROADCAST_ERRORS = new Set([
   'Job not found',
@@ -457,7 +470,7 @@ app.post('/upload-image', async (c) => {
     const body = await c.req.parseBody();
     const file = body['image'];
     
-    if (!file || !file.size) {
+    if (!file || typeof file !== 'object' || typeof file.arrayBuffer !== 'function' || typeof file.name !== 'string' || typeof file.size !== 'number' || !file.size) {
       return c.json({
         success: false,
         error: 'No image file provided'
@@ -484,6 +497,8 @@ app.post('/upload-image', async (c) => {
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const contentType = broadcastInlineImageType(buffer);
+    if (!contentType) return c.json({ success: false, error: 'Invalid image content' }, 400);
     
     // Generate unique image ID
     const imageId = `img_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -494,7 +509,7 @@ app.post('/upload-image', async (c) => {
     await query(
       `INSERT INTO broadcast_images (image_id, filename, content_type, file_size, image_data, uploaded_by)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [imageId, file.name, file.type, buffer.length, buffer, user.email]
+      [imageId, file.name, contentType, buffer.length, buffer, user.email]
     );
     
     console.log('[Broadcast] Image stored successfully');
@@ -680,6 +695,7 @@ app.delete('/schedules/:id', async (c) => {
   try {
     const user = c.get('user');
     const scheduleId = c.req.param('id');
+    if (!/^\d+$/.test(scheduleId) || !Number.isSafeInteger(Number(scheduleId)) || Number(scheduleId) <= 0) return c.json({ success: false, error: 'IDが不正です' }, 400);
     
     let deleteQuery = `DELETE FROM broadcast_messages WHERE id = $1 AND is_scheduled = true`;
     const params = [scheduleId];
@@ -720,6 +736,7 @@ app.post('/schedules/:id/toggle', async (c) => {
   try {
     const user = c.get('user');
     const scheduleId = c.req.param('id');
+    if (!/^\d+$/.test(scheduleId) || !Number.isSafeInteger(Number(scheduleId)) || Number(scheduleId) <= 0) return c.json({ success: false, error: 'IDが不正です' }, 400);
     
     let updateQuery = `
       UPDATE broadcast_messages 
@@ -763,8 +780,11 @@ app.post('/schedules/:id/toggle', async (c) => {
  * Get image data from database
  */
 app.get('/images/:imageId', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  c.header('Vary', 'Authorization');
   try {
     const imageId = c.req.param('imageId');
+    if (!/^[a-zA-Z0-9_-]{1,200}$/.test(imageId)) return c.json({ success: false, error: 'Invalid image ID' }, 400);
     
     console.log('[Broadcast] Retrieving image from database');
     
@@ -781,15 +801,20 @@ app.get('/images/:imageId', async (c) => {
     }
     
     const image = result.rows[0];
+    const bytes = Buffer.from(image.image_data);
+    const contentType = broadcastInlineImageType(bytes);
     
     console.log('[Broadcast] Image retrieved');
     
     // Return image data
-    return new Response(image.image_data, {
+    return new Response(bytes, {
       headers: {
-        'Content-Type': image.content_type,
-        'Content-Disposition': `inline; filename="${image.filename}"`,
-        'Cache-Control': 'public, max-age=31536000' // Cache for 1 year
+        'Content-Type': contentType || 'application/octet-stream',
+        'Content-Disposition': broadcastImageDisposition(Boolean(contentType), image.filename),
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'",
+        'Cache-Control': 'private, no-store',
+        'Vary': 'Authorization'
       }
     });
   } catch (error) {
