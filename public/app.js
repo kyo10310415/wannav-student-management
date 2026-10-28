@@ -218,14 +218,14 @@ function renderHeader() {
   
   // Build user management button (admin only)
   const userManagementButton = currentUser && currentUser.role === 'admin' ? `
-    <button id="nav-users" onclick="changePage('users')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-users" data-nav-page="users" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'users' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-users-cog mr-2"></i>ユーザー管理
     </button>
   ` : '';
   
   // Build database management button (admin only)
   const databaseManagementButton = currentUser && currentUser.role === 'admin' ? `
-    <button id="nav-database" onclick="changePage('database')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'database' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-database" data-nav-page="database" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'database' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-database mr-2"></i>DB管理
     </button>
   ` : '';
@@ -235,21 +235,21 @@ function renderHeader() {
     <button data-er-read-action="open-page" class="px-4 py-2 rounded-lg font-semibold bg-orange-600 text-white hover:bg-orange-700">延長審査AI採点</button>
   ` : '';
   const funnelManagementButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-    <button id="nav-funnel" onclick="changePage('funnel')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'funnel' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-funnel" data-nav-page="funnel" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'funnel' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-filter mr-2"></i>ファネル管理
     </button>
   ` : '';
   
   // Build VQ diagnosis button (leader or above)
   const vqDiagnosisButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-    <button id="nav-vq-diagnosis" onclick="changePage('vq-diagnosis')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'vq-diagnosis' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-vq-diagnosis" data-nav-page="vq-diagnosis" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'vq-diagnosis' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-clipboard-check mr-2"></i>VQ診断
     </button>
   ` : '';
   
   // Build lesson reports button (leader or above)
   const lessonReportsButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-    <button id="nav-lesson-reports" onclick="changePage('lesson-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-reports' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-lesson-reports" data-nav-page="lesson-reports" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-reports' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-clipboard-list mr-2"></i>レッスン報告
     </button>
   ` : '';
@@ -263,14 +263,14 @@ function renderHeader() {
 
   // Build minutes button (admin or leader)
   const minutesButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-    <button id="nav-minutes" onclick="minutesCurrentStudentId=null; minutesCurrentStudentName=null; changePage('minutes')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-minutes" data-nav-page="minutes" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'minutes' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-file-alt mr-2"></i>議事録
     </button>
   ` : '';
 
   // Build lesson contents button (leader or above)
   const lessonContentsButton = currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-    <button id="nav-lesson-contents" onclick="changePage('lesson-contents')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-contents' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
+    <button id="nav-lesson-contents" data-nav-page="lesson-contents" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'lesson-contents' ? 'bg-white text-orange-600' : 'bg-orange-600 text-white hover:bg-orange-700'}">
       <i class="fas fa-book-open mr-2"></i>レッスン内容管理
     </button>
   ` : '';
@@ -323,13 +323,13 @@ function renderHeader() {
           <nav class="mt-6 flex gap-4 flex-wrap">
             <!-- Lesson Section (Green) -->
             <div class="flex gap-2">
-              <button id="nav-today" onclick="changePage('today')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
+              <button id="nav-today" data-nav-page="today" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'today' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
                 <i class="fas fa-calendar-day mr-2"></i>今日のレッスン
               </button>
-              <button id="nav-reservations" onclick="changePage('reservations')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'reservations' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
+              <button id="nav-reservations" data-nav-page="reservations" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'reservations' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
                 <i class="fas fa-calendar-check mr-2"></i>予約管理
               </button>
-              <button id="nav-helpers" onclick="changePage('helpers')" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
+              <button id="nav-helpers" data-nav-page="helpers" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'helpers' ? 'bg-white text-green-600' : 'bg-green-600 text-white hover:bg-green-700'}">
                 <i class="fas fa-hands-helping mr-2"></i>助っ人待ち
                 <span id="helper-badge" class="hidden absolute -top-1 -left-1 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
               </button>
@@ -340,25 +340,25 @@ function renderHeader() {
             
             <!-- Student Section (Blue) -->
             <div class="flex gap-2">
-              <button id="nav-students" onclick="changePage('students')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'students' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+              <button id="nav-students" data-nav-page="students" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'students' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-user-graduate mr-2"></i>生徒管理
               </button>
-              <button id="nav-red-list" onclick="changePage('red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'red-list' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+              <button id="nav-red-list" data-nav-page="red-list" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'red-list' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-exclamation-triangle mr-2"></i>レッドリスト
               </button>
-              <button id="nav-extensions" onclick="changePage('extensions')" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+              <button id="nav-extensions" data-nav-page="extensions" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-sync-alt mr-2"></i>延長管理
                 <span id="extension-hearing-badge" class="hidden absolute -top-1 -left-1 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
                 <span id="extension-exam-badge" class="hidden absolute -top-1 left-8 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"></span>
               </button>
-              <button id="nav-suspensions" onclick="changePage('suspensions')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+              <button id="nav-suspensions" data-nav-page="suspensions" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'suspensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-pause-circle mr-2"></i>休会管理
               </button>
-              <button id="nav-broadcast" onclick="changePage('broadcast')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'broadcast' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+              <button id="nav-broadcast" data-nav-page="broadcast" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'broadcast' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-bullhorn mr-2"></i>一斉送信
               </button>
               ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
-              <button id="nav-handover" onclick="changePage('handover')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'handover' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
+              <button id="nav-handover" data-nav-page="handover" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'handover' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-exchange-alt mr-2"></i>引き継ぎ管理
               </button>
               ` : ''}
@@ -369,18 +369,18 @@ function renderHeader() {
             
             <!-- Tutor Section (Purple) -->
             <div class="flex gap-2">
-              <button id="nav-tutors" onclick="changePage('tutors')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+              <button id="nav-tutors" data-nav-page="tutors" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutors' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-chalkboard-teacher mr-2"></i>Tutor管理
               </button>
-              <button id="nav-daily-reports" onclick="changePage('daily-reports')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'daily-reports' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+              <button id="nav-daily-reports" data-nav-page="daily-reports" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'daily-reports' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-clipboard-list mr-2"></i>日報管理
               </button>
               ${currentUser && currentUser.role === 'admin' ? `
-              <button id="nav-tutor-red-list" onclick="changePage('tutor-red-list')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+              <button id="nav-tutor-red-list" data-nav-page="tutor-red-list" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'tutor-red-list' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-exclamation-triangle mr-2"></i>Tutorレッドリスト
               </button>
               ` : ''}
-              <button id="nav-schedules" onclick="changePage('schedules')" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
+              <button id="nav-schedules" data-nav-page="schedules" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'schedules' ? 'bg-white text-purple-600' : 'bg-purple-600 text-white hover:bg-purple-700'}">
                 <i class="fas fa-calendar-alt mr-2"></i>スケジュール
               </button>
             </div>
@@ -1049,7 +1049,7 @@ async function renderFunnelPage() {
         <i class="fas fa-exclamation-circle text-4xl text-red-500"></i>
         <h2 class="mt-4 text-lg font-bold text-red-800">ファネルデータを取得できませんでした</h2>
         <p class="mt-2 text-sm text-red-700">${escapeHtml(message)}</p>
-        <button onclick="renderFunnelPage()" class="mt-5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+        <button data-funnel-action="reload" class="mt-5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
           <i class="fas fa-redo mr-2"></i>再読み込み
         </button>
       </div>
@@ -1180,7 +1180,7 @@ function renderFunnelCountCard(label, count, options = {}) {
   const clickable = !unavailable && options.detailKey;
   const tag = clickable ? 'button' : 'div';
   const clickAttributes = clickable
-    ? `type="button" data-detail-key="${escapeHtml(options.detailKey)}" data-detail-label="${escapeHtml(label)}" onclick="showFunnelStudentDetails(this.dataset.detailKey, this.dataset.detailLabel)"`
+    ? `type="button" data-detail-key="${escapeHtml(options.detailKey)}" data-detail-label="${escapeHtml(label)}" data-funnel-action="details"`
     : '';
   return `
     <${tag} ${clickAttributes} class="rounded-xl border-2 ${tone} px-4 py-3 text-center shadow-sm min-w-[170px] w-full ${clickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition focus:outline-none focus:ring-2 focus:ring-orange-400' : ''}">
@@ -1288,7 +1288,7 @@ function showFunnelStudentDetails(detailKey, label) {
           <h2 class="text-xl font-bold text-gray-900">${escapeHtml(label)}・該当生徒様一覧</h2>
           <p class="mt-1 text-sm text-gray-500">${rows.length}名（同一生徒の複数件は「該当件数」にまとめています）</p>
         </div>
-        <button type="button" onclick="closeFunnelStudentDetails()" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" aria-label="閉じる">
+        <button type="button" data-funnel-action="close-details" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600" aria-label="閉じる">
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -1431,12 +1431,12 @@ function renderFunnelDashboard() {
           <div>
           <label for="funnel-month" class="block text-xs font-bold text-gray-600 mb-1">対象月</label>
           <div class="flex items-center gap-2">
-            <button onclick="changeFunnelMonth(-1)" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="前月">
+            <button data-funnel-action="previous-month" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="前月">
               <i class="fas fa-chevron-left"></i>
             </button>
-            <input id="funnel-month" type="month" value="${monthValue}" onchange="setFunnelMonth(this.value)"
+            <input id="funnel-month" type="month" value="${monthValue}" data-funnel-month
                    class="h-9 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-            <button onclick="changeFunnelMonth(1)" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="翌月">
+            <button data-funnel-action="next-month" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" aria-label="翌月">
               <i class="fas fa-chevron-right"></i>
             </button>
           </div>
@@ -5148,7 +5148,7 @@ async function renderTodayLessonsPage() {
       <div class="flex items-center justify-between">
         <div class="flex-1">
           <h2 class="text-2xl font-bold mb-2 flex items-center gap-3">
-            <button onclick="changeLessonDate(-1)" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition">
+            <button data-today-action="previous" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition">
               <i class="fas fa-chevron-left"></i>
             </button>
             <span>
@@ -5156,10 +5156,10 @@ async function renderTodayLessonsPage() {
               ${dateLabel} (${displayDate.getFullYear()}年${displayMonth}月${displayDay}日)
               ${isToday ? '<span class="text-xs bg-yellow-400 text-blue-900 px-2 py-1 rounded ml-2">TODAY</span>' : ''}
             </span>
-            <button onclick="changeLessonDate(1)" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition">
+            <button data-today-action="next" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition">
               <i class="fas fa-chevron-right"></i>
             </button>
-            ${!isToday ? `<button onclick="resetToToday()" class="px-3 py-2 text-sm bg-yellow-400 text-blue-900 hover:bg-yellow-300 rounded transition">
+            ${!isToday ? `<button data-today-action="today" class="px-3 py-2 text-sm bg-yellow-400 text-blue-900 hover:bg-yellow-300 rounded transition">
               <i class="fas fa-calendar-day mr-1"></i>今日に戻る
             </button>` : ''}
           </h2>
@@ -9224,7 +9224,7 @@ async function renderExtensionsPage() {
             ${canSelectTutor ? `
               <div class="bg-white/10 backdrop-blur-sm rounded-lg p-3">
                 <label class="text-sm text-purple-100 block mb-1">Tutor選択</label>
-                <select id="extension-tutor-select" class="px-3 py-2 rounded bg-white text-gray-800 font-semibold min-w-[150px]" onchange="changeExtensionTutor(this.value)">
+                <select id="extension-tutor-select" class="px-3 py-2 rounded bg-white text-gray-800 font-semibold min-w-[150px]" data-extension-stats-tutor>
                   ${tutorList.map(t => `
                     <option value="${t.tutorName}" ${t.tutorName === selectedExtensionTutor ? 'selected' : ''}>
                       ${t.tutorName}
@@ -9497,7 +9497,7 @@ async function renderSuspensionsPage() {
         <div class="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
           <i class="fas fa-exclamation-triangle text-yellow-500"></i>
           <span class="text-yellow-800 text-sm">Google Sheets に一時的に接続できないため、データを取得できませんでした。しばらく待ってから再読み込みしてください。</span>
-          <button onclick="renderSuspensionsPage()" class="ml-auto px-3 py-1 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-xs rounded">再読み込み</button>
+          <button data-suspension-action="reload" class="ml-auto px-3 py-1 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-xs rounded">再読み込み</button>
         </div>
         ` : ''}
         <div class="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -13940,7 +13940,7 @@ async function renderLessonReportsPage() {
           
           <!-- 検索ボタン -->
           <div class="flex items-end">
-            <button onclick="searchLessonReports()" 
+            <button data-report-read-action="search"
               class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
               <i class="fas fa-search mr-2"></i>検索
             </button>
@@ -13949,19 +13949,19 @@ async function renderLessonReportsPage() {
         
         <!-- クイックフィルター -->
         <div class="flex gap-2 flex-wrap">
-          <button onclick="setQuickFilter('today')" 
+          <button data-report-read-action="quick-filter" data-report-period="today"
             class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
             今日
           </button>
-          <button onclick="setQuickFilter('week')" 
+          <button data-report-read-action="quick-filter" data-report-period="week"
             class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
             今週
           </button>
-          <button onclick="setQuickFilter('month')" 
+          <button data-report-read-action="quick-filter" data-report-period="month"
             class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
             今月
           </button>
-          <button onclick="clearReportFilters()" 
+          <button data-report-read-action="clear-filters"
             class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded transition">
             <i class="fas fa-times mr-1"></i>フィルタークリア
           </button>
@@ -14087,7 +14087,7 @@ function renderLessonReportsTable(data) {
     ${totalPages > 1 ? `
       <div class="mt-4 flex justify-center items-center gap-2">
         <button 
-          onclick="searchLessonReports(${currentPage - 1})"
+          data-report-read-action="page" data-report-page="${currentPage - 1}"
           ${currentPage === 0 ? 'disabled' : ''}
           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
           <i class="fas fa-chevron-left"></i>
@@ -14098,7 +14098,7 @@ function renderLessonReportsTable(data) {
         </span>
         
         <button 
-          onclick="searchLessonReports(${currentPage + 1})"
+          data-report-read-action="page" data-report-page="${currentPage + 1}"
           ${currentPage >= totalPages - 1 ? 'disabled' : ''}
           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
           <i class="fas fa-chevron-right"></i>
