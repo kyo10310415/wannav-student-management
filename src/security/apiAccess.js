@@ -1,4 +1,12 @@
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { uploadRequestBodyLimit } from './uploadBodyLimit.js';
+
+// Reports contain short text fields, not files. Bound bytes before crew ownership JSON parsing.
+export const LESSON_REPORT_REQUEST_MAX_BYTES = 256 * 1024;
+const limitLessonReportBody = uploadRequestBodyLimit(LESSON_REPORT_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Lesson report request too large',
+  invalidError: 'Invalid lesson report request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -101,6 +109,10 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
       (path === '/api/daily-reports/reminder-setting' && method === 'PUT') ||
       (under(path, '/api/daily-reports') && method === 'DELETE');
     if (managerOperation && !leaders.has(user.role)) return c.json({ success: false, error: 'リーダー以上の権限が必要です' }, 403);
+    if (method === 'POST' && path === '/api/lesson-reports') {
+      const rejected = await limitLessonReportBody(c, async () => {});
+      if (rejected) return rejected;
+    }
     if (user.role === 'crew') {
       const crewWrites = [
         ['POST', /^\/api\/auth\/(logout|change-password)$/],
