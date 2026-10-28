@@ -7,13 +7,27 @@ import {
 
 const app = new Hono();
 
+function validReportDate(value) {
+  if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000')) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+function validReportStudentId(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 255 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
 /**
  * POST /api/lesson-reports
  * レッスン報告を作成または更新
  */
 app.post('/', async (c) => {
   try {
-    const body = await c.req.json();
+    let body;
+    try { body = await c.req.json(); }
+    catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    }
     const {
       student_id,
       lesson_date,
@@ -127,6 +141,7 @@ app.post('/', async (c) => {
 app.get('/by-date/:date', async (c) => {
   try {
     const date = c.req.param('date');
+    if (!validReportDate(date)) return c.json({ success: false, error: 'Invalid report date' }, 400);
 
     const result = await query(
       'SELECT * FROM lesson_reports WHERE lesson_date = $1 ORDER BY student_id ASC',
@@ -155,6 +170,9 @@ app.get('/:studentId/:date', async (c) => {
   try {
     const studentId = c.req.param('studentId');
     const date = c.req.param('date');
+    if (!validReportStudentId(studentId) || !validReportDate(date)) {
+      return c.json({ success: false, error: 'Invalid report reference' }, 400);
+    }
 
     const result = await query(
       'SELECT * FROM lesson_reports WHERE student_id = $1 AND lesson_date = $2',
@@ -196,6 +214,13 @@ app.get('/:studentId/:date', async (c) => {
 app.get('/', async (c) => {
   try {
     const { start_date, end_date, student_id, tutor_name, lesson_result, limit = 100, offset = 0 } = c.req.query();
+    if (!/^[1-9][0-9]*$/.test(String(limit)) || !Number.isSafeInteger(Number(limit)) || Number(limit) > 1000 ||
+        !/^(0|[1-9][0-9]*)$/.test(String(offset)) || !Number.isSafeInteger(Number(offset)) ||
+        (start_date && !validReportDate(start_date)) || (end_date && !validReportDate(end_date)) ||
+        (start_date && end_date && start_date > end_date) ||
+        [student_id, tutor_name, lesson_result].some(value => value !== undefined && (value.length > 255 || /[\u0000-\u001f\u007f]/.test(value)))) {
+      return c.json({ success: false, error: 'Invalid report search' }, 400);
+    }
 
     let sql = `
       SELECT 

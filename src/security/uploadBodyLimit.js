@@ -1,12 +1,15 @@
 // Keep the existing 8 MiB image contract plus 1 MiB for multipart headers/fields.
 export const BROADCAST_IMAGE_REQUEST_MAX_BYTES = 9 * 1024 * 1024;
 
-export function uploadRequestBodyLimit(maxBytes = BROADCAST_IMAGE_REQUEST_MAX_BYTES) {
+export function uploadRequestBodyLimit(maxBytes = BROADCAST_IMAGE_REQUEST_MAX_BYTES, {
+  tooLargeError = 'Image upload request too large',
+  invalidError = 'Invalid image upload request'
+} = {}) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('Invalid upload body limit');
   return async (c, next) => {
     const raw = c.req.raw;
     if (!raw.body) return next();
-    const tooLarge = () => c.json({ success: false, error: 'Image upload request too large' }, 413);
+    const tooLarge = () => c.json({ success: false, error: tooLargeError }, 413);
     const declared = raw.headers.get('content-length');
     if (declared && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
       void raw.body.cancel().catch(() => {});
@@ -29,7 +32,7 @@ export function uploadRequestBodyLimit(maxBytes = BROADCAST_IMAGE_REQUEST_MAX_BY
       }
     } catch {
       void reader.cancel().catch(() => {});
-      return c.json({ success: false, error: 'Invalid image upload request' }, 400);
+      return c.json({ success: false, error: invalidError }, 400);
     } finally {
       reader.releaseLock();
     }

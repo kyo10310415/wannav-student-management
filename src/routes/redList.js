@@ -14,6 +14,10 @@ async function readRedListSaveJson(c) {
 }
 function validRedListText(value) { return typeof value === 'string' && value.trim().length > 0; }
 function validRedListId(value) { return /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0; }
+function validRedListMonth(value) { return typeof value === 'string' && /^(?!0000)\d{4}-(?:0[1-9]|1[0-2])$/.test(value); }
+function validRedListStudentId(value) {
+  return typeof value === 'string' && value.trim().length > 0 && [...value].length <= 50 && !/[\u0000-\u001f\u007f]/.test(value);
+}
 function validRedListBookingUrl(value) {
   if (!validRedListText(value)) return false;
   try { return ['http:', 'https:'].includes(new URL(value.trim()).protocol); } catch { return false; }
@@ -86,6 +90,7 @@ app.use('/discord/*', authMiddleware);
 app.get('/', async (c) => {
   try {
     const { yearMonth } = c.req.query();
+    if (yearMonth && !validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     const redLists = await getAllRedLists(yearMonth);
     return c.json({ success: true, data: redLists, count: redLists.length });
   } catch (error) {
@@ -144,6 +149,7 @@ app.get('/history', async (c) => {
     if (!yearMonth) {
       return c.json({ success: false, error: 'yearMonth is required' }, 400);
     }
+    if (!validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     const result = await query(
       `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor
        FROM red_list_history rlh
@@ -710,6 +716,8 @@ app.post('/discord/test-send', async (c) => {
 app.get('/discord/logs', async (c) => {
   try {
     const { studentId, yearMonth } = c.req.query();
+    if (yearMonth && !validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
+    if (studentId && !validRedListStudentId(studentId)) return c.json({ success: false, error: 'Invalid student ID' }, 400);
     const conditions = [];
     const params = [];
 
@@ -851,6 +859,8 @@ app.get('/:studentId', async (c) => {
   try {
     const studentId = c.req.param('studentId');
     const { yearMonth } = c.req.query();
+    if (!validRedListStudentId(studentId)) return c.json({ success: false, error: 'Invalid student ID' }, 400);
+    if (yearMonth && !validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     const redList = await getRedList(studentId, yearMonth);
     if (!redList) {
       const scores = await calculateRedListScore(studentId, yearMonth || getCurrentYearMonth());
