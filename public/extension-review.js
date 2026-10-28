@@ -66,7 +66,7 @@ async function renderExtensionReviewPage() {
   const panel = document.getElementById('er-panel');
   try {
     if (erTab === 'run') {
-      panel.innerHTML = `<div class="grid md:grid-cols-2 gap-4">${erInputFields()}</div><button id="er-start" onclick="erGenerate()" class="bg-orange-600 text-white rounded px-5 py-2" ${erBusy ? 'disabled' : ''}>${erBusy ? '採点中…' : '採点開始'}</button><p class="text-sm text-gray-500">同一資料・基準の保存済み結果があれば再利用します。基準・対象回スクリプトが未登録の場合は実行しません。</p>`;
+      panel.innerHTML = `<div class="grid md:grid-cols-2 gap-4">${erInputFields()}</div><button id="er-start" data-er-action="generate" class="bg-orange-600 text-white rounded px-5 py-2" ${erBusy ? 'disabled' : ''}>${erBusy ? '採点中…' : '採点開始'}</button><p class="text-sm text-gray-500">同一資料・基準の保存済み結果があれば再利用します。基準・対象回スクリプトが未登録の場合は実行しません。</p>`;
       if (erLastInput) {
         document.getElementById('er-round').value = erLastInput.round;
         document.getElementById('er-tutor').value = erLastInput.tutorId;
@@ -77,7 +77,7 @@ async function renderExtensionReviewPage() {
     else if (erTab === 'history') await erRenderHistory();
     else if (erTab === 'analysis') await erRenderAnalysis();
     else if (erTab === 'settings') await erRenderSettings();
-    else panel.innerHTML = `${erInputFields()}<button onclick="erDiagnose()" class="bg-orange-600 text-white px-4 py-2 rounded">接続診断（採点APIは呼び出しません）</button><pre id="er-diagnosis" class="whitespace-pre-wrap text-sm"></pre>`;
+    else panel.innerHTML = `${erInputFields()}<button data-er-action="diagnose" class="bg-orange-600 text-white px-4 py-2 rounded">接続診断（採点APIは呼び出しません）</button><pre id="er-diagnosis" class="whitespace-pre-wrap text-sm"></pre>`;
   } catch (error) { panel.textContent = error.response?.data?.error || '画面の読み込みに失敗しました'; }
 }
 async function erSelectTab(tab) { erTab = tab; await renderExtensionReviewPage(); }
@@ -104,10 +104,10 @@ function erRenderResult() {
   if (!result) { panel.textContent = row.safe_error || '採点結果がまだありません'; return; }
   const points = (title, list) => `<h3 class="font-semibold mt-3">${title}</h3><ul class="list-disc pl-6">${list.map(p => `<li>${erEscape(p.text)}<details><summary class="text-sm text-orange-600 cursor-pointer">採点根拠</summary>${p.evidence.map(e => `<blockquote class="bg-gray-50 p-2 whitespace-pre-wrap">${erEscape(e.quote)}<small class="block">${erEscape(e.speaker || '発言者不明')} ${erEscape(e.timestamp || '時刻不明')}</small></blockquote>`).join('')}</details></li>`).join('') || '<li>該当なし</li>'}</ul>`;
   panel.innerHTML = `<div class="flex flex-wrap justify-between gap-3"><div><p>${erEscape(row.student_name)} / ${erEscape(row.tutor_name)} / ${row.round}回目</p><p class="text-sm text-gray-500">基準v${erEscape(row.settings_id)}・${erEscape(row.model)}・${row.confirmed_at ? '確定済み' : row.reviewed_at ? '確認済み' : 'AI一次評価'} ${row.edited_result ? '（管理者編集あり）' : ''}</p></div><div class="text-4xl font-bold text-orange-600">${result.score}<span class="text-sm"> / 100点</span></div></div>
-    <div class="flex flex-wrap gap-2"><button onclick="erCopy()" class="border rounded p-2">Markdownコピー</button><button onclick="erDownload()" class="border rounded p-2">Markdownダウンロード</button>
+    <div class="flex flex-wrap gap-2"><button data-er-action="copy" class="border rounded p-2">Markdownコピー</button><button data-er-action="download" class="border rounded p-2">Markdownダウンロード</button>
     <a href="https://docs.google.com/document/d/${encodeURIComponent(row.document_id)}/edit" target="_blank" rel="noopener noreferrer" class="border rounded p-2">元の文字起こし</a>
-    <button onclick="erGenerate(true)" class="border rounded p-2">再採点</button>
-    ${!row.confirmed_at ? `<button onclick="erReview(false)" class="border rounded p-2">確認済みにする</button>${currentUser.role === 'admin' ? '<button onclick="erReview(true)" class="border rounded p-2">確定する</button><button onclick="erEdit()" class="border rounded p-2">管理者編集</button>' : ''}` : ''}</div>
+    <button data-er-action="regrade" class="border rounded p-2">再採点</button>
+    ${!row.confirmed_at ? `<button data-er-action="review" class="border rounded p-2">確認済みにする</button>${currentUser.role === 'admin' ? '<button data-er-action="confirm" class="border rounded p-2">確定する</button><button data-er-action="edit" class="border rounded p-2">管理者編集</button>' : ''}` : ''}</div>
     ${points('加点ポイント',result.bonuses)}${points('減点ポイント',result.penalties)}${points('改善できた点',result.improvements)}
     <h3 class="font-semibold">トークスクリプト</h3><p>一致度 ${result.scriptMatch.score}% / オリジナリティ ${result.originality.score}%</p>${points('根拠',[result.scriptMatch,result.originality])}
     <h3 class="font-semibold">生徒様の人物像</h3><p>一致率 ${row.target_match.rate === null ? '算出不可' : row.target_match.rate + '%'} / 確認済み ${row.target_match.matched}/${row.target_match.known}件一致</p>
@@ -129,7 +129,7 @@ async function erReview(confirmResult) {
 }
 async function erEdit() {
   const edits = await erRequest(`/results/${erResult.id}/edits`);
-  document.getElementById('er-panel').innerHTML = `<h2 class="font-bold">管理者編集（AI原本は維持されます）</h2><textarea id="er-edit-json" class="border rounded p-2 w-full h-96">${erEscape(JSON.stringify(erResult.result,null,2))}</textarea><button onclick="erSaveEdit()" class="bg-orange-600 text-white p-2 rounded">編集内容を保存</button><details><summary>編集履歴 ${edits.length}件</summary><pre class="whitespace-pre-wrap">${erEscape(JSON.stringify(edits,null,2))}</pre></details>`;
+  document.getElementById('er-panel').innerHTML = `<h2 class="font-bold">管理者編集（AI原本は維持されます）</h2><textarea id="er-edit-json" class="border rounded p-2 w-full h-96">${erEscape(JSON.stringify(erResult.result,null,2))}</textarea><button data-er-action="save-edit" class="bg-orange-600 text-white p-2 rounded">編集内容を保存</button><details><summary>編集履歴 ${edits.length}件</summary><pre class="whitespace-pre-wrap">${erEscape(JSON.stringify(edits,null,2))}</pre></details>`;
 }
 async function erSaveEdit() {
   try { erResult = await erRequest(`/results/${erResult.id}`, 'put', JSON.parse(document.getElementById('er-edit-json').value)); erRenderResult(); }
@@ -184,7 +184,7 @@ async function erRenderSettings(version) {
     <p class="text-sm">${erTutors.map(t=>`${erEscape(t.tutor_name)}：${erEscape(t.employee_id)}`).join(' / ')}。例：{"Tutor番号":["文字起こしの実際の名前"]}。接続診断で発言者ラベルを確認できます。</p>
     ${area('er-target','ターゲット条件(JSON)',JSON.stringify(config.target,null,2))}
     ${area('er-limits','利用上限(JSON)',JSON.stringify(config.limits,null,2))}
-    <button onclick="erSaveSettings()" class="bg-orange-600 text-white p-2 rounded">新しいバージョンとして保存</button><button data-er-read-action="preview-settings" class="border rounded p-2 ml-2">プレビュー</button><pre id="er-settings-preview" class="whitespace-pre-wrap text-sm"></pre>`;
+    <button data-er-action="save-settings" class="bg-orange-600 text-white p-2 rounded">新しいバージョンとして保存</button><button data-er-read-action="preview-settings" class="border rounded p-2 ml-2">プレビュー</button><pre id="er-settings-preview" class="whitespace-pre-wrap text-sm"></pre>`;
 }
 function erApplyNotionMapping() {
   document.getElementById('er-mapping').value = JSON.stringify({
@@ -250,7 +250,26 @@ function erHandleSettingsChange(event) {
   return erRenderSettings(select.value);
 }
 
+function erHandleActionClick(event) {
+  const button = event.target?.closest?.('button[data-er-action]');
+  if (!button || button.disabled || !document.getElementById('content')?.contains(button)) return;
+  if (!currentUser || currentUser.role !== 'admin' || !sessionToken || !extensionReviewFeatureEnabled) return;
+  switch (button.dataset.erAction) {
+    case 'generate': return erGenerate();
+    case 'regrade': return erGenerate(true);
+    case 'diagnose': return erDiagnose();
+    case 'copy': return erCopy();
+    case 'download': return erDownload();
+    case 'review': return erReview(false);
+    case 'confirm': return erReview(true);
+    case 'edit': return erEdit();
+    case 'save-edit': return erSaveEdit();
+    case 'save-settings': return erSaveSettings();
+  }
+}
+
 document.addEventListener('click', erHandleReadClick);
+document.addEventListener('click', erHandleActionClick);
 document.addEventListener('change', erHandleSettingsChange);
 
 // app.js initializes asynchronously; refresh once this script becomes available.
