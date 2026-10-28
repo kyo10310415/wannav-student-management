@@ -16704,7 +16704,7 @@ function renderRedListMessages() {
                     class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition">
               <i class="fas fa-edit"></i>
             </button>
-            <button onclick="deleteRedListMessage(${m.id}, '${escapeHtml(m.title)}')"
+            <button data-red-delete-action="message" data-red-delete-id="${escapeHtml(String(m.id)).replace(/"/g, '&quot;')}"
                     class="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition">
               <i class="fas fa-trash"></i>
             </button>
@@ -16850,21 +16850,8 @@ async function saveRedListMessage() {
   } finally { finishRedListSave(saveState); }
 }
 
-async function deleteRedListMessage(id, title) {
-  if (!confirm(`「${title}」を削除してもよいですか？`)) return;
-  try {
-    const res = await axios.delete(`${API_BASE}/api/red-list/messages/${id}`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    if (res.data.success) {
-      showNotification('メッセージを削除しました', 'success');
-      await loadRedListMessages();
-    } else {
-      showNotification(res.data.error || '削除に失敗しました', 'error');
-    }
-  } catch (e) {
-    showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
-  }
+async function deleteRedListMessage(id, button) {
+  return runRedListDelete('message', id, button);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -17020,7 +17007,7 @@ function renderRedListSenders() {
                     class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition">
               <i class="fas fa-edit"></i>
             </button>
-            <button onclick="deleteRedListSender(${s.id}, '${escapeHtml(s.name)}')"
+            <button data-red-delete-action="sender" data-red-delete-id="${escapeHtml(String(s.id)).replace(/"/g, '&quot;')}"
                     class="text-red-500 hover:text-red-700 text-sm px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition">
               <i class="fas fa-trash"></i>
             </button>
@@ -17100,23 +17087,8 @@ async function saveRedListSender() {
   } finally { finishRedListSave(saveState); }
 }
 
-async function deleteRedListSender(id, name) {
-  if (!confirm(`「${name}」を削除してもよいですか？`)) return;
-  try {
-    const res = await axios.delete(`${API_BASE}/api/red-list/senders/${id}`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    if (res.data.success) {
-      showNotification('送信者を削除しました', 'success');
-      // 送信モーダルのドロップダウンもリセット
-      redListSenders = [];
-      await loadRedListSenders();
-    } else {
-      showNotification(res.data.error || '削除に失敗しました', 'error');
-    }
-  } catch (e) {
-    showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
-  }
+async function deleteRedListSender(id, button) {
+  return runRedListDelete('sender', id, button);
 }
 
 // ============================================================
@@ -19278,7 +19250,7 @@ async function renderMinutesPage() {
           <div id="minutes-template-editor">読み込み中...</div>
         </div>
         <div class="px-6 py-3 border-t flex gap-2 justify-end">
-          <button onclick="saveMinutesTemplate()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+          <button id="minutes-template-save-btn" data-minutes-template-action="save" disabled class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-save mr-1"></i>保存
           </button>
           <button data-minutes-template-action="close" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
@@ -19626,13 +19598,16 @@ async function deleteMinutes(id) {
 // ── テンプレートモーダル ─────────────────────────────────────
 
 async function showMinutesTemplateModal() {
+  const state = beginMinutesTemplateView();
+  if (!state) return;
   document.getElementById('minutes-template-modal').classList.remove('hidden');
   const editor = document.getElementById('minutes-template-editor');
   editor.innerHTML = '<p class="text-gray-400 text-sm">読み込み中...</p>';
   try {
     const res = await axios.get('/api/minutes/templates', {
-      headers: { Authorization: `Bearer ${sessionToken}` }
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!minutesTemplateViewCurrent(state)) return;
     minutesTemplates = res.data.data || [];
     if (minutesTemplates.length === 0) {
       editor.innerHTML = '<p class="text-red-500 text-sm">テンプレートが見つかりません</p>';
@@ -19651,28 +19626,45 @@ async function showMinutesTemplateModal() {
         <textarea id="tmpl-text" rows="18"
                   class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-teal-400 resize-y">${escapeHtml(t.template_text || '')}</textarea>
       </div>`;
+    state.id = String(t.id ?? '');
+    state.ready = /^\d+$/.test(state.id) && Number.isSafeInteger(Number(state.id)) && Number(state.id) > 0;
+    state.button.disabled = !state.ready || pendingMinutesTemplateSaves.has(state.id);
   } catch (err) {
+    if (!minutesTemplateViewCurrent(state)) return;
     editor.innerHTML = '<p class="text-red-500 text-sm">テンプレートを読み込めませんでした</p>';
   }
 }
 
 function closeMinutesTemplateModal() {
+  minutesTemplateView = null;
   document.getElementById('minutes-template-modal').classList.add('hidden');
 }
 
 async function saveMinutesTemplate() {
-  const id   = document.getElementById('tmpl-id')?.value;
+  const state = minutesTemplateView;
+  if (!minutesTemplateViewCurrent(state) || !state.ready || state.saving || state.button.disabled) return;
+  const id = document.getElementById('tmpl-id')?.value;
   const name = document.getElementById('tmpl-name')?.value;
   const text = document.getElementById('tmpl-text')?.value;
-  if (!id || text == null) return;
+  if (id !== state.id || typeof name !== 'string' || typeof text !== 'string' || pendingMinutesTemplateSaves.has(id)) return;
+  pendingMinutesTemplateSaves.add(id);
+  state.saving = true;
+  state.button.disabled = true;
   try {
-    await axios.put(`/api/minutes/templates/${id}`, { name, template_text: text }, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
+    const response = await axios.put(`/api/minutes/templates/${id}`, { name, template_text: text }, {
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!minutesTemplateViewCurrent(state)) return;
+    if (!response.data.success) throw new Error('Template save failed');
     showNotification('テンプレートを保存しました', 'success');
     closeMinutesTemplateModal();
-  } catch (err) {
-    showNotification('保存に失敗しました: ' + err.message, 'error');
+  } catch {
+    if (minutesTemplateViewCurrent(state)) showNotification('テンプレートの保存に失敗しました', 'error');
+  } finally {
+    pendingMinutesTemplateSaves.delete(id);
+    state.saving = false;
+    const current = minutesTemplateView;
+    if (minutesTemplateViewCurrent(current) && current.ready && current.id === id) current.button.disabled = false;
   }
 }
 

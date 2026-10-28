@@ -33,6 +33,10 @@ const scriptPolicy = (sources) => secureHeaders({
     scriptSrcAttr: ["'none'"]
   }
 });
+const imageHeaders = secureHeaders({
+  ...headerOptions,
+  contentSecurityPolicy: { ...headerOptions.contentSecurityPolicy, defaultSrc: ["'none'"], sandbox: [] }
+});
 const exportHeaders = scriptPolicy(["'self'"]);
 const cdnScriptHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com']);
 const redlistHeaders = scriptPolicy(["'self'", 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js']);
@@ -42,6 +46,7 @@ export const browserSecurityHeaders = (c, next) => {
   // Match the static server's URI decoding so encoded aliases retain the policy.
   let pagePath = c.req.path;
   try { pagePath = decodeURI(pagePath); } catch { /* Invalid URIs are handled by routing/static serving. */ }
+  if (/^\/api\/red-list\/messages\/[^/]+\/image\/?$/.test(pagePath)) return imageHeaders(c, next);
   if (pagePath === '/funnel-analysis-export.html') return exportHeaders(c, next);
   if (pagePath === '/redlist.html') return redlistHeaders(c, next);
   if (cdnScriptPages.has(pagePath)) return cdnScriptHeaders(c, next);

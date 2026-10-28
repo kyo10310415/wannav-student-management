@@ -1,8 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from'node:vm';import{readFile}from'node:fs/promises';
 const source=await readFile(new URL('../public/minutes-template-events.js',import.meta.url),'utf8'),app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
 function fixture(){
- const calls=[],requests=[],listeners=[];const root=parent=>({root:parent,innerHTML:'',contains(n){for(let p=n;p;p=p.root)if(p===this)return true;return false},classList:{hidden:true,add(){this.hidden=true},remove(){this.hidden=false}}});
- const elements={content:root()};elements['minutes-template-modal']=root(elements.content);elements['minutes-template-editor']=root(elements['minutes-template-modal']);
+ const calls=[],requests=[],listeners=[];const root=parent=>({root:parent,innerHTML:'',contains(n){for(let p=n;p;p=p.root)if(p===this)return true;return false},classList:{hidden:true,add(){this.hidden=true},remove(){this.hidden=false},contains(){return this.hidden}}});
+ const elements={content:root()};elements['minutes-template-modal']=root(elements.content);elements['minutes-template-editor']=root(elements['minutes-template-modal']);elements['minutes-template-save-btn']=root(elements['minutes-template-modal']);
  const c={currentUser:{role:'admin'},sessionToken:'synthetic',currentPage:'minutes',document:{getElementById:id=>elements[id],addEventListener:(type,callback)=>listeners.push({type,callback})},escapeHtml:value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),axios:{get:async(...args)=>{requests.push(args);return{data:{data:[]}}}},showMinutesTemplateModal:()=>calls.push(['open']),closeMinutesTemplateModal:()=>calls.push(['close'])};vm.createContext(c);vm.runInContext(source,c);
  const button=(action,at=elements.content)=>{const n={root:at,disabled:false,dataset:{minutesTemplateAction:action}};n.closest=s=>s==='button[data-minutes-template-action]'?n:null;return n};
  const click=n=>c.handleMinutesTemplateClick({target:n});const real=()=>vm.runInContext(app.slice(app.indexOf('async function showMinutesTemplateModal()'),app.indexOf('async function saveMinutesTemplate()')),c);
@@ -27,6 +27,6 @@ test('empty and failed template reads retain safe states without exposing raw er
  f.c.axios.get=async()=>{throw Error('Synthetic private <img src=x>')};await f.click(f.button('open'));const html=f.elements['minutes-template-editor'].innerHTML;assert.ok(html.includes('テンプレートを読み込めませんでした'));assert.equal(html.includes('Synthetic private'),false);assert.equal(html.includes('<img'),false);
 });
 test('only three template attributes migrate and all generation/save/delete controls remain',()=>{
- assert.equal((app.match(/data-minutes-template-action=/g)||[]).length,3);for(const old of ['onclick="showMinutesTemplateModal()"','onclick="closeMinutesTemplateModal()"'])assert.equal(app.includes(old),false);
- for(const unchanged of ['onclick="saveMinutesTemplate()"','onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','onclick="event.stopPropagation(); deleteMinutes(${m.id})"'])assert.ok(app.includes(unchanged));
+ assert.equal((app.match(/data-minutes-template-action=/g)||[]).length,4);for(const old of ['onclick="showMinutesTemplateModal()"','onclick="closeMinutesTemplateModal()"'])assert.equal(app.includes(old),false);
+ for(const unchanged of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','onclick="event.stopPropagation(); deleteMinutes(${m.id})"'])assert.ok(app.includes(unchanged));
 });

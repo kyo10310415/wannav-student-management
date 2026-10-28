@@ -87,9 +87,13 @@ app.get('/templates', async (c) => {
 /** テンプレート更新 */
 app.put('/templates/:id', async (c) => {
   try {
-    const id   = c.req.param('id');
-    const body = await c.req.json();
+    const id = c.req.param('id');
+    if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) return c.json({ success: false, error: 'IDが不正です' }, 400);
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ success: false, error: '入力が不正です' }, 400);
     const { name, template_text } = body;
+    if ([name, template_text].some(value => value != null && typeof value !== 'string')) return c.json({ success: false, error: '文字列を入力してください' }, 400);
 
     const result = await query(
       `UPDATE minutes_templates
