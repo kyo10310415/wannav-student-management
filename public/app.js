@@ -6607,7 +6607,7 @@ function showTutorSelectionModal(requestId) {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-user-check mr-2 text-green-600"></i>受諾Tutor選択
         </h2>
-        <button onclick="closeTutorSelectionModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-helper-selection-close class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -6619,7 +6619,7 @@ function showTutorSelectionModal(requestId) {
           <select id="accepting-tutor-select" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
             <option value="">Tutorを選択...</option>
             ${tutors.filter(t => t.status === 'アクティブ' && t.job_type && t.job_type.includes('Tutor')).map(t => 
-              `<option value="${t.employee_id}">${t.tutor_name}</option>`
+              `<option value="${escapeHtml(String(t.employee_id ?? '')).replace(/"/g, '&quot;')}">${escapeHtml(t.tutor_name)}</option>`
             ).join('')}
           </select>
         </div>
@@ -6628,7 +6628,7 @@ function showTutorSelectionModal(requestId) {
           <button onclick="confirmAcceptHelperRequest(${requestId})" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
             <i class="fas fa-check mr-2"></i>確定する
           </button>
-          <button onclick="closeTutorSelectionModal()" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
+          <button data-helper-selection-close class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
             <i class="fas fa-times mr-2"></i>キャンセル
           </button>
         </div>
@@ -8271,7 +8271,7 @@ async function renderUsersPage() {
             <button onclick="checkDiscordMapping()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
               <i class="fab fa-discord mr-2"></i>Discord紐付け確認
             </button>
-            <button onclick="showCreateUserModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+            <button data-user-create-action="open" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
               <i class="fas fa-plus mr-2"></i>ユーザーを追加
             </button>
           </div>
@@ -8330,11 +8330,11 @@ async function renderUsersPage() {
                     ${user.tutor_name ? `
                       <button
                         data-user-id="${user.id}"
-                        data-email="${escapeHtml(user.email)}"
-                        data-tutor-name="${escapeHtml(user.tutor_name)}"
-                        data-regular-url="${escapeHtml(user.funnel_regular_booking_url || '')}"
-                        data-pro-url="${escapeHtml(user.funnel_pro_booking_url || '')}"
-                        onclick="showEditBookingLinksModal(this)"
+                        data-email="${escapeHtml(user.email).replace(/"/g, '&quot;')}"
+                        data-tutor-name="${escapeHtml(user.tutor_name).replace(/"/g, '&quot;')}"
+                        data-regular-url="${escapeHtml(user.funnel_regular_booking_url || '').replace(/"/g, '&quot;')}"
+                        data-pro-url="${escapeHtml(user.funnel_pro_booking_url || '').replace(/"/g, '&quot;')}"
+                        data-booking-prepare-action="open"
                         class="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 transition whitespace-nowrap"
                         title="Tutor別の予約URLを編集"
                       >
@@ -8413,26 +8413,26 @@ function showEditBookingLinksModal(button) {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-link mr-2 text-teal-600"></i>予約URL設定
         </h2>
-        <button type="button" onclick="closeEditBookingLinksModal()" class="text-gray-500 hover:text-gray-700">
+        <button type="button" data-booking-prepare-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
       <form id="edit-booking-links-form" class="p-6 space-y-5">
-        <input type="hidden" id="booking-links-user-id" value="${escapeHtml(userId)}">
-        <input type="hidden" id="booking-links-original-regular-url" value="${escapeHtml(regularUrl || '')}">
-        <input type="hidden" id="booking-links-original-pro-url" value="${escapeHtml(proUrl || '')}">
+        <input type="hidden" id="booking-links-user-id" value="${escapeHtml(userId).replace(/"/g, '&quot;')}">
+        <input type="hidden" id="booking-links-original-regular-url" value="${escapeHtml(regularUrl || '').replace(/"/g, '&quot;')}">
+        <input type="hidden" id="booking-links-original-pro-url" value="${escapeHtml(proUrl || '').replace(/"/g, '&quot;')}">
         <div class="bg-teal-50 border border-teal-200 rounded-lg p-4 text-sm text-teal-900">
           <strong>${escapeHtml(tutorName)}</strong>（${escapeHtml(email)}）の予約URL
         </div>
         <p class="text-sm text-gray-600">Discord投稿に設定したURLが含まれている場合、このTutorの担当生徒を「予約リンク送付済み」と判定します。</p>
         <div>
           <label for="booking-links-regular-url" class="block text-sm font-semibold text-gray-700 mb-1">通常レッスン予約URL</label>
-          <input id="booking-links-regular-url" type="url" value="${escapeHtml(regularUrl || '')}"
+          <input id="booking-links-regular-url" type="url" value="${escapeHtml(regularUrl || '').replace(/"/g, '&quot;')}"
             placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
         </div>
         <div>
           <label for="booking-links-pro-url" class="block text-sm font-semibold text-gray-700 mb-1">PROプランレッスン予約URL</label>
-          <input id="booking-links-pro-url" type="url" value="${escapeHtml(proUrl || '')}"
+          <input id="booking-links-pro-url" type="url" value="${escapeHtml(proUrl || '').replace(/"/g, '&quot;')}"
             placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
         </div>
         <div class="border-t pt-4">
@@ -8442,7 +8442,7 @@ function showEditBookingLinksModal(button) {
           </div>
         </div>
         <div class="flex justify-end gap-3 pt-4 border-t">
-          <button type="button" onclick="closeEditBookingLinksModal()" class="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">キャンセル</button>
+          <button type="button" data-booking-prepare-action="close" class="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">キャンセル</button>
           <button type="submit" class="px-5 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700">
             <i class="fas fa-save mr-2"></i>保存
           </button>
@@ -8478,9 +8478,9 @@ async function loadTutorBookingLinkHistory(userId) {
             <div class="flex flex-wrap items-center justify-between gap-2">
               <span class="text-xs font-semibold text-gray-600">${escapeHtml(formatDateTime(item.changed_at))}・${escapeHtml(item.changed_by || 'system')}</span>
               <button type="button"
-                data-regular-url="${escapeHtml(item.new_regular_url || '')}"
-                data-pro-url="${escapeHtml(item.new_pro_url || '')}"
-                onclick="restoreTutorBookingLinksFromHistory(this)"
+                data-regular-url="${escapeHtml(item.new_regular_url || '').replace(/"/g, '&quot;')}"
+                data-pro-url="${escapeHtml(item.new_pro_url || '').replace(/"/g, '&quot;')}"
+                data-booking-prepare-action="restore"
                 class="text-xs font-semibold text-teal-700 hover:text-teal-900">
                 <i class="fas fa-undo mr-1"></i>この時点の値を入力
               </button>
@@ -8491,7 +8491,7 @@ async function loadTutorBookingLinkHistory(userId) {
         `).join('')}
       </div>`;
   } catch (error) {
-    console.error('予約URL変更履歴の取得エラー:', error);
+    console.error('予約URL変更履歴の取得エラー');
     container.innerHTML = `<div class="rounded-lg bg-red-50 px-3 py-3 text-red-700">${escapeHtml(error.response?.data?.error || '変更履歴を取得できませんでした')}</div>`;
   }
 }
@@ -8570,7 +8570,7 @@ function showCreateUserModal() {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-user-plus mr-2 text-indigo-600"></i>ユーザーを追加
         </h2>
-        <button onclick="closeCreateUserModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-user-create-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -8616,7 +8616,7 @@ function showCreateUserModal() {
         <div class="flex gap-2">
           <button 
             type="button"
-            onclick="closeCreateUserModal()"
+            data-user-create-action="close"
             class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
           >
             キャンセル
@@ -15334,7 +15334,7 @@ async function renderRedListPage() {
             <h3 class="text-lg font-semibold text-gray-800">
               <i class="fas fa-user-tie text-indigo-500 mr-2"></i>送信者管理
             </h3>
-            <button onclick="openRedListSenderModal()"
+            <button data-red-prepare-action="sender-new"
                     class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition">
               <i class="fas fa-plus mr-1"></i>新規追加
             </button>
@@ -15357,7 +15357,7 @@ async function renderRedListPage() {
             <h3 class="text-lg font-semibold text-gray-800">
               <i class="fab fa-discord text-indigo-500 mr-2"></i>送信メッセージテンプレート
             </h3>
-            <button onclick="openRedListMessageModal()" 
+            <button data-red-prepare-action="message-new"
                     class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition">
               <i class="fas fa-plus mr-1"></i>新規作成
             </button>
@@ -15452,7 +15452,7 @@ async function renderRedListPage() {
       <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-screen overflow-y-auto">
         <div class="flex justify-between items-center p-6 border-b">
           <h3 class="text-lg font-semibold text-gray-800" id="redlist-msg-edit-title">メッセージ作成</h3>
-          <button onclick="closeRedListMessageModal()" class="text-gray-400 hover:text-gray-600">
+          <button data-red-prepare-action="message-close" class="text-gray-400 hover:text-gray-600">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
@@ -15488,7 +15488,7 @@ async function renderRedListPage() {
               <div class="flex items-center space-x-3">
                 <img id="redlist-msg-edit-img-preview" src="" alt="現在の画像"
                      class="max-h-32 rounded-lg border border-gray-200 object-contain">
-                <button type="button" onclick="removeRedListMessageImage()"
+                <button type="button" data-red-prepare-action="image-remove"
                         class="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50">
                   <i class="fas fa-trash mr-1"></i>削除
                 </button>
@@ -15496,7 +15496,7 @@ async function renderRedListPage() {
             </div>
             <!-- 新規画像選択 -->
             <input type="file" id="redlist-msg-edit-image" accept="image/jpeg,image/png"
-                   onchange="onRedListImageSelected(this)"
+                   data-red-prepare-image
                    class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
             <!-- 新規画像プレビュー -->
             <div id="redlist-msg-edit-img-new-wrap" class="hidden mt-2">
@@ -15508,7 +15508,7 @@ async function renderRedListPage() {
           </div>
         </div>
         <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
-          <button onclick="closeRedListMessageModal()"
+          <button data-red-prepare-action="message-close"
                   class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             キャンセル
           </button>
@@ -15620,7 +15620,7 @@ async function renderRedListPage() {
       <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
         <div class="flex justify-between items-center p-6 border-b">
           <h3 class="text-lg font-semibold text-gray-800" id="redlist-sender-edit-title">送信者追加</h3>
-          <button onclick="closeRedListSenderModal()" class="text-gray-400 hover:text-gray-600">
+          <button data-red-prepare-action="sender-close" class="text-gray-400 hover:text-gray-600">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
@@ -15639,7 +15639,7 @@ async function renderRedListPage() {
           </div>
         </div>
         <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
-          <button onclick="closeRedListSenderModal()"
+          <button data-red-prepare-action="sender-close"
                   class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             キャンセル
           </button>
@@ -16699,7 +16699,7 @@ function renderRedListMessages() {
                     title="テスト送信">
               <i class="fas fa-flask"></i>
             </button>
-            <button onclick="openRedListMessageModal(${m.id})"
+            <button data-red-prepare-action="message-edit" data-red-prepare-id="${escapeHtml(String(m.id)).replace(/"/g, '&quot;')}"
                     class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition">
               <i class="fas fa-edit"></i>
             </button>
@@ -17003,7 +17003,7 @@ function renderRedListSenders() {
             <p class="text-xs text-gray-400 mt-1">最終更新: ${updated} ／ ${s.created_by || '-'}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
-            <button onclick="openRedListSenderModal(${s.id})"
+            <button data-red-prepare-action="sender-edit" data-red-prepare-id="${escapeHtml(String(s.id)).replace(/"/g, '&quot;')}"
                     class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition">
               <i class="fas fa-edit"></i>
             </button>
