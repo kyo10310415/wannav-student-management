@@ -14758,58 +14758,39 @@ function resetRouletteFilters() {
  * Load red list data for all students
  */
 async function loadRedListData() {
+  const state = beginRedListRead('table');
+  const cells = [...document.querySelectorAll('.red-list-loading')];
+  if (!state || cells.length === 0) return;
+  const current = () => state.current() && cells.some(cell => state.root.contains(cell));
+  const clearCells = () => cells.forEach(cell => {
+    if (state.root.contains(cell)) cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
+  });
+  const options = { headers: { Authorization: `Bearer ${state.token}` } };
   try {
-    console.log('[Red List] Loading red list data...');
-    const response = await axios.get(`${API_BASE}/api/red-list`);
-    
+    const response = await axios.get(`${API_BASE}/api/red-list`, options);
+    if (!current()) return;
     if (response.data.success) {
-      const redLists = response.data.data;
-      console.log(`[Red List] Loaded ${redLists.length} red list records`);
-      
-      // If no data exists, trigger automatic calculation
-      if (redLists.length === 0) {
-        console.log('[Red List] No data found, triggering automatic update...');
-        try {
-          await axios.post(`${API_BASE}/api/red-list/update`, {});
-          // Reload data after update
-          const retryResponse = await axios.get(`${API_BASE}/api/red-list`);
-          if (retryResponse.data.success) {
-            const newRedLists = retryResponse.data.data;
-            console.log(`[Red List] Loaded ${newRedLists.length} red list records after update`);
-            newRedLists.forEach(redList => {
-              updateRedListDisplay(redList.student_id, redList);
-            });
-          }
-        } catch (updateError) {
-          console.error('[Red List] Error during automatic update:', updateError);
-          // Show all cells as empty if update fails
-          document.querySelectorAll('.red-list-loading').forEach(cell => {
-            cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
-          });
-        }
-        return;
+      let redLists = response.data.data;
+      // Keep the existing manager-only automatic calculation; crew is read-only.
+      if (redLists.length === 0 && ['admin', 'leader'].includes(state.role)) {
+        await axios.post(`${API_BASE}/api/red-list/update`, {}, options);
+        if (!current()) return;
+        const retryResponse = await axios.get(`${API_BASE}/api/red-list`, options);
+        if (!current()) return;
+        if (!retryResponse.data.success) { clearCells(); return; }
+        redLists = retryResponse.data.data;
       }
-      
-      // Update display for each student
-      redLists.forEach(redList => {
-        updateRedListDisplay(redList.student_id, redList);
-      });
-      
-      // For students not in the list, show empty
-      document.querySelectorAll('.red-list-loading').forEach(cell => {
-        const studentId = cell.dataset.studentId;
-        const hasData = redLists.find(r => r.student_id === studentId);
-        if (!hasData) {
+      redLists.forEach(redList => updateRedListDisplay(redList.student_id, redList));
+      cells.forEach(cell => {
+        if (state.root.contains(cell) && !redLists.some(row => row.student_id === cell.dataset.studentId)) {
           cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
         }
       });
     }
-  } catch (error) {
-    console.error('[Red List] Error loading red list data:', error);
-    // Show all cells as empty on error
-    document.querySelectorAll('.red-list-loading').forEach(cell => {
-      cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
-    });
+  } catch {
+    if (!current()) return;
+    console.error('[Red List] Data load failed');
+    clearCells();
   }
 }
 
@@ -14916,6 +14897,20 @@ async function updateAllRedLists() {
     console.error('[Red List] Error updating red lists:', error);
     showNotification('レッドリスト更新に失敗しました', 'error');
   }
+}
+
+// Read generations are separate for each panel/month so unrelated reads can finish independently.
+const redListReadStates = new Map();
+function beginRedListRead(key, targetIds = []) {
+  const root = document.getElementById('content');
+  const targets = targetIds.map(id => [id, document.getElementById(id)]);
+  const state = { root, token: sessionToken, userId: currentUser?.id, role: currentUser?.role, page: currentPage };
+  redListReadStates.set(key, state);
+  if (!root || !state.token || !currentUser || !['admin', 'leader', 'crew'].includes(state.role) || targets.some(([, target]) => !target)) return null;
+  state.current = () => redListReadStates.get(key) === state && sessionToken === state.token &&
+    currentUser?.id === state.userId && currentUser?.role === state.role && currentPage === state.page &&
+    document.getElementById('content') === root && targets.every(([id, target]) => document.getElementById(id) === target);
+  return state;
 }
 
 // Red List Page
@@ -15440,16 +15435,19 @@ function switchRedListTab(tab) {
 }
 
 async function loadRedListCurrentData() {
+  const state = beginRedListRead('current', ['redlist-current-loading', 'redlist-current-content']);
+  if (!state || currentPage !== 'red-list') return;
+  const loading = document.getElementById('redlist-current-loading');
+  const content = document.getElementById('redlist-current-content');
   try {
-    document.getElementById('redlist-current-loading').classList.remove('hidden');
-    document.getElementById('redlist-current-content').classList.add('hidden');
-
+    loading.classList.remove('hidden');
+    content.classList.add('hidden');
     const ym = getCurrentYearMonthStr();
     const [response] = await Promise.all([
-      axios.get(`${API_BASE}/api/red-list`),
-      fetchRedListDiscordLogs(ym)
+      axios.get(`${API_BASE}/api/red-list`, { headers: { Authorization: `Bearer ${state.token}` } }),
+      fetchRedListDiscordLogs(ym, state)
     ]);
-
+    if (!state.current()) return;
     if (response.data.success) {
       currentRedListData = response.data.data.filter(item =>
         item.rank === 'high' || item.rank === 'middle' || item.rank === 'low' || item.ex_rank === true
@@ -15457,13 +15455,15 @@ async function loadRedListCurrentData() {
       renderRedListCurrentList();
       updateRedListStats();
     }
-  } catch (error) {
-    console.error('Error loading red list data:', error);
-    document.getElementById('redlist-current-content').innerHTML =
-      '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
+  } catch {
+    if (!state.current()) return;
+    console.error('Red list data load failed');
+    content.innerHTML = '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
   } finally {
-    document.getElementById('redlist-current-loading').classList.add('hidden');
-    document.getElementById('redlist-current-content').classList.remove('hidden');
+    if (state.current()) {
+      loading.classList.add('hidden');
+      content.classList.remove('hidden');
+    }
   }
 }
 
@@ -15948,36 +15948,42 @@ function populateRedListHistoryMonths() {
 }
 
 async function loadRedListHistoryData() {
-  const yearMonth = document.getElementById('redlist-history-month').value;
-  
+  const state = beginRedListRead('history', ['redlist-history-month', 'redlist-history-loading', 'redlist-history-content']);
+  if (!state || currentPage !== 'red-list') return;
+  const select = document.getElementById('redlist-history-month');
+  const loading = document.getElementById('redlist-history-loading');
+  const content = document.getElementById('redlist-history-content');
+  const yearMonth = select.value;
+  const sameRead = state.current;
+  state.current = () => sameRead() && select.value === yearMonth;
   if (!yearMonth) {
-    document.getElementById('redlist-history-content').innerHTML = '';
+    historyRedListData = [];
+    content.innerHTML = '';
+    loading.classList.add('hidden');
     return;
   }
-  
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(yearMonth)) return;
   try {
-    document.getElementById('redlist-history-loading').classList.remove('hidden');
-    document.getElementById('redlist-history-content').innerHTML = '';
-    
+    loading.classList.remove('hidden');
+    content.innerHTML = '';
     const [response] = await Promise.all([
-      axios.get(`${API_BASE}/api/red-list/history?yearMonth=${yearMonth}`),
-      fetchRedListDiscordLogs(yearMonth)
+      axios.get(`${API_BASE}/api/red-list/history?yearMonth=${encodeURIComponent(yearMonth)}`, { headers: { Authorization: `Bearer ${state.token}` } }),
+      fetchRedListDiscordLogs(yearMonth, state)
     ]);
-
+    if (!state.current()) return;
     if (response.data.success) {
       historyRedListData = response.data.data.filter(item =>
         item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low' || item.final_ex_rank === true
       );
-
       renderRedListHistoryList();
       updateRedListStats();
     }
-  } catch (error) {
+  } catch {
+    if (!state.current()) return;
     console.error('Red list history load failed');
-    document.getElementById('redlist-history-content').innerHTML = 
-      '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
+    content.innerHTML = '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
   } finally {
-    document.getElementById('redlist-history-loading').classList.add('hidden');
+    if (state.current()) loading.classList.add('hidden');
   }
 }
 
@@ -16189,22 +16195,30 @@ function exportRedListCsv() {
 //  Discord 送信ログ一括取得（ページ表示時・送信後に呼ぶ）
 // ═══════════════════════════════════════════════════════════════
 
-async function fetchRedListDiscordLogs(yearMonth) {
+async function fetchRedListDiscordLogs(yearMonth, parentRead = null) {
+  const ym = yearMonth || getCurrentYearMonthStr();
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(ym)) return;
+  const state = beginRedListRead(`logs:${ym}`);
+  if (!state || currentPage !== 'red-list') return;
+  const current = () => state.current() && (!parentRead || parentRead.current());
   try {
-    const ym = yearMonth || getCurrentYearMonthStr();
-    const res = await axios.get(`${API_BASE}/api/red-list/discord/logs?yearMonth=${ym}`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    const res = await axios.get(`${API_BASE}/api/red-list/discord/logs?yearMonth=${encodeURIComponent(ym)}`, {
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!current()) return;
     if (res.data.success) {
-      redListDiscordLogs = {};
+      // Replace only this month's logs; concurrent current/history reads must not erase each other.
+      const next = Object.fromEntries(Object.entries(redListDiscordLogs).filter(([key, logs]) => !logs.some(log => log.year_month === ym)));
       for (const log of res.data.data) {
+        if (log.year_month !== ym) continue;
         const key = `${log.student_id}_${log.year_month}`;
-        if (!redListDiscordLogs[key]) redListDiscordLogs[key] = [];
-        redListDiscordLogs[key].push(log);
+        if (!next[key]) next[key] = [];
+        next[key].push(log);
       }
+      redListDiscordLogs = next;
     }
-  } catch (e) {
-    console.warn('Discord logs fetch failed');
+  } catch {
+    if (current()) console.warn('Discord logs fetch failed');
   }
 }
 

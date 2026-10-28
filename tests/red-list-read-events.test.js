@@ -5,7 +5,7 @@ function fixture(){const calls=[],requests=[],listeners=[];
  const elements={content:root()};for(const id of ['redlist-tab-current','redlist-tab-history','redlist-tab-messages','redlist-tab-senders','redlist-current-list','redlist-history-list','redlist-messages-panel','redlist-senders-panel','redlist-history-month','redlist-history-loading','redlist-history-content','score-breakdown-SYNTHETIC','rl-log-detail-SYNTHETIC','rl-log-chevron-SYNTHETIC'])elements[id]=root(elements.content);
  const c={currentUser:{role:'admin'},sessionToken:'synthetic',currentPage:'red-list',API_BASE:'',document:{getElementById:id=>elements[id]??null,addEventListener:(type,callback)=>listeners.push({type,callback})},console:{log(){},error(){}},escapeHtml:value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};
  for(const name of ['switchRedListTab','loadRedListHistoryData','showScoreBreakdown','toggleRedListLogDetail'])c[name]=(...args)=>calls.push([name,...args]);
- vm.createContext(c);vm.runInContext(source,c);
+ vm.createContext(c);vm.runInContext(app.slice(app.indexOf('const redListReadStates ='),app.indexOf('// Red List Page')),c);vm.runInContext(source,c);
  const node=(selector,dataset={},at=elements.content)=>{const n={root:at,dataset,disabled:false,value:'2026-10'};n.closest=s=>s===selector?n:null;return n};
  const button=(action,data={},at=elements.content)=>node('button[data-red-list-read-action]',{redListReadAction:action,...data},at);
  const click=n=>c.handleRedListReadClick({target:n});const install=(start,end)=>{const i=app.indexOf(start),j=app.indexOf(end,i);assert.ok(i>=0&&j>i);vm.runInContext(app.slice(i,j),c)};
