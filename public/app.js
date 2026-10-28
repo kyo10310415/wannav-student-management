@@ -1913,7 +1913,7 @@ function renderStudentRows() {
             ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
             ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
-            ${student.student_id ? `<button onclick="openMinutesForStudent('${student.student_id}', '${escapeHtml(student.name||'')}')" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
+            ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
       </tr>
@@ -2890,7 +2890,7 @@ async function loadWanamiUsageDataBatch() {
       if (!studentId) return;
       
       const count = usageCounts[studentId] || 0;
-      element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" onclick="showWanamiHistory('${studentId}')">${count}回</span>`;
+      element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" data-student-history-action="wanami" data-student-history-id="${escapeHtml(studentId).replace(/"/g, '&quot;')}">${count}回</span>`;
       element.classList.remove('text-gray-400');
       element.classList.remove('wanami-usage-loading');
     });
@@ -2935,7 +2935,7 @@ async function showWanamiHistory(studentId) {
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
           <div class="mt-3">
             <h3 class="text-lg font-bold text-gray-900 mb-4">
-              <i class="fas fa-history mr-2"></i>${studentName}様 - わなみさん使用履歴
+              <i class="fas fa-history mr-2"></i>${escapeHtml(studentName)}様 - わなみさん使用履歴
             </h3>
             <div class="mt-2 max-h-96 overflow-y-auto">
               <table class="min-w-full divide-y divide-gray-200">
@@ -2951,7 +2951,7 @@ async function showWanamiHistory(studentId) {
               </table>
             </div>
             <div class="mt-4 flex justify-end">
-              <button onclick="closeWanamiHistoryModal()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+              <button data-student-history-action="close-wanami" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
                 <i class="fas fa-times mr-2"></i>閉じる
               </button>
             </div>
@@ -2962,7 +2962,7 @@ async function showWanamiHistory(studentId) {
     
     document.body.insertAdjacentHTML('beforeend', modalHtml);
   } catch (error) {
-    console.error('Error showing Wanami history:', error);
+    console.error('Error showing Wanami history');
     showAlert('使用履歴の取得に失敗しました', 'error');
   }
 }
@@ -3133,8 +3133,8 @@ function renderStudentRowsSimple() {
               ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-sm"></i></span>'}
               ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-sm"></i></span>'}
               ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-sm"></i></span>'}
-              ${student.student_id ? `<button onclick="showStudentVQHistory('${student.student_id}')" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-sm"></i></span>'}
-              ${student.student_id ? `<button onclick="openMinutesForStudent('${student.student_id}', '${escapeHtml(student.name||'')}')" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-sm"></i></span>'}
+              ${student.student_id ? `<button data-student-history-action="vq" data-student-history-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-sm"></i></span>'}
+              ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-sm"></i></span>'}
             </div>
           </div>
         </div>
@@ -5392,7 +5392,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
             ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
             ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
             ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
-            ${student.student_id ? `<button onclick="openMinutesForStudent('${student.student_id}', '${escapeHtml(student.name||'')}')" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
+            ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
@@ -6317,16 +6317,16 @@ async function renderHelpersPage() {
     <!-- Status Filter Tabs -->
     <div class="bg-white rounded-lg shadow-md p-2 mb-6">
       <div class="flex flex-wrap gap-2">
-        <button onclick="filterHelpersByStatus('all')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-helper-status="all" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-list mr-2"></i>すべて
         </button>
-        <button onclick="filterHelpersByStatus('pending')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'pending' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-helper-status="pending" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'pending' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-clock mr-2"></i>待機中
         </button>
-        <button onclick="filterHelpersByStatus('accepted')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'accepted' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-helper-status="accepted" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'accepted' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-check-circle mr-2"></i>受諾済み
         </button>
-        <button onclick="filterHelpersByStatus('rescheduled')" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'rescheduled' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-helper-status="rescheduled" class="px-6 py-3 rounded-lg font-semibold transition ${helperStatusFilter === 'rescheduled' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-calendar-times mr-2"></i>リスケジュール
         </button>
       </div>
@@ -6807,13 +6807,13 @@ function renderSchedulesContent() {
       <div class="flex flex-col gap-4">
         <!-- Top row: Month navigation -->
         <div class="flex items-center justify-between">
-          <button onclick="changeScheduleMonth(-1)" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+          <button data-schedule-read-action="previous-month" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
             <i class="fas fa-chevron-left mr-2"></i>前月
           </button>
           <h2 class="text-2xl font-bold text-gray-800">
             ${selectedScheduleYear}年${selectedScheduleMonth}月
           </h2>
-          <button onclick="changeScheduleMonth(1)" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+          <button data-schedule-read-action="next-month" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
             来月<i class="fas fa-chevron-right ml-2"></i>
           </button>
         </div>
@@ -6822,12 +6822,12 @@ function renderSchedulesContent() {
         ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
           <div class="flex gap-2 border-b border-gray-200">
             <button 
-              onclick="handleScheduleTabChange('confirmed')" 
+              data-schedule-read-action="tab" data-schedule-tab="confirmed"
               class="px-6 py-3 font-semibold transition ${scheduleTab === 'confirmed' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}">
               受理済み
             </button>
             <button 
-              onclick="handleScheduleTabChange('pending')" 
+              data-schedule-read-action="tab" data-schedule-tab="pending"
               class="px-6 py-3 font-semibold transition ${scheduleTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}">
               申請中
             </button>
@@ -6839,7 +6839,7 @@ function renderSchedulesContent() {
         <div class="grid grid-cols-2 md:grid-cols-5 gap-2">`
 : '<!-- Filters hidden for pending tab --><div style="display:none;">'}
           <!-- Keyword filter -->
-          <select id="keyword-filter" onchange="handleKeywordFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+          <select id="keyword-filter" data-schedule-read-filter="keyword" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="all">すべてのキーワード</option>
             <option value="ロープレ">ロープレ</option>
             <option value="1on1">1on1</option>
@@ -6849,7 +6849,7 @@ function renderSchedulesContent() {
           </select>
           
           <!-- Date range filter -->
-          <select id="date-range-filter" onchange="handleDateRangeFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+          <select id="date-range-filter" data-schedule-read-filter="date-range" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="all">すべての日付</option>
             <option value="this_week">今週</option>
             <option value="next_week">来週</option>
@@ -6858,21 +6858,21 @@ function renderSchedulesContent() {
           </select>
           
           <!-- Leader filter -->
-          <select id="leader-filter" onchange="handleLeaderFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+          <select id="leader-filter" data-schedule-read-filter="leader" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             ${renderLeaderFilterOptions()}
           </select>
           
           <!-- Attendee filter -->
-          <select id="attendee-filter" onchange="handleAttendeeFilterChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+          <select id="attendee-filter" data-schedule-read-filter="attendee" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
             ${renderAttendeeFilterOptions()}
           </select>
           
           <!-- View mode toggle -->
           <div class="flex gap-2">
-            <button onclick="toggleScheduleViewMode('list')" class="flex-1 px-3 py-2 ${scheduleViewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} rounded-lg hover:opacity-80 transition">
+            <button data-schedule-read-action="view" data-schedule-view="list" class="flex-1 px-3 py-2 ${scheduleViewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} rounded-lg hover:opacity-80 transition">
               <i class="fas fa-list mr-1"></i>リスト
             </button>
-            <button onclick="toggleScheduleViewMode('calendar')" class="flex-1 px-3 py-2 ${scheduleViewMode === 'calendar' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} rounded-lg hover:opacity-80 transition">
+            <button data-schedule-read-action="view" data-schedule-view="calendar" class="flex-1 px-3 py-2 ${scheduleViewMode === 'calendar' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'} rounded-lg hover:opacity-80 transition">
               <i class="fas fa-calendar mr-1"></i>カレンダー
             </button>
           </div>
@@ -6881,10 +6881,10 @@ function renderSchedulesContent() {
         <!-- Third row: Actions (hide for pending tab) -->
         ${scheduleTab === 'confirmed' ? `
         <div class="flex gap-2">
-          <button onclick="renderSchedulesPage()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+          <button data-schedule-read-action="reload" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
             <i class="fas fa-sync-alt mr-2"></i>データ更新
           </button>
-          <button onclick="clearScheduleFilters()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">
+          <button data-schedule-read-action="clear" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">
             <i class="fas fa-times mr-2"></i>フィルタークリア
           </button>
         </div>
@@ -12919,7 +12919,7 @@ function renderVQDiagnosisHistoryRows() {
         </td>
         <td class="px-6 py-4 text-sm text-gray-900">
           <button 
-            onclick="showStudentVQHistory('${studentIdCode}')"
+            data-student-history-action="vq" data-student-history-id="${escapeHtml(studentIdCode).replace(/"/g, '&quot;')}"
             class="text-blue-600 hover:underline font-mono"
             title="この生徒の全履歴を表示"
           >
@@ -13028,14 +13028,14 @@ function escapeHtml(text) {
  */
 async function showStudentVQHistory(studentId) {
   try {
-    console.log('VQ診断履歴取得開始:', studentId);
+
     
     const response = await axios.get(
       `${API_BASE}/api/vq-diagnosis/student/${studentId}`,
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     
-    console.log('VQ診断API レスポンス:', response.data);
+
     
     const history = response.data.history || [];
     
@@ -13049,14 +13049,15 @@ async function showStudentVQHistory(studentId) {
     // モーダルで表示
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.setAttribute('data-student-vq-history', '');
     modal.innerHTML = `
       <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div class="p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
           <h3 class="text-xl font-bold text-gray-800">
             <i class="fas fa-history mr-2 text-purple-600"></i>
-            ${history[0].student_name} さんの診断履歴（全${history.length}件）
+            ${escapeHtml(history[0].student_name)} さんの診断履歴（全${history.length}件）
           </h3>
-          <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
+          <button data-student-history-action="close-vq" class="text-gray-500 hover:text-gray-700">
             <i class="fas fa-times text-2xl"></i>
           </button>
         </div>
@@ -13174,7 +13175,7 @@ async function showStudentVQHistory(studentId) {
         
         <div class="p-6 border-t border-gray-200 bg-gray-50">
           <button 
-            onclick="this.closest('.fixed').remove()" 
+            data-student-history-action="close-vq"
             class="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
           >
             閉じる
@@ -13191,7 +13192,7 @@ async function showStudentVQHistory(studentId) {
     }, 100);
     
   } catch (error) {
-    console.error('生徒別履歴取得エラー:', error);
+    console.error('生徒別履歴取得エラー');
     showNotification('履歴の取得に失敗しました', 'error');
   }
 }
@@ -19122,10 +19123,10 @@ async function renderMinutesPage() {
     <div class="max-w-4xl mx-auto px-4 py-6">
       <div class="flex items-center gap-3 mb-6">
         ${minutesCurrentStudentId
-          ? `<button onclick="minutesCurrentStudentId=null; minutesCurrentStudentName=null; renderMinutesPage()" class="text-gray-500 hover:text-gray-700">
+          ? `<button data-minutes-read-action="all-students" class="text-gray-500 hover:text-gray-700">
                <i class="fas fa-arrow-left text-lg"></i>
              </button>`
-          : `<button onclick="changePage('students')" class="text-gray-500 hover:text-gray-700">
+          : `<button data-minutes-read-action="back-students" class="text-gray-500 hover:text-gray-700">
                <i class="fas fa-arrow-left text-lg"></i>
              </button>`
         }
@@ -19146,12 +19147,12 @@ async function renderMinutesPage() {
           <input id="minutes-student-input" type="text"
                  placeholder="学籍番号または生徒名を入力"
                  class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
-          <button onclick="minutesSearchStudent()"
+          <button data-minutes-read-action="search"
                   class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-search mr-1"></i>検索
           </button>
           ${minutesCurrentStudentId
-            ? `<button onclick="minutesCurrentStudentId=null; minutesCurrentStudentName=null; renderMinutesPage()"
+            ? `<button data-minutes-read-action="all-students"
                        class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">
                  <i class="fas fa-times mr-1"></i>全件表示
                </button>`
@@ -19238,14 +19239,14 @@ async function renderMinutesPage() {
       <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between px-6 py-4 border-b">
           <h3 class="text-lg font-bold text-gray-800" id="minutes-modal-title">議事録</h3>
-          <button onclick="closeMinutesModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+          <button data-minutes-read-action="close-detail" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
         </div>
         <div class="flex border-b px-6 pt-3 gap-2">
-          <button id="minutes-detail-tab-text" onclick="switchMinutesDetailTab('text')"
+          <button id="minutes-detail-tab-text" data-minutes-read-action="detail-tab" data-minutes-tab="text"
                   class="px-4 py-2 text-sm font-semibold border-b-2 border-teal-600 text-teal-700">
             <i class="fas fa-file-alt mr-1"></i>議事録本文
           </button>
-          <button id="minutes-detail-tab-quality" onclick="switchMinutesDetailTab('quality')"
+          <button id="minutes-detail-tab-quality" data-minutes-read-action="detail-tab" data-minutes-tab="quality"
                   class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
             <i class="fas fa-clipboard-check mr-1"></i>品質評価
           </button>
@@ -19261,7 +19262,7 @@ async function renderMinutesPage() {
           <button id="minutes-modal-save-btn" onclick="saveMinutesEdit()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-save mr-1"></i>保存
           </button>
-          <button onclick="closeMinutesModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
+          <button data-minutes-read-action="close-detail" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
         </div>
       </div>
     </div>
@@ -19416,11 +19417,11 @@ function renderMinutesList() {
   container.innerHTML = `
     <div class="bg-white rounded-lg shadow divide-y">
       ${minutesListCache.map(m => `
-        <div class="px-5 py-4 flex items-center gap-4 hover:bg-gray-50 cursor-pointer" onclick="openMinutesDetail(${m.id})">
+        <div class="px-5 py-4 flex items-center gap-4 hover:bg-gray-50 cursor-pointer" data-minutes-read-action="detail" data-minutes-id="${escapeHtml(String(m.id)).replace(/"/g, '&quot;')}">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               ${showStudentName && m.student_name
-                ? `<button onclick="event.stopPropagation(); minutesCurrentStudentId='${m.student_id}'; minutesCurrentStudentName='${escapeHtml(m.student_name||'')}'; renderMinutesPage()"
+                ? `<button data-minutes-read-action="select-student" data-minutes-student-id="${escapeHtml(m.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(m.student_name||'').replace(/"/g, '&quot;')}"
                           class="font-semibold text-teal-700 hover:text-teal-900 hover:underline text-sm">
                      ${escapeHtml(m.student_name)}様
                    </button>
@@ -19433,7 +19434,7 @@ function renderMinutesList() {
             <p class="text-sm text-gray-600 mt-1 line-clamp-2">${escapeHtml((m.preview || '').replace(/\n/g, ' '))}</p>
           </div>
           <div class="flex gap-2 flex-shrink-0">
-            <button onclick="event.stopPropagation(); openMinutesDetail(${m.id})"
+            <button data-minutes-read-action="detail" data-minutes-id="${escapeHtml(String(m.id)).replace(/"/g, '&quot;')}"
                     class="px-3 py-1.5 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">
               <i class="fas fa-eye mr-1"></i>表示
             </button>
@@ -19692,7 +19693,7 @@ async function minutesSearchStudent() {
     return;
   }
   results.innerHTML = `<div class="flex flex-wrap gap-2 mt-1">${matched.map(s => `
-    <button onclick="minutesCurrentStudentId='${s.student_id}'; minutesCurrentStudentName='${escapeHtml(s.name||'')}'; renderMinutesPage()"
+    <button data-minutes-read-action="select-student" data-minutes-student-id="${escapeHtml(s.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(s.name||'').replace(/"/g, '&quot;')}"
             class="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs hover:bg-teal-200">
       ${escapeHtml(s.name || s.student_id)} (${s.student_id})
     </button>`).join('')}</div>`;
