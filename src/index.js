@@ -141,6 +141,11 @@ app.get('/', (c) => {
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
         <script src="/app.js?v=${Date.now()}"></script>
         <script src="/extension-review.js?v=${Date.now()}"></script>
+        <script src="/navigation-events.js?v=${Date.now()}"></script>
+        <script src="/today-events.js?v=${Date.now()}"></script>
+        <script src="/extension-stats-events.js?v=${Date.now()}"></script>
+        <script src="/funnel-events.js?v=${Date.now()}"></script>
+        <script src="/lesson-report-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
