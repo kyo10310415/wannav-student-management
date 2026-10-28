@@ -1608,7 +1608,7 @@ function renderReservationsPage() {
         <button onclick="sendReminders()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
           <i class="fas fa-bell mr-2"></i>リマインド送信
         </button>
-        <button onclick="openHelperRequestModal()" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
+        <button data-helper-prepare-action="open" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
           <i class="fas fa-hand-paper mr-2"></i>助っ人Tutor依頼
         </button>
       </div>
@@ -5246,21 +5246,13 @@ function getLessonReportButton(studentId, lessonDate, studentName, tutorName) {
   const reportKey = `${studentId}-${lessonDate}`;
   const hasReport = lessonReportStatus[reportKey];
   
-  // Debug logging
-  if (window.debugLessonReport) {
-    console.log(`🔍 Button check - studentId: ${studentId}, lessonDate: ${lessonDate}`);
-    console.log(`🔍 Report key: ${reportKey}`);
-    console.log(`🔍 Has report:`, hasReport);
-    console.log(`🔍 All report keys:`, Object.keys(lessonReportStatus));
-  }
-  
-  const escapedName = (studentName || '').replace(/'/g, "\\'");
-  const escapedTutor = (tutorName || '').replace(/'/g, "\\'");
-  
+  const attribute = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
+  const reportAttributes = `data-report-prepare-action="open" data-report-student-id="${attribute(studentId)}" data-report-date="${attribute(lessonDate)}" data-report-student-name="${attribute(studentName)}" data-report-tutor-name="${attribute(tutorName)}"`;
+
   if (hasReport) {
     // 提出済み - 青色で表示
     return `
-      <button onclick="showLessonReportModal('${studentId}', '${lessonDate}', '${escapedName}', '${escapedTutor}')" 
+      <button ${reportAttributes}
               class="px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition"
               title="提出済み（クリックで編集可能）">
         <i class="fas fa-check-circle mr-1"></i>提出済み
@@ -5269,7 +5261,7 @@ function getLessonReportButton(studentId, lessonDate, studentName, tutorName) {
   } else {
     // 未提出 - 緑色で表示
     return `
-      <button onclick="showLessonReportModal('${studentId}', '${lessonDate}', '${escapedName}', '${escapedTutor}')" 
+      <button ${reportAttributes}
               class="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition">
         <i class="fas fa-clipboard-check mr-1"></i>報告
       </button>
@@ -5786,7 +5778,7 @@ function openHelperRequestModal() {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-hand-paper mr-2 text-orange-600"></i>助っ人Tutor依頼
         </h2>
-        <button onclick="closeHelperRequestModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-helper-prepare-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -5797,7 +5789,7 @@ function openHelperRequestModal() {
           </label>
           <input type="date" id="helper-date-input" 
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            onchange="loadLessonsForDate()">
+            data-helper-prepare-date>
         </div>
         <div id="lessons-list-container" class="hidden">
           <div class="mb-4">
@@ -5807,7 +5799,7 @@ function openHelperRequestModal() {
             <input type="text" id="lesson-search-input" 
               placeholder="生徒名を入力..."
               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              oninput="filterLessons()">
+              data-helper-prepare-search>
           </div>
           <div class="mb-4">
             <h3 class="text-lg font-semibold text-gray-800 mb-3">レッスン一覧</h3>
@@ -5861,14 +5853,6 @@ async function loadLessonsForDate() {
     
     console.log(`API Response: ${res.data.data.length} lessons found`);
     
-    // Debug: Show first 3 lessons
-    if (res.data.data.length > 0) {
-      res.data.data.slice(0, 3).forEach(lesson => {
-        const dateStr = lesson.lesson_date.split('T')[0];
-        console.log(`Sample lesson - Student: ${lesson.student_id}, Date: ${dateStr}`);
-      });
-    }
-    
     // Update lessonDates with the selected month's data
     res.data.data.forEach(lesson => {
       if (!lessonDates[lesson.student_id]) {
@@ -5892,7 +5876,7 @@ async function loadLessonsForDate() {
     
     console.log(`Loaded ${res.data.data.length} lessons for ${year}/${month}`);
   } catch (error) {
-    console.error('Error loading lesson dates:', error);
+    console.error('Error loading lesson dates');
   }
   
   // Filter students who have lessons on this date
@@ -5902,13 +5886,6 @@ async function loadLessonsForDate() {
   console.log('Total students:', students.length);
   console.log('Students with lesson dates:', Object.keys(lessonDates).length);
   
-  // Debug: Show first 3 students with lesson dates
-  const studentIdsWithDates = Object.keys(lessonDates).slice(0, 3);
-  studentIdsWithDates.forEach(studentId => {
-    const dates = lessonDates[studentId].map(d => d.formatted).join(', ');
-    console.log(`Sample - Student ${studentId}: [${dates}]`);
-  });
-  
   const lessonsOnDate = students.filter(student => {
     const lessonDatesArray = lessonDates[student.student_id];
     if (!lessonDatesArray || !Array.isArray(lessonDatesArray)) return false;
@@ -5917,10 +5894,6 @@ async function loadLessonsForDate() {
     const hasLesson = lessonDatesArray.some(lessonDate => {
       return lessonDate.formatted === formattedSelectedDate;
     });
-    
-    if (hasLesson) {
-      console.log(`✓ Student ${student.student_id} (${student.name}) has lesson on ${formattedSelectedDate}`);
-    }
     
     return hasLesson;
   });
@@ -5949,16 +5922,16 @@ function displayLessonsList(lessons) {
     const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
     return `
       <div class="lesson-item p-4 border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition"
-        onclick="selectLesson('${student.student_id}')">
+        data-helper-prepare-action="select" data-helper-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}">
         <div class="flex justify-between items-start">
           <div>
-            <div class="font-semibold text-gray-800">${student.name}</div>
-            <div class="text-sm text-gray-600">学籍番号: ${student.student_id}</div>
-            <div class="text-sm text-gray-600">担任Tutor: ${getTutorDisplayName(student.homeroom_tutor)}</div>
+            <div class="font-semibold text-gray-800">${escapeHtml(student.name)}</div>
+            <div class="text-sm text-gray-600">学籍番号: ${escapeHtml(student.student_id)}</div>
+            <div class="text-sm text-gray-600">担任Tutor: ${escapeHtml(getTutorDisplayName(student.homeroom_tutor))}</div>
             <div class="text-sm text-gray-600">レッスン進捗: ${student.lesson_progress === 'Proプラン' ? 'Proプラン' : (student.lesson_progress ? `${student.lesson_progress}回` : '0回')}</div>
           </div>
           <div class="flex gap-2">
-            <a href="${notionUrl}" target="_blank" onclick="event.stopPropagation()" 
+            <a href="${escapeHtml(notionUrl).replace(/"/g, '&quot;')}" target="_blank" data-helper-prepare-link
               class="text-blue-600 hover:text-blue-800">
               <i class="fas fa-external-link-alt"></i>
             </a>
@@ -6018,7 +5991,7 @@ function showHelperRequestForm() {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-hand-paper mr-2 text-orange-600"></i>助っ人Tutor依頼 - 詳細入力
         </h2>
-        <button onclick="closeHelperRequestModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-helper-prepare-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -6026,10 +5999,10 @@ function showHelperRequestForm() {
         <div class="bg-blue-50 p-4 rounded-lg mb-6">
           <h3 class="font-semibold text-gray-800 mb-2">選択されたレッスン</h3>
           <div class="text-sm">
-            <p><span class="font-medium">レッスン日:</span> ${helperRequestData.selectedDate}</p>
-            <p><span class="font-medium">生徒名:</span> ${student.name}</p>
-            <p><span class="font-medium">学籍番号:</span> ${student.student_id}</p>
-            <p><span class="font-medium">担任Tutor:</span> ${getTutorDisplayName(student.homeroom_tutor)}</p>
+            <p><span class="font-medium">レッスン日:</span> ${escapeHtml(helperRequestData.selectedDate)}</p>
+            <p><span class="font-medium">生徒名:</span> ${escapeHtml(student.name)}</p>
+            <p><span class="font-medium">学籍番号:</span> ${escapeHtml(student.student_id)}</p>
+            <p><span class="font-medium">担任Tutor:</span> ${escapeHtml(getTutorDisplayName(student.homeroom_tutor))}</p>
             <p><span class="font-medium">レッスン進捗:</span> ${student.lesson_progress === 'Proプラン' ? 'Proプラン' : (student.lesson_progress ? `${student.lesson_progress}回` : '0回')}</p>
           </div>
         </div>
@@ -6074,11 +6047,11 @@ function showHelperRequestForm() {
         </div>
         
         <div class="mt-6 flex gap-3 justify-end">
-          <button onclick="showHelperRequestConfirmation()" 
+          <button data-helper-prepare-action="confirm"
             class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
             <i class="fas fa-check mr-2"></i>確認画面へ
           </button>
-          <button onclick="closeHelperRequestModal()" 
+          <button data-helper-prepare-action="close"
             class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
             <i class="fas fa-times mr-2"></i>キャンセル
           </button>
@@ -6131,7 +6104,7 @@ function showHelperRequestConfirmation() {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-hand-paper mr-2 text-orange-600"></i>助っ人Tutor依頼 - 確認
         </h2>
-        <button onclick="closeHelperRequestModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-helper-prepare-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -6142,7 +6115,7 @@ function showHelperRequestConfirmation() {
           <div class="grid grid-cols-2 gap-4">
             <div>
               <p class="text-sm text-gray-600">レッスン日</p>
-              <p class="font-semibold">${helperRequestData.selectedDate}</p>
+              <p class="font-semibold">${escapeHtml(helperRequestData.selectedDate)}</p>
             </div>
             <div>
               <p class="text-sm text-gray-600">レッスン時間</p>
@@ -6153,25 +6126,25 @@ function showHelperRequestConfirmation() {
           <div class="grid grid-cols-2 gap-4">
             <div>
               <p class="text-sm text-gray-600">生徒名</p>
-              <p class="font-semibold">${student.name}</p>
+              <p class="font-semibold">${escapeHtml(student.name)}</p>
             </div>
             <div>
               <p class="text-sm text-gray-600">学籍番号</p>
-              <p class="font-semibold">${student.student_id}</p>
+              <p class="font-semibold">${escapeHtml(student.student_id)}</p>
             </div>
           </div>
           
           <div>
             <p class="text-sm text-gray-600">NotionページURL</p>
-            <a href="${notionUrl}" target="_blank" class="text-blue-600 hover:underline break-all">
-              ${notionUrl}
+            <a href="${escapeHtml(notionUrl).replace(/"/g, '&quot;')}" target="_blank" class="text-blue-600 hover:underline break-all">
+              ${escapeHtml(notionUrl)}
             </a>
           </div>
           
           <div class="grid grid-cols-2 gap-4">
             <div>
               <p class="text-sm text-gray-600">依頼Tutor</p>
-              <p class="font-semibold">${getTutorDisplayName(student.homeroom_tutor)}</p>
+              <p class="font-semibold">${escapeHtml(getTutorDisplayName(student.homeroom_tutor))}</p>
             </div>
             <div>
               <p class="text-sm text-gray-600">レッスン進捗</p>
@@ -6181,13 +6154,13 @@ function showHelperRequestConfirmation() {
           
           <div>
             <p class="text-sm text-gray-600">依頼理由</p>
-            <p class="font-semibold whitespace-pre-wrap">${reason}</p>
+            <p class="font-semibold whitespace-pre-wrap">${escapeHtml(reason)}</p>
           </div>
           
           ${notes ? `
           <div>
             <p class="text-sm text-gray-600">備考</p>
-            <p class="font-semibold whitespace-pre-wrap">${notes}</p>
+            <p class="font-semibold whitespace-pre-wrap">${escapeHtml(notes)}</p>
           </div>
           ` : ''}
           
@@ -6209,7 +6182,7 @@ function showHelperRequestConfirmation() {
             class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
             <i class="fas fa-paper-plane mr-2"></i>依頼を確定する
           </button>
-          <button onclick="showHelperRequestForm()" 
+          <button data-helper-prepare-action="back"
             class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
             <i class="fas fa-arrow-left mr-2"></i>戻る
           </button>
@@ -13666,16 +13639,16 @@ function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
             <i class="fas fa-clipboard-check mr-2 text-green-600"></i>
             レッスン報告
           </h2>
-          <button onclick="closeLessonReportModal()" class="text-gray-400 hover:text-gray-600 transition">
+          <button data-report-prepare-action="close" class="text-gray-400 hover:text-gray-600 transition">
             <i class="fas fa-times text-2xl"></i>
           </button>
         </div>
         
         <div class="mb-6 p-4 bg-blue-50 rounded-lg">
-          <p class="text-sm text-gray-600">学籍番号: <span class="font-semibold">${studentId}</span></p>
-          <p class="text-sm text-gray-600">生徒名: <span class="font-semibold">${studentName}</span></p>
-          <p class="text-sm text-gray-600">担任Tutor: <span class="font-semibold">${tutorName}</span></p>
-          <p class="text-sm text-gray-600">レッスン日: <span class="font-semibold">${lessonDate}</span></p>
+          <p class="text-sm text-gray-600">学籍番号: <span class="font-semibold">${escapeHtml(studentId)}</span></p>
+          <p class="text-sm text-gray-600">生徒名: <span class="font-semibold">${escapeHtml(studentName)}</span></p>
+          <p class="text-sm text-gray-600">担任Tutor: <span class="font-semibold">${escapeHtml(tutorName)}</span></p>
+          <p class="text-sm text-gray-600">レッスン日: <span class="font-semibold">${escapeHtml(lessonDate)}</span></p>
         </div>
         
         <form id="lessonReportForm" class="space-y-6">
@@ -13698,7 +13671,7 @@ function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
             <label class="block text-sm font-semibold text-gray-700 mb-2">
               レッスン番号 <span class="text-red-600">*</span>
             </label>
-            <select id="lessonNumber" required onchange="toggleProFields()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            <select id="lessonNumber" required data-report-pro-fields class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
               <option value="">選択してください</option>
               ${Array.from({length: 28}, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
               <option value="PROプラン">PROプラン</option>
@@ -13738,7 +13711,7 @@ function showLessonReportModal(studentId, lessonDate, studentName, tutorName) {
           
           <!-- ボタン -->
           <div class="flex gap-3 pt-4">
-            <button type="button" onclick="closeLessonReportModal()" class="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition">
+            <button type="button" data-report-prepare-action="close" class="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-400 transition">
               キャンセル
             </button>
             <button type="submit" class="flex-1 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
@@ -17195,7 +17168,7 @@ async function renderHandoverPage() {
         <i class="fas fa-lock text-6xl text-red-400 mb-4"></i>
         <h2 class="text-2xl font-bold text-gray-700 mb-2">アクセス権限がありません</h2>
         <p class="text-gray-500 mb-6">このページはリーダー以上のみ閲覧できます。</p>
-        <button onclick="changePage('today')" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+        <button data-handover-read-action="back-today" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
           <i class="fas fa-home mr-2"></i>ホームに戻る
         </button>
       </div>`;
@@ -17233,7 +17206,7 @@ async function renderHandoverPage() {
       <div class="text-center py-20 text-red-500">
         <i class="fas fa-exclamation-circle text-4xl mb-3"></i>
         <p>データの読み込みに失敗しました。</p>
-        <button onclick="renderHandoverPage()" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg">再試行</button>
+        <button data-handover-read-action="reload" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg">再試行</button>
       </div>`;
     return;
   }
@@ -17265,7 +17238,7 @@ function _renderHandoverLayout() {
                       class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition text-sm">
                 <i class="fas fa-file-spreadsheet mr-1"></i>スプレッドシート出力
               </button>
-              <button onclick="renderHandoverPage()" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+              <button data-handover-read-action="reload" class="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
                 <i class="fas fa-sync-alt mr-1"></i>更新
               </button>
             </div>
@@ -17275,13 +17248,13 @@ function _renderHandoverLayout() {
           <div class="flex gap-2 mb-4 border-b border-gray-200">
             <button
               id="handover-tab-handover"
-              onclick="handoverSwitchTab('handover')"
+              data-handover-read-action="tab" data-handover-tab="handover"
               class="px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 ${handoverActiveTab === 'handover' ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}">
               <i class="fas fa-exchange-alt mr-1"></i>引き継ぎ管理
             </button>
             <button
               id="handover-tab-new"
-              onclick="handoverSwitchTab('new')"
+              data-handover-read-action="tab" data-handover-tab="new"
               class="px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 ${handoverActiveTab === 'new' ? 'border-orange-500 text-orange-700 bg-orange-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}">
               <i class="fas fa-user-plus mr-1"></i>新規割り振り
               ${newAssignStudents.length > 0 ? `<span class="ml-1 inline-block px-1.5 py-0.5 rounded-full text-xs font-bold bg-orange-500 text-white">${newAssignStudents.length}</span>` : ''}
@@ -17295,21 +17268,21 @@ function _renderHandoverLayout() {
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
                 </label>
-                <select id="handover-filter-assigned" onchange="handoverApplyFilter()"
+                <select id="handover-filter-assigned" data-handover-read-filter="handover"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="all">すべて</option>
-                  ${[...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(t => t && assignableNotionNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+                  ${[...new Set(handoverStudents.map(s => s.homeroom_tutor).filter(t => t && assignableNotionNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t).replace(/"/g, '&quot;')}" ${handoverFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
                 </select>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   <i class="fas fa-filter mr-1"></i>引き継ぎ先Tutor 絞り込み
                 </label>
-                <select id="handover-filter-handover" onchange="handoverApplyFilter()"
+                <select id="handover-filter-handover" data-handover-read-filter="handover"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                   <option value="all">すべて</option>
                   <option value="__empty__" ${handoverFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
-                  ${[...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(t => t && assignableTutorNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+                  ${[...new Set(handoverStudents.map(s => s.handover_tutor_name).filter(t => t && assignableTutorNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t).replace(/"/g, '&quot;')}" ${handoverFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
                 </select>
               </div>
             </div>
@@ -17322,7 +17295,7 @@ function _renderHandoverLayout() {
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   <i class="fas fa-calendar-alt mr-1"></i>対象開始月
                 </label>
-                <select id="new-assign-month" onchange="newAssignChangeMonth(this.value)"
+                <select id="new-assign-month" data-handover-read-filter="month"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
                   <option value="current" ${newAssignMonth === 'current' ? 'selected' : ''}>今月</option>
                   <option value="next" ${newAssignMonth === 'next' ? 'selected' : ''}>来月</option>
@@ -17332,21 +17305,21 @@ function _renderHandoverLayout() {
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   <i class="fas fa-filter mr-1"></i>担当Tutor 絞り込み
                 </label>
-                <select id="new-assign-filter-assigned" onchange="newAssignApplyFilter()"
+                <select id="new-assign-filter-assigned" data-handover-read-filter="new"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
                   <option value="all">すべて</option>
-                  ${[...new Set(newAssignStudents.map(s => s.homeroom_tutor).filter(t => t && assignableNotionNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
+                  ${[...new Set(newAssignStudents.map(s => s.homeroom_tutor).filter(t => t && assignableNotionNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t).replace(/"/g, '&quot;')}" ${newAssignFilterAssigned === t ? 'selected' : ''}>${escapeHtml(getTutorDisplayName(t))}</option>`).join('')}
                 </select>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">
                   <i class="fas fa-filter mr-1"></i>引き継ぎ先Tutor 絞り込み
                 </label>
-                <select id="new-assign-filter-handover" onchange="newAssignApplyFilter()"
+                <select id="new-assign-filter-handover" data-handover-read-filter="new"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
                   <option value="all">すべて</option>
                   <option value="__empty__" ${newAssignFilterHandover === '__empty__' ? 'selected' : ''}>未設定</option>
-                  ${[...new Set(newAssignStudents.map(s => s.handover_tutor_name).filter(t => t && assignableTutorNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t)}" ${newAssignFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+                  ${[...new Set(newAssignStudents.map(s => s.handover_tutor_name).filter(t => t && assignableTutorNames.has(t)))].sort().map(t => `<option value="${escapeHtml(t).replace(/"/g, '&quot;')}" ${newAssignFilterHandover === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
                 </select>
               </div>
             </div>
@@ -17427,7 +17400,7 @@ function _handoverTh(col, label) {
     : 'fa-sort text-gray-400';
   return `
     <th class="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 transition"
-        onclick="handoverSort('${col}')">
+        data-handover-read-action="sort" data-handover-column="${escapeHtml(col).replace(/"/g, '&quot;')}">
       ${label} <i class="fas ${icon} ml-1"></i>
     </th>`;
 }
@@ -17439,7 +17412,7 @@ function _newAssignTh(col, label) {
     : 'fa-sort text-gray-400';
   return `
     <th class="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-orange-100 transition"
-        onclick="newAssignSort('${col}')">
+        data-handover-read-action="sort-new" data-handover-column="${escapeHtml(col).replace(/"/g, '&quot;')}">
       ${label} <i class="fas ${icon} ml-1"></i>
     </th>`;
 }
@@ -17771,7 +17744,7 @@ function _refreshHandoverTable() {
   // Re-render th headers so sort arrows update
   const table = tbody ? tbody.closest('table') : null;
   if (table) {
-    const headers = table.querySelectorAll('thead th[onclick]');
+    const headers = table.querySelectorAll('thead th[data-handover-read-action="sort"]');
     const cols = ['student_id', 'name', 'lesson_progress', 'homeroom_tutor', 'expected_progress'];
     const labels = ['学籍番号', '生徒名', 'レッスン進捗', '担当Tutor', '予想進捗'];
     headers.forEach((th, i) => {
@@ -17846,7 +17819,7 @@ function _refreshNewAssignTable() {
   // Re-render th headers
   const table = tbody ? tbody.closest('table') : null;
   if (table) {
-    const headers = table.querySelectorAll('thead th[onclick]');
+    const headers = table.querySelectorAll('thead th[data-handover-read-action="sort-new"]');
     const cols   = ['lesson_start_date', 'student_id', 'name', 'lesson_progress', 'homeroom_tutor', 'expected_progress'];
     const labels = ['レッスン開始月', '学籍番号', '生徒名', 'レッスン進捗', '担当Tutor', '予想進捗'];
     headers.forEach((th, i) => {
@@ -18663,7 +18636,7 @@ function _renderDailyReportsContent() {
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-semibold">
                     ${canClick
-                      ? `<button class="text-purple-600 hover:underline" onclick="openDailyReportHistory(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}')">
+                      ? `<button class="text-purple-600 hover:underline" data-daily-history-action="open" data-daily-tutor-id="${t.tutor_id}" data-daily-tutor-name="${escapeHtml(t.tutor_name).replace(/"/g, '&quot;')}">
                            ${t.tutor_name}
                          </button>`
                       : `<span class="text-gray-500">${t.tutor_name}</span>`
@@ -18731,7 +18704,7 @@ function _renderDailyReportsContent() {
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
           <h3 id="drHistoryTitle" class="text-lg font-bold text-gray-800"></h3>
-          <button onclick="closeDailyReportHistory()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          <button data-daily-history-action="close" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
         <div id="drHistoryBody" class="overflow-y-auto flex-1 px-6 py-4 space-y-4"></div>
         <div id="drHistoryPager" class="px-6 py-3 border-t flex-shrink-0 flex justify-center gap-3"></div>
@@ -18837,7 +18810,7 @@ const DR_PAGE_SIZE = 5;
 async function openDailyReportHistory(tutorId, tutorName) {
   dailyReportViewTutorId = tutorId;
   document.getElementById('drHistoryTitle').innerHTML =
-    `<i class="fas fa-history mr-2 text-purple-600"></i>${tutorName} の日報履歴`;
+    `<i class="fas fa-history mr-2 text-purple-600"></i>${escapeHtml(tutorName)} の日報履歴`;
   document.getElementById('dailyReportHistoryModal').classList.remove('hidden');
   document.getElementById('drHistoryBody').innerHTML =
     '<div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
@@ -18868,7 +18841,7 @@ async function loadDailyReportHistory(tutorId, offset) {
     _renderDailyReportHistoryBody();
     _renderDailyReportHistoryPager();
   } catch (e) {
-    console.error('[DailyReports] load history error:', e);
+    console.error('[DailyReports] load history error');
     document.getElementById('drHistoryBody').innerHTML =
       '<div class="text-center py-8 text-red-400">読み込みに失敗しました</div>';
   }
@@ -18957,13 +18930,13 @@ function _renderDailyReportHistoryPager() {
   if (totalPages <= 1) { pager.innerHTML = ''; return; }
 
   pager.innerHTML = `
-    <button onclick="loadDailyReportHistory(${dailyReportViewTutorId}, ${Math.max(0, offset - DR_PAGE_SIZE)})"
+    <button data-daily-history-action="page" data-daily-tutor-id="${dailyReportViewTutorId}" data-daily-offset="${Math.max(0, offset - DR_PAGE_SIZE)}"
             ${currentPageIdx === 0 ? 'disabled' : ''}
             class="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed">
       <i class="fas fa-chevron-left"></i> 前
     </button>
     <span class="text-sm text-gray-500 self-center">${currentPageIdx + 1} / ${totalPages}</span>
-    <button onclick="loadDailyReportHistory(${dailyReportViewTutorId}, ${offset + DR_PAGE_SIZE})"
+    <button data-daily-history-action="page" data-daily-tutor-id="${dailyReportViewTutorId}" data-daily-offset="${offset + DR_PAGE_SIZE}"
             ${currentPageIdx >= totalPages - 1 ? 'disabled' : ''}
             class="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed">
       次 <i class="fas fa-chevron-right"></i>
@@ -19713,7 +19686,7 @@ async function renderLessonContentsPage() {
         <h1 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-book-open mr-2 text-teal-600"></i>レッスン内容管理
         </h1>
-        <button onclick="showAddLessonContentForm()"
+        <button data-content-local-action="show-add"
                 class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700">
           <i class="fas fa-plus mr-1"></i>追加
         </button>
@@ -19743,7 +19716,7 @@ async function renderLessonContentsPage() {
           <button onclick="addLessonContent()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-save mr-1"></i>保存
           </button>
-          <button onclick="document.getElementById('lc-add-form').classList.add('hidden')"
+          <button data-content-local-action="hide-add"
                   class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">キャンセル</button>
         </div>
       </div>
@@ -19786,7 +19759,7 @@ function renderLessonContentsList() {
   container.innerHTML = `
     <div class="bg-white rounded-lg shadow divide-y">
       ${lessonContentsCache.map(lc => {
-        const lessonNumber = escapeHtml(String(lc.lesson_number));
+        const lessonNumber = escapeHtml(String(lc.lesson_number)).replace(/"/g, '&quot;');
         return `
         <div class="px-5 py-4" id="lc-row-${lessonNumber}">
           <div class="flex items-start gap-3">
@@ -19799,20 +19772,20 @@ function renderLessonContentsList() {
                 <p class="text-sm text-gray-600 mt-1 whitespace-pre-wrap">${escapeHtml(lc.content || '')}</p>
               </div>
               <div id="lc-edit-${lessonNumber}" class="hidden">
-                <input id="lc-edit-title-${lessonNumber}" type="text" value="${escapeHtml(lc.title || '')}"
+                <input id="lc-edit-title-${lessonNumber}" type="text" value="${escapeHtml(lc.title || '').replace(/"/g, '&quot;')}"
                        class="w-full border rounded px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-teal-400">
                 <textarea id="lc-edit-content-${lessonNumber}" rows="4"
                           class="w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-teal-400 resize-y">${escapeHtml(lc.content || '')}</textarea>
                 <div class="flex gap-2 mt-2">
                   <button data-lesson-number="${lessonNumber}" onclick="saveLessonContent(this.dataset.lessonNumber)"
                           class="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">保存</button>
-                  <button data-lesson-number="${lessonNumber}" onclick="cancelEditLessonContent(this.dataset.lessonNumber)"
+                  <button data-lesson-number="${lessonNumber}" data-content-local-action="cancel"
                           class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">キャンセル</button>
                 </div>
               </div>
             </div>
             <div class="flex gap-1 flex-shrink-0">
-              <button data-lesson-number="${lessonNumber}" onclick="editLessonContent(this.dataset.lessonNumber)"
+              <button data-lesson-number="${lessonNumber}" data-content-local-action="edit"
                       class="p-1.5 text-gray-400 hover:text-teal-600" title="編集">
                 <i class="fas fa-edit text-sm"></i>
               </button>

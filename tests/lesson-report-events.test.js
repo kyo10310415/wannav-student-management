@@ -23,7 +23,7 @@ test('report read markup migrates exactly seven controls and preserves existing 
   assert.equal((reportSource.match(/data-report-read-action=/g)||[]).length,7);
   assert.equal(/onclick="(?:searchLessonReports|setQuickFilter|clearReportFilters)/.test(reportSource),false);
   assert.equal((reportSource.match(/\.addEventListener\('(change|input)'/g)||[]).length,5);
-  assert.ok(appSource.includes('onclick="showLessonReportModal('));
+  assert.ok(appSource.includes('data-report-prepare-action="open"'));
 });
 test('report read dispatcher allows only fixed search/filter/page actions and exact period values',async()=>{
   const f=fixture();f.stub();assert.equal(f.listeners.length,1);
