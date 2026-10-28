@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { inspect } from 'node:util';
 let sequence = 0;
-async function fixture({ role = 'crew', missing = false, duplicate = false, fail = false, noTargets = false, notFound = false, failActive = false } = {}) {
+async function fixture({ role = 'crew', missing = false, duplicate = false, fail = false, noTargets = false, notFound = false, failActive = false, deliveryFail = false } = {}) {
   const queries = [], sends = [], logs = [];
   const owner = 'owner@example.invalid';
   const schedule = { id: 42, name: 'SYNTHETIC_PRIVATE', content: 'SYNTHETIC_PRIVATE', channel_type: 'discord', target_status: 'active', target_tutor: 'all', created_by: owner };
@@ -19,7 +19,7 @@ async function fixture({ role = 'crew', missing = false, duplicate = false, fail
   const targetSource = broadcast.slice(broadcast.indexOf('export async function getTargetStudents'), broadcast.indexOf('// ─── タイムアウト付き'));
   const source = (await readFile(new URL('../src/services/schedulerService.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
   const key = 'scheduledAuthority' + sequence++;
-  globalThis[key] = { query, console: quiet, sendBroadcast: async (...args) => { sends.push(args); return { results: { sent: args[1].length, failed: 0 } }; } };
+  globalThis[key] = { query, console: quiet, sendBroadcast: async (...args) => { sends.push(args); return { success: !deliveryFail, results: { sent: args[1].length, failed: 0 } }; } };
   try {
     const module = await import('data:text/javascript;base64,' + Buffer.from(`const { query, console, sendBroadcast } = globalThis[${JSON.stringify(key)}];\n${targetSource.replace('export async function', 'async function')}\n${source}`).toString('base64'));
     return { module, queries, sends, logs };
@@ -77,4 +77,13 @@ test('cron conversion retains existing weekly biweekly monthly behavior and vali
   assert.equal(module.parseCronExpression('30 09 1-7 * 2').frequency, 'monthly');
   assert.throws(() => module.generateCronExpression('invalid', '2', '09:30'));
   assert.throws(() => module.parseCronExpression('invalid'));
+});
+
+
+test('failed asynchronous delivery does not advance scheduled last_sent_at', async () => {
+  const f = await fixture({ deliveryFail: true });
+  const result = await f.module.executeScheduledBroadcast(42);
+  assert.equal(result.success, false);
+  assert.equal(f.sends.length, 1);
+  assert.equal(f.queries.some(item => item.sql.includes('UPDATE broadcast_messages')), false);
 });

@@ -305,6 +305,8 @@ export async function enqueueBroadcast(messageData, targetStudents, userEmail, d
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const total = isTest ? 1 : targetStudents.length;
 
+  if (!usesExplicitTargets) await loadBroadcastImage(imageId, userEmail, dependencies.query || query);
+
   const client = await getClientFn();
   let broadcastId;
   try {
@@ -437,16 +439,19 @@ async function insertJobRecipients(client, jobId, students, statuses = new Map()
   );
 }
 
-async function loadBroadcastImage(imageId) {
+async function loadBroadcastImage(imageId, userEmail, queryFn = query) {
   if (!imageId) return null;
-  const result = await query(
-    'SELECT filename, content_type, image_data FROM broadcast_images WHERE image_id = $1',
-    [imageId]
+  const deny = () => Object.assign(new Error('画像を利用できません'), { status: 404 });
+  if (typeof imageId !== 'string' || !/^[a-zA-Z0-9_-]{1,200}$/.test(imageId) || typeof userEmail !== 'string' || !userEmail) throw deny();
+  const userResult = await queryFn('SELECT email, role FROM users WHERE LOWER(email) = LOWER($1)', [userEmail]);
+  if (userResult.rows.length !== 1 || !['admin', 'leader', 'crew'].includes(userResult.rows[0].role)) throw deny();
+  const user = userResult.rows[0];
+  const result = await queryFn(
+    `SELECT filename, content_type, image_data FROM broadcast_images
+     WHERE image_id = $1 AND ($2::boolean OR LOWER(uploaded_by) = LOWER($3))`,
+    [imageId, ['admin', 'leader'].includes(user.role), user.email]
   );
-  if (result.rows.length === 0) {
-    console.warn("[Broadcast] Image not found in database:");
-    return null;
-  }
+  if (!result.rows.length) throw deny();
   return result.rows[0];
 }
 
@@ -496,7 +501,7 @@ function isExplicitGasBroadcastJob(job) {
 
 async function getAuthorizedBroadcastJobTargets(jobId, { crewScopeOnly = false } = {}) {
   const jobResult = await query(
-    `SELECT bj.*, bm.name AS message_name, bm.target_status, bm.target_tutor, bm.channel_type, creator.role AS creator_role, creator.email AS creator_email
+    `SELECT bj.*, bm.name AS message_name, bm.image_url, bm.target_status, bm.target_tutor, bm.channel_type, creator.role AS creator_role, creator.email AS creator_email
      FROM broadcast_jobs bj
      JOIN broadcast_messages bm ON bm.id = bj.broadcast_id
      LEFT JOIN users creator ON LOWER(creator.email) = LOWER(bj.created_by)
@@ -526,6 +531,7 @@ async function getAuthorizedBroadcastJobTargets(jobId, { crewScopeOnly = false }
 
 async function assertBroadcastRecipientAccess(jobId) {
   const { job, targets } = await getAuthorizedBroadcastJobTargets(jobId, { crewScopeOnly: true });
+  if (!isExplicitGasBroadcastJob(job)) await loadBroadcastImage(job.image_url, job.created_by);
   if (job.is_test || isExplicitGasBroadcastJob(job) || job.creator_role !== 'crew') return;
   const recipientResult = await query(
     "SELECT student_id FROM broadcast_job_recipients WHERE job_id = $1 AND status IN ('pending', 'failed')",
@@ -748,7 +754,7 @@ async function _runBroadcastJob(jobId) {
       job.channel_type === 'chat'
     );
 
-    const imageData = await loadBroadcastImage(job.image_url);
+    const imageData = await loadBroadcastImage(job.image_url, job.created_by);
     let broadcastInfoMap = new Map();
     if (!job.is_test && !usesExplicitTargets) {
       console.log("[Broadcast] Loading recipient information");
@@ -963,6 +969,7 @@ export async function getTemplates(userEmail, userRole) {
 export async function saveTemplate(templateData, userEmail) {
   try {
     const { id, name, content, imageUrl, channelType, targetTutor } = templateData;
+    await loadBroadcastImage(imageUrl, userEmail);
     if (id) {
       const result = await query(
         `UPDATE broadcast_messages

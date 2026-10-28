@@ -13,6 +13,7 @@ import {
   getBroadcastLogs
 } from '../services/broadcastService.js';
 import { query } from '../db/connection.js';
+import { limitBroadcastImageUpload } from '../security/uploadBodyLimit.js';
 
 // Images are now stored in database (broadcast_images table)
 // No need for in-memory storage
@@ -31,6 +32,20 @@ function broadcastImageDisposition(inline, filename) {
   return `${inline ? 'inline' : 'attachment'}; filename="image"; filename*=UTF-8''${encoded}`;
 }
 
+
+// Image IDs are references, not permission to read another crew member's upload.
+async function assertBroadcastImageReference(imageId, user) {
+  if (!imageId) return;
+  if (typeof imageId !== 'string' || !/^[a-zA-Z0-9_-]{1,200}$/.test(imageId) || !user || !['admin', 'leader', 'crew'].includes(user.role)) throw Object.assign(new Error('画像を利用できません'), { status: 404 });
+  const result = await query(
+    `SELECT image_id FROM broadcast_images
+     WHERE image_id = $1
+       AND (SELECT COUNT(*) FROM users WHERE LOWER(email) = LOWER($3)) = 1
+       AND ($2::boolean OR LOWER(uploaded_by) = LOWER($3))`,
+    [imageId, ['admin', 'leader'].includes(user.role), user.email]
+  );
+  if (!result.rows.length) throw Object.assign(new Error('画像を利用できません'), { status: 404 });
+}
 
 const SAFE_BROADCAST_ERRORS = new Set([
   'Job not found',
@@ -166,6 +181,8 @@ app.post('/send', async (c) => {
       }, 400);
     }
     
+    await assertBroadcastImageReference(messageData.imageId, user);
+
     // テストモード: 生徒検索をスキップしてすぐにジョブ登録
     if (messageData.isTest) {
       console.log('[Broadcast] Test mode: enqueuing job');
@@ -196,6 +213,7 @@ app.post('/send', async (c) => {
       message: `送信ジョブを開始しました（対象: ${total}名）`
     });
   } catch (error) {
+    if (error?.status === 404) return c.json({ success: false, error: '画像を利用できません' }, 404);
     console.error('Error sending broadcast:');
     return c.json({
       success: false,
@@ -257,6 +275,7 @@ app.post('/templates', async (c) => {
       }, 400);
     }
     
+    await assertBroadcastImageReference(templateData.imageUrl, user);
     const result = await saveTemplate(templateData, user.email);
     
     return c.json({
@@ -464,7 +483,7 @@ app.get('/tutors', async (c) => {
  * POST /api/broadcast/upload-image
  * Store image in database (persistent storage)
  */
-app.post('/upload-image', async (c) => {
+app.post('/upload-image', limitBroadcastImageUpload, async (c) => {
   try {
     const user = c.get('user');
     const body = await c.req.parseBody();
@@ -616,6 +635,8 @@ app.post('/schedules', async (c) => {
       }, 400);
     }
     
+    await assertBroadcastImageReference(scheduleData.imageId, user);
+
     if (scheduleData.id) {
       // Update existing schedule
       const updateResult = await query(
@@ -679,6 +700,7 @@ app.post('/schedules', async (c) => {
       });
     }
   } catch (error) {
+    if (error?.status === 404) return c.json({ success: false, error: '画像を利用できません' }, 404);
     console.error('Error saving schedule:');
     return c.json({
       success: false,
@@ -789,8 +811,11 @@ app.get('/images/:imageId', async (c) => {
     console.log('[Broadcast] Retrieving image from database');
     
     const result = await query(
-      'SELECT filename, content_type, image_data FROM broadcast_images WHERE image_id = $1',
-      [imageId]
+      `SELECT filename, content_type, image_data FROM broadcast_images
+       WHERE image_id = $1
+       AND (SELECT COUNT(*) FROM users WHERE LOWER(email) = LOWER($3)) = 1
+       AND ($2::boolean OR LOWER(uploaded_by) = LOWER($3))`,
+      [imageId, ['admin', 'leader'].includes(c.get('user').role), c.get('user').email]
     );
     
     if (result.rows.length === 0) {
