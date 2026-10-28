@@ -10924,7 +10924,7 @@ async function loadBroadcastLogs() {
       renderBroadcastLogs();
     }
   } catch (error) {
-    console.error('Error loading logs:', error);
+    console.error('Error loading logs');
     const container = document.getElementById('broadcast-logs-container');
     if (container) {
       container.innerHTML = `
@@ -10972,7 +10972,7 @@ function renderBroadcastLogs() {
       <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
         <div class="flex justify-between items-start mb-2">
           <div>
-            <h3 class="font-bold text-gray-800">${firstLog.message_name || 'Broadcast ' + broadcastId}</h3>
+            <h3 class="font-bold text-gray-800">${escapeHtml(firstLog.message_name || 'Broadcast ' + broadcastId)}</h3>
             <p class="text-sm text-gray-600">
               <i class="fas fa-clock mr-1"></i>${new Date(firstLog.sent_at).toLocaleString('ja-JP')}
             </p>
@@ -10994,7 +10994,7 @@ function renderBroadcastLogs() {
           </div>
         </div>
         <div class="flex gap-2 text-xs text-gray-500">
-          <span><i class="fas fa-hashtag mr-1"></i>${firstLog.channel_type}</span>
+          <span><i class="fas fa-hashtag mr-1"></i>${escapeHtml(firstLog.channel_type)}</span>
           <span><i class="fas fa-users mr-1"></i>${totalCount}名</span>
         </div>
       </div>
@@ -16506,6 +16506,13 @@ function onRedListImageSelected(input) {
   const file    = input.files[0];
   const newWrap = document.getElementById('redlist-msg-edit-img-new-wrap');
   const newImg  = document.getElementById('redlist-msg-edit-img-new');
+  if (file && file.size > 8 * 1024 * 1024) {
+    input.value = '';
+    newWrap.classList.add('hidden');
+    newImg.src = '';
+    showNotification('画像ファイルが大きすぎます（最大8MB）', 'error');
+    return;
+  }
   if (file) {
     const reader = new FileReader();
     reader.onload = (e) => {

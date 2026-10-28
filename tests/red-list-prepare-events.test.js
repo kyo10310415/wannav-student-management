@@ -44,3 +44,7 @@ test('only ten preparation attributes migrate while all persistence and test-sen
  assert.equal((app.match(/data-red-prepare-action=/g)||[]).length,9);assert.equal((app.match(/data-red-prepare-image(?:\s|>)/g)||[]).length,1);
  for(const fn of ['deleteRedListMessage(','deleteRedListSender('])assert.equal(app.includes('onclick="'+fn),false);assert.deepEqual(fixture().listeners.map(x=>x.type),['click','change']);
 });
+
+test('documented oversized image is rejected before FileReader without clearing existing image removal intent',()=>{
+ const f=fixture(),notices=[];f.c.showNotification=(...args)=>notices.push(args);f.install('function openRedListMessageModal(id = null)', 'async function saveRedListMessage()');const input=f.elements['redlist-msg-edit-image'];input.closest=()=>input;input.files=[{name:'Synthetic.png',type:'image/png',size:8*1024*1024+1}];input.value='Synthetic file';f.elements['redlist-msg-edit-remove-image'].value='true';f.c.handleRedListPrepareImageChange({target:input});assert.equal(input.value,'');assert.equal(f.files.length,0);assert.equal(f.elements['redlist-msg-edit-img-new-wrap'].classList.contains('hidden'),true);assert.equal(f.elements['redlist-msg-edit-remove-image'].value,'true');assert.equal(notices[0][1],'error');assert.equal(f.requests.length,0);
+});

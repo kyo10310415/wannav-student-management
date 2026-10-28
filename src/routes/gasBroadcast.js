@@ -302,7 +302,7 @@ export function createGasBroadcastRoutes(overrides = {}) {
         return c.json({ success: false, error: 'Broadcast not found' }, 404);
       }
 
-      const logs = await dependencies.getBroadcastLogs(broadcastId, 1000);
+      const logs = await dependencies.getBroadcastLogs(broadcastId, 1000, { email: GAS_BROADCAST_CREATED_BY, role: 'integration' });
       return c.json({
         success: true,
         results: logs.map(log => ({

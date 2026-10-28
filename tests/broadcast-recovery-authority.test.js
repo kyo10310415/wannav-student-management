@@ -8,7 +8,7 @@ const marker = 'SYNTHETIC_RECOVERY_PRIVATE';
 let sequence = 0;
 async function fixture({ role = 'crew', creator = owner, duplicate = false, isTest = false, gas = false, total,
   saved = ['OWN'], logs = [], recipientCount = 1, historyStatus = 'failed', messageName = '[Scheduled] fixture', claim = true } = {}) {
-  const queries = [], transaction = [], dispatches = [], outputs = []; let released = 0;
+  const queries = [], transaction = [], dispatches = [], outputs = [], external = []; let released = 0;
   const job = { job_id: 'fixture-job', broadcast_id: 7, created_by: gas ? 'gas-broadcast' : owner, creator_email: creator, creator_role: role,
     message_name: messageName, target_status: gas ? 'explicit' : 'active', target_tutor: 'all', channel_type: gas ? 'chat' : 'notice',
     is_test: isTest, total: total ?? (role === 'crew' ? 1 : 2), status: historyStatus, recipient_count: recipientCount, sent: 0, failed: 0 };
@@ -29,15 +29,15 @@ async function fixture({ role = 'crew', creator = owner, duplicate = false, isTe
       return { rows: [] };
     }, getClient: async () => ({ query: async (...args) => { transaction.push(args); return { rows: [] }; }, release: () => released++ }),
     createKeyedJobDispatcher: worker => ({ dispatch: async id => { dispatches.push(id); } }),
-    axios: { post: async () => { throw new Error('Forbidden fixture notification'); } }, FormData: class {},
-    fetchStudentBroadcastInfo: async () => { throw new Error('Forbidden fixture Sheets lookup'); }, discordClient: {},
+    axios: { post: async () => { external.push('notification'); throw new Error('Forbidden fixture notification'); } }, FormData: class {},
+    fetchStudentBroadcastInfo: async () => { external.push('Sheets'); throw new Error('Forbidden fixture Sheets lookup'); }, discordClient: {},
     console: Object.fromEntries(['log', 'warn', 'error'].map(level => [level, (...args) => outputs.push(inspect(args))])) };
   const source = (await readFile(new URL('../src/services/broadcastService.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
   const key = 'broadcastRecoveryAuthorityFixture' + sequence++; globalThis[key] = deps;
   try {
     const prefix = `const { query, getClient, classifyLegacyBroadcastRecipients, createKeyedJobDispatcher, axios, FormData, fetchStudentBroadcastInfo, discordClient, console } = globalThis[${JSON.stringify(key)}];\n`;
     const module = await import(`data:text/javascript;base64,${Buffer.from(prefix + source + '\nexport { prepareLegacyJobRecipients, assertBroadcastRecipientAccess, _runBroadcastJob };').toString('base64')}`);
-    return { module, queries, transaction, dispatches, outputs, released: () => released, job };
+    return { module, queries, transaction, dispatches, outputs, external, released: () => released, job };
   } finally { delete globalThis[key]; }
 }
 const safe = f => assert.equal(f.outputs.join('\n').includes(marker), false);
@@ -74,8 +74,8 @@ test('legacy count and historical-target checks remain fail-closed before any re
   }
 });
 
-test('legacy synthetic test jobs retain their artificial recipient without requiring a human creator', async () => {
-  const f = await fixture({ isTest: true, creator: null, role: 'unknown', total: 1 });
+test('authorized human test jobs retain their artificial recipient without student selection', async () => {
+  const f = await fixture({ isTest: true, total: 1 });
   await f.module.prepareLegacyJobRecipients('fixture-job', owner, 'admin');
   assert.equal(JSON.parse(insertRecipients(f)[1][1])[0].student_id, 'TEST');
   assert.equal(f.queries.some(q => q.sql.includes('FROM students s')), false); safe(f);
@@ -108,8 +108,8 @@ test('worker refuses unauthorized durable jobs after atomic claim but before rec
   }
 });
 
-test('test and exact GAS machine jobs bypass human ownership checks while ordinary jobs cannot forge an exception', async () => {
-  for (const params of [{ isTest: true, creator: null, role: 'unknown' }, { gas: true, creator: null, role: 'unknown' }]) {
+test('exact GAS machine jobs bypass human ownership checks while ordinary jobs cannot forge an exception', async () => {
+  for (const params of [{ gas: true, creator: null, role: 'unknown' }]) {
     const f = await fixture(params); await f.module.assertBroadcastRecipientAccess('fixture-job');
     assert.equal(f.queries.some(q => q.sql.includes('FROM students s')), false);
     assert.equal(f.queries.some(q => q.sql.includes('SELECT student_id FROM broadcast_job_recipients')), false);
@@ -138,5 +138,56 @@ test('GAS exemption requires the complete stored machine contract, not just crea
   for (const patch of [{ channel_type: 'notice' }, { target_status: 'active' }, { created_by: owner }]) {
     const f = await fixture({ gas: true, creator: null, role: 'unknown' }); Object.assign(f.job, patch);
     await assert.rejects(() => f.module.assertBroadcastRecipientAccess('fixture-job'), error => error.status === 403);
+  }
+});
+
+
+test('image-free test recovery rejects missing unknown or duplicated human creators before writes', async () => {
+  for (const params of [{ creator: null }, { role: 'unknown' }, { duplicate: true }]) {
+    const f = await fixture({ ...params, isTest: true, total: 1 });
+    await assert.rejects(() => f.module.prepareLegacyJobRecipients('fixture-job', owner, 'admin'), error => error.status === 403);
+    assert.equal(f.transaction.length, 0);
+    assert.equal(f.queries.some(q => /^(UPDATE|INSERT|DELETE)/.test(q.sql.trim())), false);
+    assert.equal(f.dispatches.length, 0); assert.equal(f.external.length, 0); safe(f);
+  }
+});
+
+test('image-free test resume rejects revoked creators before reconciliation or dispatch', async () => {
+  for (const params of [{ creator: null }, { role: 'unknown' }, { duplicate: true }]) {
+    const f = await fixture({ ...params, isTest: true, total: 1 });
+    await assert.rejects(() => f.module.resumeBroadcastJob('fixture-job', owner, 'admin'), error => error.status === 403);
+    assert.equal(f.queries.some(q => /^(UPDATE|INSERT|DELETE)/.test(q.sql.trim())), false);
+    assert.equal(f.transaction.length, 0); assert.equal(f.dispatches.length, 0); assert.equal(f.external.length, 0); safe(f);
+  }
+});
+
+test('image-free test worker fails revoked creators before recipient claim Sheets or notifications', async () => {
+  for (const params of [{ creator: null }, { role: 'unknown' }, { duplicate: true }]) {
+    const f = await fixture({ ...params, isTest: true, total: 1 });
+    await f.module._runBroadcastJob('fixture-job');
+    assert.equal(f.queries.some(q => q.sql.includes("SET status = 'running'")), true);
+    assert.equal(f.queries.some(q => q.sql.includes("SET status = 'sending'")), false);
+    assert.equal(f.queries.some(q => q.sql.includes('SELECT bj.broadcast_id')), false);
+    assert.equal(f.external.length, 0); assert.equal(f.dispatches.length, 0); safe(f);
+  }
+});
+
+test('current creator role is re-read for every image-free test authorization', async () => {
+  const f = await fixture({ isTest: true, total: 1 });
+  await f.module.assertBroadcastRecipientAccess('fixture-job');
+  f.job.creator_role = 'unknown';
+  await assert.rejects(() => f.module.assertBroadcastRecipientAccess('fixture-job'), error => error.status === 403);
+  assert.equal(f.queries.filter(q => q.sql.includes('bm.name AS message_name')).length, 2);
+  assert.equal(f.external.length, 0); assert.equal(f.transaction.length, 0); safe(f);
+});
+
+test('active human roles retain image-free test resume without expanding TEST recipient scope', async () => {
+  for (const role of ['admin', 'leader', 'crew']) {
+    const f = await fixture({ role, isTest: true, total: 1 });
+    await f.module.resumeBroadcastJob('fixture-job', owner, role);
+    assert.deepEqual(f.dispatches, ['fixture-job']);
+    assert.equal(f.queries.some(q => q.sql.includes('FROM students s')), false);
+    assert.equal(f.queries.some(q => q.sql.includes('SELECT student_id FROM broadcast_job_recipients')), false);
+    assert.equal(f.external.length, 0); safe(f);
   }
 });

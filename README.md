@@ -1025,3 +1025,15 @@ VQ画像設定削除は管理者/leader制限を維持し、確認キャンセ�
 配信画像uploadだけに、認証後・multipart解析前の9MiB本文上限を適用します。既存8MiB画像と最大1MiBのmultipart余白を許容し、Content-Lengthだけに頼らず実ストリームを数え、超過時は読込を中止して413を返します。上限内の8MiB超ファイルは従来どおり400です。全HTTPリクエストや他uploadの上限ではなく、同時多数リクエストやインフラ側の制限まで保証するものではありません。
 
 既存共有参照の調査用にdocs/security/broadcast-image-compatibility.sqlを用意しました。READ ONLY・10秒timeout・ROLLBACK、件数/種類/statusのみで、メール・ファイル名・画像・本文・IDを出力しません。本番では未実行です。共有値・実際の旧アカウント重複・過去漏洩は未確認のため、必要な影響調査として残します。本番配信・保存・削除・upload・SQL実行をこの検証で行いません。
+
+## アップロード・復旧・配信履歴の境界（2026-10-28、第129〜133工程）
+
+レッドリスト画像は既存画面の8MB表記に合わせ、POST/PUTとも8MiBファイル・9MiB本文上限を実施します。認証/crew拒否の後、JSON/multipart解析前に本文を数え、本文超過413・ファイル超過400にします。選択時もFileReader前に拒否します。image/*/SVG・JSON・removeImage・既存DBの画像値は維持し、上限はこの2保存経路だけです。
+
+画像を使わない人間のテスト配信ジョブにも、作成者の現在DBrole・一意性確認を適用します。削除済み/不明権限/曖昧なcreatorは復旧・再開・workerで通知前に拒否し、有効なadmin/leader/crewのTEST専用動作は維持します。GAS専用actorの例外は維持します。画像なしenqueue入口の既存認可は維持し、全てのqueue作成へ追加user lookupをしたわけではありません。既存jobの状態記録は行われ得ます。
+
+通常の配信APIではisTest/saveAsTemplateにbooleanを使い、explicitTargets/campaignKey/targetStatus=explicitの機械専用項目を受け付けません。専用連携名を人間セッションとして使用することも拒否します。専用GASは従来どおりAPIキーで認証し、actor/channel/explicit指定をサーバーで決めます。
+
+配信履歴はcrew本人作成分だけ、admin/leaderは全件、GAS専用連携はGAS所有分だけを取得できます。孤立した履歴はcrewへ返しません。getBroadcastLogsを直接使う内部呼出しにはtrusted {email,role}が必要です。HTTPのrole/email query指定を信用しません。IDは正整数、取得件数は標準100・1〜1000で、不正指定は400です。GASの既存owner確認も維持します。履歴見出し・チャンネル名をHTMLとして解釈せず、生の取得例外もconsoleへ出しません。
+
+本番のログ・個人情報・配信・保存・削除・upload・SQLはこの検証で取得/実行しません。旧無効テストjobやcrewの他人履歴閲覧は拒否される副作用があります。既存DB・依存・環境設定は変更しません。

@@ -510,7 +510,7 @@ async function getAuthorizedBroadcastJobTargets(jobId, { crewScopeOnly = false }
   );
   const job = jobResult.rows[0];
   if (!job) throw new Error('Job not found');
-  if (!job.is_test && !isExplicitGasBroadcastJob(job) && (jobResult.rows.length !== 1 || !job.creator_email || !['admin', 'leader', 'crew'].includes(job.creator_role))) {
+  if (!isExplicitGasBroadcastJob(job) && (jobResult.rows.length !== 1 || !job.creator_email || !['admin', 'leader', 'crew'].includes(job.creator_role))) {
     const error = new Error('送信ジョブの作成者権限を確認できません');
     error.status = 403;
     throw error;
@@ -1016,7 +1016,14 @@ export async function deleteTemplate(templateId, userEmail, userRole) {
 
 // ─── ログ取得 ─────────────────────────────────────────────────────────────────
 
-export async function getBroadcastLogs(broadcastId = null, limit = 100) {
+export async function getBroadcastLogs(broadcastId = null, limit = 100, actor) {
+  const integration = actor?.role === 'integration' && actor?.email === GAS_BROADCAST_CREATED_BY;
+  const human = actor && ['admin', 'leader', 'crew'].includes(actor.role) && typeof actor.email === 'string' && actor.email.trim() && actor.email.toLowerCase() !== GAS_BROADCAST_CREATED_BY;
+  if (!integration && !human) throw Object.assign(new Error('Broadcast logs access denied'), { status: 403 });
+  const id = broadcastId == null || broadcastId === '' ? null : Number(broadcastId);
+  if ((id !== null && (!/^\d+$/.test(String(broadcastId)) || !Number.isSafeInteger(id) || id < 1)) || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+    throw Object.assign(new Error('Invalid broadcast logs request'), { status: 400 });
+  }
   try {
     let sqlQuery = `
       SELECT
@@ -1032,11 +1039,16 @@ export async function getBroadcastLogs(broadcastId = null, limit = 100) {
       FROM broadcast_logs bl
       LEFT JOIN broadcast_messages bm ON bl.broadcast_message_id = bm.id
     `;
-    const params = [];
-    if (broadcastId) {
-      sqlQuery += ' WHERE bl.broadcast_message_id = $1';
-      params.push(broadcastId);
+    const params = [], conditions = [];
+    if (integration || actor.role === 'crew') {
+      params.push(integration ? GAS_BROADCAST_CREATED_BY : actor.email);
+      conditions.push('bm.created_by = $' + params.length);
     }
+    if (id !== null) {
+      params.push(id);
+      conditions.push('bl.broadcast_message_id = $' + params.length);
+    }
+    if (conditions.length) sqlQuery += ' WHERE ' + conditions.join(' AND ');
     sqlQuery += ' ORDER BY bl.sent_at DESC LIMIT $' + (params.length + 1);
     params.push(limit);
     const result = await query(sqlQuery, params);

@@ -41,7 +41,7 @@ test('target selection retains crew SQL scope and rows while verbose logs concea
 test('database operation failures become fixed errors without provider metadata', async () => {
   const f = await fixture({ query: async () => { throw rawError(); } });
   for (const invoke of [() => f.module.getTargetStudents('fixture', null, marker, 'crew'), () => f.module.getTemplates(marker, 'crew'),
-    () => f.module.saveTemplate({ name: marker }, marker), () => f.module.deleteTemplate(marker, marker, 'crew'), () => f.module.getBroadcastLogs(marker)]) {
+    () => f.module.saveTemplate({ name: marker }, marker), () => f.module.deleteTemplate(marker, marker, 'crew'), () => f.module.getBroadcastLogs(null, 100, { email: 'fixture@example.invalid', role: 'crew' })]) {
     await assert.rejects(invoke, error => { assert.equal(error.message, 'Broadcast operation failed'); safe(error); assert.equal(Object.hasOwn(error, 'cause'), false); return true; });
   }
   safe(f.logs);
@@ -94,7 +94,7 @@ test('worker stores fixed delivery errors and retains failed versus unknown prog
     const f = await fixture({ axios: { post: async () => { throw rawError(network ? undefined : { status: 400 }); } },
       query: async (sql, params) => {
         calls.push({ sql, params });
-        if (sql.includes('bm.name AS message_name')) return { rows: [{ is_test: true }] };
+        if (sql.includes('bm.name AS message_name')) return { rows: [{ is_test: true, created_by: 'fixture@example.invalid', creator_email: 'fixture@example.invalid', creator_role: 'leader' }] };
         if (sql.includes('RETURNING broadcast_jobs.*')) return { rows: [{ sent: 0, failed: network ? 0 : 1, unknown_count: network ? 1 : 0 }] };
         if (sql.includes('AS pending,') && sql.includes('AS unknown_count')) return { rows: [{ pending: 0, unknown_count: network ? 1 : 0 }] };
         if (sql.includes('SELECT bj.broadcast_id')) return { rows: [{ broadcast_id: 1, is_test: true, content: marker, channel_type: 'notice' }] };

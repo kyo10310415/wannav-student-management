@@ -1,3 +1,4 @@
+import { uploadRequestBodyLimit } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -12,7 +13,7 @@ let sequence = 0;
 async function fixture({ fail = false, rows = [], query, sendFail = false, missingRecord = false } = {}) {
   const logs = [], queries = [], sends = [], updates = [];
   const provider = async value => { if (fail) throw rawError(); return value; };
-  const deps = { Hono,
+  const deps = { Hono, uploadRequestBodyLimit,
     query: async (sql, params) => {
       queries.push({ sql, params });
       if (sql.includes('FROM sessions')) return { rows: [{ id: 7, email: marker, role: 'admin' }] };
@@ -30,7 +31,7 @@ async function fixture({ fail = false, rows = [], query, sendFail = false, missi
   const key = 'redRoutesPrivacyFixture' + sequence++;
   globalThis[key] = deps;
   let app;
-  try { app = (await import(`data:text/javascript;base64,${Buffer.from(`const deps = globalThis[${JSON.stringify(key)}]; const { Hono, query, calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists, getStudentDiscordInfo, sendDiscordMessage, console } = deps;\n${source}`).toString('base64')}`)).default; }
+  try { app = (await import(`data:text/javascript;base64,${Buffer.from(`const deps = globalThis[${JSON.stringify(key)}]; const { Hono, uploadRequestBodyLimit, query, calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists, getStudentDiscordInfo, sendDiscordMessage, console } = deps;\n${source}`).toString('base64')}`)).default; }
   finally { delete globalThis[key]; }
   return { app, logs, queries, sends, updates };
 }

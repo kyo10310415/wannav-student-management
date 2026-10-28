@@ -11,9 +11,9 @@ const token = 'a'.repeat(64);
 const headers = { Authorization: `Bearer ${token}` };
 let sequence = 0;
 async function fixture({ role = 'crew', legacy = false, noOwnJob = false, session = true } = {}) {
-  const own = { job_id: 'own-job', broadcast_id: 1, created_by: email, status: legacy ? 'interrupted' : 'running', stale: true,
+  const own = { job_id: 'own-job', broadcast_id: 1, created_by: email, creator_email: email, creator_role: role, status: legacy ? 'interrupted' : 'running', stale: true,
     total: 2, sent: legacy ? 1 : 0, failed: 0, unknown_count: 0, is_test: true };
-  const other = { ...own, job_id: 'other-job', broadcast_id: 2, created_by: 'fixture-other@example.test', status: 'running' };
+  const other = { ...own, job_id: 'other-job', broadcast_id: 2, created_by: 'fixture-other@example.test', creator_email: 'fixture-other@example.test', status: 'running' };
   const jobs = new Map([[other.job_id, other], ...noOwnJob ? [] : [[own.job_id, own]]]);
   const recipients = new Map([...jobs.keys()].map(id => [id, legacy && id === 'own-job' ? [] : [{ status: 'sending' }, { status: 'pending' }]]));
   const queries = [], writes = [], dispatches = [], notifications = [];

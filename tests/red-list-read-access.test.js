@@ -1,3 +1,4 @@
+import { uploadRequestBodyLimit } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -10,7 +11,7 @@ const scores = { total: 0, rank: 'none' };
 let sequence = 0;
 async function fixture({ role = 'crew', session = true, existing = false, install = true, contextRole } = {}) {
   const calls = { session: 0, get: [], calculate: [], update: [], updateAll: [], routeSql: 0, notification: 0 };
-  const deps = { Hono,
+  const deps = { Hono, uploadRequestBodyLimit,
     getRedList: async (...args) => { calls.get.push(args); return existing ? { rank: 'low', total_score: 3 } : null; },
     calculateRedListScore: async (...args) => { calls.calculate.push(args); return scores; },
     updateRedList: async (...args) => { calls.update.push(args); return scores; },

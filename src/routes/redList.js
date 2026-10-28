@@ -2,8 +2,12 @@ import { Hono } from 'hono';
 import { calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists } from '../services/redListService.js';
 import { query } from '../db/connection.js';
 import { sendDiscordMessage, getStudentDiscordInfo } from '../services/discordService.js';
+import { uploadRequestBodyLimit } from '../security/uploadBodyLimit.js';
 
 const app = new Hono();
+// The existing editor documents an 8 MiB image cap; allow 1 MiB for framing/text.
+const RED_LIST_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const limitRedListMessageBody = uploadRequestBodyLimit(RED_LIST_IMAGE_MAX_BYTES + 1024 * 1024);
 
 async function readRedListSaveJson(c) {
   try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; } catch { return null; }
@@ -22,6 +26,7 @@ async function readRedListImageUpload(formData) {
   if (typeof file !== 'object' || typeof file.arrayBuffer !== 'function' || typeof file.size !== 'number' || typeof file.name !== 'string' || !/^image\/[a-z0-9.+-]+$/i.test(file.type || '')) {
     return { error: '画像ファイルを選択してください' };
   }
+  if (file.size > RED_LIST_IMAGE_MAX_BYTES) return { error: '画像ファイルが大きすぎます（最大8MB）' };
   if (file.size === 0) return {};
   return { data: Buffer.from(await file.arrayBuffer()), filename: file.name, contentType: file.type.toLowerCase() };
 }
@@ -184,7 +189,7 @@ app.get('/messages', async (c) => {
  * 送信メッセージテンプレート作成（multipart/form-data）
  * フィールド: title (string), content (string), image (File, optional)
  */
-app.post('/messages', async (c) => {
+app.post('/messages', limitRedListMessageBody, async (c) => {
   try {
     const user = c.get('user');
     const contentType = c.req.header('content-type') || '';
@@ -232,7 +237,7 @@ app.post('/messages', async (c) => {
  * 送信メッセージテンプレート更新（multipart/form-data）
  * フィールド: title, content, image (optional), removeImage (optional "true")
  */
-app.put('/messages/:id', async (c) => {
+app.put('/messages/:id', limitRedListMessageBody, async (c) => {
   try {
     const id = c.req.param('id');
     if (!validRedListId(id)) return c.json({ success: false, error: 'IDが不正です' }, 400);
