@@ -15515,12 +15515,17 @@ function renderRedListCurrentList() {
 }
 
 function renderRedListStudentCard(item, isHistory) {
+  const attribute = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
+  const safeLink = value => {
+    try { const url = new URL(String(value)); return ['https:', 'http:'].includes(url.protocol) ? attribute(url.href) : '#'; } catch { return '#'; }
+  };
+  const cardData = `data-red-list-student-id="${attribute(item.student_id)}" data-red-list-year-month="${attribute(item.year_month)}"`;
   const student = students.find(s => s.student_id === item.student_id);
   const studentName = student ? student.name : item.student_name || '不明';
   const tutorName = student ? getTutorDisplayName(student.homeroom_tutor) : '-';
   
-  const notionUrl = cachedNotionUrls[item.student_id] || student?.notion_url || '#';
-  const discordUrl = student?.discord_url || '#';
+  const notionUrl = safeLink(cachedNotionUrls[item.student_id] || student?.notion_url || '#');
+  const discordUrl = safeLink(student?.discord_url || '#');
   const youtubeId = student?.youtube_channel_id || '';
   const xId = student?.x_account_id || '';
 
@@ -15670,26 +15675,26 @@ function renderRedListStudentCard(item, isHistory) {
         <div class="flex-1 min-w-0">
           <!-- 氏名行 -->
           <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span class="text-xs font-mono text-gray-400">${item.student_id}</span>
-            <span class="text-base font-bold text-gray-900">${studentName}</span>
-            <span class="text-xs text-gray-500"><i class="fas fa-user-tie mr-0.5"></i>${tutorName}</span>
+            <span class="text-xs font-mono text-gray-400">${attribute(item.student_id)}</span>
+            <span class="text-base font-bold text-gray-900">${escapeHtml(String(studentName))}</span>
+            <span class="text-xs text-gray-500"><i class="fas fa-user-tie mr-0.5"></i>${escapeHtml(String(tutorName))}</span>
           </div>
           <!-- SNS・日付行 -->
           <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
             ${notionUrl !== '#'
-              ? `<a href="${notionUrl}" target="_blank" class="text-gray-400 hover:text-blue-600 text-sm"><i class="fas fa-file-alt"></i></a>`
+              ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-blue-600 text-sm"><i class="fas fa-file-alt"></i></a>`
               : '<i class="fas fa-file-alt text-gray-200 text-sm"></i>'}
             ${discordUrl !== '#'
-              ? `<a href="${discordUrl}" target="_blank" class="text-gray-400 hover:text-purple-600 text-sm"><i class="fab fa-discord"></i></a>`
+              ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-purple-600 text-sm"><i class="fab fa-discord"></i></a>`
               : '<i class="fab fa-discord text-gray-200 text-sm"></i>'}
             ${youtubeId
-              ? `<a href="${formatYouTubeUrl(youtubeId)}" target="_blank" class="text-gray-400 hover:text-red-600 text-sm"><i class="fab fa-youtube"></i></a>`
+              ? `<a href="${safeLink(formatYouTubeUrl(youtubeId))}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-red-600 text-sm"><i class="fab fa-youtube"></i></a>`
               : '<i class="fab fa-youtube text-gray-200 text-sm"></i>'}
             ${xId
-              ? `<a href="${formatXUrl(xId)}" target="_blank" class="text-gray-400 hover:text-blue-400 text-sm"><i class="fab fa-x-twitter"></i></a>`
+              ? `<a href="${safeLink(formatXUrl(xId))}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-blue-400 text-sm"><i class="fab fa-x-twitter"></i></a>`
               : '<i class="fab fa-x-twitter text-gray-200 text-sm"></i>'}
-            <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${yearMonth}</span>
-            <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${consecutiveMonths}ヶ月</span>
+            <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${attribute(yearMonth)}</span>
+            <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${escapeHtml(String(consecutiveMonths))}ヶ月</span>
             ${isEx && item.ex_reason
               ? `<span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold"><i class="fas fa-comment-alt"></i>${escapeHtml(item.ex_reason)}</span>`
               : ''}
@@ -15719,8 +15724,8 @@ function renderRedListStudentCard(item, isHistory) {
         <!-- ③ 操作エリア（右端・固定幅） -->
         <div class="flex-shrink-0 flex flex-col items-end gap-2 min-w-[9rem]">
           <!-- 対応状況（今月・過去タブ共通） -->
-          <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)"
-                  id="rl-status-${item.student_id}"
+          <select data-red-list-card-action="status" ${cardData}
+                  id="rl-status-${attribute(item.student_id)}"
                   class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-blue-400 cursor-pointer">
             <option value="未対応"  ${cs === '未対応'  ? 'selected' : ''}>未対応</option>
             <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
@@ -15729,20 +15734,20 @@ function renderRedListStudentCard(item, isHistory) {
           <!-- 担当者（今月・過去タブ共通） -->
           <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
             <i class="fas fa-user-tie text-indigo-300 text-xs flex-shrink-0"></i>
-            <input id="rl-assigned-${item.student_id}" type="text"
-                   value="${escapeHtml(ao)}"
+            <input id="rl-assigned-${attribute(item.student_id)}" type="text"
+                   value="${attribute(ao)}"
                    placeholder="担当者名"
-                   onchange="updateRedListAssigned('${item.student_id}', '${yearMonth}', this.value)"
+                   data-red-list-card-action="assigned" ${cardData}
                    class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
           </div>
           <!-- Discord送信ボタン -->
-          <button onclick="openRedListDiscordModal('${item.student_id}', '${studentName}', '${yearMonth}')"
+          <button data-red-list-card-action="send-prepare" ${cardData}
                   class="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">
             <i class="fab fa-discord"></i>Discord送信
           </button>
           <!-- EXランク手動設定ボタン -->
-          <button onclick="toggleExRank('${item.student_id}', '${yearMonth}', ${isEx})"
-                  id="ex-rank-btn-${item.student_id}"
+          <button data-red-list-card-action="ex" ${cardData}
+                  id="ex-rank-btn-${attribute(item.student_id)}"
                   class="w-full flex items-center justify-center gap-1 ${isEx ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'} px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm border ${isEx ? 'border-purple-600' : 'border-gray-300'}">
             <span class="font-black">EX</span>${isEx ? ' 解除' : ' 手動設定'}
           </button>
@@ -15809,7 +15814,7 @@ async function updateRedListStatus(studentId, yearMonth, status) {
       showNotification(res.data.error || 'ステータスの更新に失敗しました', 'error');
     }
   } catch (error) {
-    console.error('Error updating status:', error);
+    console.error('Red list status update failed');
     showNotification('ステータスの更新に失敗しました', 'error');
   }
 }
@@ -15830,7 +15835,7 @@ async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
       showNotification(res.data.error || '担当者の更新に失敗しました', 'error');
     }
   } catch (error) {
-    console.error('Error updating assigned_to:', error);
+    console.error('Red list assignment update failed');
     showNotification('担当者の更新に失敗しました', 'error');
   }
 }
@@ -15960,7 +15965,7 @@ async function loadRedListHistoryData() {
       updateRedListStats();
     }
   } catch (error) {
-    console.error('Error loading history data:', error);
+    console.error('Red list history load failed');
     document.getElementById('redlist-history-content').innerHTML = 
       '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
   } finally {
@@ -16007,8 +16012,8 @@ function renderRedListDiscordLogs(studentId, yearMonth) {
       year: 'numeric', month: 'numeric', day: 'numeric',
       hour: '2-digit', minute: '2-digit' });
     return `<div class="border-b border-indigo-100 py-1 last:border-0">
-      <div class="text-xs text-gray-500">${t} ／ ${l.sent_by || '-'}</div>
-      <div class="text-xs font-medium text-indigo-700 truncate">${escapeHtml(l.message_title || l.message_content.slice(0,30)+'…')}</div>
+      <div class="text-xs text-gray-500">${t} ／ ${escapeHtml(String(l.sent_by || '-'))}</div>
+      <div class="text-xs font-medium text-indigo-700 truncate">${escapeHtml(String(l.message_title || String(l.message_content || '').slice(0,30)+'…'))}</div>
     </div>`;
   }).join('');
 
@@ -16191,7 +16196,7 @@ async function fetchRedListDiscordLogs(yearMonth) {
       }
     }
   } catch (e) {
-    console.warn('Discord logs fetch failed:', e.message);
+    console.warn('Discord logs fetch failed');
   }
 }
 
