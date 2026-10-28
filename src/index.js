@@ -146,6 +146,10 @@ app.get('/', (c) => {
         <script src="/extension-stats-events.js?v=${Date.now()}"></script>
         <script src="/funnel-events.js?v=${Date.now()}"></script>
         <script src="/lesson-report-events.js?v=${Date.now()}"></script>
+        <script src="/student-search-events.js?v=${Date.now()}"></script>
+        <script src="/student-filter-events.js?v=${Date.now()}"></script>
+        <script src="/tutor-read-events.js?v=${Date.now()}"></script>
+        <script src="/previous-targets-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
