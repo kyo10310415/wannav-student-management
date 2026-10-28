@@ -48,7 +48,7 @@ const safe = f => assert.equal(f.logs.join('\n').includes(marker), false);
 test('all reachable route exception boundaries return fixed errors and conceal provider data', async () => {
   const f = await fixture({ fail: 'all' });
   for (const [path, options] of [['/status'], ['/toggle', json({ enabled: true })], ['/check', json({})], ['/history'], ['/student/' + marker],
-    ['/resend-from-row', json({ startRow: 3 })], ['/resend/42', json({})], ['/images'], ['/images', json({ diagnosis_type: marker, image_url: marker })],
+    ['/resend-from-row', json({ startRow: 3 })], ['/resend/42', json({})], ['/images'], ['/images', json({ diagnosis_type: marker, image_url: 'https://fixture.invalid/' + marker })],
     ['/images/42', { method: 'DELETE' }], ['/test', json({ channelUrl: marker, userId: marker })], ['/resend-single-row', json({ rowNumber: 3 })], ['/history/42', { method: 'DELETE' }]]) {
     const response = await f.app.request(path, options); assert.equal(response.status, 500, path);
     assert.deepEqual(await response.json(), { success: false, error: 'VQ diagnosis operation failed' });
@@ -79,8 +79,8 @@ test('student history preserves diagnosis, scoring and sent-state mapping', asyn
 test('image CRUD and history deletion preserve successful fields and parameter binding', async () => {
   const f = await fixture();
   assert.equal((await (await f.app.request('/images')).json()).success, true);
-  const saved = await (await f.app.request('/images', json({ diagnosis_type: marker, image_url: marker }))).json();
-  assert.equal(saved.image.image_url, marker); assert.deepEqual(f.queries.at(-1).params, [marker, marker]);
+  const saved = await (await f.app.request('/images', json({ diagnosis_type: marker, image_url: 'https://fixture.invalid/' + marker }))).json();
+  assert.equal(saved.image.image_url, marker); assert.deepEqual(f.queries.at(-1).params, [marker, 'https://fixture.invalid/' + marker]);
   assert.equal((await f.app.request('/images/42', { method: 'DELETE' })).status, 200);
   const deleted = await (await f.app.request('/history/42', { method: 'DELETE' })).json();
   assert.equal(deleted.deleted.student_name, marker); assert.deepEqual(f.queries.at(-1).params, ['42']); safe(f);
