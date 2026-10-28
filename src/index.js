@@ -175,6 +175,7 @@ app.get('/', (c) => {
         <script src="/red-test-prepare-events.js?v=${Date.now()}"></script>
         <script src="/user-update-events.js?v=${Date.now()}"></script>
         <script src="/red-list-save-events.js?v=${Date.now()}"></script>
+        <script src="/red-list-delete-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);

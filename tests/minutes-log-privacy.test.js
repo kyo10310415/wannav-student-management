@@ -132,3 +132,19 @@ test('manager session lookup failure is fixed before either backfill endpoint re
   }
   assert.equal(f.backfills.length, 0); safe(f);
 });
+
+test('template update rejects malformed input and unsafe IDs before business SQL',async()=>{
+ const f=await fixture();
+ const request=body=>({method:'PUT',headers:{'Content-Type':'application/json'},body});
+ for(const id of ['0','-1','1.5','9007199254740992','bad'])assert.equal((await f.app.request('/templates/'+id,request('{}'))).status,400);
+ for(const body of ['{','null','[]','42','{"name":{}}','{"template_text":[]}'])assert.equal((await f.app.request('/templates/7',request(body))).status,400);
+ assert.equal(f.queries.length,0);assert.equal(f.aiCalls.length,0);assert.equal(f.transcriptCalls.length,0);
+});
+
+test('template update preserves partial COALESCE contract for omitted null and empty strings',async()=>{
+ const f=await fixture({query:async(...args)=>{f.queries.push(args);return{rows:[{id:7}]}}});
+ for(const body of [{name:'Synthetic',template_text:'Synthetic body'},{name:null},{name:'',template_text:''}]){
+  assert.equal((await f.app.request('/templates/7',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).status,200);
+ }
+ assert.deepEqual(f.queries.map(x=>x[1]),[['Synthetic','Synthetic body','7'],[null,null,'7'],[null,null,'7']]);
+});

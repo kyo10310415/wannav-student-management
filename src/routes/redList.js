@@ -15,6 +15,32 @@ function validRedListBookingUrl(value) {
   try { return ['http:', 'https:'].includes(new URL(value.trim()).protocol); } catch { return false; }
 }
 
+// Uploads keep image-format compatibility; browser responses independently isolate active content.
+async function readRedListImageUpload(formData) {
+  const file = formData.get('image');
+  if (file === null) return {};
+  if (typeof file !== 'object' || typeof file.arrayBuffer !== 'function' || typeof file.size !== 'number' || typeof file.name !== 'string' || !/^image\/[a-z0-9.+-]+$/i.test(file.type || '')) {
+    return { error: '画像ファイルを選択してください' };
+  }
+  if (file.size === 0) return {};
+  return { data: Buffer.from(await file.arrayBuffer()), filename: file.name, contentType: file.type.toLowerCase() };
+}
+function redListInlineImageType(bytes) {
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg';
+  if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))) return 'image/gif';
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (bytes.length >= 2 && bytes[0] === 66 && bytes[1] === 77) return 'image/bmp';
+  if (bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0, 0, 1, 0]))) return 'image/x-icon';
+  return null;
+}
+function redListImageDisposition(inline, filename) {
+  // A fixed ASCII fallback and encoded extended filename cannot inject header syntax.
+  const name = typeof filename === 'string' && filename ? filename : 'image';
+  const encoded = encodeURIComponent(name.toWellFormed()).replace(/['()*]/g, value => '%' + value.charCodeAt(0).toString(16).toUpperCase());
+  return `${inline ? 'inline' : 'attachment'}; filename="image"; filename*=UTF-8''${encoded}`;
+}
+
 // ─────────────────────────────────────────
 // 認証ミドルウェア（Bearer トークン検証）
 // ─────────────────────────────────────────
@@ -169,13 +195,11 @@ app.post('/messages', async (c) => {
       const formData = await c.req.formData();
       title   = formData.get('title');
       content = formData.get('content');
-      const imageFile = formData.get('image');
-      if (imageFile && imageFile.size > 0) {
-        const buf = await imageFile.arrayBuffer();
-        imageData        = Buffer.from(buf);
-        imageFilename    = imageFile.name;
-        imageContentType = imageFile.type;
-      }
+      const image = await readRedListImageUpload(formData);
+      if (image.error) return c.json({ success: false, error: image.error }, 400);
+      imageData = image.data;
+      imageFilename = image.filename;
+      imageContentType = image.contentType;
     } else {
       const body = await readRedListSaveJson(c);
       if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
@@ -221,13 +245,11 @@ app.put('/messages/:id', async (c) => {
       title       = formData.get('title');
       content     = formData.get('content');
       removeImage = formData.get('removeImage') === 'true';
-      const imageFile = formData.get('image');
-      if (imageFile && imageFile.size > 0) {
-        const buf = await imageFile.arrayBuffer();
-        imageData        = Buffer.from(buf);
-        imageFilename    = imageFile.name;
-        imageContentType = imageFile.type;
-      }
+      const image = await readRedListImageUpload(formData);
+      if (image.error) return c.json({ success: false, error: image.error }, 400);
+      imageData = image.data;
+      imageFilename = image.filename;
+      imageContentType = image.contentType;
     } else {
       const body = await readRedListSaveJson(c);
       if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
@@ -296,7 +318,9 @@ app.put('/messages/:id', async (c) => {
 app.delete('/messages/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await query('DELETE FROM red_list_messages WHERE id = $1', [id]);
+    if (!validRedListId(id)) return c.json({ success: false, error: 'IDが不正です' }, 400);
+    const result = await query('DELETE FROM red_list_messages WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows.length) return c.json({ success: false, error: '対象が見つかりません' }, 404);
     return c.json({ success: true });
   } catch (error) {
     console.error('Error deleting red list message:');
@@ -313,6 +337,7 @@ app.get('/messages/:id/image', async (c) => {
   c.header('Vary', 'Authorization');
   try {
     const id = c.req.param('id');
+    if (!validRedListId(id)) return c.json({ success: false, error: 'IDが不正です' }, 400);
     const result = await query(
       'SELECT image_data, image_content_type, image_filename FROM red_list_messages WHERE id = $1',
       [id]
@@ -320,11 +345,15 @@ app.get('/messages/:id/image', async (c) => {
     if (result.rows.length === 0 || !result.rows[0].image_data) {
       return c.json({ success: false, error: '画像が見つかりません' }, 404);
     }
-    const { image_data, image_content_type, image_filename } = result.rows[0];
-    return new Response(image_data, {
+    const { image_data, image_filename } = result.rows[0];
+    const bytes = Buffer.from(image_data);
+    const inlineType = redListInlineImageType(bytes);
+    return new Response(bytes, {
       headers: {
-        'Content-Type': image_content_type || 'application/octet-stream',
-        'Content-Disposition': `inline; filename="${image_filename || 'image'}"`,
+        'Content-Type': inlineType || 'application/octet-stream',
+        'Content-Disposition': redListImageDisposition(Boolean(inlineType), image_filename),
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'",
         'Cache-Control': 'private, no-store',
         'Vary': 'Authorization'
       }
@@ -421,7 +450,9 @@ app.put('/senders/:id', async (c) => {
 app.delete('/senders/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await query('DELETE FROM red_list_senders WHERE id = $1', [id]);
+    if (!validRedListId(id)) return c.json({ success: false, error: 'IDが不正です' }, 400);
+    const result = await query('DELETE FROM red_list_senders WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows.length) return c.json({ success: false, error: '対象が見つかりません' }, 404);
     return c.json({ success: true });
   } catch (error) {
     console.error('Error deleting sender:');
