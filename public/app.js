@@ -56,6 +56,7 @@ let tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} }; // Monthly h
 let tutorWeeklySnapshotData = {}; // notion_name -> snapshot (前週スナップショット)
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
+let lessonReportStatusLoadId = 0;
 let lessonReportStatus = {}; // { student_id-lesson_date: report_data }
 let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
@@ -875,16 +876,16 @@ function countLessonsThisMonth(studentId, currentDate) {
 
 // Load lesson report status for a specific date
 async function loadLessonReportStatus(date) {
+  const requestId = ++lessonReportStatusLoadId;
+  const token = sessionToken, userId = currentUser?.id;
+  if (!token || !currentUser) { lessonReportStatus = {}; return; }
+  const current = () => requestId === lessonReportStatusLoadId && token === sessionToken && currentUser?.id === userId;
   try {
-    console.log(`📋 Loading lesson reports for date: ${date}`);
     const url = `${API_BASE}/api/lesson-reports/by-date/${date}`;
-    console.log(`📋 Request URL: ${url}`);
     
-    const response = await axios.get(url);
-    
-    console.log(`📋 Response status: ${response.status}`);
-    console.log(`📋 Response data:`, response.data);
-    
+    const response = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+
     if (response.data.success) {
       // Store reports by student_id-date key
       lessonReportStatus = {};
@@ -893,17 +894,11 @@ async function loadLessonReportStatus(date) {
         const dateOnly = report.lesson_date.split('T')[0];
         const key = `${report.student_id}-${dateOnly}`;
         lessonReportStatus[key] = report;
-        console.log(`📝 Stored report: key="${key}", result="${report.lesson_result}"`);
       });
-      console.log(`✅ Loaded ${response.data.count} lesson reports for ${date}`);
-      console.log(`✅ Report keys:`, Object.keys(lessonReportStatus));
-      console.log(`✅ Full lessonReportStatus:`, lessonReportStatus);
     }
   } catch (error) {
+    if (!current()) return;
     console.error('❌ Error loading lesson report status:');
-    console.error('Error message:', error.message);
-    console.error('Error response status:', error.response?.status);
-    console.error('Error response data:', error.response?.data);
     
     // 404 or other errors - initialize empty status (all buttons will show as "未提出")
     lessonReportStatus = {};
@@ -12667,6 +12662,8 @@ function renderVQDiagnosisHistoryRows() {
     
     const studentIdCode = record.student_id_code || '-';
     const diagnosisDate = record.diagnosis_date || '-';
+    const rowId = Number(record.id);
+    const validRowId = Number.isSafeInteger(rowId) && rowId > 0;
     
     return `
       <tr class="hover:bg-gray-50">
@@ -12689,7 +12686,7 @@ function renderVQDiagnosisHistoryRows() {
           ${escapeHtml(record.student_name)}
         </td>
         <td class="px-6 py-4 text-sm text-gray-900">
-          <span class="font-bold text-purple-600">${record.total_score}点</span>
+          <span class="font-bold text-purple-600">${escapeHtml(String(record.total_score ?? ''))}点</span>
         </td>
         <td class="px-6 py-4 text-sm text-gray-900">
           <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-semibold">
@@ -12709,14 +12706,14 @@ function renderVQDiagnosisHistoryRows() {
         <td class="px-6 py-4 text-sm">
           <div class="flex gap-2">
             <button 
-              onclick="resendVQDiagnosis(${record.id})"
+              ${validRowId ? `data-vq-history-action="resend" data-vq-history-id="${rowId}"` : 'disabled'}
               class="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-xs"
               title="再送信"
             >
               <i class="fas fa-redo mr-1"></i>再送信
             </button>
             <button 
-              onclick="deleteVQHistory(${record.id}, '${escapeHtml(record.student_name || studentIdCode)}')"
+              ${validRowId ? `data-vq-history-action="delete" data-vq-history-id="${rowId}"` : 'disabled'}
               class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition text-xs"
               title="履歴を削除"
             >
@@ -12750,9 +12747,9 @@ async function resendVQDiagnosis(id) {
     }
     
   } catch (error) {
-    console.error('再送信エラー:', error);
+    console.error('再送信エラー');
     showNotification(
-      error.response?.data?.error || '再送信に失敗しました',
+      '再送信に失敗しました',
       'error'
     );
   }
@@ -12786,19 +12783,22 @@ function escapeHtml(text) {
  * 生徒別のVQ診断履歴を表示
  */
 async function showStudentVQHistory(studentId) {
+  const state = beginStudentVQHistoryRead(studentId);
+  if (!state) return;
   try {
 
     
     const response = await axios.get(
-      `${API_BASE}/api/vq-diagnosis/student/${studentId}`,
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+      `${API_BASE}/api/vq-diagnosis/student/${encodeURIComponent(studentId)}`,
+      { headers: { 'Authorization': `Bearer ${state.token}` } }
     );
     
 
     
+    if (!studentVQHistoryReadCurrent(state)) return;
     const history = response.data.history || [];
     
-    console.log('取得した履歴件数:', history.length);
+
     
     if (history.length === 0) {
       showNotification('この生徒の診断履歴はありません', 'info');
@@ -12829,7 +12829,7 @@ async function showStudentVQHistory(studentId) {
               <div class="bg-purple-50 rounded-lg p-4">
                 <h4 class="text-md font-semibold text-gray-800 mb-3 text-center">
                   <i class="fas fa-chart-radar mr-2"></i>
-                  最新の正解率（${history[0].diagnosis_date || '日付不明'}）
+                  最新の正解率（${escapeHtml(history[0].diagnosis_date || '日付不明')}）
                 </h4>
                 <canvas id="vq-radar-chart" style="max-height: 300px;"></canvas>
               </div>
@@ -12853,7 +12853,7 @@ async function showStudentVQHistory(studentId) {
                 <div class="flex items-start justify-between mb-2">
                   <div>
                     <span class="text-sm font-semibold text-gray-700">診断 ${history.length - index}回目</span>
-                    ${record.diagnosis_date ? `<span class="ml-3 text-sm text-gray-600">診断日: ${record.diagnosis_date}</span>` : ''}
+                    ${record.diagnosis_date ? `<span class="ml-3 text-sm text-gray-600">診断日: ${escapeHtml(record.diagnosis_date)}</span>` : ''}
                   </div>
                   <span class="px-2 py-1 rounded-full text-xs font-semibold ${record.status === 'sent' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
                     ${record.status === 'sent' ? '送信済み' : 'エラー'}
@@ -12863,19 +12863,19 @@ async function showStudentVQHistory(studentId) {
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
                   <div>
                     <p class="text-xs text-gray-600">合計点</p>
-                    <p class="text-lg font-bold text-purple-600">${record.total_score}点</p>
+                    <p class="text-lg font-bold text-purple-600">${escapeHtml(String(record.total_score ?? ''))}点</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">SNS</p>
-                    <p class="text-sm font-semibold text-blue-600">${record.sns_score || 0}点</p>
+                    <p class="text-sm font-semibold text-blue-600">${escapeHtml(String(record.sns_score || 0))}点</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">配信</p>
-                    <p class="text-sm font-semibold text-green-600">${record.streaming_score || 0}点</p>
+                    <p class="text-sm font-semibold text-green-600">${escapeHtml(String(record.streaming_score || 0))}点</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-600">収益</p>
-                    <p class="text-sm font-semibold text-amber-600">${record.revenue_score || 0}点</p>
+                    <p class="text-sm font-semibold text-amber-600">${escapeHtml(String(record.revenue_score || 0))}点</p>
                   </div>
                 </div>
                 
@@ -12892,15 +12892,15 @@ async function showStudentVQHistory(studentId) {
                   <div class="grid grid-cols-3 gap-3">
                     <div class="text-center">
                       <p class="text-xs text-gray-500">SNS</p>
-                      <p class="text-lg font-bold text-blue-600">${record.sns_accuracy || 0}%</p>
+                      <p class="text-lg font-bold text-blue-600">${escapeHtml(String(record.sns_accuracy || 0))}%</p>
                     </div>
                     <div class="text-center">
                       <p class="text-xs text-gray-500">配信</p>
-                      <p class="text-lg font-bold text-green-600">${record.streaming_accuracy || 0}%</p>
+                      <p class="text-lg font-bold text-green-600">${escapeHtml(String(record.streaming_accuracy || 0))}%</p>
                     </div>
                     <div class="text-center">
                       <p class="text-xs text-gray-500">収益</p>
-                      <p class="text-lg font-bold text-amber-600">${record.revenue_accuracy || 0}%</p>
+                      <p class="text-lg font-bold text-amber-600">${escapeHtml(String(record.revenue_accuracy || 0))}%</p>
                     </div>
                   </div>
                 </div>
@@ -12943,14 +12943,17 @@ async function showStudentVQHistory(studentId) {
       </div>
     `;
     
+    state.modal = modal;
     document.body.appendChild(modal);
     
     // チャートを描画（モーダルがDOMに追加された後）
     setTimeout(() => {
-      renderVQDiagnosisCharts(history);
+      if (studentVQHistoryReadCurrent(state) && document.body.contains(modal)) renderVQDiagnosisCharts(history);
     }, 100);
     
   } catch (error) {
+    if (!studentVQHistoryReadCurrent(state)) return;
+    clearStudentVQHistoryRead();
     console.error('生徒別履歴取得エラー');
     showNotification('履歴の取得に失敗しました', 'error');
   }
@@ -13336,7 +13339,7 @@ async function deleteVQHistory(id, studentName) {
     );
     
     if (response.data.success) {
-      showNotification(`履歴を削除しました: ${studentName}`, 'success');
+      showNotification(`履歴を削除しました: ${escapeHtml(studentName)}`, 'success');
       
       // 履歴を再読み込み
       await loadVQDiagnosisData();
@@ -13344,9 +13347,9 @@ async function deleteVQHistory(id, studentName) {
     }
     
   } catch (error) {
-    console.error('履歴削除エラー:', error);
+    console.error('履歴削除エラー');
     showNotification(
-      error.response?.data?.error || '履歴の削除に失敗しました',
+      '履歴の削除に失敗しました',
       'error'
     );
   }
@@ -13834,23 +13837,23 @@ function renderLessonReportRow(report) {
   }[report.lesson_result] || 'bg-gray-100 text-gray-800';
   
   const proInfo = report.lesson_number === 'PROプラン' 
-    ? `${report.pro_curriculum || '-'}<br><span class="text-xs">テキスト${report.pro_text_number || '-'}</span>`
+    ? `${escapeHtml(report.pro_curriculum || '-')}<br><span class="text-xs">テキスト${escapeHtml(report.pro_text_number || '-')}</span>`
     : '-';
   
   return `
     <tr class="hover:bg-gray-50">
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.lesson_date}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${report.student_id}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.student_name || '-'}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${report.tutor_name || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.lesson_date)}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(report.student_id)}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.student_name || '-')}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${escapeHtml(report.tutor_name || '-')}</td>
       <td class="px-4 py-3 whitespace-nowrap text-sm">
         <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${lessonResultClass}">
-          ${report.lesson_result}
+          ${escapeHtml(report.lesson_result)}
         </span>
       </td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.lesson_number}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.lesson_number)}</td>
       <td class="px-4 py-3 text-sm text-gray-600">${proInfo}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${report.reported_by || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${escapeHtml(report.reported_by || '-')}</td>
       <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
         ${new Date(report.reported_at).toLocaleString('ja-JP')}
       </td>
@@ -15520,12 +15523,17 @@ function renderRedListCurrentList() {
 }
 
 function renderRedListStudentCard(item, isHistory) {
+  const attribute = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
+  const safeLink = value => {
+    try { const url = new URL(String(value)); return ['https:', 'http:'].includes(url.protocol) ? attribute(url.href) : '#'; } catch { return '#'; }
+  };
+  const cardData = `data-red-list-student-id="${attribute(item.student_id)}" data-red-list-year-month="${attribute(item.year_month)}"`;
   const student = students.find(s => s.student_id === item.student_id);
   const studentName = student ? student.name : item.student_name || '不明';
   const tutorName = student ? getTutorDisplayName(student.homeroom_tutor) : '-';
   
-  const notionUrl = cachedNotionUrls[item.student_id] || student?.notion_url || '#';
-  const discordUrl = student?.discord_url || '#';
+  const notionUrl = safeLink(cachedNotionUrls[item.student_id] || student?.notion_url || '#');
+  const discordUrl = safeLink(student?.discord_url || '#');
   const youtubeId = student?.youtube_channel_id || '';
   const xId = student?.x_account_id || '';
 
@@ -15675,26 +15683,26 @@ function renderRedListStudentCard(item, isHistory) {
         <div class="flex-1 min-w-0">
           <!-- 氏名行 -->
           <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span class="text-xs font-mono text-gray-400">${item.student_id}</span>
-            <span class="text-base font-bold text-gray-900">${studentName}</span>
-            <span class="text-xs text-gray-500"><i class="fas fa-user-tie mr-0.5"></i>${tutorName}</span>
+            <span class="text-xs font-mono text-gray-400">${attribute(item.student_id)}</span>
+            <span class="text-base font-bold text-gray-900">${escapeHtml(String(studentName))}</span>
+            <span class="text-xs text-gray-500"><i class="fas fa-user-tie mr-0.5"></i>${escapeHtml(String(tutorName))}</span>
           </div>
           <!-- SNS・日付行 -->
           <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
             ${notionUrl !== '#'
-              ? `<a href="${notionUrl}" target="_blank" class="text-gray-400 hover:text-blue-600 text-sm"><i class="fas fa-file-alt"></i></a>`
+              ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-blue-600 text-sm"><i class="fas fa-file-alt"></i></a>`
               : '<i class="fas fa-file-alt text-gray-200 text-sm"></i>'}
             ${discordUrl !== '#'
-              ? `<a href="${discordUrl}" target="_blank" class="text-gray-400 hover:text-purple-600 text-sm"><i class="fab fa-discord"></i></a>`
+              ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-purple-600 text-sm"><i class="fab fa-discord"></i></a>`
               : '<i class="fab fa-discord text-gray-200 text-sm"></i>'}
             ${youtubeId
-              ? `<a href="${formatYouTubeUrl(youtubeId)}" target="_blank" class="text-gray-400 hover:text-red-600 text-sm"><i class="fab fa-youtube"></i></a>`
+              ? `<a href="${safeLink(formatYouTubeUrl(youtubeId))}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-red-600 text-sm"><i class="fab fa-youtube"></i></a>`
               : '<i class="fab fa-youtube text-gray-200 text-sm"></i>'}
             ${xId
-              ? `<a href="${formatXUrl(xId)}" target="_blank" class="text-gray-400 hover:text-blue-400 text-sm"><i class="fab fa-x-twitter"></i></a>`
+              ? `<a href="${safeLink(formatXUrl(xId))}" target="_blank" rel="noopener noreferrer" class="text-gray-400 hover:text-blue-400 text-sm"><i class="fab fa-x-twitter"></i></a>`
               : '<i class="fab fa-x-twitter text-gray-200 text-sm"></i>'}
-            <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${yearMonth}</span>
-            <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${consecutiveMonths}ヶ月</span>
+            <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-0.5"></i>${attribute(yearMonth)}</span>
+            <span class="text-xs text-gray-400"><i class="fas fa-redo-alt mr-0.5"></i>連続 ${escapeHtml(String(consecutiveMonths))}ヶ月</span>
             ${isEx && item.ex_reason
               ? `<span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold"><i class="fas fa-comment-alt"></i>${escapeHtml(item.ex_reason)}</span>`
               : ''}
@@ -15724,8 +15732,8 @@ function renderRedListStudentCard(item, isHistory) {
         <!-- ③ 操作エリア（右端・固定幅） -->
         <div class="flex-shrink-0 flex flex-col items-end gap-2 min-w-[9rem]">
           <!-- 対応状況（今月・過去タブ共通） -->
-          <select onchange="updateRedListStatus('${item.student_id}', '${yearMonth}', this.value)"
-                  id="rl-status-${item.student_id}"
+          <select data-red-list-card-action="status" ${cardData}
+                  id="rl-status-${attribute(item.student_id)}"
                   class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-blue-400 cursor-pointer">
             <option value="未対応"  ${cs === '未対応'  ? 'selected' : ''}>未対応</option>
             <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
@@ -15734,20 +15742,20 @@ function renderRedListStudentCard(item, isHistory) {
           <!-- 担当者（今月・過去タブ共通） -->
           <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
             <i class="fas fa-user-tie text-indigo-300 text-xs flex-shrink-0"></i>
-            <input id="rl-assigned-${item.student_id}" type="text"
-                   value="${escapeHtml(ao)}"
+            <input id="rl-assigned-${attribute(item.student_id)}" type="text"
+                   value="${attribute(ao)}"
                    placeholder="担当者名"
-                   onchange="updateRedListAssigned('${item.student_id}', '${yearMonth}', this.value)"
+                   data-red-list-card-action="assigned" ${cardData}
                    class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
           </div>
           <!-- Discord送信ボタン -->
-          <button onclick="openRedListDiscordModal('${item.student_id}', '${studentName}', '${yearMonth}')"
+          <button data-red-list-card-action="send-prepare" ${cardData}
                   class="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">
             <i class="fab fa-discord"></i>Discord送信
           </button>
           <!-- EXランク手動設定ボタン -->
-          <button onclick="toggleExRank('${item.student_id}', '${yearMonth}', ${isEx})"
-                  id="ex-rank-btn-${item.student_id}"
+          <button data-red-list-card-action="ex" ${cardData}
+                  id="ex-rank-btn-${attribute(item.student_id)}"
                   class="w-full flex items-center justify-center gap-1 ${isEx ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'} px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm border ${isEx ? 'border-purple-600' : 'border-gray-300'}">
             <span class="font-black">EX</span>${isEx ? ' 解除' : ' 手動設定'}
           </button>
@@ -15814,7 +15822,7 @@ async function updateRedListStatus(studentId, yearMonth, status) {
       showNotification(res.data.error || 'ステータスの更新に失敗しました', 'error');
     }
   } catch (error) {
-    console.error('Error updating status:', error);
+    console.error('Red list status update failed');
     showNotification('ステータスの更新に失敗しました', 'error');
   }
 }
@@ -15835,7 +15843,7 @@ async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
       showNotification(res.data.error || '担当者の更新に失敗しました', 'error');
     }
   } catch (error) {
-    console.error('Error updating assigned_to:', error);
+    console.error('Red list assignment update failed');
     showNotification('担当者の更新に失敗しました', 'error');
   }
 }
@@ -15965,7 +15973,7 @@ async function loadRedListHistoryData() {
       updateRedListStats();
     }
   } catch (error) {
-    console.error('Error loading history data:', error);
+    console.error('Red list history load failed');
     document.getElementById('redlist-history-content').innerHTML = 
       '<div class="text-center py-8 text-red-600">データの読み込みに失敗しました</div>';
   } finally {
@@ -16012,8 +16020,8 @@ function renderRedListDiscordLogs(studentId, yearMonth) {
       year: 'numeric', month: 'numeric', day: 'numeric',
       hour: '2-digit', minute: '2-digit' });
     return `<div class="border-b border-indigo-100 py-1 last:border-0">
-      <div class="text-xs text-gray-500">${t} ／ ${l.sent_by || '-'}</div>
-      <div class="text-xs font-medium text-indigo-700 truncate">${escapeHtml(l.message_title || l.message_content.slice(0,30)+'…')}</div>
+      <div class="text-xs text-gray-500">${t} ／ ${escapeHtml(String(l.sent_by || '-'))}</div>
+      <div class="text-xs font-medium text-indigo-700 truncate">${escapeHtml(String(l.message_title || String(l.message_content || '').slice(0,30)+'…'))}</div>
     </div>`;
   }).join('');
 
@@ -16196,7 +16204,7 @@ async function fetchRedListDiscordLogs(yearMonth) {
       }
     }
   } catch (e) {
-    console.warn('Discord logs fetch failed:', e.message);
+    console.warn('Discord logs fetch failed');
   }
 }
 
@@ -18613,7 +18621,7 @@ function _renderDailyReportHistoryBody() {
         <div class="flex gap-2 items-start group" id="drComment-${cm.id}">
           <div class="flex-1 bg-blue-50 rounded-lg px-3 py-2 text-sm">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-semibold text-blue-800">${cm.commenter_name || cm.email || '-'}</span>
+              <span class="font-semibold text-blue-800">${escapeHtml(cm.commenter_name || cm.email || '-')}</span>
               <span class="text-xs text-gray-400">${cmTime}</span>
             </div>
             <div class="text-gray-700 whitespace-pre-wrap">${escapeHtml(cm.content)}</div>
@@ -18711,7 +18719,7 @@ async function submitDailyReportComment(reportId) {
       <div class="flex gap-2 items-start group" id="drComment-${cm.id}">
         <div class="flex-1 bg-blue-50 rounded-lg px-3 py-2 text-sm">
           <div class="flex items-center gap-2 mb-1">
-            <span class="font-semibold text-blue-800">${cm.commenter_name || '-'}</span>
+            <span class="font-semibold text-blue-800">${escapeHtml(cm.commenter_name || '-')}</span>
             <span class="text-xs text-gray-400">${cmTime}</span>
           </div>
           <div class="text-gray-700 whitespace-pre-wrap">${escapeHtml(cm.content)}</div>

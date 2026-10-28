@@ -11,6 +11,7 @@ function fixture(date='2026-10-28T12:00:00') {
   const elements=Object.fromEntries(['content','loading','lesson-reports-results','filter-start-date','filter-end-date','filter-student-id','filter-tutor-name','filter-lesson-result'].map(id=>[id,element()]));
   const FixedDate=class extends Date {constructor(...args){super(...(args.length?args:[date]));}};
   const context={currentUser:{role:'admin'},sessionToken:'synthetic-session',currentPage:'lesson-reports',API_BASE:'',Date:FixedDate,URLSearchParams,
+    escapeHtml:value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
     console:{error(){}},document:{getElementById:id=>elements[id],addEventListener:(type,callback)=>listeners.push({type,callback})},
     axios:{get:async url=>{requests.push(url);return {data:{success:true,data:[],count:0,total:0,limit:50,offset:0}}}}};
   vm.createContext(context);vm.runInContext(reportSource,context);vm.runInContext(eventSource,context);

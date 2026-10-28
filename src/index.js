@@ -165,6 +165,7 @@ app.get('/', (c) => {
         <script src="/daily-prepare-events.js?v=${Date.now()}"></script>
         <script src="/minutes-template-events.js?v=${Date.now()}"></script>
         <script src="/red-list-read-events.js?v=${Date.now()}"></script>
+        <script src="/red-list-card-events.js?v=${Date.now()}"></script>
         <script src="/tutor-red-month-events.js?v=${Date.now()}"></script>
         <script src="/user-create-prepare-events.js?v=${Date.now()}"></script>
         <script src="/helper-selection-close-events.js?v=${Date.now()}"></script>
@@ -181,6 +182,7 @@ app.get('/', (c) => {
         <script src="/broadcast-schedule-action-events.js?v=${Date.now()}"></script>
         <script src="/broadcast-template-write-events.js?v=${Date.now()}"></script>
         <script src="/vq-image-events.js?v=${Date.now()}"></script>
+        <script src="/vq-history-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);

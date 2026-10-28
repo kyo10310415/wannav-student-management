@@ -14,7 +14,7 @@ function fixture(){const calls=[],requests=[],listeners=[];
 test('seven read attributes migrate while calculation, send and status controls remain',()=>{
  assert.equal((app.match(/data-red-list-read-action=/g)||[]).length,6);assert.equal((app.match(/data-red-list-history-month/g)||[]).length,1);
  for(const fn of ['switchRedListTab','loadRedListHistoryData','showScoreBreakdown','toggleRedListLogDetail'])assert.equal(new RegExp('on(?:click|change)="'+fn+'\\(').test(app),false);
- for(const fn of ['updateRedListData()','exportRedListCsv()','toggleExRank('])assert.ok(app.includes('onclick="'+fn));assert.ok(app.includes('onchange="updateRedListStatus('));
+ for(const fn of ['updateRedListData()','exportRedListCsv()'])assert.ok(app.includes('onclick="'+fn));assert.ok(app.includes('data-red-list-card-action="status"'));assert.ok(app.includes('data-red-list-card-action="ex"'));
 });
 test('fixed read actions forward exact IDs/month and only toggle existing current content targets',()=>{
  const f=fixture();for(const tab of ['current','history','messages','senders'])f.click(f.button('tab',{redListTab:tab}));

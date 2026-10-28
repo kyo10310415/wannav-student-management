@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from'node:vm';import{readFile}from'node:fs/promises';
-const historySource=await readFile(new URL('../public/student-history-events.js',import.meta.url),'utf8'),helperSource=await readFile(new URL('../public/helper-status-events.js',import.meta.url),'utf8'),app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
+const historySource=await readFile(new URL('../public/student-history-events.js',import.meta.url),'utf8'),vqSource=await readFile(new URL('../public/vq-history-events.js',import.meta.url),'utf8'),helperSource=await readFile(new URL('../public/helper-status-events.js',import.meta.url),'utf8'),app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
 function fixture(){
  const calls=[],requests=[],notices=[],logs=[],timers=[],children=new Set(),html=[],listeners=[];
  const root=()=>({innerHTML:'',attributes:{},contains(n){for(let p=n;p;p=p.root)if(p===this)return true;return false},setAttribute(key,value){this.attributes[key]=value},remove(){children.delete(this);this.removed=true}});
@@ -7,7 +7,7 @@ function fixture(){
  const c={currentUser:{role:'admin'},sessionToken:'synthetic-session',currentPage:'students',API_BASE:'',students:[{student_id:'SYNTHETIC',name:'Synthetic <student>'}],document:{getElementById:id=>elements[id],body:{contains:n=>children.has(n),insertAdjacentHTML:(position,value)=>html.push(value),appendChild:modal=>children.add(modal)},createElement:()=>root(),addEventListener:(type,callback)=>listeners.push({type,callback})},console:{log:(...args)=>logs.push(args),error:(...args)=>logs.push(args)},escapeHtml:value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),setTimeout:(callback,delay)=>timers.push({callback,delay}),showAlert:(...args)=>notices.push(args),showNotification:(...args)=>notices.push(args),renderVQDiagnosisCharts:rows=>calls.push(['charts',rows.length])};
  for(const name of ['showWanamiHistory','closeWanamiHistoryModal','showStudentVQHistory','filterHelpersByStatus'])c[name]=(...args)=>calls.push([name,...args]);
  c.axios={get:async(...args)=>{requests.push(args);return {data:{success:true,data:{history:[]},history:[]}}}};
- vm.createContext(c);vm.runInContext(historySource+'\n'+helperSource,c);
+ vm.createContext(c);vm.runInContext(historySource+'\n'+helperSource+'\n'+vqSource,c);
  const node=(action,id='SYNTHETIC',at=elements.content,modal=null)=>{const n={root:at,disabled:false,dataset:{studentHistoryAction:action,studentHistoryId:id}};n.closest=s=>s==='[data-student-history-action]'?n:s==='[data-student-vq-history]'?modal:null;return n};
  const status=(value,at=elements.content)=>{const n={root:at,disabled:false,dataset:{helperStatus:value}};n.closest=s=>s==='button[data-helper-status]'?n:null;return n};
  return{c,calls,requests,notices,logs,timers,children,html,elements,listeners,root,node,status};
@@ -64,10 +64,45 @@ test('history data attributes encode quotes and targeted inline handlers disappe
  const c={studentId:'Synthetic" <&',student:{student_id:'Synthetic" <&'},studentIdCode:'Synthetic" <&',escapeHtml:value=>value.replace(/&/g,'&amp;').replace(/</g,'&lt;')};vm.createContext(c);
  const matches=[...app.matchAll(/data-student-history-id="(\$\{.*?\})"/g)];assert.equal(matches.length,3);for(const match of matches)assert.equal(vm.runInContext('`'+match[1]+'`',c),'Synthetic&quot; &lt;&amp;');
  for(const fn of ['showWanamiHistory','closeWanamiHistoryModal','showStudentVQHistory','filterHelpersByStatus'])assert.equal(new RegExp('onclick="'+fn+'\\(').test(app),false);
- assert.equal(app.includes('onclick="this.closest(\'.fixed\').remove()"'),false);for(const fn of ['submitHelperRequest()','acceptHelperRequest(','deleteHelperRequest(','resendVQDiagnosis(','deleteVQHistory('])assert.ok(app.includes('onclick="'+fn));
+ assert.equal(app.includes('onclick="this.closest(\'.fixed\').remove()"'),false);for(const fn of ['submitHelperRequest()','acceptHelperRequest(','deleteHelperRequest('])assert.ok(app.includes('onclick="'+fn));
 });
 
 test('root loads the four new delegates after app.js without duplicate entries',async()=>{
  const index=await readFile(new URL('../src/index.js',import.meta.url),'utf8');
  for(const name of ['student-history-events','helper-status-events','schedule-read-events','minutes-read-events']){const marker='<script src="/'+name+'.js?v=';assert.equal(index.split(marker).length-1,1);assert.ok(index.indexOf(marker)>index.indexOf('<script src="/app.js'));}
+});
+
+test('VQ stored dates are escaped and path IDs are encoded without altering chart inputs', async()=>{
+ const f=fixture();installRealHistories(f);const value='<img/src=x/onerror=synthetic()>';
+ const row={student_name:'Synthetic',diagnosis_date:value,total_score:81};
+ f.c.axios.get=async(...args)=>{f.requests.push(args);return {data:{history:[row]}}};
+ await f.c.showStudentVQHistory('Synthetic/?#');const modal=[...f.children][0];
+ assert.ok(modal.innerHTML.includes('&lt;img/src=x/onerror=synthetic()&gt;'));assert.equal(modal.innerHTML.includes(value),false);
+ assert.equal(f.requests[0][0],'/api/vq-diagnosis/student/Synthetic%2F%3F%23');
+ f.timers[0].callback();assert.deepEqual(f.calls,[['charts',1]]);
+});
+test('VQ late reads and charts cannot restore private modal after session or page changes',async()=>{
+ for(const change of [f=>{f.c.sessionToken='changed'},f=>{f.c.currentPage='dashboard'},f=>{f.c.currentUser={role:'crew'}},f=>{f.elements.content=f.root()}]){
+  const f=fixture();installRealHistories(f);let resolve;
+  f.c.axios.get=()=>new Promise(r=>{resolve=r});const pending=f.c.showStudentVQHistory('SYNTHETIC');change(f);
+  resolve({data:{history:[{student_name:'Synthetic'}]}});await pending;assert.equal(f.children.size,0);assert.equal(f.notices.length,0);
+ }
+ const f=fixture();installRealHistories(f);f.c.axios.get=async()=>({data:{history:[{student_name:'Synthetic'}]}});
+ await f.c.showStudentVQHistory('SYNTHETIC');f.c.sessionToken='changed';f.timers[0].callback();assert.equal(f.calls.length,0);
+});
+test('VQ row delegate uses cached names and rejects stale, crew and uncached operations',()=>{
+ const f=fixture();f.c.currentPage='vq-diagnosis';f.c.vqDiagnosisHistory=[{id:42,student_name:"Synthetic'\"<name>"}];
+ f.c.resendVQDiagnosis=(...args)=>f.calls.push(['resend',...args]);f.c.deleteVQHistory=(...args)=>f.calls.push(['delete',...args]);
+ const button={root:f.elements.content,dataset:{vqHistoryAction:'delete',vqHistoryId:'42'},closest(){return this}};
+ f.c.handleVQHistoryClick({target:button});assert.deepEqual(f.calls,[['delete',42,"Synthetic'\"<name>"]]);
+ for(const id of ['0','1.2','999','NaN']){button.dataset.vqHistoryId=id;f.c.handleVQHistoryClick({target:button})}
+ button.dataset.vqHistoryId='42';f.c.currentUser={role:'crew'};f.c.handleVQHistoryClick({target:button});
+ f.c.currentUser={role:'admin'};button.root=f.root();f.c.handleVQHistoryClick({target:button});assert.equal(f.calls.length,1);
+});
+test('VQ rendered actions contain only safe IDs and never interpolate stored names into handlers',()=>{
+ const f=fixture();f.c.vqDiagnosisHistory=[{id:42,student_name:"Synthetic'\" onmouseover=synthetic()",student_id_code:'SYNTHETIC',total_score:'<synthetic>'},{id:'bad',student_name:'Synthetic'}];f.c.formatDateTime=()=>'-';
+ const start=app.indexOf('function renderVQDiagnosisHistoryRows()'),end=app.indexOf('async function resendVQDiagnosis(id)',start);
+ vm.runInContext(app.slice(start,end),f.c);const html=f.c.renderVQDiagnosisHistoryRows();
+ assert.equal(html.includes('onclick='),false);assert.ok(html.includes('data-vq-history-action="delete" data-vq-history-id="42"'));
+ assert.equal(html.includes('data-vq-history-id="bad"'),false);assert.ok(html.includes('&lt;synthetic&gt;'));assert.ok(html.includes('disabled'));
 });
