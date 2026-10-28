@@ -61,8 +61,8 @@ app.get('/', requireAdmin, async (c) => {
         u.must_change_password,
         u.created_at,
         u.last_login,
-        u.discord_webhook_url,
-        u.discord_user_id,
+        COALESCE(u.discord_webhook_url, '') <> '' AS has_discord_webhook,
+        COALESCE(u.discord_user_id, '') <> '' AS has_discord_user_id,
         u.discord_reply_alerts_enabled,
         u.job_title,
         u.funnel_regular_booking_url,
@@ -76,7 +76,7 @@ app.get('/', requireAdmin, async (c) => {
     
     return c.json({
       success: true,
-      data: result.rows
+      data: result.rows.map(({ discord_webhook_url, discord_user_id, ...user }) => user)
     });
     
   } catch (error) {
@@ -342,6 +342,26 @@ app.put('/:id/reply-alerts', requireAdmin, async (c) => {
   } catch {
     console.error('[DiscordReplyMonitor] Preference update failed');
     return c.json({success:false,error:'未返信通知の設定更新に失敗しました'},500);
+  }
+});
+
+// Read selected settings only; never return these secrets in the users list.
+app.get('/:id/discord', requireAdmin, async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const rawId = c.req.param('id');
+  const userId = Number(rawId);
+  if (!/^\d+$/.test(rawId) || !Number.isSafeInteger(userId) || userId <= 0) {
+    return c.json({ success: false, error: 'ユーザーIDが不正です' }, 400);
+  }
+  try {
+    const result = await query(
+      'SELECT id, email, discord_webhook_url, discord_user_id FROM users WHERE id = $1', [userId]
+    );
+    if (!result.rows[0]) return c.json({ success: false, error: 'ユーザーが見つかりません' }, 404);
+    return c.json({ success: true, data: result.rows[0] });
+  } catch {
+    console.error('Get Discord settings error');
+    return c.json({ success: false, error: 'Discord設定の取得に失敗しました' }, 500);
   }
 });
 

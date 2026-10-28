@@ -139,6 +139,7 @@ app.get('/', (c) => {
         <div id="app"></div>
         <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+        <script src="/authenticated-images.js?v=${Date.now()}"></script>
         <script src="/app.js?v=${Date.now()}"></script>
         <script src="/extension-review.js?v=${Date.now()}"></script>
         <script src="/navigation-events.js?v=${Date.now()}"></script>
@@ -168,6 +169,10 @@ app.get('/', (c) => {
         <script src="/helper-selection-close-events.js?v=${Date.now()}"></script>
         <script src="/booking-prepare-events.js?v=${Date.now()}"></script>
         <script src="/red-list-prepare-events.js?v=${Date.now()}"></script>
+        <script src="/discord-prepare-events.js?v=${Date.now()}"></script>
+        <script src="/discord-mapping-events.js?v=${Date.now()}"></script>
+        <script src="/broadcast-template-events.js?v=${Date.now()}"></script>
+        <script src="/red-test-prepare-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
