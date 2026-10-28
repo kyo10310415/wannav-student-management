@@ -150,6 +150,10 @@ app.get('/', (c) => {
         <script src="/student-filter-events.js?v=${Date.now()}"></script>
         <script src="/tutor-read-events.js?v=${Date.now()}"></script>
         <script src="/previous-targets-events.js?v=${Date.now()}"></script>
+        <script src="/student-history-events.js?v=${Date.now()}"></script>
+        <script src="/helper-status-events.js?v=${Date.now()}"></script>
+        <script src="/schedule-read-events.js?v=${Date.now()}"></script>
+        <script src="/minutes-read-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
