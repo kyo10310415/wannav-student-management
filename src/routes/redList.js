@@ -296,6 +296,8 @@ app.delete('/messages/:id', async (c) => {
  * テンプレートに添付された画像を返す
  */
 app.get('/messages/:id/image', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  c.header('Vary', 'Authorization');
   try {
     const id = c.req.param('id');
     const result = await query(
@@ -310,7 +312,8 @@ app.get('/messages/:id/image', async (c) => {
       headers: {
         'Content-Type': image_content_type || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${image_filename || 'image'}"`,
-        'Cache-Control': 'private, max-age=3600'
+        'Cache-Control': 'private, no-store',
+        'Vary': 'Authorization'
       }
     });
   } catch (error) {

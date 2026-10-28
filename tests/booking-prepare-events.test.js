@@ -44,6 +44,6 @@ test('real history preserves empty/failure display and does not log raw exceptio
 });
 test('exactly four booking attributes migrate while save confirmation and Discord configuration remain untouched',()=>{
  assert.equal((app.match(/data-booking-prepare-action=/g)||[]).length,4);for(const fn of ['showEditBookingLinksModal','closeEditBookingLinksModal','restoreTutorBookingLinksFromHistory'])assert.equal(new RegExp('onclick="'+fn+'\\(').test(app),false);
- assert.ok(app.includes("onclick=\"showEditDiscordModal(${user.id}, '${user.email}'"));assert.ok(app.includes("document.getElementById('edit-booking-links-form').addEventListener('submit', saveTutorBookingLinks)"));
+ assert.ok(app.includes('data-discord-prepare-action="open" data-discord-user-id="${user.id}"'));assert.ok(app.includes("document.getElementById('edit-booking-links-form').addEventListener('submit', saveTutorBookingLinks)"));
  for(const expr of ['user.email','user.tutor_name',"user.funnel_regular_booking_url || ''","user.funnel_pro_booking_url || ''"]){assert.ok(app.includes('${escapeHtml('+expr+').replace(/"/g, \'&quot;\')}"'))}
 });

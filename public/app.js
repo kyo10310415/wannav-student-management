@@ -7968,6 +7968,8 @@ async function verifySession() {
  * Show login page
  */
 function showLoginPage() {
+  closeEditDiscordModal();
+  if (typeof clearAllRedListAuthenticatedImages === 'function') clearAllRedListAuthenticatedImages();
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -8268,7 +8270,7 @@ async function renderUsersPage() {
             ユーザー管理
           </h2>
           <div class="flex gap-2">
-            <button onclick="checkDiscordMapping()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            <button data-discord-mapping-action="open" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
               <i class="fab fa-discord mr-2"></i>Discord紐付け確認
             </button>
             <button data-user-create-action="open" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
@@ -8345,12 +8347,12 @@ async function renderUsersPage() {
                   </td>
                   <td class="px-4 py-3">
                     <button 
-                      onclick="showEditDiscordModal(${user.id}, '${user.email}', ${user.discord_webhook_url ? `'${user.discord_webhook_url}'` : 'null'}, ${user.discord_user_id ? `'${user.discord_user_id}'` : 'null'})"
+                      data-discord-prepare-action="open" data-discord-user-id="${user.id}"
                       class="px-3 py-1 bg-indigo-500 text-white rounded text-sm hover:bg-indigo-600 transition"
                       title="Discord設定を編集"
                     >
                       <i class="fab fa-discord mr-1"></i>
-                      ${user.discord_webhook_url || user.discord_user_id ? '設定済み' : '未設定'}
+                      ${user.has_discord_webhook || user.has_discord_user_id ? '設定済み' : '未設定'}
                     </button>
                     ${user.tutor_name ? `<label class="flex items-center gap-2 mt-2 text-xs" title="担当生徒の12時間未返信通知。OFFでTutor・管理側の両方を停止"><input type="checkbox" ${user.discord_reply_alerts_enabled !== false ? 'checked' : ''} onchange="updateUserReplyAlerts(${user.id}, this)">未返信通知</label>` : '<div class="text-xs text-gray-400 mt-2">未返信通知：Tutor未紐付け</div>'}
                   </td>
@@ -8814,7 +8816,18 @@ async function deleteUser(userId, email) {
 /**
  * Show edit Discord settings modal
  */
-function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
+let discordSettingsRequestState = null;
+
+function discordSettingsCanSave() {
+  const state = discordSettingsRequestState;
+  return state?.ready && state.token === sessionToken && currentUser?.role === 'admin' && currentPage === 'users' &&
+    state.modal.isConnected && document.getElementById('edit-discord-modal') === state.modal;
+}
+
+async function showEditDiscordModal(userId) {
+  if (!currentUser || currentUser.role !== 'admin' || !sessionToken || currentPage !== 'users') return;
+  closeEditDiscordModal();
+  const requestToken = sessionToken;
   const modal = document.createElement('div');
   modal.id = 'edit-discord-modal';
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
@@ -8824,19 +8837,20 @@ function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fab fa-discord mr-2 text-indigo-600"></i>Discord設定を編集
         </h2>
-        <button onclick="closeEditDiscordModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-discord-prepare-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
       
+      <p id="discord-settings-status" class="px-6 text-sm text-gray-600">設定を読み込んでいます...</p>
       <form id="edit-discord-form" class="p-6 space-y-6">
-        <input type="hidden" id="discord-user-id-field" value="${userId}">
+        <input type="hidden" id="discord-user-id-field" value="">
         
         <!-- User info -->
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p class="text-sm text-blue-800">
             <i class="fas fa-info-circle mr-2"></i>
-            <strong>${email}</strong> のDiscord設定
+            <strong id="discord-settings-email"></strong> のDiscord設定
           </p>
         </div>
         
@@ -8848,7 +8862,7 @@ function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
           <input 
             type="url" 
             id="discord-webhook-url" 
-            value="${webhookUrl || ''}"
+            value=""
             placeholder="https://discord.com/api/webhooks/..."
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           >
@@ -8866,7 +8880,7 @@ function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
           <input 
             type="text" 
             id="discord-user-id-input" 
-            value="${discordUserId || ''}"
+            value=""
             placeholder="123456789012345678"
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           >
@@ -8880,13 +8894,13 @@ function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
         <div class="flex justify-end gap-3 pt-4 border-t">
           <button 
             type="button" 
-            onclick="closeEditDiscordModal()"
+            data-discord-prepare-action="close"
             class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
           >
             キャンセル
           </button>
           <button 
-            type="submit"
+            type="submit" id="discord-settings-save" disabled
             class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
           >
             <i class="fas fa-save mr-2"></i>保存
@@ -8897,18 +8911,46 @@ function showEditDiscordModal(userId, email, webhookUrl, discordUserId) {
   `;
   
   document.body.appendChild(modal);
+  const state = { modal, token: requestToken, ready: false };
+  discordSettingsRequestState = state;
   
   // Handle form submission
   document.getElementById('edit-discord-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    await saveDiscordSettings();
+    if (discordSettingsCanSave()) await saveDiscordSettings();
   });
+  try {
+    const response = await axios.get(`${API_BASE}/api/users/${userId}/discord`, {
+      headers: { Authorization: `Bearer ${requestToken}` }
+    });
+    if (discordSettingsRequestState !== state || requestToken !== sessionToken || currentUser?.role !== 'admin' ||
+        currentPage !== 'users' || !modal.isConnected || document.getElementById('edit-discord-modal') !== modal) return;
+    const data = response.data.data;
+    if (!response.data.success || !data || String(data.id) !== String(userId)) throw new Error('Invalid settings response');
+    document.getElementById('discord-user-id-field').value = String(data.id);
+    document.getElementById('discord-settings-email').textContent = data.email || '';
+    document.getElementById('discord-webhook-url').value = data.discord_webhook_url || '';
+    document.getElementById('discord-user-id-input').value = data.discord_user_id || '';
+    document.getElementById('discord-settings-status').textContent = '';
+    state.ready = true;
+    document.getElementById('discord-settings-save').disabled = false;
+  } catch {
+    if (discordSettingsRequestState === state && requestToken === sessionToken && currentUser?.role === 'admin' &&
+        modal.isConnected && document.getElementById('edit-discord-modal') === modal) {
+      document.getElementById('discord-settings-status').textContent = '設定を取得できませんでした。閉じてから再度お試しください。';
+    }
+  }
 }
 
 /**
  * Close edit Discord modal
  */
 function closeEditDiscordModal() {
+  discordSettingsRequestState = null;
+  for (const id of ['discord-webhook-url', 'discord-user-id-input']) {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  }
   const modal = document.getElementById('edit-discord-modal');
   if (modal) {
     modal.remove();
@@ -8919,6 +8961,7 @@ function closeEditDiscordModal() {
  * Save Discord settings
  */
 async function saveDiscordSettings() {
+  if (!discordSettingsCanSave()) return;
   const userId = document.getElementById('discord-user-id-field').value;
   const webhookUrl = document.getElementById('discord-webhook-url').value.trim();
   const discordUserId = document.getElementById('discord-user-id-input').value.trim();
@@ -8949,9 +8992,14 @@ async function saveDiscordSettings() {
  * Check Discord mapping for tutors and leaders
  */
 async function checkDiscordMapping() {
+  if (!currentUser || currentUser.role !== 'admin' || !sessionToken) return;
+  const mappingToken = sessionToken;
+  const mappingContent = document.getElementById('content');
+  let loadingModal;
   try {
+    document.getElementById('discord-mapping-modal')?.remove();
     // Show loading modal
-    const loadingModal = document.createElement('div');
+    loadingModal = document.createElement('div');
     loadingModal.id = 'discord-mapping-modal';
     loadingModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
     loadingModal.innerHTML = `
@@ -8960,7 +9008,7 @@ async function checkDiscordMapping() {
           <h2 class="text-2xl font-bold text-gray-800">
             <i class="fab fa-discord mr-2 text-indigo-600"></i>Discord紐付け確認
           </h2>
-          <button onclick="closeDiscordMappingModal()" class="text-gray-500 hover:text-gray-700">
+          <button data-discord-mapping-action="close" class="text-gray-500 hover:text-gray-700">
             <i class="fas fa-times text-2xl"></i>
           </button>
         </div>
@@ -8975,7 +9023,8 @@ async function checkDiscordMapping() {
     document.body.appendChild(loadingModal);
     
     // Fetch mapping data
-    const response = await axios.get(`${API_BASE}/api/lesson-report-reminder/check-mapping`);
+    const response = await axios.get(`${API_BASE}/api/lesson-report-reminder/check-mapping`, { headers: { Authorization: `Bearer ${mappingToken}` } });
+    if (mappingToken !== sessionToken || currentUser?.role !== 'admin' || currentPage !== 'users' || document.getElementById('content') !== mappingContent || document.getElementById('discord-mapping-modal') !== loadingModal) { loadingModal.remove(); return; }
     const data = response.data.data;
     
     // Build summary HTML
@@ -9007,9 +9056,9 @@ async function checkDiscordMapping() {
           <div class="space-y-2">
             ${data.summary.yesterday_lessons.map(lesson => `
               <div class="text-sm text-yellow-800">
-                <strong>${lesson.tutor_name || lesson.homeroom_tutor}</strong>: ${lesson.lesson_count}件
-                ${lesson.tutor_email ? `(${lesson.tutor_email})` : ''}
-                ${lesson.team ? `[${lesson.team}]` : ''}
+                <strong>${escapeHtml(lesson.tutor_name || lesson.homeroom_tutor)}</strong>: ${lesson.lesson_count}件
+                ${lesson.tutor_email ? `(${escapeHtml(lesson.tutor_email)})` : ''}
+                ${lesson.team ? `[${escapeHtml(lesson.team)}]` : ''}
               </div>
             `).join('')}
           </div>
@@ -9034,11 +9083,11 @@ async function checkDiscordMapping() {
           <tbody>
             ${data.tutor_mapping.map(tutor => `
               <tr class="border-b hover:bg-gray-50">
-                <td class="px-3 py-2">${tutor.tutor_name}</td>
-                <td class="px-3 py-2 text-xs">${tutor.email || '-'}</td>
+                <td class="px-3 py-2">${escapeHtml(tutor.tutor_name)}</td>
+                <td class="px-3 py-2 text-xs">${escapeHtml(tutor.email || '-')}</td>
                 <td class="px-3 py-2">
                   <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                    ${tutor.team || '-'}
+                    ${escapeHtml(tutor.team || '-')}
                   </span>
                 </td>
                 <td class="px-3 py-2 text-center">
@@ -9050,8 +9099,8 @@ async function checkDiscordMapping() {
                   ${tutor.team_leaders.length > 0 
                     ? tutor.team_leaders.map(leader => `
                         <div class="text-xs mb-1">
-                          <span class="font-medium">${leader.tutor_name || leader.email}</span>
-                          <span class="text-gray-500">(${leader.role})</span>
+                          <span class="font-medium">${escapeHtml(leader.tutor_name || leader.email)}</span>
+                          <span class="text-gray-500">(${escapeHtml(leader.role)})</span>
                           ${leader.has_webhook 
                             ? '<i class="fas fa-check text-green-600 ml-1"></i>' 
                             : '<i class="fas fa-times text-red-600 ml-1"></i>'}
@@ -9078,7 +9127,7 @@ async function checkDiscordMapping() {
           <h2 class="text-2xl font-bold text-gray-800">
             <i class="fab fa-discord mr-2 text-indigo-600"></i>Discord紐付け確認
           </h2>
-          <button onclick="closeDiscordMappingModal()" class="text-gray-500 hover:text-gray-700">
+          <button data-discord-mapping-action="close" class="text-gray-500 hover:text-gray-700">
             <i class="fas fa-times text-2xl"></i>
           </button>
         </div>
@@ -9095,7 +9144,7 @@ async function checkDiscordMapping() {
         
         <div class="p-4 border-t bg-gray-50 flex justify-end">
           <button 
-            onclick="closeDiscordMappingModal()"
+            data-discord-mapping-action="close"
             class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
           >
             閉じる
@@ -9105,8 +9154,9 @@ async function checkDiscordMapping() {
     `;
     
   } catch (error) {
-    console.error('Discord mapping check error:', error);
-    alert('Discord紐付け確認に失敗しました: ' + (error.response?.data?.error || error.message));
+    if (mappingToken !== sessionToken || currentUser?.role !== 'admin' || currentPage !== 'users' || document.getElementById('content') !== mappingContent || document.getElementById('discord-mapping-modal') !== loadingModal) { loadingModal?.remove(); return; }
+    console.error('Discord mapping check failed');
+    alert('Discord紐付け確認に失敗しました');
     closeDiscordMappingModal();
   }
 }
@@ -10063,7 +10113,7 @@ async function renderBroadcastPage() {
             </h1>
             <p class="text-gray-600">Discord一斉送信メッセージ管理</p>
           </div>
-          <button onclick="showTemplatesModal()" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition">
+          <button data-broadcast-template-action="open" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition">
             <i class="fas fa-folder-open mr-2"></i>テンプレート管理
           </button>
         </div>
@@ -10835,11 +10885,16 @@ async function saveTemplate() {
  * Show templates modal
  */
 async function showTemplatesModal() {
+  if (!currentUser || !['admin', 'leader', 'crew'].includes(currentUser.role) || !sessionToken) return;
+  const templateToken = sessionToken;
+  const templateRole = currentUser.role;
+  const templateContent = document.getElementById('content');
   try {
     const response = await axios.get(`${API_BASE}/api/broadcast/templates`, {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
     
+    if (templateToken !== sessionToken || currentUser?.role !== templateRole || currentPage !== 'broadcast' || document.getElementById('content') !== templateContent) return;
     if (response.data.success) {
       broadcastTemplates = response.data.templates;
       
@@ -10850,7 +10905,7 @@ async function showTemplatesModal() {
       ` : broadcastTemplates.map(t => `
         <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
           <div class="flex justify-between items-start mb-2">
-            <h3 class="font-bold text-lg text-gray-800">${t.name}</h3>
+            <h3 class="font-bold text-lg text-gray-800">${escapeHtml(t.name)}</h3>
             <div class="flex gap-2">
               <button onclick="loadTemplate(${t.id})" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition text-sm">
                 <i class="fas fa-download mr-1"></i>読込
@@ -10860,29 +10915,30 @@ async function showTemplatesModal() {
               </button>
             </div>
           </div>
-          <p class="text-gray-700 text-sm mb-2 whitespace-pre-wrap">${t.content}</p>
+          <p class="text-gray-700 text-sm mb-2 whitespace-pre-wrap">${escapeHtml(t.content)}</p>
           <div class="flex gap-4 text-xs text-gray-500">
-            <span><i class="fas fa-hashtag mr-1"></i>${t.channel_type}</span>
-            ${t.target_tutor ? `<span><i class="fas fa-chalkboard-teacher mr-1"></i>${t.target_tutor}</span>` : ''}
+            <span><i class="fas fa-hashtag mr-1"></i>${escapeHtml(t.channel_type)}</span>
+            ${t.target_tutor ? `<span><i class="fas fa-chalkboard-teacher mr-1"></i>${escapeHtml(t.target_tutor)}</span>` : ''}
             ${t.image_url ? '<span><i class="fas fa-image mr-1"></i>画像あり</span>' : ''}
           </div>
         </div>
       `).join('');
       
-      showModal(`
+      showModal(`<div data-broadcast-template-view>
         <h2 class="text-2xl font-bold mb-4">
           <i class="fas fa-folder-open mr-2 text-indigo-600"></i>テンプレート管理
         </h2>
         <div class="max-h-96 overflow-y-auto space-y-3">
           ${templatesHtml}
         </div>
-        <button onclick="closeModal()" class="mt-4 w-full bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition">
+        <button data-broadcast-template-action="close" class="mt-4 w-full bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition">
           閉じる
-        </button>
+        </button></div>
       `);
     }
   } catch (error) {
-    console.error('Error loading templates:', error);
+    if (templateToken !== sessionToken || currentUser?.role !== templateRole || currentPage !== 'broadcast' || document.getElementById('content') !== templateContent) return;
+    console.error('Error loading templates');
     showNotification('テンプレートの取得に失敗しました', 'error');
   }
 }
@@ -15183,6 +15239,7 @@ let redListDiscordLogs = {};    // { studentId_yearMonth: [log, ...] }
 let redListSenders = [];        // 送信者マスタ
 
 async function renderRedListPage() {
+  clearAllRedListAuthenticatedImages();
   const content = document.getElementById('content');
   
   content.innerHTML = `
@@ -15527,7 +15584,7 @@ async function renderRedListPage() {
           <h3 class="text-lg font-semibold text-gray-800">
             <i class="fas fa-flask text-green-500 mr-2"></i>テスト送信
           </h3>
-          <button onclick="closeRedListTestSendModal()" class="text-gray-400 hover:text-gray-600">
+          <button data-red-test-action="close" class="text-gray-400 hover:text-gray-600">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
@@ -15550,7 +15607,7 @@ async function renderRedListPage() {
               <i class="fas fa-user-tie mr-1 text-indigo-400"></i>送信者を選択（任意）
             </label>
             <select id="redlist-test-send-sender-select"
-                    onchange="onRedListTestSendSenderChange()"
+                    data-red-test-sender
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
               <option value="">送信者を選択しない</option>
             </select>
@@ -15563,7 +15620,7 @@ async function renderRedListPage() {
           <input type="hidden" id="redlist-test-send-message-id" value="">
         </div>
         <div class="flex justify-end space-x-3 p-6 border-t bg-gray-50 rounded-b-xl">
-          <button onclick="closeRedListTestSendModal()"
+          <button data-red-test-action="close"
                   class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             キャンセル
           </button>
@@ -16470,6 +16527,7 @@ function getCurrentYearMonthStr() {
 let _rlDiscordTarget = { studentId: null, studentName: null, yearMonth: null };
 
 async function openRedListDiscordModal(studentId, studentName, yearMonth) {
+  clearRedListAuthenticatedImage(document.getElementById('redlist-discord-modal-img'), document.getElementById('redlist-discord-modal-img-wrap'));
   _rlDiscordTarget = { studentId, studentName, yearMonth };
 
   // 生徒名表示
@@ -16490,7 +16548,6 @@ async function openRedListDiscordModal(studentId, studentName, yearMonth) {
 
   // テキストエリア・画像・送信者をリセット
   document.getElementById('redlist-discord-modal-content').value = '';
-  document.getElementById('redlist-discord-modal-img-wrap').classList.add('hidden');
   document.getElementById('redlist-discord-sender-select').value = '';
   document.getElementById('redlist-discord-booking-url-wrap').classList.add('hidden');
 
@@ -16499,6 +16556,7 @@ async function openRedListDiscordModal(studentId, studentName, yearMonth) {
 }
 
 function closeRedListDiscordModal() {
+  clearRedListAuthenticatedImage(document.getElementById('redlist-discord-modal-img'), document.getElementById('redlist-discord-modal-img-wrap'));
   document.getElementById('redlist-discord-modal').classList.add('hidden');
   _rlDiscordTarget = { studentId: null, studentName: null, yearMonth: null };
 }
@@ -16563,16 +16621,13 @@ function onRedListMessageSelectChange() {
     // 添付画像プレビュー
     if (opt.dataset.hasImage === '1') {
       const msgId = opt.value;
-      imgEl.src = `${API_BASE}/api/red-list/messages/${msgId}/image`;
-      imgWrap.classList.remove('hidden');
+      loadRedListAuthenticatedImage(imgEl, msgId, imgWrap);
     } else {
-      imgWrap.classList.add('hidden');
-      imgEl.src = '';
+      clearRedListAuthenticatedImage(imgEl, imgWrap);
     }
   } else if (!sel.value) {
     textarea.value = '';
-    imgWrap.classList.add('hidden');
-    imgEl.src = '';
+    clearRedListAuthenticatedImage(imgEl, imgWrap);
   }
 }
 
@@ -16694,7 +16749,7 @@ function renderRedListMessages() {
             <p class="text-sm text-gray-600 mt-2 whitespace-pre-wrap line-clamp-3">${escapeHtml(m.content)}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
-            <button onclick="openRedListTestSendModal(${m.id}, '${escapeHtml(m.title)}')"
+            <button data-red-test-action="open" data-red-test-id="${escapeHtml(String(m.id)).replace(/"/g, '&quot;')}"
                     class="text-green-600 hover:text-green-800 text-sm px-2 py-1 rounded border border-green-200 hover:bg-green-50 transition"
                     title="テスト送信">
               <i class="fas fa-flask"></i>
@@ -16718,6 +16773,7 @@ function renderRedListMessages() {
 // ═══════════════════════════════════════════════════════════════
 
 function openRedListMessageModal(id = null) {
+  clearRedListAuthenticatedImage(document.getElementById('redlist-msg-edit-img-preview'), document.getElementById('redlist-msg-edit-img-current'));
   document.getElementById('redlist-msg-edit-id').value = id || '';
   document.getElementById('redlist-msg-edit-name').value = '';
   document.getElementById('redlist-msg-edit-content').value = '';
@@ -16738,8 +16794,7 @@ function openRedListMessageModal(id = null) {
       if (msg.has_image) {
         const imgWrap    = document.getElementById('redlist-msg-edit-img-current');
         const imgPreview = document.getElementById('redlist-msg-edit-img-preview');
-        imgPreview.src   = `${API_BASE}/api/red-list/messages/${id}/image`;
-        imgWrap.classList.remove('hidden');
+        loadRedListAuthenticatedImage(imgPreview, id, imgWrap);
       }
     }
   }
@@ -16748,11 +16803,13 @@ function openRedListMessageModal(id = null) {
 }
 
 function closeRedListMessageModal() {
+  clearRedListAuthenticatedImage(document.getElementById('redlist-msg-edit-img-preview'), document.getElementById('redlist-msg-edit-img-current'));
   document.getElementById('redlist-msg-edit-modal').classList.add('hidden');
 }
 
 /** 「既存画像を削除」ボタン */
 function removeRedListMessageImage() {
+  clearRedListAuthenticatedImage(document.getElementById('redlist-msg-edit-img-preview'), document.getElementById('redlist-msg-edit-img-current'));
   document.getElementById('redlist-msg-edit-remove-image').value = 'true';
   document.getElementById('redlist-msg-edit-img-current').classList.add('hidden');
 }
