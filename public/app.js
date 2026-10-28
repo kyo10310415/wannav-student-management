@@ -7294,7 +7294,7 @@ function renderSchedulesList() {
             const colorClass = keywordColors[keyword] || 'bg-gray-100 text-gray-800';
             
             // Convert schedule object to JSON string for onclick (escape quotes)
-            const scheduleJson = JSON.stringify(schedule).replace(/"/g, '&quot;');
+            const scheduleJson = encodeURIComponent(JSON.stringify(schedule));
             
             return `
               <tr class="hover:bg-gray-50">
@@ -7311,7 +7311,7 @@ function renderSchedulesList() {
                 <td class="px-4 py-3 text-sm">${absenceNames}</td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <button 
-                    onclick='openAbsenceRequestModal(${scheduleJson})' 
+                    data-absence-prepare-action="open" data-absence-schedule="${scheduleJson}"
                     class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
                   >
                     <i class="fas fa-calendar-times mr-1"></i>不参加申請
@@ -7563,7 +7563,7 @@ function openAbsenceRequestModal(schedule) {
         <h2 class="text-2xl font-bold text-gray-800">
           <i class="fas fa-calendar-times mr-2 text-red-600"></i>不参加申請
         </h2>
-        <button onclick="closeAbsenceRequestModal()" class="text-gray-500 hover:text-gray-700">
+        <button data-absence-prepare-action="close" class="text-gray-500 hover:text-gray-700">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -7572,12 +7572,12 @@ function openAbsenceRequestModal(schedule) {
         <!-- Schedule info -->
         <div class="bg-gray-50 rounded-lg p-4 mb-4">
           <div class="text-sm text-gray-600 mb-1">スケジュール詳細</div>
-          <div class="font-semibold text-gray-900">${schedule.title || '（タイトルなし）'}</div>
+          <div class="font-semibold text-gray-900">${escapeHtml(schedule.title || '（タイトルなし）')}</div>
           <div class="text-sm text-gray-600 mt-2">
-            <i class="fas fa-calendar mr-1"></i>${schedule.schedule_date} ${schedule.schedule_time}
+            <i class="fas fa-calendar mr-1"></i>${escapeHtml(schedule.schedule_date)} ${escapeHtml(schedule.schedule_time)}
           </div>
           <div class="text-sm text-gray-600 mt-1">
-            <i class="fas fa-tag mr-1"></i>${schedule.matched_keyword || '-'}
+            <i class="fas fa-tag mr-1"></i>${escapeHtml(schedule.matched_keyword || '-')}
           </div>
         </div>
         
@@ -7620,7 +7620,7 @@ function openAbsenceRequestModal(schedule) {
         <!-- Actions -->
         <div class="flex gap-3">
           <button 
-            onclick="closeAbsenceRequestModal()" 
+            data-absence-prepare-action="close"
             class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
           >
             キャンセル
@@ -15208,19 +15208,19 @@ async function renderRedListPage() {
     <div class="bg-white rounded-lg shadow-md mb-6">
       <div class="border-b border-gray-200">
         <nav class="flex -mb-px">
-          <button onclick="switchRedListTab('current')" id="redlist-tab-current" 
+          <button data-red-list-read-action="tab" data-red-list-tab="current" id="redlist-tab-current"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
             <i class="fas fa-calendar-day"></i> 今月のレッドリスト
           </button>
-          <button onclick="switchRedListTab('history')" id="redlist-tab-history"
+          <button data-red-list-read-action="tab" data-red-list-tab="history" id="redlist-tab-history"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
             <i class="fas fa-history"></i> 過去のレッドリスト
           </button>
-          <button onclick="switchRedListTab('messages')" id="redlist-tab-messages"
+          <button data-red-list-read-action="tab" data-red-list-tab="messages" id="redlist-tab-messages"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
             <i class="fab fa-discord"></i> 送信メッセージ管理
           </button>
-          <button onclick="switchRedListTab('senders')" id="redlist-tab-senders"
+          <button data-red-list-read-action="tab" data-red-list-tab="senders" id="redlist-tab-senders"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
             <i class="fas fa-user-tie"></i> 送信者管理
           </button>
@@ -15313,7 +15313,7 @@ async function renderRedListPage() {
       <div class="p-6">
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">対象月</label>
-          <select id="redlist-history-month" onchange="loadRedListHistoryData()" 
+          <select id="redlist-history-month" data-red-list-history-month
                   class="border border-gray-300 rounded-lg px-4 py-2 w-64">
             <option value="">月を選択...</option>
           </select>
@@ -15864,12 +15864,12 @@ function renderRedListStudentCard(item, isHistory) {
   
   const scoreBreakdown = `
     <div class="mt-2 text-xs">
-      <button onclick="showScoreBreakdown('${item.student_id}')" 
+      <button data-red-list-read-action="score" data-red-list-student-id="${escapeHtml(String(item.student_id)).replace(/"/g, '&quot;')}"
               class="text-blue-600 hover:text-blue-800" 
               title="スコア内訳を表示">
         <i class="fas fa-list-ul"></i> スコア内訳
       </button>
-      <div id="score-breakdown-${item.student_id}" class="hidden mt-2 bg-gray-50 p-3 rounded border border-gray-200">
+      <div id="score-breakdown-${escapeHtml(String(item.student_id)).replace(/"/g, '&quot;')}" class="hidden mt-2 bg-gray-50 p-3 rounded border border-gray-200">
         <div class="grid grid-cols-2 gap-2 text-sm">
           <div class="flex justify-between">
             <span class="text-gray-600">満足度 (0-4):</span>
@@ -16277,13 +16277,13 @@ function renderRedListDiscordLogs(studentId, yearMonth) {
 
   return `
     <div class="mt-2">
-      <button onclick="toggleRedListLogDetail('${studentId}','${yearMonth}')"
+      <button data-red-list-read-action="log" data-red-list-student-id="${escapeHtml(String(studentId)).replace(/"/g, '&quot;')}" data-red-list-year-month="${escapeHtml(String(yearMonth)).replace(/"/g, '&quot;')}"
               class="text-xs text-indigo-600 hover:text-indigo-800 flex items-center space-x-1">
         <i class="fab fa-discord"></i>
         <span>送信済み ${logs.length}件（最終: ${sentAt}）</span>
-        <i class="fas fa-chevron-down text-xs" id="rl-log-chevron-${studentId}"></i>
+        <i class="fas fa-chevron-down text-xs" id="rl-log-chevron-${escapeHtml(String(studentId)).replace(/"/g, '&quot;')}"></i>
       </button>
-      <div id="rl-log-detail-${studentId}" class="hidden mt-1 bg-indigo-50 border border-indigo-200 rounded-lg p-2 max-h-40 overflow-y-auto">
+      <div id="rl-log-detail-${escapeHtml(String(studentId)).replace(/"/g, '&quot;')}" class="hidden mt-1 bg-indigo-50 border border-indigo-200 rounded-lg p-2 max-h-40 overflow-y-auto">
         ${allRows}
       </div>
     </div>`;
@@ -18116,13 +18116,13 @@ function _renderTutorRedListContent() {
         <!-- 月選択 -->
         <div class="flex items-center gap-2 ml-2">
           <label class="text-sm font-medium text-gray-700"><i class="fas fa-calendar mr-1"></i>集計月:</label>
-          <button onclick="changeTutorRedListMonth(-1)" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+          <button data-tutor-red-month="previous" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
             <i class="fas fa-chevron-left"></i>
           </button>
           <span class="px-4 py-2 bg-gray-100 rounded font-semibold min-w-[120px] text-center">
             ${tutorRedListYear}年${tutorRedListMonth}月
           </span>
-          <button onclick="changeTutorRedListMonth(1)" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+          <button data-tutor-red-month="next" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
             <i class="fas fa-chevron-right"></i>
           </button>
         </div>
@@ -18647,7 +18647,7 @@ function _renderDailyReportsContent() {
                   <td class="px-4 py-3 text-center">${dayBadge(todayStatus)}</td>
                   <td class="px-4 py-3 text-center">${dayBadge(yesterdayStatus)}</td>
                   <td class="px-4 py-3 text-center">
-                    <button onclick="openDailyReportModal(${t.tutor_id}, '${t.tutor_name.replace(/'/g,"\\'")}', null)"
+                    <button data-daily-prepare-action="open" data-daily-prepare-id="${t.tutor_id}" data-daily-prepare-name="${escapeHtml(t.tutor_name).replace(/"/g, '&quot;')}"
                             class="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition">
                       <i class="fas fa-pen mr-1"></i>日報提出
                     </button>
@@ -18665,7 +18665,7 @@ function _renderDailyReportsContent() {
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div class="flex items-center justify-between px-6 py-4 border-b">
           <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-pen mr-2 text-purple-600"></i>日報提出</h3>
-          <button onclick="closeDailyReportModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          <button data-daily-prepare-action="close" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
         <div class="px-6 py-5 space-y-4">
           <div>
@@ -18689,7 +18689,7 @@ function _renderDailyReportsContent() {
           </div>
         </div>
         <div class="px-6 py-4 border-t flex gap-3 justify-end">
-          <button onclick="closeDailyReportModal()"
+          <button data-daily-prepare-action="close"
                   class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition">キャンセル</button>
           <button id="drModalSubmitBtn" onclick="submitDailyReport()"
                   class="px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition">
@@ -18732,14 +18732,14 @@ function openDailyReportModal(tutorId, tutorName, defaultDate) {
   if (quickBtns) {
     quickBtns.innerHTML = `
       <button type="button"
-        onclick="document.getElementById('drModalDate').value='${todayJst}'; _drHighlightDateBtn(this);"
+        data-daily-prepare-action="date"
         class="dr-date-quick-btn flex-1 py-1.5 text-xs font-semibold border rounded-lg transition
                bg-purple-600 text-white border-purple-600"
         data-date="${todayJst}">
         今日 (${todayJst.replace(/-/g, '/')})
       </button>
       <button type="button"
-        onclick="document.getElementById('drModalDate').value='${yesterdayJst}'; _drHighlightDateBtn(this);"
+        data-daily-prepare-action="date"
         class="dr-date-quick-btn flex-1 py-1.5 text-xs font-semibold border rounded-lg transition
                bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
         data-date="${yesterdayJst}">
@@ -19192,7 +19192,7 @@ async function renderMinutesPage() {
 
       <!-- テンプレート設定リンク -->
       <div class="flex justify-end mb-3">
-        <button onclick="showMinutesTemplateModal()"
+        <button data-minutes-template-action="open"
                 class="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1">
           <i class="fas fa-cog"></i>テンプレート設定
         </button>
@@ -19245,7 +19245,7 @@ async function renderMinutesPage() {
       <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between px-6 py-4 border-b">
           <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-cog mr-2 text-teal-600"></i>議事録テンプレート設定</h3>
-          <button onclick="closeMinutesTemplateModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+          <button data-minutes-template-action="close" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
         </div>
         <div class="flex-1 overflow-y-auto px-6 py-4">
           <p class="text-xs text-gray-500 mb-3">
@@ -19257,7 +19257,7 @@ async function renderMinutesPage() {
           <button onclick="saveMinutesTemplate()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
             <i class="fas fa-save mr-1"></i>保存
           </button>
-          <button onclick="closeMinutesTemplateModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
+          <button data-minutes-template-action="close" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
         </div>
       </div>
     </div>
@@ -19616,10 +19616,10 @@ async function showMinutesTemplateModal() {
     }
     const t = minutesTemplates[0];
     editor.innerHTML = `
-      <input type="hidden" id="tmpl-id" value="${t.id}">
+      <input type="hidden" id="tmpl-id" value="${escapeHtml(String(t.id ?? '')).replace(/"/g, '&quot;')}">
       <div class="mb-3">
         <label class="block text-sm font-semibold text-gray-700 mb-1">テンプレート名</label>
-        <input id="tmpl-name" type="text" value="${escapeHtml(t.name || '')}"
+        <input id="tmpl-name" type="text" value="${escapeHtml(t.name || '').replace(/"/g, '&quot;')}"
                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400">
       </div>
       <div>
@@ -19628,7 +19628,7 @@ async function showMinutesTemplateModal() {
                   class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-teal-400 resize-y">${escapeHtml(t.template_text || '')}</textarea>
       </div>`;
   } catch (err) {
-    editor.innerHTML = `<p class="text-red-500 text-sm">読み込み失敗: ${err.message}</p>`;
+    editor.innerHTML = '<p class="text-red-500 text-sm">テンプレートを読み込めませんでした</p>';
   }
 }
 

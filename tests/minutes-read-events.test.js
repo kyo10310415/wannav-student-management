@@ -21,7 +21,7 @@ function fixture(){
 test('minutes migrates exactly fifteen read controls and leaves writes/templates unchanged',()=>{
  assert.equal((app.match(/data-minutes-read-action=/g)||[]).length,15);
  for(const old of ['onclick="openMinutesForStudent(','onclick="minutesSearchStudent()"','onclick="closeMinutesModal()"','onclick="switchMinutesDetailTab(','onclick="openMinutesDetail(','onclick="event.stopPropagation(); openMinutesDetail('])assert.equal(app.includes(old),false);
- for(const write of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','onclick="showMinutesTemplateModal()"','onclick="event.stopPropagation(); deleteMinutes(${m.id})"'])assert.ok(app.includes(write));
+ for(const write of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','data-minutes-template-action="open"','onclick="event.stopPropagation(); deleteMinutes(${m.id})"'])assert.ok(app.includes(write));
 });
 test('student entry preserves exact data only on existing source pages and requires managers',async()=>{
  for(const page of ['students','reservations','today']){
