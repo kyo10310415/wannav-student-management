@@ -132,3 +132,8 @@ test('existing validation, missing data and invalid test URL type keep their sta
   for (const [path, options] of [['/resend/42', json({})], ['/images/42', { method: 'DELETE' }], ['/history/42', { method: 'DELETE' }], ['/test', json({ channelUrl: marker })], ['/resend-single-row', json({ rowNumber: 3 })]]) assert.equal((await empty.app.request(path, options)).status, 404);
   safe(f); safe(empty);
 });
+
+test('VQ image deletion rejects malformed IDs before settings SQL and preserves missing target 404',async()=>{
+ const f=await fixture();for(const id of['0','-1','1.5','9007199254740992','bad'])assert.equal((await f.app.request('/images/'+id,{method:'DELETE'})).status,400);assert.equal(f.queries.length,0);
+ const missing=await fixture({queryOverride:()=>({rows:[]})});assert.equal((await missing.app.request('/images/7',{method:'DELETE'})).status,404);assert.equal(missing.sends.length,0);assert.equal(missing.sheetCalls.length,0);
+});

@@ -433,6 +433,7 @@ app.post('/images', async (c) => {
 app.delete('/images/:id', async (c) => {
   try {
     const id = c.req.param('id');
+    if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) return c.json({ success: false, error: '画像IDが不正です' }, 400);
     
     const result = await dbQuery(
       `DELETE FROM vq_diagnosis_images WHERE id = $1 RETURNING diagnosis_type`,

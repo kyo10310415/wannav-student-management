@@ -11,7 +11,7 @@ function registerBroadcastScheduleEditor(id) {
 }
 function beginBroadcastScheduleSave(id) {
   const state = broadcastScheduleEditState;
-  if (!broadcastScheduleContextCurrent(state) || state.id !== id || !state.button || state.button.disabled || pendingBroadcastScheduleSaves.has(state.key)) return null;
+  if (!broadcastScheduleContextCurrent(state) || state.id !== id || !state.button || state.button.disabled || pendingBroadcastScheduleSaves.has(state.key) || (typeof pendingBroadcastScheduleActions !== 'undefined' && pendingBroadcastScheduleActions.has(state.key))) return null;
   if (id != null && (!Number.isSafeInteger(id) || id <= 0 || !broadcastSchedules.some(row => Number(row.id) === id))) return null;
   pendingBroadcastScheduleSaves.add(state.key);
   state.button.disabled = true;
