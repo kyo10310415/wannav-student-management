@@ -173,18 +173,18 @@ async function erRenderSettings(version) {
   const versions = await erRequest('/settings/versions');
   const config = erSettings.config;
   const area = (id,title,value) => `<label class="block font-medium">${title}<textarea id="${id}" class="border rounded p-2 w-full h-32 font-normal">${erEscape(value)}</textarea></label>`;
-  document.getElementById('er-panel').innerHTML = `<h2 class="font-bold">基準v${erEscape(erSettings.id || '未登録')}</h2><select onchange="erRenderSettings(this.value)" class="border rounded p-2"><option value="">最新バージョン</option>${versions.map(v => `<option value="${v.id}">v${v.id} ${erEscape(v.created_at)}</option>`).join('')}</select><p class="text-sm">過去バージョンを選択して参照・コピーできます。保存は常に新しいバージョンを作り、過去の採点結果を変更しません。</p>
+  document.getElementById('er-panel').innerHTML = `<h2 class="font-bold">基準v${erEscape(erSettings.id || '未登録')}</h2><select data-er-settings-version class="border rounded p-2"><option value="">最新バージョン</option>${versions.map(v => `<option value="${v.id}">v${v.id} ${erEscape(v.created_at)}</option>`).join('')}</select><p class="text-sm">過去バージョンを選択して参照・コピーできます。保存は常に新しいバージョンを作り、過去の採点結果を変更しません。</p>
     ${area('er-criteria','Tutorのトーク内容の採点基準',config.criteria)}${config.scripts.map((s,i) => area(`er-script-${i}`,`${i+1}回目延長審査スクリプト`,s)).join('')}
     ${area('er-template','出力テンプレート（空欄で延長審査採点・トークスクリプト・人物像・要因分析を区切り線付きで出力。カスタム時は{{grading}} {{script}} {{profile}} {{factors}}すべてを使用）',config.template)}
     ${area('er-mapping','Notion項目マッピング(JSON)：streams / age / companyReasons / expenseConsent / classification',JSON.stringify(config.mapping,null,2))}
-    <button onclick="erApplyNotionMapping()" class="border rounded p-2">CSVに合わせた標準マッピングを入力</button>
+    <button data-er-read-action="apply-mapping" class="border rounded p-2">CSVに合わせた標準マッピングを入力</button>
     <p class="text-sm">年齢は「生年月日」から採点当日（日本時間）の満年齢を計算します。空欄・不正日付は不明になります。ボタンで入力した後、新しいバージョンとして保存してください。</p>
     <p class="text-sm">例：{"streams":{"source":"property","name":"実際のプロパティ名"}}。本文の見出しはsourceをblockに指定。企業理由は複数選択・リレーション・箇条書き・件数のみ数え、自由文を推測で分割しません。実際の名前・型はAPI接続診断で確認してください。</p>
     ${area('er-speaker-aliases','Tutor発言者別名(JSON、Tutor番号→名前配列)。登録名と文字起こしの表記が異なる場合に設定',JSON.stringify(config.speakerAliases || {},null,2))}
     <p class="text-sm">${erTutors.map(t=>`${erEscape(t.tutor_name)}：${erEscape(t.employee_id)}`).join(' / ')}。例：{"Tutor番号":["文字起こしの実際の名前"]}。接続診断で発言者ラベルを確認できます。</p>
     ${area('er-target','ターゲット条件(JSON)',JSON.stringify(config.target,null,2))}
     ${area('er-limits','利用上限(JSON)',JSON.stringify(config.limits,null,2))}
-    <button onclick="erSaveSettings()" class="bg-orange-600 text-white p-2 rounded">新しいバージョンとして保存</button><button onclick="erPreviewSettings()" class="border rounded p-2 ml-2">プレビュー</button><pre id="er-settings-preview" class="whitespace-pre-wrap text-sm"></pre>`;
+    <button onclick="erSaveSettings()" class="bg-orange-600 text-white p-2 rounded">新しいバージョンとして保存</button><button data-er-read-action="preview-settings" class="border rounded p-2 ml-2">プレビュー</button><pre id="er-settings-preview" class="whitespace-pre-wrap text-sm"></pre>`;
 }
 function erApplyNotionMapping() {
   document.getElementById('er-mapping').value = JSON.stringify({
@@ -221,6 +221,8 @@ function erHandleReadClick(event) {
   if (!content?.contains(button) && !navigation?.contains(button)) return;
   if (!currentUser || currentUser.role !== 'admin' || !sessionToken || !extensionReviewFeatureEnabled) return;
   switch (button.dataset.erReadAction) {
+    case 'apply-mapping': return erApplyNotionMapping();
+    case 'preview-settings': return erPreviewSettings();
     case 'open-page': return changePage('extension-review');
     case 'select-tab':
       if (['run', 'result', 'history', 'analysis', 'settings', 'diagnostics'].includes(button.dataset.erTab)) return erSelectTab(button.dataset.erTab);
@@ -235,7 +237,15 @@ function erHandleReadClick(event) {
       if (button.dataset.erResultId) return erOpenResult(button.dataset.erResultId);
   }
 }
+function erHandleSettingsChange(event) {
+  const select = event.target?.closest?.('select[data-er-settings-version]');
+  if (!select || select.disabled || !document.getElementById('content')?.contains(select)) return;
+  if (!currentUser || currentUser.role !== 'admin' || !sessionToken || !extensionReviewFeatureEnabled) return;
+  return erRenderSettings(select.value);
+}
+
 document.addEventListener('click', erHandleReadClick);
+document.addEventListener('change', erHandleSettingsChange);
 
 // app.js initializes asynchronously; refresh once this script becomes available.
 refreshExtensionReviewCapability();
