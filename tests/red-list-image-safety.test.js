@@ -1,3 +1,4 @@
+import { uploadRequestBodyLimit } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -10,8 +11,8 @@ let sequence=0;
 async function fixture({bytes=png,mime='image/png',filename='image.png',role='admin'}={}) {
  const writes=[],reads=[];const query=async(sql,params)=>{if(sql.includes('FROM sessions'))return {rows:[{id:7,email:'synthetic@example.invalid',role}]};if(sql.includes('SELECT image_data')){reads.push(params);return {rows:[{image_data:bytes,image_content_type:mime,image_filename:filename}]}}writes.push({sql,params});return{rows:[{id:42,has_image:true}]}};
  const source=(await readFile(new URL('../src/routes/redList.js',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'');
- const key='redImageFixture'+sequence++;globalThis[key]={Hono,query,calculateRedListScore(){},updateRedList(){},updateAllRedLists(){},getRedList(){},getAllRedLists(){},sendDiscordMessage(){throw Error('No external send permitted')},getStudentDiscordInfo(){},console:{error(){}}};let route;
- try{route=(await import('data:text/javascript;base64,'+Buffer.from(`const {Hono,query,calculateRedListScore,updateRedList,updateAllRedLists,getRedList,getAllRedLists,sendDiscordMessage,getStudentDiscordInfo,console}=globalThis[${JSON.stringify(key)}];\n`+source).toString('base64'))).default}finally{delete globalThis[key]}
+ const key='redImageFixture'+sequence++;globalThis[key]={Hono,uploadRequestBodyLimit,query,calculateRedListScore(){},updateRedList(){},updateAllRedLists(){},getRedList(){},getAllRedLists(){},sendDiscordMessage(){throw Error('No external send permitted')},getStudentDiscordInfo(){},console:{error(){}}};let route;
+ try{route=(await import('data:text/javascript;base64,'+Buffer.from(`const {Hono,uploadRequestBodyLimit,query,calculateRedListScore,updateRedList,updateAllRedLists,getRedList,getAllRedLists,sendDiscordMessage,getStudentDiscordInfo,console}=globalThis[${JSON.stringify(key)}];\n`+source).toString('base64'))).default}finally{delete globalThis[key]}
  const app=new Hono();app.use('*',browserSecurityHeaders);installApiAccess(app,{db:async()=>({rows:[{id:7,email:'synthetic@example.invalid',role,must_change_password:false}]})});app.route('/api/red-list',route);return{app,writes,reads};
 }
 function multipart(value){const form=new FormData();form.set('title','Synthetic title');form.set('content','Synthetic content');if(value!==undefined)form.set('image',value);return form}

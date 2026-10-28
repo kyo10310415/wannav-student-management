@@ -388,9 +388,10 @@ test('results endpoint exposes only GAS-owned broadcasts and maps up to 1000 log
       assert.deepEqual(params, [44, GAS_BROADCAST_CREATED_BY]);
       return { rows: [{ '?column?': 1 }] };
     },
-    getBroadcastLogs: async (broadcastId, limit) => {
+    getBroadcastLogs: async (broadcastId, limit, actor) => {
       assert.equal(broadcastId, 44);
       assert.equal(limit, 1000);
+      assert.deepEqual(actor, { email: GAS_BROADCAST_CREATED_BY, role: 'integration' });
       return [{
         student_id: 'S001',
         student_name: '生徒一郎',

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { 
   getTargetStudents, 
   enqueueBroadcast,
+  GAS_BROADCAST_CREATED_BY,
   getBroadcastJobStatus,
   getLatestRecoverableBroadcastJob,
   reconcileStaleBroadcastJobs,
@@ -106,6 +107,11 @@ async function authMiddleware(c, next) {
     }
     
     const session = sessionResult.rows[0];
+    // Dedicated integrations assign this actor internally, never through a human session.
+    if (typeof session.email === 'string' && session.email.toLowerCase() === GAS_BROADCAST_CREATED_BY) {
+      return c.json({ success: false, error: '専用の連携APIを利用してください' }, 403);
+    }
+
     c.set('user', {
       id: session.user_id,
       email: session.email,
@@ -164,17 +170,21 @@ app.post('/preview', async (c) => {
 app.post('/send', async (c) => {
   try {
     const user = c.get('user');
-    const messageData = await c.req.json();
+    let messageData;
+    try { messageData = await c.req.json(); } catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!messageData || typeof messageData !== 'object' || Array.isArray(messageData)) return c.json({ success: false, error: '入力が不正です' }, 400);
+    if (Object.hasOwn(messageData, 'explicitTargets') || Object.hasOwn(messageData, 'campaignKey') || messageData.targetStatus === 'explicit') return c.json({ success: false, error: 'この項目は専用の連携APIでのみ利用できます' }, 400);
+    if (['isTest', 'saveAsTemplate'].some(key => messageData[key] != null && typeof messageData[key] !== 'boolean')) return c.json({ success: false, error: '送信設定はON/OFFで指定してください' }, 400);
     
     // Validate required fields
-    if (!messageData.content) {
+    if (typeof messageData.content !== 'string' || !messageData.content.trim()) {
       return c.json({
         success: false,
         error: 'Message content is required'
       }, 400);
     }
     
-    if (!messageData.channelType) {
+    if (typeof messageData.channelType !== 'string' || !messageData.channelType) {
       return c.json({
         success: false,
         error: 'Channel type is required'
@@ -326,16 +336,20 @@ app.delete('/templates/:id', async (c) => {
  */
 app.get('/logs', async (c) => {
   try {
+    const user = c.get('user');
     const broadcastId = c.req.query('broadcastId');
-    const limit = parseInt(c.req.query('limit')) || 100;
+    const rawLimit = c.req.query('limit');
+    const limit = rawLimit == null || rawLimit === '' ? 100 : Number(rawLimit);
     
-    const logs = await getBroadcastLogs(broadcastId, limit);
+    const logs = await getBroadcastLogs(broadcastId, limit, { email: user.email, role: user.role });
     
     return c.json({
       success: true,
       logs
     });
   } catch (error) {
+    if (error?.status === 400) return c.json({ success: false, error: 'ログ取得条件が不正です' }, 400);
+    if (error?.status === 403) return c.json({ success: false, error: 'ログを参照する権限がありません' }, 403);
     console.error('Error getting logs:');
     return c.json({
       success: false,
