@@ -88,7 +88,7 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
       path === '/api/auth/reset-password') && user.role !== 'admin') {
       return c.json({ success: false, error: '管理者権限が必要です' }, 403);
     }
-    const leaderOnly = ['/api/funnel', '/api/vq-diagnosis', '/api/minutes', '/api/lesson-contents'];
+    const leaderOnly = ['/api/handover', '/api/funnel', '/api/vq-diagnosis', '/api/minutes', '/api/lesson-contents'];
     const managerOperation = leaderOnly.some(prefix => under(path, prefix)) ||
       under(path, '/api/lessons/sync') || path === '/api/lessons/sync-from-sheet' ||
       (under(path, '/api/lesson-reports') && method === 'DELETE') ||
