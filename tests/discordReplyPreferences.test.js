@@ -38,9 +38,10 @@ test('preference checkbox rolls back on failed save and does not stay disabled',
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   const start=source.indexOf('async function updateUserReplyAlerts(');
   const end=source.indexOf('async function updateUserJobTitle(',start);
-  const context={API_BASE:'',sessionToken:'test-session',axios:{put:async()=>{throw new Error('Failure');}},alert(){},showNotification(){}};
-  vm.createContext(context);vm.runInContext(source.slice(start,end),context);
-  const input={checked:false,disabled:false};
+  const content={contains:node=>node.root===content};
+  const context={API_BASE:'',sessionToken:'test-session',currentUser:{role:'admin'},currentPage:'users',document:{getElementById:()=>content,addEventListener(){}},axios:{put:async()=>{throw new Error('Failure');}},alert(){},showNotification(){}};
+  vm.createContext(context);vm.runInContext(readFileSync(new URL('../public/user-update-events.js',import.meta.url),'utf8'),context);vm.runInContext(source.slice(start,end),context);
+  const input={checked:false,disabled:false,root:content,dataset:{userUpdateAction:'reply-alerts',userUpdateId:'1',userUpdatePrevious:'true'}};
   await context.updateUserReplyAlerts(1,input);
   assert.equal(input.checked,true);assert.equal(input.disabled,false);
 });

@@ -8307,7 +8307,7 @@ async function renderUsersPage() {
                   <td class="px-4 py-3">
                     <select
                       class="px-2 py-1 border rounded text-sm ${getRoleBadgeClass(user.role)}"
-                      onchange="updateUserRole(${user.id}, this.value)"
+                      data-user-update-action="role" data-user-update-id="${user.id}" data-user-update-previous="${escapeHtml(user.role)}"
                     >
                       <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理者</option>
                       <option value="leader" ${user.role === 'leader' ? 'selected' : ''}>リーダー</option>
@@ -8317,7 +8317,7 @@ async function renderUsersPage() {
                   <td class="px-4 py-3">
                     <select
                       class="px-2 py-1 border rounded text-sm ${getJobTitleBadgeClass(user.job_title)}"
-                      onchange="updateUserJobTitle(${user.id}, this.value)"
+                      data-user-update-action="job-title" data-user-update-id="${user.id}" data-user-update-previous="${escapeHtml(user.job_title || '')}"
                     >
                       <option value="" ${!user.job_title ? 'selected' : ''}>未設定</option>
                       <option value="マネージャー" ${user.job_title === 'マネージャー' ? 'selected' : ''}>マネージャー</option>
@@ -8354,7 +8354,7 @@ async function renderUsersPage() {
                       <i class="fab fa-discord mr-1"></i>
                       ${user.has_discord_webhook || user.has_discord_user_id ? '設定済み' : '未設定'}
                     </button>
-                    ${user.tutor_name ? `<label class="flex items-center gap-2 mt-2 text-xs" title="担当生徒の12時間未返信通知。OFFでTutor・管理側の両方を停止"><input type="checkbox" ${user.discord_reply_alerts_enabled !== false ? 'checked' : ''} onchange="updateUserReplyAlerts(${user.id}, this)">未返信通知</label>` : '<div class="text-xs text-gray-400 mt-2">未返信通知：Tutor未紐付け</div>'}
+                    ${user.tutor_name ? `<label class="flex items-center gap-2 mt-2 text-xs" title="担当生徒の12時間未返信通知。OFFでTutor・管理側の両方を停止"><input type="checkbox" ${user.discord_reply_alerts_enabled !== false ? 'checked' : ''} data-user-update-action="reply-alerts" data-user-update-id="${user.id}" data-user-update-previous="${user.discord_reply_alerts_enabled !== false ? 'true' : 'false'}">未返信通知</label>` : '<div class="text-xs text-gray-400 mt-2">未返信通知：Tutor未紐付け</div>'}
                   </td>
                   <td class="px-4 py-3 text-sm">
                     ${user.must_change_password ? '<span class="text-orange-600">はい</span>' : '<span class="text-gray-500">いいえ</span>'}
@@ -8685,70 +8685,16 @@ async function handleCreateUser(e) {
 /**
  * Update user role
  */
-async function updateUserRole(userId, newRole) {
-  if (!confirm('このユーザーの権限を変更しますか?')) {
-    await renderUsersPage(); // Reset select
-    return;
-  }
-  
-  try {
-    const response = await axios.put(`${API_BASE}/api/users/${userId}`, {
-      role: newRole
-    }, {
-      headers: {
-        'Authorization': `Bearer ${sessionToken}`
-      }
-    });
-    
-    if (response.data.success) {
-      alert(response.data.message);
-      await renderUsersPage();
-    } else {
-      alert('エラー: ' + response.data.error);
-      await renderUsersPage();
-    }
-  } catch (error) {
-    alert('権限更新に失敗しました: ' + (error.response?.data?.error || error.message));
-    await renderUsersPage();
-  }
+async function updateUserRole(userId, newRole, input) {
+  return saveUserFieldUpdate('role', userId, newRole, input);
 }
 
-/**
- * Update user job title
- */
 async function updateUserReplyAlerts(userId, input) {
-  const enabled = input.checked;
-  input.disabled = true;
-  try {
-    const response = await axios.put(`${API_BASE}/api/users/${userId}/reply-alerts`, { enabled }, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
-    if (!response.data.success) throw new Error(response.data.error || '更新に失敗しました');
-    showNotification(`未返信通知を${enabled ? 'ON' : 'OFF'}にしました（Tutor・管理側の両方）`, 'success');
-  } catch (error) {
-    input.checked = !enabled;
-    alert('未返信通知の更新に失敗しました: ' + (error.response?.data?.error || error.message));
-  } finally { input.disabled = false; }
+  return saveUserFieldUpdate('reply-alerts', userId, input?.checked, input);
 }
 
-async function updateUserJobTitle(userId, newJobTitle) {
-  try {
-    const response = await axios.put(`${API_BASE}/api/users/${userId}/job-title`, {
-      job_title: newJobTitle || null
-    }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-
-    if (response.data.success) {
-      showNotification('役職を更新しました', 'success');
-    } else {
-      alert('エラー: ' + response.data.error);
-      await renderUsersPage();
-    }
-  } catch (error) {
-    alert('役職更新に失敗しました: ' + (error.response?.data?.error || error.message));
-    await renderUsersPage();
-  }
+async function updateUserJobTitle(userId, newJobTitle, input) {
+  return saveUserFieldUpdate('job-title', userId, newJobTitle, input);
 }
 
 /**
@@ -15569,7 +15515,7 @@ async function renderRedListPage() {
                   class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             キャンセル
           </button>
-          <button onclick="saveRedListMessage()"
+          <button data-red-save-action="message"
                   class="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition">
             <i class="fas fa-save mr-1"></i>保存
           </button>
@@ -15700,7 +15646,7 @@ async function renderRedListPage() {
                   class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             キャンセル
           </button>
-          <button onclick="saveRedListSender()"
+          <button data-red-save-action="sender"
                   class="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition">
             <i class="fas fa-save mr-1"></i>保存
           </button>
@@ -16773,6 +16719,7 @@ function renderRedListMessages() {
 // ═══════════════════════════════════════════════════════════════
 
 function openRedListMessageModal(id = null) {
+  if (typeof invalidateRedListSaveView === 'function') invalidateRedListSaveView(document.getElementById('redlist-msg-edit-modal'));
   clearRedListAuthenticatedImage(document.getElementById('redlist-msg-edit-img-preview'), document.getElementById('redlist-msg-edit-img-current'));
   document.getElementById('redlist-msg-edit-id').value = id || '';
   document.getElementById('redlist-msg-edit-name').value = '';
@@ -16803,6 +16750,7 @@ function openRedListMessageModal(id = null) {
 }
 
 function closeRedListMessageModal() {
+  if (typeof invalidateRedListSaveView === 'function') invalidateRedListSaveView(document.getElementById('redlist-msg-edit-modal'));
   clearRedListAuthenticatedImage(document.getElementById('redlist-msg-edit-img-preview'), document.getElementById('redlist-msg-edit-img-current'));
   document.getElementById('redlist-msg-edit-modal').classList.add('hidden');
 }
@@ -16835,18 +16783,20 @@ function onRedListImageSelected(input) {
 }
 
 async function saveRedListMessage() {
-  const id          = document.getElementById('redlist-msg-edit-id').value;
-  const title       = document.getElementById('redlist-msg-edit-name').value.trim();
-  const content     = document.getElementById('redlist-msg-edit-content').value.trim();
-  const imageFile   = document.getElementById('redlist-msg-edit-image').files[0];
-  const removeImage = document.getElementById('redlist-msg-edit-remove-image').value === 'true';
-
-  if (!title || !content) {
-    showNotification('タイトルとメッセージ本文を入力してください', 'error');
-    return;
-  }
-
+  const saveState = beginRedListSave('msg');
+  if (!saveState) return;
   try {
+    const id          = document.getElementById('redlist-msg-edit-id').value;
+    const title       = document.getElementById('redlist-msg-edit-name').value.trim();
+    const content     = document.getElementById('redlist-msg-edit-content').value.trim();
+    const imageFile   = document.getElementById('redlist-msg-edit-image').files[0];
+    const removeImage = document.getElementById('redlist-msg-edit-remove-image').value === 'true';
+
+    if (!title || !content) {
+      showNotification('タイトルとメッセージ本文を入力してください', 'error');
+      return;
+    }
+
     // 画像あり または 削除フラグあり → multipart/form-data
     let res;
     if (imageFile || removeImage) {
@@ -16862,12 +16812,12 @@ async function saveRedListMessage() {
       if (id) {
         res = await axios.put(`${API_BASE}/api/red-list/messages/${id}`,
           formData,
-          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+          { headers: { 'Authorization': `Bearer ${saveState.token}` } }
         );
       } else {
         res = await axios.post(`${API_BASE}/api/red-list/messages`,
           formData,
-          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+          { headers: { 'Authorization': `Bearer ${saveState.token}` } }
         );
       }
     } else {
@@ -16875,16 +16825,17 @@ async function saveRedListMessage() {
       if (id) {
         res = await axios.put(`${API_BASE}/api/red-list/messages/${id}`,
           { title, content },
-          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+          { headers: { 'Authorization': `Bearer ${saveState.token}` } }
         );
       } else {
         res = await axios.post(`${API_BASE}/api/red-list/messages`,
           { title, content },
-          { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+          { headers: { 'Authorization': `Bearer ${saveState.token}` } }
         );
       }
     }
 
+    if (!redListSaveResponseCurrent(saveState)) return;
     if (res.data.success) {
       showNotification(id ? 'メッセージを更新しました' : 'メッセージを作成しました', 'success');
       closeRedListMessageModal();
@@ -16893,9 +16844,10 @@ async function saveRedListMessage() {
       showNotification(res.data.error || '保存に失敗しました', 'error');
     }
   } catch (e) {
-    console.error('saveRedListMessage error:', e);
-    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
-  }
+    if (!redListSaveResponseCurrent(saveState)) return;
+    console.error('saveRedListMessage failed');
+    showNotification('保存に失敗しました', 'error');
+  } finally { finishRedListSave(saveState); }
 }
 
 async function deleteRedListMessage(id, title) {
@@ -17027,6 +16979,10 @@ async function loadRedListSenders(silent = false) {
   }
 }
 
+function redListSafeBookingUrl(value) {
+  try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol); } catch { return false; }
+}
+
 function renderRedListSenders() {
   const contentEl = document.getElementById('redlist-senders-content');
   if (!contentEl) return;
@@ -17054,7 +17010,7 @@ function renderRedListSenders() {
             </div>
             <div class="flex items-center gap-1 mt-1">
               <i class="fas fa-calendar-check text-green-400 text-xs"></i>
-              <a href="${escapeHtml(s.booking_url)}" target="_blank" rel="noopener"
+              <a ${redListSafeBookingUrl(s.booking_url) ? `href="${escapeHtml(s.booking_url).replace(/"/g, '&quot;')}"` : ''} target="_blank" rel="noopener"
                  class="text-xs text-indigo-600 hover:underline break-all">${escapeHtml(s.booking_url)}</a>
             </div>
             <p class="text-xs text-gray-400 mt-1">最終更新: ${updated} ／ ${s.created_by || '-'}</p>
@@ -17075,6 +17031,7 @@ function renderRedListSenders() {
 }
 
 function openRedListSenderModal(id = null) {
+  if (typeof invalidateRedListSaveView === 'function') invalidateRedListSaveView(document.getElementById('redlist-sender-edit-modal'));
   document.getElementById('redlist-sender-edit-id').value = id || '';
   document.getElementById('redlist-sender-edit-name').value = '';
   document.getElementById('redlist-sender-edit-url').value = '';
@@ -17093,33 +17050,42 @@ function openRedListSenderModal(id = null) {
 }
 
 function closeRedListSenderModal() {
+  if (typeof invalidateRedListSaveView === 'function') invalidateRedListSaveView(document.getElementById('redlist-sender-edit-modal'));
   document.getElementById('redlist-sender-edit-modal').classList.add('hidden');
 }
 
 async function saveRedListSender() {
-  const id          = document.getElementById('redlist-sender-edit-id').value;
-  const name        = document.getElementById('redlist-sender-edit-name').value.trim();
-  const booking_url = document.getElementById('redlist-sender-edit-url').value.trim();
-
-  if (!name || !booking_url) {
-    showNotification('送信者名と予約URLを入力してください', 'error');
-    return;
-  }
-
+  const saveState = beginRedListSave('sender');
+  if (!saveState) return;
   try {
+    const id          = document.getElementById('redlist-sender-edit-id').value;
+    const name        = document.getElementById('redlist-sender-edit-name').value.trim();
+    const booking_url = document.getElementById('redlist-sender-edit-url').value.trim();
+
+    if (!name || !booking_url) {
+      showNotification('送信者名と予約URLを入力してください', 'error');
+      return;
+    }
+
+    if (!redListSafeBookingUrl(booking_url)) {
+      showNotification('予約URLはhttpまたはhttpsのURLを入力してください', 'error');
+      return;
+    }
+
     let res;
     if (id) {
       res = await axios.put(`${API_BASE}/api/red-list/senders/${id}`,
         { name, booking_url },
-        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        { headers: { 'Authorization': `Bearer ${saveState.token}` } }
       );
     } else {
       res = await axios.post(`${API_BASE}/api/red-list/senders`,
         { name, booking_url },
-        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        { headers: { 'Authorization': `Bearer ${saveState.token}` } }
       );
     }
 
+    if (!redListSaveResponseCurrent(saveState)) return;
     if (res.data.success) {
       showNotification(id ? '送信者を更新しました' : '送信者を追加しました', 'success');
       closeRedListSenderModal();
@@ -17128,9 +17094,10 @@ async function saveRedListSender() {
       showNotification(res.data.error || '保存に失敗しました', 'error');
     }
   } catch (e) {
-    console.error('saveRedListSender error:', e);
-    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
-  }
+    if (!redListSaveResponseCurrent(saveState)) return;
+    console.error('saveRedListSender failed');
+    showNotification('保存に失敗しました', 'error');
+  } finally { finishRedListSave(saveState); }
 }
 
 async function deleteRedListSender(id, name) {

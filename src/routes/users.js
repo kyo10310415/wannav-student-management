@@ -262,9 +262,15 @@ app.post('/', requireAdmin, async (c) => {
  * Update user role (admin only)
  */
 app.put('/:id', requireAdmin, async (c) => {
+  const rawId = c.req.param('id');
+  if (!/^\d+$/.test(rawId) || !Number.isSafeInteger(Number(rawId)) || Number(rawId) <= 0) {
+    return c.json({ success: false, error: 'ユーザーIDが不正です' }, 400);
+  }
   try {
     const userId = c.req.param('id');
-    const { role } = await c.req.json();
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: '設定が不正です' }, 400); }
+    const role = body?.role;
     
     if (!role) {
       return c.json({
@@ -303,9 +309,16 @@ app.put('/:id', requireAdmin, async (c) => {
  * Update user job_title (admin only)
  */
 app.put('/:id/job-title', requireAdmin, async (c) => {
+  const rawId = c.req.param('id');
+  if (!/^\d+$/.test(rawId) || !Number.isSafeInteger(Number(rawId)) || Number(rawId) <= 0) {
+    return c.json({ success: false, error: 'ユーザーIDが不正です' }, 400);
+  }
   try {
     const userId = c.req.param('id');
-    const { job_title } = await c.req.json();
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: '設定が不正です' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ success: false, error: '設定が不正です' }, 400);
+    const { job_title } = body;
 
     const VALID_TITLES = ['マネージャー', '統括', 'リーダー', 'クルー', '部署移動', '契約解除', ''];
     if (!VALID_TITLES.includes(job_title ?? '')) {
@@ -331,6 +344,10 @@ app.put('/:id/job-title', requireAdmin, async (c) => {
  * Update user Discord settings (admin only)
  */
 app.put('/:id/reply-alerts', requireAdmin, async (c) => {
+  const rawId = c.req.param('id');
+  if (!/^\d+$/.test(rawId) || !Number.isSafeInteger(Number(rawId)) || Number(rawId) <= 0) {
+    return c.json({ success: false, error: 'ユーザーIDが不正です' }, 400);
+  }
   let body;
   try { body = await c.req.json(); }
   catch { return c.json({ success:false, error:'設定が不正です' },400); }
