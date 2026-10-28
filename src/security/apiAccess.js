@@ -92,6 +92,7 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     const managerOperation = leaderOnly.some(prefix => under(path, prefix)) ||
       under(path, '/api/lessons/sync') || path === '/api/lessons/sync-from-sheet' ||
       (under(path, '/api/lesson-reports') && method === 'DELETE') ||
+      (path === '/api/lesson-reports' && ['GET', 'HEAD'].includes(method)) ||
       (under(path, '/api/tutors') && !['GET', 'HEAD'].includes(method)) ||
       /^\/api\/schedules\/absence(?:-stats|-requests\/pending|\/[^/]+\/approve)$/.test(path) ||
       /^\/api\/roulette\/(winners|losers|unopened)(\/|$)/.test(path) ||

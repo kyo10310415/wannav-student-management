@@ -56,6 +56,7 @@ let tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} }; // Monthly h
 let tutorWeeklySnapshotData = {}; // notion_name -> snapshot (前週スナップショット)
 let lessonStats = {};
 let lessonDates = {}; // student_id -> [dates]
+let lessonReportStatusLoadId = 0;
 let lessonReportStatus = {}; // { student_id-lesson_date: report_data }
 let cachedNotionUrls = {}; // student_id -> notion_url
 let currentMonth = new Date();
@@ -875,16 +876,16 @@ function countLessonsThisMonth(studentId, currentDate) {
 
 // Load lesson report status for a specific date
 async function loadLessonReportStatus(date) {
+  const requestId = ++lessonReportStatusLoadId;
+  const token = sessionToken, userId = currentUser?.id;
+  if (!token || !currentUser) { lessonReportStatus = {}; return; }
+  const current = () => requestId === lessonReportStatusLoadId && token === sessionToken && currentUser?.id === userId;
   try {
-    console.log(`📋 Loading lesson reports for date: ${date}`);
     const url = `${API_BASE}/api/lesson-reports/by-date/${date}`;
-    console.log(`📋 Request URL: ${url}`);
     
-    const response = await axios.get(url);
-    
-    console.log(`📋 Response status: ${response.status}`);
-    console.log(`📋 Response data:`, response.data);
-    
+    const response = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+
     if (response.data.success) {
       // Store reports by student_id-date key
       lessonReportStatus = {};
@@ -893,17 +894,11 @@ async function loadLessonReportStatus(date) {
         const dateOnly = report.lesson_date.split('T')[0];
         const key = `${report.student_id}-${dateOnly}`;
         lessonReportStatus[key] = report;
-        console.log(`📝 Stored report: key="${key}", result="${report.lesson_result}"`);
       });
-      console.log(`✅ Loaded ${response.data.count} lesson reports for ${date}`);
-      console.log(`✅ Report keys:`, Object.keys(lessonReportStatus));
-      console.log(`✅ Full lessonReportStatus:`, lessonReportStatus);
     }
   } catch (error) {
+    if (!current()) return;
     console.error('❌ Error loading lesson report status:');
-    console.error('Error message:', error.message);
-    console.error('Error response status:', error.response?.status);
-    console.error('Error response data:', error.response?.data);
     
     // 404 or other errors - initialize empty status (all buttons will show as "未提出")
     lessonReportStatus = {};
@@ -13834,23 +13829,23 @@ function renderLessonReportRow(report) {
   }[report.lesson_result] || 'bg-gray-100 text-gray-800';
   
   const proInfo = report.lesson_number === 'PROプラン' 
-    ? `${report.pro_curriculum || '-'}<br><span class="text-xs">テキスト${report.pro_text_number || '-'}</span>`
+    ? `${escapeHtml(report.pro_curriculum || '-')}<br><span class="text-xs">テキスト${escapeHtml(report.pro_text_number || '-')}</span>`
     : '-';
   
   return `
     <tr class="hover:bg-gray-50">
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.lesson_date}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${report.student_id}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.student_name || '-'}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${report.tutor_name || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.lesson_date)}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(report.student_id)}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.student_name || '-')}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${escapeHtml(report.tutor_name || '-')}</td>
       <td class="px-4 py-3 whitespace-nowrap text-sm">
         <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${lessonResultClass}">
-          ${report.lesson_result}
+          ${escapeHtml(report.lesson_result)}
         </span>
       </td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${report.lesson_number}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.lesson_number)}</td>
       <td class="px-4 py-3 text-sm text-gray-600">${proInfo}</td>
-      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${report.reported_by || '-'}</td>
+      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${escapeHtml(report.reported_by || '-')}</td>
       <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
         ${new Date(report.reported_at).toLocaleString('ja-JP')}
       </td>
@@ -18613,7 +18608,7 @@ function _renderDailyReportHistoryBody() {
         <div class="flex gap-2 items-start group" id="drComment-${cm.id}">
           <div class="flex-1 bg-blue-50 rounded-lg px-3 py-2 text-sm">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-semibold text-blue-800">${cm.commenter_name || cm.email || '-'}</span>
+              <span class="font-semibold text-blue-800">${escapeHtml(cm.commenter_name || cm.email || '-')}</span>
               <span class="text-xs text-gray-400">${cmTime}</span>
             </div>
             <div class="text-gray-700 whitespace-pre-wrap">${escapeHtml(cm.content)}</div>
@@ -18711,7 +18706,7 @@ async function submitDailyReportComment(reportId) {
       <div class="flex gap-2 items-start group" id="drComment-${cm.id}">
         <div class="flex-1 bg-blue-50 rounded-lg px-3 py-2 text-sm">
           <div class="flex items-center gap-2 mb-1">
-            <span class="font-semibold text-blue-800">${cm.commenter_name || '-'}</span>
+            <span class="font-semibold text-blue-800">${escapeHtml(cm.commenter_name || '-')}</span>
             <span class="text-xs text-gray-400">${cmTime}</span>
           </div>
           <div class="text-gray-700 whitespace-pre-wrap">${escapeHtml(cm.content)}</div>
