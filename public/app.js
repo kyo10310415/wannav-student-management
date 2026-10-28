@@ -1559,13 +1559,13 @@ function renderReservationsPage() {
             月選択
           </label>
           <div class="flex items-center gap-2">
-            <button onclick="changeMonth(-1)" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            <button data-student-view-action="previous-month" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
               <i class="fas fa-chevron-left mr-2"></i>先月
             </button>
             <span class="px-4 py-2 bg-gray-100 rounded-lg font-semibold text-center flex-1" id="current-month-display">
               ${formatMonth(currentMonth)}
             </span>
-            <button onclick="changeMonth(1)" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            <button data-student-view-action="next-month" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
               来月<i class="fas fa-chevron-right ml-2"></i>
             </button>
           </div>
@@ -1619,12 +1619,12 @@ function renderReservationsPage() {
           <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
           <input id="student-search-reservations" type="text"
                  placeholder="生徒名・学籍番号で検索..."
-                 value="${escapeHtml(studentSearchQuery)}"
-                 oninput="studentSearchQuery=this.value; renderStudentTable()"
+                 value="${escapeHtml(studentSearchQuery).replace(/"/g, '&quot;')}"
+                 data-student-search-view="reservations"
                  class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
         </div>
         ${studentSearchQuery ? `
-        <button onclick="studentSearchQuery=''; document.getElementById('student-search-reservations').value=''; renderStudentTable()"
+        <button data-student-view-action="clear-search" data-student-search-view="reservations"
                 class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-1">
           <i class="fas fa-times"></i>クリア
         </button>` : ''}
@@ -1645,19 +1645,19 @@ function renderReservationsPage() {
     <!-- Status Tabs -->
     <div class="bg-white rounded-lg shadow-md p-2 mb-6">
       <div class="flex flex-wrap gap-2">
-        <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="active" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-check-circle mr-2"></i>アクティブ
         </button>
-        <button onclick="switchTab('preparing')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="preparing" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-clock mr-2"></i>レッスン準備中
         </button>
-        <button onclick="switchTab('suspended')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'suspended' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="suspended" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'suspended' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-pause-circle mr-2"></i>休会
         </button>
-        <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="graduated" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-graduate mr-2"></i>正規退会
         </button>
-        <button onclick="switchTab('cancelled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="cancelled" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-times mr-2"></i>無断キャンセル
         </button>
       </div>
@@ -2111,16 +2111,16 @@ function renderActiveSubTabs() {
   return `
     <div class="mt-3 pt-3 border-t border-gray-200">
       <div class="flex gap-2">
-        <button onclick="switchActiveSubTab('lesson')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'lesson' ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+        <button data-student-view-action="active-tab" data-student-plan="lesson" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'lesson' ? 'bg-green-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
           <i class="fas fa-book-open mr-2"></i>レッスン中 (${lessonCount})
         </button>
-        <button onclick="switchActiveSubTab('pro')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'pro' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+        <button data-student-view-action="active-tab" data-student-plan="pro" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'pro' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
           <i class="fas fa-star mr-2"></i>PROプラン (${proCount})
         </button>
-        <button onclick="switchActiveSubTab('permanent')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'permanent' ? 'bg-purple-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+        <button data-student-view-action="active-tab" data-student-plan="permanent" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'permanent' ? 'bg-purple-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
           <i class="fas fa-crown mr-2"></i>永久会員 (${permanentCount})
         </button>
-        <button onclick="switchActiveSubTab('enrolled')" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'enrolled' ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
+        <button data-student-view-action="active-tab" data-student-plan="enrolled" class="px-4 py-2 rounded-lg font-semibold text-sm transition ${activeSubTab === 'enrolled' ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}">
           <i class="fas fa-user-clock mr-2"></i>在籍プラン (${enrolledCount})
         </button>
       </div>
@@ -2431,7 +2431,7 @@ function renderStudentsPage() {
         <button onclick="refreshData()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
-        <button onclick="clearAllFilters()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" id="clear-filters-btn">
+        <button data-student-filter-action="clear-all" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition" id="clear-filters-btn">
           <i class="fas fa-times-circle mr-2"></i>フィルター・ソートをクリア
         </button>
       </div>
@@ -2442,12 +2442,12 @@ function renderStudentsPage() {
           <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
           <input id="student-search-students" type="text"
                  placeholder="生徒名・学籍番号で検索..."
-                 value="${escapeHtml(studentSearchQuery)}"
-                 oninput="studentSearchQuery=this.value; renderStudentsCards()"
+                 value="${escapeHtml(studentSearchQuery).replace(/"/g, '&quot;')}"
+                 data-student-search-view="students"
                  class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
         </div>
         ${studentSearchQuery ? `
-        <button onclick="studentSearchQuery=''; renderStudentsPage()"
+        <button data-student-view-action="clear-search" data-student-search-view="students"
                 class="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-1">
           <i class="fas fa-times"></i>クリア
         </button>` : ''}
@@ -2513,19 +2513,19 @@ function renderStudentsPage() {
     <!-- Status Tabs -->
     <div class="bg-white rounded-lg shadow-md p-2 mb-6">
       <div class="flex flex-wrap gap-2">
-        <button onclick="switchTab('active')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="active" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'active' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-check-circle mr-2"></i>アクティブ
         </button>
-        <button onclick="switchTab('preparing')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="preparing" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'preparing' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-clock mr-2"></i>レッスン準備中
         </button>
-        <button onclick="switchTab('suspended')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'suspended' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="suspended" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'suspended' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-pause-circle mr-2"></i>休会
         </button>
-        <button onclick="switchTab('graduated')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="graduated" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'graduated' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-graduate mr-2"></i>正規退会
         </button>
-        <button onclick="switchTab('cancelled')" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
+        <button data-student-view-action="status-tab" data-student-status="cancelled" class="px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">
           <i class="fas fa-user-times mr-2"></i>無断キャンセル
         </button>
       </div>
@@ -2546,38 +2546,38 @@ function renderStudentsPage() {
           <span class="font-semibold text-gray-700">
             <i class="fas fa-sort mr-1"></i>並び替え:
           </span>
-          <button onclick="toggleSort('student_id')" class="px-3 py-1 text-xs rounded ${sortColumn === 'student_id' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="sort" data-student-filter-column="student_id" class="px-3 py-1 text-xs rounded ${sortColumn === 'student_id' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             学籍番号 ${sortColumn === 'student_id' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
           </button>
-          <button onclick="toggleSort('name')" class="px-3 py-1 text-xs rounded ${sortColumn === 'name' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="sort" data-student-filter-column="name" class="px-3 py-1 text-xs rounded ${sortColumn === 'name' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             生徒名 ${sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
           </button>
-          <button onclick="toggleSort('lesson_progress')" class="px-3 py-1 text-xs rounded ${sortColumn === 'lesson_progress' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="sort" data-student-filter-column="lesson_progress" class="px-3 py-1 text-xs rounded ${sortColumn === 'lesson_progress' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             レッスン進捗 ${sortColumn === 'lesson_progress' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
           </button>
-          <button onclick="toggleSort('continued_months')" class="px-3 py-1 text-xs rounded ${sortColumn === 'continued_months' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="sort" data-student-filter-column="continued_months" class="px-3 py-1 text-xs rounded ${sortColumn === 'continued_months' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             継続月数 ${sortColumn === 'continued_months' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
           </button>
-          <button onclick="toggleSort('result_overall')" class="px-3 py-1 text-xs rounded ${sortColumn === 'result_overall' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="sort" data-student-filter-column="result_overall" class="px-3 py-1 text-xs rounded ${sortColumn === 'result_overall' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             リザルト ${sortColumn === 'result_overall' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
           </button>
           
           <span class="font-semibold text-gray-700 ml-4">
             <i class="fas fa-filter mr-1"></i>フィルター:
           </span>
-          <button onclick="toggleFilter('student_id')" class="px-3 py-1 text-xs rounded ${columnFilters.student_id ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="open" data-student-filter-column="student_id" class="px-3 py-1 text-xs rounded ${columnFilters.student_id ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             学籍番号 ${columnFilters.student_id ? '✓' : ''}
           </button>
-          <button onclick="toggleFilter('name')" class="px-3 py-1 text-xs rounded ${columnFilters.name ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="open" data-student-filter-column="name" class="px-3 py-1 text-xs rounded ${columnFilters.name ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             生徒名 ${columnFilters.name ? '✓' : ''}
           </button>
-          <button onclick="toggleFilter('status')" class="px-3 py-1 text-xs rounded ${columnFilters.status ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="open" data-student-filter-column="status" class="px-3 py-1 text-xs rounded ${columnFilters.status ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             ステータス ${columnFilters.status ? '✓' : ''}
           </button>
-          <button onclick="toggleFilter('homeroom_tutor')" class="px-3 py-1 text-xs rounded ${columnFilters.homeroom_tutor ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="open" data-student-filter-column="homeroom_tutor" class="px-3 py-1 text-xs rounded ${columnFilters.homeroom_tutor ? 'bg-green-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             Tutor ${columnFilters.homeroom_tutor ? '✓' : ''}
           </button>
-          <button onclick="toggleSurveyFilter()" class="px-3 py-1 text-xs rounded ${surveyFilter === 'unreplied' ? 'bg-red-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
+          <button data-student-filter-action="survey" class="px-3 py-1 text-xs rounded ${surveyFilter === 'unreplied' ? 'bg-red-600 text-white' : 'bg-white text-gray-700'} hover:shadow transition">
             アンケート未回答 ${surveyFilter === 'unreplied' ? '✓' : ''}
           </button>
         </div>
@@ -2596,10 +2596,10 @@ function renderStudentsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center gap-2">
                   <span>学籍番号</span>
-                  <button onclick="toggleSort('student_id')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="student_id" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'student_id' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('student_id')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="student_id" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.student_id ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2607,10 +2607,10 @@ function renderStudentsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center gap-2">
                   <span>生徒名</span>
-                  <button onclick="toggleSort('name')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="name" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'name' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('name')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="name" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.name ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2618,10 +2618,10 @@ function renderStudentsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center gap-2">
                   <span>ステータス</span>
-                  <button onclick="toggleSort('status')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="status" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'status' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('status')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="status" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.status ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2629,10 +2629,10 @@ function renderStudentsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center gap-2">
                   <span>契約プラン</span>
-                  <button onclick="toggleSort('contract_plan')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="contract_plan" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'contract_plan' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('contract_plan')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="contract_plan" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.contract_plan ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2640,10 +2640,10 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center gap-2">
                   <span>キャラ名</span>
-                  <button onclick="toggleSort('character_name')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="character_name" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'character_name' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('character_name')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="character_name" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.character_name ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2651,10 +2651,10 @@ function renderStudentsPage() {
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center gap-2">
                   <span>担任Tutor</span>
-                  <button onclick="toggleSort('homeroom_tutor')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="homeroom_tutor" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'homeroom_tutor' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('homeroom_tutor')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="homeroom_tutor" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.homeroom_tutor ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2662,7 +2662,7 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>レッスン進捗</span>
-                  <button onclick="toggleSort('lesson_progress')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="lesson_progress" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'lesson_progress' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2670,7 +2670,7 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>開始日</span>
-                  <button onclick="toggleSort('lesson_start_date')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="lesson_start_date" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'lesson_start_date' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2678,7 +2678,7 @@ function renderStudentsPage() {
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>継続月数</span>
-                  <button onclick="toggleSort('continued_months')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="continued_months" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'continued_months' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2686,7 +2686,7 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
                 <div class="flex items-center justify-center gap-2">
                   <span class="text-purple-700">PROプラン<br>開始日</span>
-                  <button onclick="toggleSort('pro_plan_start_date')" class="hover:text-purple-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="pro_plan_start_date" class="hover:text-purple-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'pro_plan_start_date' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2694,7 +2694,7 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-purple-50">
                 <div class="flex items-center justify-center gap-2">
                   <span class="text-purple-700">PROプラン<br>継続月数</span>
-                  <button onclick="toggleSort('pro_plan_continued_months')" class="hover:text-purple-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="pro_plan_continued_months" class="hover:text-purple-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'pro_plan_continued_months' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2702,10 +2702,10 @@ function renderStudentsPage() {
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>リザルト総合</span>
-                  <button onclick="toggleSort('result_overall')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="result_overall" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'result_overall' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
-                  <button onclick="toggleFilter('result_overall')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="open" data-student-filter-column="result_overall" class="hover:text-blue-600 transition">
                     <i class="fas fa-filter ${columnFilters.result_overall ? 'text-blue-600' : ''}"></i>
                   </button>
                 </div>
@@ -2713,7 +2713,7 @@ function renderStudentsPage() {
               <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>わなみさん</span>
-                  <button onclick="toggleSort('wanami_usage')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="wanami_usage" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'wanami_usage' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2721,7 +2721,7 @@ function renderStudentsPage() {
               <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div class="flex items-center justify-center gap-2">
                   <span>欠席回数</span>
-                  <button onclick="toggleSort('result_absence')" class="hover:text-blue-600 transition">
+                  <button data-student-filter-action="sort" data-student-filter-column="result_absence" class="hover:text-blue-600 transition">
                     <i class="fas fa-sort ${sortColumn === 'result_absence' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : ''}"></i>
                   </button>
                 </div>
@@ -2730,7 +2730,7 @@ function renderStudentsPage() {
                 <div class="flex items-center justify-center gap-2">
                   <i class="fas fa-clipboard-check text-blue-600"></i>
                   <span>アンケート</span>
-                  <button onclick="toggleSurveyFilter()" class="hover:text-blue-600 transition" title="今月未回答でフィルター">
+                  <button data-student-filter-action="survey" class="hover:text-blue-600 transition" title="今月未回答でフィルター">
                     <i class="fas fa-filter ${surveyFilter === 'unreplied' ? 'text-red-600' : ''}"></i>
                   </button>
                 </div>
@@ -2751,20 +2751,20 @@ function renderStudentsPage() {
       </div>
       
       <!-- Filter Modals -->
-      <div id="filter-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onclick="if(event.target.id === 'filter-modal') closeFilterModal()">
+      <div id="filter-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" data-student-filter-backdrop>
         <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800" id="filter-modal-title">フィルター</h3>
-            <button onclick="closeFilterModal()" class="text-gray-400 hover:text-gray-600">
+            <button data-student-filter-action="close" class="text-gray-400 hover:text-gray-600">
               <i class="fas fa-times text-xl"></i>
             </button>
           </div>
           <div id="filter-modal-content"></div>
           <div class="flex gap-2 mt-4">
-            <button onclick="applyFilter()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            <button data-student-filter-action="apply" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
               <i class="fas fa-check mr-2"></i>適用
             </button>
-            <button onclick="clearFilter()" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+            <button data-student-filter-action="clear" class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
               <i class="fas fa-times mr-2"></i>クリア
             </button>
           </div>
@@ -3264,13 +3264,13 @@ function renderTutorsPage() {
           <label class="text-sm font-medium text-gray-700">
             <i class="fas fa-calendar mr-1"></i>集計表示月:
           </label>
-          <button onclick="changeTutorStatsMonth(-1)" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+          <button data-tutor-read-action="previous-month" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
             <i class="fas fa-chevron-left"></i>
           </button>
           <span class="px-4 py-2 bg-gray-100 rounded font-semibold text-center min-w-[120px]">
             ${selectedTutorYear}年${selectedTutorMonth}月
           </span>
-          <button onclick="changeTutorStatsMonth(1)" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+          <button data-tutor-read-action="next-month" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
             <i class="fas fa-chevron-right"></i>
           </button>
         </div>
@@ -3321,7 +3321,7 @@ function renderTutorsPage() {
           <label class="text-sm font-medium text-gray-700">チーム絞り込み:</label>
           <select 
             id="teamFilter" 
-            onchange="handleTeamFilterChange(this.value)"
+            data-tutor-team-filter
             class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             ${renderTeamFilterOptions()}
@@ -3390,13 +3390,13 @@ function renderTutorsPage() {
           <i class="fas fa-calendar-times mr-2"></i>月別不参加集計
         </h2>
         <div class="flex items-center gap-3">
-          <button onclick="changeAbsenceStatsMonth(-1)" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
+          <button data-tutor-read-action="previous-absence" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
             <i class="fas fa-chevron-left mr-1"></i>前月
           </button>
           <span class="text-lg font-semibold text-gray-800">
             ${selectedStatsYear}年${selectedStatsMonth}月
           </span>
-          <button onclick="changeAbsenceStatsMonth(1)" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
+          <button data-tutor-read-action="next-absence" class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
             次月<i class="fas fa-chevron-right ml-1"></i>
           </button>
         </div>
@@ -4023,7 +4023,7 @@ function renderTutorRows() {
     // 満足度ボタン (表示月にデータがある場合のみ表示、きょうへい先生は非表示)
     const satisfactionButton = (!isKyoheiSensei && currentMonthData) ? 
       `<button 
-        onclick="showSatisfactionModal('${tutor.employee_id}')"
+        data-tutor-read-action="satisfaction" data-tutor-id="${escapeHtml(tutor.employee_id).replace(/"/g, '&quot;')}"
         class="text-blue-600 hover:text-blue-800 ml-2"
         title="満足度詳細を表示">
         <i class="fas fa-chart-line"></i>
@@ -4031,7 +4031,7 @@ function renderTutorRows() {
 
     const lessonQualityButton = `
       <button
-        onclick="showTutorMinutesQualityModal('${tutor.employee_id}')"
+        data-tutor-read-action="quality" data-tutor-id="${escapeHtml(tutor.employee_id).replace(/"/g, '&quot;')}"
         class="ml-2 px-2 py-1 text-xs bg-cyan-100 text-cyan-700 rounded hover:bg-cyan-200 whitespace-nowrap"
         title="表示月のレッスン品質評価を表示">
         <i class="fas fa-clipboard-check mr-1"></i>品質評価
@@ -4213,7 +4213,7 @@ async function showTutorMinutesQualityModal(employeeId) {
           </h3>
           <p class="text-sm text-gray-500 mt-1">${escapeHtml(tutor?.tutor_name || employeeId)}・${selectedTutorYear}年${selectedTutorMonth}月</p>
         </div>
-        <button onclick="closeTutorMinutesQualityModal()" class="text-gray-400 hover:text-gray-600">
+        <button data-tutor-read-action="close-quality" class="text-gray-400 hover:text-gray-600">
           <i class="fas fa-times text-xl"></i>
         </button>
       </div>
@@ -4223,7 +4223,7 @@ async function showTutorMinutesQualityModal(employeeId) {
         </div>
       </div>
       <div class="px-6 py-3 border-t flex justify-end">
-        <button onclick="closeTutorMinutesQualityModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
+        <button data-tutor-read-action="close-quality" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">閉じる</button>
       </div>
     </div>`;
   modal.addEventListener('click', event => {
@@ -4862,15 +4862,15 @@ async function showSatisfactionModal(tutorEmployeeId) {
   
   // Create modal
   const modalHtml = `
-    <div id="satisfactionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeSatisfactionModal(event)">
-      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+    <div id="satisfactionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-tutor-satisfaction-backdrop>
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="p-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-2xl font-bold text-gray-800">
               <i class="fas fa-chart-line mr-2"></i>
               ${tutorName} - レッスン満足度
             </h3>
-            <button onclick="closeSatisfactionModal()" class="text-gray-500 hover:text-gray-700">
+            <button data-tutor-read-action="close-satisfaction" class="text-gray-500 hover:text-gray-700">
               <i class="fas fa-times text-xl"></i>
             </button>
           </div>
@@ -5378,7 +5378,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
         </td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           <button
-            onclick="showPreviousLessonTargets(decodeURIComponent('${encodeURIComponent(student.student_id)}'), '${lessonDateStr}')"
+            data-previous-targets-action="open" data-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-lesson-date="${escapeHtml(lessonDateStr).replace(/"/g, '&quot;')}"
             class="inline-flex items-center px-3 py-1 bg-teal-600 text-white text-xs font-semibold rounded hover:bg-teal-700 transition"
             title="前回の悩みと小目標を表示"
           >
@@ -5413,7 +5413,7 @@ async function showPreviousLessonTargets(studentId, lessonDate) {
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
   modal.onclick = closePreviousLessonTargetsModal;
   modal.innerHTML = `
-    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
       <div class="p-5 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
         <div>
           <h3 class="text-xl font-bold text-gray-800">
@@ -5421,7 +5421,7 @@ async function showPreviousLessonTargets(studentId, lessonDate) {
           </h3>
           <p class="text-sm text-gray-500 mt-1">${escapeHtml(studentName)} 様</p>
         </div>
-        <button onclick="closePreviousLessonTargetsModal()" class="text-gray-500 hover:text-gray-700" aria-label="閉じる">
+        <button data-previous-targets-action="close" class="text-gray-500 hover:text-gray-700" aria-label="閉じる">
           <i class="fas fa-times text-2xl"></i>
         </button>
       </div>
@@ -5548,6 +5548,8 @@ function toggleFilter(column) {
     columnFilters[column] = savedFilter;
   }
   
+  // Values are text in labels, but quoted attributes also need quote escaping.
+  const escapeFilterAttribute = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
   // Generate filter options
   const currentFilter = columnFilters[column];
   content.innerHTML = `
@@ -5557,22 +5559,22 @@ function toggleFilter(column) {
         type="text" 
         id="filter-search-input" 
         placeholder="検索または入力..." 
-        value="${currentFilter && currentFilter !== 'all' ? currentFilter : ''}"
+        value="${escapeFilterAttribute(currentFilter && currentFilter !== 'all' ? currentFilter : '')}"
         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        oninput="filterOptions()"
+        data-student-filter-search
       >
     </div>
     
     <!-- Filter options -->
     <div id="filter-options-list" class="space-y-2 max-h-72 overflow-y-auto border-t pt-2">
       <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-        <input type="radio" name="filter-value" value="all" ${!currentFilter || currentFilter === 'all' ? 'checked' : ''} class="text-blue-600" onchange="updateSearchInput('')">
+        <input type="radio" name="filter-value" value="all" ${!currentFilter || currentFilter === 'all' ? 'checked' : ''} class="text-blue-600" data-student-filter-choice="">
         <span class="text-sm text-gray-700">すべて表示</span>
       </label>
       ${uniqueValues.map(value => `
-        <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer" data-filter-option="${value}">
-          <input type="radio" name="filter-value" value="${value}" ${currentFilter === value ? 'checked' : ''} class="text-blue-600" onchange="updateSearchInput('${value.replace(/'/g, "\\'")}')">
-          <span class="text-sm text-gray-700">${value}</span>
+        <label class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer" data-filter-option="${escapeFilterAttribute(value)}">
+          <input type="radio" name="filter-value" value="${escapeFilterAttribute(value)}" ${currentFilter === value ? 'checked' : ''} class="text-blue-600" data-student-filter-choice="${escapeFilterAttribute(value)}">
+          <span class="text-sm text-gray-700">${escapeHtml(value)}</span>
         </label>
       `).join('')}
     </div>
