@@ -4037,7 +4037,7 @@ function renderTutorRows() {
         <i class="fas fa-clipboard-check mr-1"></i>品質評価
       </button>`;
     const extensionReviewTutorButton = typeof extensionReviewFeatureEnabled !== 'undefined' && extensionReviewFeatureEnabled && currentUser?.role === 'admin' ?
-      `<button data-tutor="${erEscape(tutor.employee_id)}" onclick="erOpenTutorAnalysis(this.dataset.tutor)" class="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded whitespace-nowrap">延長審査評価</button>` : '';
+      `<button data-tutor="${erEscape(tutor.employee_id)}" data-er-read-action="open-tutor-analysis" class="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded whitespace-nowrap">延長審査評価</button>` : '';
     
     // レッスン進捗ステータス
     const progressStatus = getTutorLessonProgressStatus(tutor.notion_name);

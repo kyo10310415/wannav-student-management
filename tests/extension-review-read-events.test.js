@@ -39,7 +39,8 @@ test('read-only entry/tab/history controls use namespaced data and preserve writ
   assert.match(source, /data-er-read-action="search-history" data-er-offset="0"/);
   assert.equal(/onclick="(?:erSelectTab|erSearchHistory|erOpenResult)\(/.test(source),false);
   for (const action of ['erGenerate()','erReview(false)','erReview(true)','erSaveEdit()','erSaveSettings()']) assert.ok(source.includes(`onclick="${action}"`));
-  assert.ok(appSource.includes('onclick="erOpenTutorAnalysis(this.dataset.tutor)"'));
+  assert.ok(appSource.includes('data-er-read-action="open-tutor-analysis"'));
+  assert.equal(appSource.includes('onclick="erOpenTutorAnalysis(this.dataset.tutor)"'),false);
 });
 
 test('one stable delegated listener handles nested targets and newly recreated navigation/content roots once', async () => {
@@ -207,4 +208,40 @@ test('settings latest-version reads and changed-session response discard do not 
   f.context.sessionToken='changed-session'; resolve({data:{data:{id:1,config:{}}}});
   await assert.rejects(pending,/SessionChanged/);
   assert.equal(f.elements['er-panel'].innerHTML,''); assert.equal(f.requests.length,1); assert.equal(f.writes.length,0);
+});
+
+
+test('Tutor analysis entry passes the exact ID and resets to all Tutors using GET only', async () => {
+  const f=fixture(); const id="synthetic'\"<&>";
+  await f.click(f.button('open-tutor-analysis',{tutor:id}),true);
+  assert.equal(vm.runInContext('erAnalysisTutor',f.context),id);
+  assert.equal(vm.runInContext('erTab',f.context),'analysis');
+  assert.deepEqual(f.calls,[['open-page','extension-review']]);
+  const tutor=(tutorId,tutorName)=>({tutorId,tutorName,score:75,scriptMatch:80,count:1,confirmed:0,rounds:{},months:{},penalties:{},improvements:{}});
+  f.context.axios=async options=>{f.requests.push(options);return {data:{data:{warning:'Synthetic warning',tutors:[tutor(id,'Synthetic <one>'),tutor('other','Synthetic two')]}}}};
+  await f.context.erRenderAnalysis();
+  assert.ok(f.elements['er-panel'].innerHTML.includes('Synthetic &lt;one&gt;'));
+  assert.equal(f.elements['er-panel'].innerHTML.includes('Synthetic two'),false);
+  assert.match(f.elements['er-panel'].innerHTML,/data-er-read-action="reset-analysis"/);
+  await f.click(f.button('reset-analysis'),true);
+  assert.equal(vm.runInContext('erAnalysisTutor',f.context),null);
+  assert.ok(f.elements['er-panel'].innerHTML.includes('Synthetic two'));
+  assert.equal(f.elements['er-panel'].innerHTML.includes('data-er-read-action="reset-analysis"'),false);
+  assert.equal(f.requests.length,2); assert.ok(f.requests.every(r=>r.method==='get'&&r.url==='/api/extension-review/analysis'));
+  assert.equal(f.writes.length,0);
+});
+
+test('Tutor analysis entry/reset reject disabled, stale-root, missing ID and unauthorized events', async () => {
+  const f=fixture(); let dispatched=0;
+  f.context.erOpenTutorAnalysis=()=>dispatched++; f.context.erRenderAnalysis=()=>dispatched++;
+  await f.click(f.button('open-tutor-analysis')); await f.click(f.button('open-tutor-analysis',{tutor:''}));
+  for (const action of ['open-tutor-analysis','reset-analysis']) {
+    const node=f.button(action,{tutor:'synthetic'}); node.disabled=true; await f.click(node);
+    await f.click(f.button(action,{tutor:'synthetic'},f.element()));
+    for (const role of ['crew','leader']) {f.context.currentUser={role}; await f.click(f.button(action,{tutor:'synthetic'}));}
+    f.context.currentUser={role:'admin'}; f.context.sessionToken=''; await f.click(f.button(action,{tutor:'synthetic'}));
+    f.context.sessionToken='synthetic-session'; vm.runInContext('extensionReviewFeatureEnabled=false',f.context); await f.click(f.button(action,{tutor:'synthetic'}));
+    vm.runInContext('extensionReviewFeatureEnabled=true',f.context);
+  }
+  assert.equal(dispatched,0); assert.equal(f.requests.length,0); assert.equal(f.writes.length,0);
 });

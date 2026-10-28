@@ -929,3 +929,5 @@ gaxios 6.7.1、googleapis-common 7.2.0、node-cron 3.0.3のUUIDだけを11.1.1�
 ロックには旧cron配下uuidを残さず、三者とも修正版へ解決することをnpm lsと専用テストで確認します。Node22.23.4/npm10.9.9での隔離npm ci --ignore-scripts、および既存ローカル環境でのnpm install --ignore-scriptsが成功。multipart、Googleのquery/OAuth輸送、cronの停止状態でのID生成、修正版のbuffer境界をmockで確認しました。上流を更新する際は、このoverrideを見直して再度互換性を検証してください。
 
 延長審査AIの設定バージョン切替・標準マッピング入力・プレビューも外部JSのイベント委譲を使用します。管理者限定を維持し、入力・プレビューはブラウザー内だけで処理します。保存ボタンの動作とrootのCSPは変更しません。
+
+Tutor一覧から延長審査AIのTutor別分析を開く操作と、分析の全Tutor表示も外部JSのイベント委譲を使用します。管理者限定と読取り専用のAPI利用を維持します。
