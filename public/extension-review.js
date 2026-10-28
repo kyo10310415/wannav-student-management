@@ -163,7 +163,7 @@ async function erRenderAnalysis() {
     const frequency = (title, values) => `<h4 class="font-semibold mt-2">${title}</h4><ul class="list-disc pl-5">${Object.entries(values).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([reason,count])=>`<li>${erEscape(reason)}：${count}件</li>`).join('') || '<li>該当なし</li>'}</ul>`;
     return averages('審査回数別',t.rounds)+averages('月別スコア推移',t.months)+frequency('主な減点理由',t.penalties)+frequency('改善項目の出現頻度',t.improvements);
   };
-  document.getElementById('er-panel').innerHTML = `<p class="text-sm text-gray-500">${erEscape(data.warning)}</p>${erAnalysisTutor ? '<button onclick="erAnalysisTutor=null;erRenderAnalysis()" class="border rounded p-2">すべてのTutorを表示</button>' : ''}<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Tutor</th><th>平均点</th><th>スクリプト一致率</th><th>件数</th><th>確定件数</th><th>詳細</th></tr></thead><tbody>${data.tutors.map(t => `<tr class="border-t"><td class="p-2">${erEscape(t.tutorName)}</td><td>${t.score.toFixed(1)}</td><td>${t.scriptMatch.toFixed(1)}%</td><td>${t.count}</td><td>${t.confirmed}</td><td><details><summary>回数別・月別・減点理由・改善頻度</summary>${detail(t)}</details></td></tr>`).join('') || '<tr><td>採点履歴なし</td></tr>'}</tbody></table></div><p class="text-sm">減点理由・改善項目の頻度は同一文言の件数です。</p>`;
+  document.getElementById('er-panel').innerHTML = `<p class="text-sm text-gray-500">${erEscape(data.warning)}</p>${erAnalysisTutor ? '<button data-er-read-action="reset-analysis" class="border rounded p-2">すべてのTutorを表示</button>' : ''}<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Tutor</th><th>平均点</th><th>スクリプト一致率</th><th>件数</th><th>確定件数</th><th>詳細</th></tr></thead><tbody>${data.tutors.map(t => `<tr class="border-t"><td class="p-2">${erEscape(t.tutorName)}</td><td>${t.score.toFixed(1)}</td><td>${t.scriptMatch.toFixed(1)}%</td><td>${t.count}</td><td>${t.confirmed}</td><td><details><summary>回数別・月別・減点理由・改善頻度</summary>${detail(t)}</details></td></tr>`).join('') || '<tr><td>採点履歴なし</td></tr>'}</tbody></table></div><p class="text-sm">減点理由・改善項目の頻度は同一文言の件数です。</p>`;
 }
 async function erOpenTutorAnalysis(tutorId) {
   erAnalysisTutor = tutorId; erTab = 'analysis'; await changePage('extension-review');
@@ -221,6 +221,12 @@ function erHandleReadClick(event) {
   if (!content?.contains(button) && !navigation?.contains(button)) return;
   if (!currentUser || currentUser.role !== 'admin' || !sessionToken || !extensionReviewFeatureEnabled) return;
   switch (button.dataset.erReadAction) {
+    case 'open-tutor-analysis':
+      if (button.dataset.tutor) return erOpenTutorAnalysis(button.dataset.tutor);
+      return;
+    case 'reset-analysis':
+      erAnalysisTutor = null;
+      return erRenderAnalysis();
     case 'apply-mapping': return erApplyNotionMapping();
     case 'preview-settings': return erPreviewSettings();
     case 'open-page': return changePage('extension-review');
