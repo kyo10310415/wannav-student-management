@@ -164,6 +164,10 @@ app.get('/', (c) => {
         <script src="/minutes-template-events.js?v=${Date.now()}"></script>
         <script src="/red-list-read-events.js?v=${Date.now()}"></script>
         <script src="/tutor-red-month-events.js?v=${Date.now()}"></script>
+        <script src="/user-create-prepare-events.js?v=${Date.now()}"></script>
+        <script src="/helper-selection-close-events.js?v=${Date.now()}"></script>
+        <script src="/booking-prepare-events.js?v=${Date.now()}"></script>
+        <script src="/red-list-prepare-events.js?v=${Date.now()}"></script>
     </body>
     </html>
   `);
