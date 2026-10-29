@@ -22,7 +22,16 @@ axios.interceptors.request.use(config => {
   return config;
 });
 axios.interceptors.response.use(response => response, error => {
-  if (error.response?.status === 401 && isOwnApi(error.config?.url || '') && !error.config?.url?.includes('/api/auth/login')) {
+  let requestUrl;
+  try {
+    const base = new URL(error.config?.baseURL || window.location.href, window.location.href);
+    requestUrl = new URL(error.config?.url || '', base);
+  } catch { /* Keep the original rejection when the request URL is invalid. */ }
+  const headers = error.config?.headers;
+  const authorization = typeof headers?.get === 'function' ? headers.get('Authorization') :
+    Object.entries(headers || {}).find(([name]) => name.toLowerCase() === 'authorization')?.[1];
+  if (error.response?.status === 401 && sessionToken && authorization === `Bearer ${sessionToken}` &&
+      requestUrl && isOwnApi(requestUrl.href) && !requestUrl.pathname.includes('/api/auth/login')) {
     sessionToken = null;
     currentUser = null;
     localStorage.removeItem('sessionToken');
@@ -34,10 +43,11 @@ const browserFetch = window.fetch.bind(window);
 window.fetch = async (input, options = {}) => {
   const url = input instanceof Request ? input.url : String(input);
   if (!sessionToken || !isOwnApi(url)) return browserFetch(input, options);
+  const requestToken = sessionToken;
   const headers = new Headers(options.headers || (input instanceof Request ? input.headers : undefined));
-  headers.set('Authorization', `Bearer ${sessionToken}`);
+  headers.set('Authorization', `Bearer ${requestToken}`);
   const response = await browserFetch(input, { ...options, headers });
-  if (response.status === 401 && !new URL(url, window.location.href).pathname.startsWith('/api/auth/')) {
+  if (response.status === 401 && sessionToken === requestToken && !new URL(url, window.location.href).pathname.startsWith('/api/auth/')) {
     sessionToken = null;
     currentUser = null;
     localStorage.removeItem('sessionToken');
@@ -6173,7 +6183,7 @@ function showHelperRequestConfirmation() {
         </div>
         
         <div class="flex gap-3 justify-end">
-          <button onclick="submitHelperRequest()" 
+          <button id="helper-request-submit" onclick="submitHelperRequest()"
             class="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition">
             <i class="fas fa-paper-plane mr-2"></i>依頼を確定する
           </button>
@@ -6188,8 +6198,28 @@ function showHelperRequestConfirmation() {
 }
 
 // Submit helper request (Step 4: Submit to API)
+const helperPendingCreations = new Set();
 async function submitHelperRequest() {
-  const student = helperRequestData.selectedLesson;
+  const root = document.getElementById('content');
+  const modal = document.getElementById('helper-request-modal');
+  const button = document.getElementById('helper-request-submit');
+  const draft = helperRequestData, student = draft?.selectedLesson;
+  if (!root || !modal || !button || !modal.contains(button) || !document.body.contains(modal) || button.disabled ||
+      !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'reservations' ||
+      !student || typeof student.student_id !== 'string' || !student.student_id) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const fields = ['selectedDate', 'lessonTime', 'reason', 'notes', 'deadline'];
+  const values = fields.map(key => draft[key]);
+  const studentFields = ['student_id', 'name', 'homeroom_tutor', 'page_id', 'lesson_progress', 'contract_plan'];
+  const studentValues = studentFields.map(key => student[key]);
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'reservations' && document.getElementById('content') === root &&
+    document.getElementById('helper-request-modal') === modal && document.body.contains(modal) &&
+    document.getElementById('helper-request-submit') === button && modal.contains(button) && helperRequestData === draft &&
+    draft.selectedLesson === student && fields.every((key, index) => draft[key] === values[index]) &&
+    studentFields.every((key, index) => student[key] === studentValues[index]);
+  const key = JSON.stringify([userId, student.student_id, draft.selectedDate]);
+  if (helperPendingCreations.has(key)) return;
   const notionUrl = cachedNotionUrls[student.student_id] || `https://www.notion.so/${student.page_id?.replace(/-/g, '')}`;
   
   // Find requesting tutor from tutors array
@@ -6203,12 +6233,13 @@ async function submitHelperRequest() {
   // Convert deadline to ISO string (treat as JST)
   // datetime-local returns "YYYY-MM-DDTHH:MM" in local timezone (JST)
   // We need to send it as ISO string to preserve the exact time
-  const deadlineDate = new Date(helperRequestData.deadline);
+  const deadlineDate = new Date(draft.deadline);
+  if (typeof draft.deadline !== 'string' || !draft.deadline.trim() || !Number.isFinite(deadlineDate.getTime())) { alert('依頼期限を確認してください'); return; }
   const deadlineISO = deadlineDate.toISOString();
   
   const requestData = {
-    lesson_date: helperRequestData.selectedDate,
-    lesson_time: helperRequestData.lessonTime,
+    lesson_date: draft.selectedDate,
+    lesson_time: draft.lessonTime,
     student_id: student.student_id,
     student_name: student.name,
     notion_url: notionUrl,
@@ -6217,31 +6248,34 @@ async function submitHelperRequest() {
     lesson_progress: (student.lesson_progress === 'Proプラン' || student.contract_plan === 'PROプラン')
       ? null
       : (parseInt(student.lesson_progress, 10) || 0),
-    reason: helperRequestData.reason,
-    notes: helperRequestData.notes || null,
+    reason: draft.reason,
+    notes: draft.notes || null,
     deadline: deadlineISO
   };
   
+  helperPendingCreations.add(key);
+  button.disabled = true;
   try {
     const response = await fetch(`${API_BASE}/api/helper-requests`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json', Authorization: `Bearer ${token}`
       },
       body: JSON.stringify(requestData)
     });
     
     const result = await response.json();
-    
-    if (result.success) {
-      alert('助っ人Tutor依頼を送信しました！');
-      closeHelperRequestModal();
-    } else {
-      alert('エラーが発生しました: ' + (result.error || '不明なエラー'));
-    }
-  } catch (error) {
-    console.error('助っ人Tutor依頼の送信エラー:', error);
+    if (!current()) return;
+    if (!response.ok || !result.success) throw new Error('Helper request rejected');
+    alert('助っ人Tutor依頼を送信しました！');
+    closeHelperRequestModal();
+  } catch {
+    if (!current()) return;
+    console.error('Helper request creation failed');
     alert('助っ人Tutor依頼の送信に失敗しました');
+  } finally {
+    helperPendingCreations.delete(key);
+    if (document.getElementById('helper-request-modal') === modal && document.getElementById('helper-request-submit') === button && modal.contains(button)) button.disabled = false;
   }
 }
 

@@ -174,6 +174,6 @@ test('browser adds credentials only to same-origin API calls for axios and fetch
   assert.equal(sent.options.headers.get('Authorization'), `Bearer ${token}`);
   await context.window.fetch('https://other.example.test/api/students');
   assert.equal(sent.options.headers, undefined);
-  await assert.rejects(() => responseError({ response: { status: 401 }, config: { url: '/api/students' } }));
+  await assert.rejects(() => responseError({ response: { status: 401 }, config: requestInterceptor({ url: '/api/students' }) }));
   assert.equal(requestInterceptor({ url: '/api/students' }).headers, undefined);
 });
