@@ -1757,16 +1757,11 @@ function getTutorOptions() {
   
   // Map notion_name to tutor_name for display
   return uniqueNotionNames
-    .map(notionName => {
-      const displayName = getTutorDisplayName(notionName);
+    .map(notionName => ({ notionName, displayName: String(getTutorDisplayName(notionName)) }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'))
+    .map(({ notionName, displayName }) => {
       const isSelected = notionName === selectedTutor ? 'selected' : '';
-      return `<option value="${notionName}" ${isSelected}>${displayName}</option>`;
-    })
-    .sort((a, b) => {
-      // Sort by display name
-      const aText = a.match(/>(.*?)<\/option>/)[1];
-      const bText = b.match(/>(.*?)<\/option>/)[1];
-      return aText.localeCompare(bText, 'ja');
+      return `<option value="${studentDisplayAttribute(notionName)}" ${isSelected}>${studentDisplayText(displayName)}</option>`;
     })
     .join('');
 }
@@ -5430,10 +5425,16 @@ function renderTodayStudentRows(dayStudents, displayDate) {
 }
 
 async function showPreviousLessonTargets(studentId, lessonDate) {
+  const root = document.getElementById('content');
+  const student = students.find(item => item.student_id === studentId);
+  const displayDate = new Date(currentLessonDate);
+  const dateKey = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')}`;
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'today' || !student || lessonDate !== dateKey) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role, tutor = selectedTutor;
+  const dateValue = displayDate.getTime(), studentName = student.name || studentId;
   document.getElementById('previous-lesson-targets-modal')?.remove();
 
-  const student = students.find(item => item.student_id === studentId);
-  const studentName = student?.name || studentId;
   const modal = document.createElement('div');
   modal.id = 'previous-lesson-targets-modal';
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
@@ -5458,14 +5459,21 @@ async function showPreviousLessonTargets(studentId, lessonDate) {
     </div>
   `;
   document.body.appendChild(modal);
+  const target = document.getElementById('previous-lesson-targets-content');
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'today' && selectedTutor === tutor && new Date(currentLessonDate).getTime() === dateValue &&
+    document.getElementById('content') === root && students.includes(student) && student.student_id === studentId && (student.name || studentId) === studentName &&
+    document.getElementById('previous-lesson-targets-modal') === modal && document.body.contains(modal) &&
+    document.getElementById('previous-lesson-targets-content') === target && modal.contains(target);
 
   try {
     const response = await axios.get(
       `${API_BASE}/api/minutes/previous-context/${encodeURIComponent(studentId)}`,
-      { params: { beforeDate: lessonDate } }
+      { params: { beforeDate: lessonDate }, headers: { Authorization: `Bearer ${token}` } }
     );
+    if (!current()) return;
     const data = response.data.data;
-    const content = document.getElementById('previous-lesson-targets-content');
+    const content = target;
     if (!content) return;
 
     if (!data.hasPreviousMinutes) {
@@ -5499,13 +5507,14 @@ async function showPreviousLessonTargets(studentId, lessonDate) {
       </div>
     `;
   } catch (error) {
-    console.error('前回の悩み・小目標取得エラー:', error);
-    const content = document.getElementById('previous-lesson-targets-content');
+    if (!current()) return;
+    console.error('前回の悩み・小目標取得エラー');
+    const content = target;
     if (content) {
       content.innerHTML = `
         <div class="py-6 text-red-600">
           <i class="fas fa-exclamation-circle text-3xl"></i>
-          <p class="mt-3">${escapeHtml(error.response?.data?.error || '前回情報の取得に失敗しました')}</p>
+          <p class="mt-3">前回情報の取得に失敗しました</p>
         </div>
       `;
     }
@@ -14882,9 +14891,15 @@ function resetRouletteFilters() {
  */
 async function loadRedListData() {
   const state = beginRedListRead('table');
-  const cells = [...document.querySelectorAll('.red-list-loading')];
-  if (!state || cells.length === 0) return;
-  const current = () => state.current() && cells.some(cell => state.root.contains(cell));
+  if (!state || currentPage !== 'students') return;
+  const cells = [...state.root.querySelectorAll('.red-list-loading')];
+  if (!cells.length) return;
+  const selected = [...getFilteredStudents()], ids = selected.map(row => row.student_id);
+  const targets = cells.map(cell => [cell, cell.dataset.studentId]);
+  const current = () => state.current() && (() => {
+    const now = getFilteredStudents();
+    return now.length === selected.length && now.every((row, i) => row === selected[i] && row.student_id === ids[i]);
+  })() && targets.every(([cell, id]) => state.root.contains(cell) && cell.dataset.studentId === id);
   const clearCells = () => cells.forEach(cell => {
     if (state.root.contains(cell)) cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
   });
@@ -14903,7 +14918,10 @@ async function loadRedListData() {
         if (!retryResponse.data.success) { clearCells(); return; }
         redLists = retryResponse.data.data;
       }
-      redLists.forEach(redList => updateRedListDisplay(redList.student_id, redList));
+      targets.forEach(([cell, id]) => {
+        const redList = redLists.find(row => row.student_id === id);
+        if (redList) updateRedListDisplay(id, redList, cell);
+      });
       cells.forEach(cell => {
         if (state.root.contains(cell) && !redLists.some(row => row.student_id === cell.dataset.studentId)) {
           cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
@@ -14920,10 +14938,12 @@ async function loadRedListData() {
 /**
  * Update red list display for a student
  */
-function updateRedListDisplay(studentId, redList) {
-  const cell = document.querySelector(`.red-list-loading[data-student-id="${studentId}"]`);
+function updateRedListDisplay(studentId, redList, capturedCell) {
+  const root = document.getElementById('content');
+  const cell = capturedCell || (root && Array.from(root.querySelectorAll('.red-list-loading'))
+    .find(node => node.dataset.studentId === String(studentId)));
   
-  if (!cell) return;
+  if (!cell || !root?.contains(cell) || cell.dataset.studentId !== String(studentId)) return;
   
   if (!redList || redList.total_score === 0) {
     cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';

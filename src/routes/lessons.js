@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { query } from '../db/connection.js';
+import { query, getClient } from '../db/connection.js';
 import { fetchLessonsForMonth } from '../services/calendarService.js';
 import { fetchLessonsFromSheet, getLastSyncTime } from '../services/sheetsService.js';
 
@@ -282,6 +282,7 @@ app.get('/stats/:year/:month', async (c) => {
  * Sync lessons from Google Sheets (populated by GAS)
  */
 app.get('/sync-from-sheet', async (c) => {
+  let client;
   try {
     const spreadsheetId = process.env.GOOGLE_SHEET_ID;
     
@@ -352,14 +353,13 @@ app.get('/sync-from-sheet', async (c) => {
     
     console.log(`Built student-tutor mapping for ${studentTutorMap.size} students`);
     
-    // Get all event IDs from spreadsheet (to detect deletions)
-    const sheetEventIds = new Set(lessons.map(l => l.calendar_event_id).filter(id => id));
-    console.log(`Event IDs in spreadsheet: ${sheetEventIds.size}`);
-    
     let validLessons = 0;
     let invalidLessons = 0;
     let unmatchedStudents = 0;
     let mismatchedTutors = 0;
+
+    client = await getClient();
+    await client.query('BEGIN');
     
     for (const lesson of lessons) {
       // Check if student exists and has a tutor
@@ -380,7 +380,7 @@ app.get('/sync-from-sheet', async (c) => {
       
       // Insert lesson
       try {
-        await query(
+        await client.query(
           `INSERT INTO lessons 
             (calendar_event_id, student_id, tutor_name, lesson_date, title, description, meet_link, lesson_time, updated_at)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
@@ -410,49 +410,15 @@ app.get('/sync-from-sheet', async (c) => {
       } catch (insertError) {
         console.error('Sheet lesson upsert failed');
         invalidLessons++;
+        throw insertError;
       }
     }
     
     console.log(`Validation results: ${validLessons} valid, ${invalidLessons} invalid, ${unmatchedStudents} unmatched, ${mismatchedTutors} tutor mismatches`);
     
-    // Delete lessons from database that are no longer in the spreadsheet
-    let deletedCount = 0;
-    try {
-      // Get all event IDs from database
-      const dbEventsResult = await query('SELECT calendar_event_id FROM lessons');
-      const dbEventIds = dbEventsResult.rows.map(row => row.calendar_event_id);
-      
-      // Find event IDs that exist in DB but not in spreadsheet
-      const toDelete = dbEventIds.filter(id => !sheetEventIds.has(id));
-      
-      if (toDelete.length > 0) {
-        console.log(`Deleting ${toDelete.length} lessons that are no longer in spreadsheet...`);
-        
-        // Delete in batches to avoid query size limits
-        const batchSize = 100;
-        for (let i = 0; i < toDelete.length; i += batchSize) {
-          const batch = toDelete.slice(i, i + batchSize);
-          const placeholders = batch.map((_, index) => `$${index + 1}`).join(',');
-          
-          await query(
-            `DELETE FROM lessons WHERE calendar_event_id IN (${placeholders})`,
-            batch
-          );
-          
-          deletedCount += batch.length;
-          
-          if (deletedCount % 100 === 0 || deletedCount === toDelete.length) {
-            console.log(`Deleted ${deletedCount}/${toDelete.length} lessons`);
-          }
-        }
-        
-        console.log(`✅ Deletion complete: ${deletedCount} lessons removed from database`);
-      } else {
-        console.log('No lessons to delete');
-      }
-    } catch (deleteError) {
-      console.error('Sheet lesson cleanup failed');
-    }
+    await client.query('COMMIT');
+    // Source completeness is not guaranteed. Absence alone must not delete stored lessons.
+    console.log('Automatic lesson deletion skipped: source completeness is unverified');
     
     return c.json({
       success: true,
@@ -460,16 +426,23 @@ app.get('/sync-from-sheet', async (c) => {
       count: validLessons,
       skipped: unmatchedStudents + mismatchedTutors,
       errors: invalidLessons,
-      deleted: deletedCount,
+      deleted: 0,
+      cleanup_skipped: true,
       lastGasSync: syncMeta?.lastSync,
       totalEventsInSheet: lessons.length
     });
   } catch (error) {
+    if (client) {
+      try { await client.query('ROLLBACK'); }
+      catch { console.error('Sheet lesson rollback failed'); }
+    }
     console.error('Sheet lesson sync failed');
     return c.json({
       success: false,
       error: 'Failed to sync lessons from sheet'
     }, 500);
+  } finally {
+    client?.release();
   }
 });
 

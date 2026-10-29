@@ -16,7 +16,9 @@ function fixture() {
   for(const id of ['redlist-current-content','redlist-current-loading','redlist-history-month','redlist-history-content','redlist-history-loading'])elements[id]=node(elements.content);
   elements['redlist-history-month'].value='2026-09';
   const cells=[Object.assign(node(elements.content),{dataset:{studentId:'SYNTHETIC'}})];
-  const c={sessionToken:'synthetic-session',currentUser:{id:7,role:'crew'},currentPage:'red-list',API_BASE:'',
+  elements.content.querySelectorAll=()=>cells;
+  const selected=[{student_id:'SYNTHETIC'}];
+  const c={getFilteredStudents:()=>selected,sessionToken:'synthetic-session',currentUser:{id:7,role:'crew'},currentPage:'red-list',API_BASE:'',
     currentRedListData:[],historyRedListData:[],redListDiscordLogs:{},
     document:{getElementById:id=>elements[id]??null,querySelectorAll:()=>cells},
     console:{log:(...args)=>logs.push(args),error:(...args)=>logs.push(args),warn:(...args)=>logs.push(args)},
