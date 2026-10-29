@@ -14882,9 +14882,15 @@ function resetRouletteFilters() {
  */
 async function loadRedListData() {
   const state = beginRedListRead('table');
-  const cells = [...document.querySelectorAll('.red-list-loading')];
-  if (!state || cells.length === 0) return;
-  const current = () => state.current() && cells.some(cell => state.root.contains(cell));
+  if (!state || currentPage !== 'students') return;
+  const cells = [...state.root.querySelectorAll('.red-list-loading')];
+  if (!cells.length) return;
+  const selected = [...getFilteredStudents()], ids = selected.map(row => row.student_id);
+  const targets = cells.map(cell => [cell, cell.dataset.studentId]);
+  const current = () => state.current() && (() => {
+    const now = getFilteredStudents();
+    return now.length === selected.length && now.every((row, i) => row === selected[i] && row.student_id === ids[i]);
+  })() && targets.every(([cell, id]) => state.root.contains(cell) && cell.dataset.studentId === id);
   const clearCells = () => cells.forEach(cell => {
     if (state.root.contains(cell)) cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
   });
@@ -14903,7 +14909,10 @@ async function loadRedListData() {
         if (!retryResponse.data.success) { clearCells(); return; }
         redLists = retryResponse.data.data;
       }
-      redLists.forEach(redList => updateRedListDisplay(redList.student_id, redList));
+      targets.forEach(([cell, id]) => {
+        const redList = redLists.find(row => row.student_id === id);
+        if (redList) updateRedListDisplay(id, redList, cell);
+      });
       cells.forEach(cell => {
         if (state.root.contains(cell) && !redLists.some(row => row.student_id === cell.dataset.studentId)) {
           cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
@@ -14920,10 +14929,12 @@ async function loadRedListData() {
 /**
  * Update red list display for a student
  */
-function updateRedListDisplay(studentId, redList) {
-  const cell = document.querySelector(`.red-list-loading[data-student-id="${studentId}"]`);
+function updateRedListDisplay(studentId, redList, capturedCell) {
+  const root = document.getElementById('content');
+  const cell = capturedCell || (root && Array.from(root.querySelectorAll('.red-list-loading'))
+    .find(node => node.dataset.studentId === String(studentId)));
   
-  if (!cell) return;
+  if (!cell || !root?.contains(cell) || cell.dataset.studentId !== String(studentId)) return;
   
   if (!redList || redList.total_score === 0) {
     cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
