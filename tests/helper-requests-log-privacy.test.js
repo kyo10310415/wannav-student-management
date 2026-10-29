@@ -34,6 +34,16 @@ async function fixture({ role = 'crew', query = async () => ({ rows: [record] })
 }
 const safe = f => assert.equal(f.logs.join('\n').includes(marker), false);
 
+test('helper create and accept reject malformed/non-object JSON before SQL or notification',async()=>{
+  for(const role of ['crew','admin']){
+    const f=await fixture({role});
+    for(const path of ['/','/42/accept'])for(const raw of ['{','null','[]','1','"text"']){
+      assert.equal((await f.app.request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:raw})).status,400);
+    }
+    assert.equal(f.queries.length,0);assert.equal(f.notifications.length,0);safe(f);
+  }
+});
+
 test('all DB error routes return only fixed errors and private logs', async () => {
   const f = await fixture({ query: async () => { throw failure(); } });
   for (const [path, options] of [['/'], ['/42'], ['/', post(body)], ['/42/accept', post({ tutor_id: marker, tutor_name: marker })],

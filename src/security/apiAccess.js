@@ -7,6 +7,14 @@ const limitLessonReportBody = uploadRequestBodyLimit(LESSON_REPORT_REQUEST_MAX_B
   tooLargeError: 'Lesson report request too large',
   invalidError: 'Invalid lesson report request'
 });
+export const DAILY_REPORT_REQUEST_MAX_BYTES = 256 * 1024;
+export const HELPER_REQUEST_MAX_BYTES = 256 * 1024;
+const limitDailyReportBody = uploadRequestBodyLimit(DAILY_REPORT_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Daily report request too large', invalidError: 'Invalid daily report request'
+});
+const limitHelperRequestBody = uploadRequestBodyLimit(HELPER_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Helper request too large', invalidError: 'Invalid helper request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -111,6 +119,16 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     if (managerOperation && !leaders.has(user.role)) return c.json({ success: false, error: 'リーダー以上の権限が必要です' }, 403);
     if (method === 'POST' && path === '/api/lesson-reports') {
       const rejected = await limitLessonReportBody(c, async () => {});
+      if (rejected) return rejected;
+    }
+    const writeId = user.role === 'crew' ? '\\d+' : '[^/]+';
+    if ((method === 'POST' && (path === '/api/daily-reports' || new RegExp(`^/api/daily-reports/${writeId}/comments$`).test(path))) ||
+        (method === 'PUT' && path === '/api/daily-reports/reminder-setting')) {
+      const rejected = await limitDailyReportBody(c, async () => {});
+      if (rejected) return rejected;
+    }
+    if (method === 'POST' && (path === '/api/helper-requests' || new RegExp(`^/api/helper-requests/${writeId}/accept$`).test(path))) {
+      const rejected = await limitHelperRequestBody(c, async () => {});
       if (rejected) return rejected;
     }
     if (user.role === 'crew') {
