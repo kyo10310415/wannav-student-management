@@ -19,7 +19,7 @@ function real(f){
 test('twelve schedule controls migrate to fixed namespaces while mutation handlers remain',()=>{
  for(const name of ['changeScheduleMonth','handleScheduleTabChange','handleKeywordFilterChange','handleDateRangeFilterChange','handleLeaderFilterChange','handleAttendeeFilterChange','toggleScheduleViewMode','renderSchedulesPage','clearScheduleFilters'])assert.equal(new RegExp('on(?:click|change)="'+name+'\\(').test(appSource),false);
  assert.equal((appSource.match(/data-schedule-read-action=/g)||[]).length,8);assert.equal((appSource.match(/data-schedule-read-filter=/g)||[]).length,4);
- for(const marker of ['data-absence-prepare-action="open"','onclick="approveAbsenceRequest(','onclick="submitAbsenceRequest()"'])assert.ok(appSource.includes(marker),marker);
+ for(const marker of ['data-absence-prepare-action="open"','data-absence-action="approve"','onclick="submitAbsenceRequest()"'])assert.ok(appSource.includes(marker),marker);
  const f=fixture();assert.deepEqual(f.listeners.map(l=>l.type),['click','change']);
 });
 test('fixed click actions pass exact month/view values, and tabs stay manager-only',async()=>{
