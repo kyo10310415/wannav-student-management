@@ -1815,6 +1815,19 @@ function renderStatistics() {
 }
 
 // Render student rows
+function studentDisplayText(value) {
+  return escapeHtml(String(value ?? ''));
+}
+function studentDisplayAttribute(value) {
+  return studentDisplayText(value).replace(/"/g, '&quot;');
+}
+function studentDisplayLink(value) {
+  try {
+    const url = new URL(String(value ?? ''));
+    return ['http:', 'https:'].includes(url.protocol) ? studentDisplayAttribute(url.href) : null;
+  } catch { return null; }
+}
+
 function renderStudentRows() {
   const filteredStudents = getFilteredStudents();
   
@@ -1837,11 +1850,13 @@ function renderStudentRows() {
       : '-';
     
     // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
-    const notionUrl = student.notion_url || 
-      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    const notionUrl = studentDisplayLink(student.notion_url ||
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null));
     
     // Discord URL from Discord destination spreadsheet
-    const discordUrl = student.discord_url || null;
+    const discordUrl = studentDisplayLink(student.discord_url);
+    const youtubeUrl = studentDisplayLink(formatYouTubeUrl(student.youtube_channel_id));
+    const xUrl = studentDisplayLink(formatXUrl(student.x_account_id));
     
     // Payment status with color coding
     // Show payment status for the month BEFORE the displayed month
@@ -1886,30 +1901,30 @@ function renderStudentRows() {
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${studentDisplayText(student.student_id || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
           <div class="flex items-center gap-2">
-            <span>${student.name || '-'}</span>
-            <span class="roulette-marker-loading" data-student-id="${student.student_id}"></span>
+            <span>${studentDisplayText(student.name || '-')}</span>
+            <span class="roulette-marker-loading" data-student-id="${studentDisplayAttribute(student.student_id)}"></span>
           </div>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
-        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(student.status || '-')}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(student.contract_plan || '-')}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${studentDisplayAttribute(student.character_name || '-')}">${studentDisplayText(student.character_name || '-')}</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">${renderStudentTextTypeBadge(student.text_type)}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${paymentStatus}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(getTutorDisplayName(student.homeroom_tutor))}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${studentDisplayText(getLessonProgressDisplay(student.lesson_progress))}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${studentDisplayText(paymentStatus)}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">
           <span class="px-2 py-1 rounded-full text-xs ${getLessonCountBadgeColor(lessonCount)}">
-            ${lessonCount}回
+            ${studentDisplayText(lessonCount)}回
           </span>
         </td>
         <td class="px-4 py-3 text-sm text-gray-600" style="max-width: 180px;">
-          <div class="overflow-x-auto whitespace-nowrap text-xs">${datesStr}</div>
+          <div class="overflow-x-auto whitespace-nowrap text-xs">${studentDisplayText(datesStr)}</div>
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
-          <div class="lesson-completion-loading" data-student-id="${student.student_id}">
+          <div class="lesson-completion-loading" data-student-id="${studentDisplayAttribute(student.student_id)}">
             <i class="fas fa-spinner fa-spin text-gray-400"></i>
           </div>
         </td>
@@ -1917,9 +1932,9 @@ function renderStudentRows() {
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-            ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-            ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
-            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+            ${youtubeUrl ? `<a href="${youtubeUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+            ${xUrl ? `<a href="${xUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${encodeURIComponent(student.student_id)}&amp;month=${encodeURIComponent(getPreviousMonth())}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
             ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
@@ -5317,11 +5332,13 @@ function renderTodayStudentRows(dayStudents, displayDate) {
 
   return dayStudents.map(student => {
     // Use pre-fetched Notion URL from cache
-    const notionUrl = student.notion_url || 
-      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    const notionUrl = studentDisplayLink(student.notion_url ||
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null));
     
     // Discord URL
-    const discordUrl = student.discord_url || null;
+    const discordUrl = studentDisplayLink(student.discord_url);
+    const youtubeUrl = studentDisplayLink(formatYouTubeUrl(student.youtube_channel_id));
+    const xUrl = studentDisplayLink(formatXUrl(student.x_account_id));
     
     // Result overall
     const resultOverall = student.result_overall || '-';
@@ -5341,7 +5358,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
     const displayMonth = displayDate.getMonth() + 1;
     const dateFormatted = `${displayMonth}/${displayDay}`;
     const dayLesson = studentLessonDates.find(d => d.formatted === dateFormatted);
-    const meetLink = dayLesson?.meet_link || null;
+    const meetLink = studentDisplayLink(dayLesson?.meet_link);
     const lessonTime = dayLesson?.time || null;
     
     // Format date for API (YYYY-MM-DD)
@@ -5352,10 +5369,10 @@ function renderTodayStudentRows(dayStudents, displayDate) {
     
     return `
       <tr class="hover:bg-gray-50 ${isFirstLesson ? 'bg-yellow-50' : ''}">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${studentDisplayText(student.student_id || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
           <div class="flex items-center gap-2">
-            <span>${student.name || '-'}</span>
+            <span>${studentDisplayText(student.name || '-')}</span>
             ${isFirstLesson ? `
               <span class="inline-flex items-center px-2 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg animate-pulse">
                 <i class="fas fa-star mr-1"></i>本日リザルトお伝え
@@ -5363,14 +5380,14 @@ function renderTodayStudentRows(dayStudents, displayDate) {
             ` : ''}
           </div>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${lessonTime || '-'}</td>
-        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(getTutorDisplayName(student.homeroom_tutor))}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${studentDisplayText(lessonTime || '-')}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${studentDisplayAttribute(student.character_name || '-')}">${studentDisplayText(student.character_name || '-')}</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">${renderStudentTextTypeBadge(student.text_type)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
-        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${studentDisplayText(getLessonProgressDisplay(student.lesson_progress))}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${studentDisplayText(continuedMonths)}ヶ月</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${studentDisplayText(resultOverall)}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${studentDisplayText(absenceCount)}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           ${meetLink ? `<a href="${meetLink}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition" title="Google Meetを開く"><i class="fas fa-video mr-1"></i>Meet</a>` : '<span class="text-gray-400 text-xs">-</span>'}
         </td>
@@ -5387,9 +5404,9 @@ function renderTodayStudentRows(dayStudents, displayDate) {
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-            ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-            ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
-            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+            ${youtubeUrl ? `<a href="${youtubeUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+            ${xUrl ? `<a href="${xUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${encodeURIComponent(student.student_id)}&amp;month=${encodeURIComponent(getPreviousMonth())}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
             ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
