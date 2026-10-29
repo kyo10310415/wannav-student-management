@@ -15,6 +15,10 @@ const limitDailyReportBody = uploadRequestBodyLimit(DAILY_REPORT_REQUEST_MAX_BYT
 const limitHelperRequestBody = uploadRequestBodyLimit(HELPER_REQUEST_MAX_BYTES, {
   tooLargeError: 'Helper request too large', invalidError: 'Invalid helper request'
 });
+export const STUDENT_PRO_PLAN_REQUEST_MAX_BYTES = 256 * 1024;
+const limitStudentProPlanBody = uploadRequestBodyLimit(STUDENT_PRO_PLAN_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Student PRO plan request too large', invalidError: 'Invalid student PRO plan request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -206,6 +210,12 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
         catch { return c.json({ success: false, error: '担当確認を利用できません' }, 503); }
         if (!owned) return c.json({ success: false, error: '他のTutorの担当生徒は変更できません' }, 403);
       }
+    }
+    // Crew ownership above does not parse this body; reject other students before reading it.
+    // Use raw segments to cover manager parameters containing encoded slashes too.
+    if (method === 'PATCH' && /^\/api\/students\/[^/]+\/pro-plan\/*$/.test(c.req.path)) {
+      const rejected = await limitStudentProPlanBody(c, async () => {});
+      if (rejected) return rejected;
     }
     return next();
   });

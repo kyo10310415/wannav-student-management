@@ -83,6 +83,14 @@ const update = (app, body, id = 'TEST-0') => app.request(`/${id}/pro-plan`, {
   method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
 });
 
+test('malformed or non-object PRO JSON never clears the existing month',async()=>{
+  const r=routes();
+  for(const body of ['{','null','[]','1','"value"']){
+    assert.equal((await r.app.request('/TEST-0/pro-plan',{method:'PATCH',headers:{'Content-Type':'application/json'},body})).status,400);
+  }
+  assert.equal(r.queries.length,0);assert.equal(r.records.get('TEST-0').pro_plan_start_date,'2026-06-01');
+});
+
 test('missing, empty and invalid PRO dates are rejected without touching saved month', async () => {
   const r = routes();
   for (const body of [{}, { proPlanStartDate: '' }, { proPlanStartDate: false },

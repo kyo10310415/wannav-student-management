@@ -34,6 +34,16 @@ async function fixture({ role = 'crew', query = async () => ({ rows: [record] })
 }
 const safe = f => assert.equal(f.logs.join('\n').includes(marker), false);
 
+test('helper serial IDs are validated before read, accept, delete queries or notifications',async()=>{
+  const f=await fixture({role:'admin'});
+  for(const id of ['0','-1','01','1.5','1e2','2147483648','abc','%2F','%00']){
+    for(const [suffix,options] of [['',undefined],['/accept',post({})],['',{method:'DELETE'}]])assert.equal((await f.app.request('/'+id+suffix,options)).status,400,id);
+  }
+  assert.equal(f.queries.length,0);assert.equal(f.notifications.length,0);
+  for(const id of ['1','2147483647'])assert.equal((await f.app.request('/'+id)).status,200);
+  assert.deepEqual(f.queries.map(q=>q[1]),[['1'],['2147483647']]);
+});
+
 test('helper create and accept reject malformed/non-object JSON before SQL or notification',async()=>{
   for(const role of ['crew','admin']){
     const f=await fixture({role});

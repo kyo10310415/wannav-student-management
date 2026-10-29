@@ -107,8 +107,13 @@ app.put('/reminder-setting', async (c) => {
 // ─────────────────────────────────────────────
 app.get('/tutor/:tutorId', async (c) => {
   const { tutorId } = c.req.param();
-  const limit  = parseInt(c.req.query('limit')  || '20');
-  const offset = parseInt(c.req.query('offset') || '0');
+  const suppliedLimit = c.req.query('limit') ?? '20';
+  const suppliedOffset = c.req.query('offset') ?? '0';
+  if (!/^[1-9][0-9]*$/.test(suppliedLimit) || !Number.isSafeInteger(Number(suppliedLimit)) || Number(suppliedLimit) > 1000 ||
+      !/^(0|[1-9][0-9]*)$/.test(suppliedOffset) || !Number.isSafeInteger(Number(suppliedOffset))) {
+    return c.json({ success: false, error: 'Invalid daily report pagination' }, 400);
+  }
+  const limit = Number(suppliedLimit), offset = Number(suppliedOffset);
 
   try {
     // 日報一覧
