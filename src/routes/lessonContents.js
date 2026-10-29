@@ -26,7 +26,8 @@ function validLessonContentText(body) {
     [body.title, body.content].every(value => value == null || (typeof value === 'string' && !value.includes('\u0000')));
 }
 function validLessonContentItem(item) {
-  return validLessonContentText(item) && (item.lesson_number == null || typeof item.lesson_number === 'string' ||
+  return validLessonContentText(item) && (item.lesson_number == null ||
+    (typeof item.lesson_number === 'string' && !item.lesson_number.includes('\u0000')) ||
     (typeof item.lesson_number === 'number' && Number.isFinite(item.lesson_number)));
 }
 
@@ -80,6 +81,7 @@ app.post('/', async (c) => {
 app.put('/:number', async (c) => {
   try {
     const num  = c.req.param('number');  // TEXT型なのでparseInt不要
+    if (num.includes('\u0000')) return c.json({ success: false, error: 'Invalid lesson content key' }, 400);
     const body = await readLessonContentBody(c);
     if (!validLessonContentText(body)) return c.json({ success: false, error: 'Invalid lesson content fields' }, 400);
     const { title, content } = body;
@@ -105,6 +107,7 @@ app.put('/:number', async (c) => {
 app.delete('/:number', async (c) => {
   try {
     const num = c.req.param('number');  // TEXT型なのでparseInt不要
+    if (num.includes('\u0000')) return c.json({ success: false, error: 'Invalid lesson content key' }, 400);
     await query('DELETE FROM lesson_contents WHERE lesson_number = $1', [num]);
     return c.json({ success: true, message: '削除しました' });
   } catch (err) {

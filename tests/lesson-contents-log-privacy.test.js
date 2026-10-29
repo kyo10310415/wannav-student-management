@@ -33,8 +33,9 @@ test('invalid lesson JSON and text shapes reject before writes, including a bad 
   for(const path of ['/','/bulk','/1'])for(const body of ['{','null','[]','1','"value"']){
     assert.equal((await f.app.request(path,{method:path==='/1'?'PUT':'POST',headers:{'Content-Type':'application/json'},body})).status,400);
   }
-  for(const body of [{lesson_number:'1',title:{}},{lesson_number:'1',content:[]},{lesson_number:['1']},{lesson_number:'1',title:'Synthetic\u0000'}])assert.equal((await f.app.request('/',request(body))).status,400);
-  for(const invalid of [null,[],{lesson_number:'2',content:{}},{lesson_number:['2']}])assert.equal((await f.app.request('/bulk',request({items:[item,invalid]}))).status,400);
+  for(const body of [{lesson_number:'1',title:{}},{lesson_number:'1',content:[]},{lesson_number:['1']},{lesson_number:'1',title:'Synthetic\u0000'},{lesson_number:'Pro_Synthetic\u0000_1'}])assert.equal((await f.app.request('/',request(body))).status,400);
+  for(const invalid of [null,[],{lesson_number:'2',content:{}},{lesson_number:['2']},{lesson_number:'Pro_Synthetic\u0000_1'}])assert.equal((await f.app.request('/bulk',request({items:[item,invalid]}))).status,400);
+  for(const method of ['PUT','DELETE'])assert.equal((await f.app.request('/Pro_Synthetic%00_1',request({},method))).status,400);
   assert.equal(f.queries.length,0);safe(f);
 });
 
