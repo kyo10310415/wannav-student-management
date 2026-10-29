@@ -13,7 +13,7 @@ function fixture(){
  for(const id of ['drCommentInput-1','drComments-1'])elements[id]=node(elements.dailyReportHistoryModal);
  elements.drModalDate.value='2026-10-29';elements.drModalContent.value='Synthetic report';elements['drCommentInput-1'].value='Synthetic comment';
  const history={tutorId:7,reports:[{id:1}]};
- const c={sessionToken:'synthetic-session',currentUser:{id:7,role:'crew'},currentPage:'daily-reports',_drCurrentTutorId:7,_drCurrentTutorName:'Synthetic',dailyReportViewTutorId:7,dailyReportHistory:history,dailyReportTutors:[],dailyReportReminderEnabled:true,Date,
+ const c={dailyReportHistoryReadId:0,sessionToken:'synthetic-session',currentUser:{id:7,role:'crew'},currentPage:'daily-reports',_drCurrentTutorId:7,_drCurrentTutorName:'Synthetic',dailyReportViewTutorId:7,dailyReportHistory:history,dailyReportTutors:[],dailyReportReminderEnabled:true,Date,
   document:{getElementById:id=>elements[id]??null},
   dailyHistoryTutorAllowed:id=>Number(id)===7,escapeHtml:v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
   showNotification:(...args)=>notices.push(args),console:{error:(...args)=>logs.push(args)},

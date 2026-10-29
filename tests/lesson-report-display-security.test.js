@@ -93,7 +93,7 @@ test('daily history and new comments escape author names without changing existi
     elements.drHistoryBody=Object.assign(node(elements.dailyReportHistoryModal),{innerHTML:''});
     elements['drCommentInput-1']=Object.assign(node(elements.dailyReportHistoryModal),{value:'Synthetic comment'});
     elements['drComments-1']=Object.assign(node(elements.dailyReportHistoryModal),{insertAdjacentHTML(_position,html){this.html=html}});
-    const context=vm.createContext({escapeHtml,Date,currentUser:{id:1,role},sessionToken:'synthetic-session',currentPage:'daily-reports',dailyReportViewTutorId:7,dailyHistoryTutorAllowed:()=>true,dailyReportHistory:{tutorId:7,reports:[{id:1,report_date:'2026-10-28',content:'Synthetic report',comments:[comment]}]},document:{getElementById:id=>elements[id]},axios:{post:async()=>({data:{success:true,data:comment}})},showNotification(){},console:{error(){}}});
+    const context=vm.createContext({escapeHtml,Date,currentUser:{id:1,role},sessionToken:'synthetic-session',currentPage:'daily-reports',dailyReportViewTutorId:7,dailyHistoryTutorAllowed:()=>true,dailyReportHistoryReadId:0,dailyReportHistory:{tutorId:7,reports:[{id:1,report_date:'2026-10-28',content:'Synthetic report',comments:[comment]}]},document:{getElementById:id=>elements[id]},axios:{post:async()=>({data:{success:true,data:comment}})},showNotification(){},console:{error(){}}});
     vm.runInContext(source.slice(source.indexOf('const dailyReportPendingWrites ='),source.indexOf('function openDailyReportModal(')),context);
     vm.runInContext(functionSource('_renderDailyReportHistoryBody'),context);
     vm.runInContext(functionSource('submitDailyReportComment'),context);

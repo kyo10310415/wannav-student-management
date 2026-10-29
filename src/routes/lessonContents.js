@@ -17,6 +17,20 @@ import {
 
 const app = new Hono();
 
+async function readLessonContentBody(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
+  catch { return null; }
+}
+function validLessonContentText(body) {
+  return body && typeof body === 'object' && !Array.isArray(body) &&
+    [body.title, body.content].every(value => value == null || (typeof value === 'string' && !value.includes('\u0000')));
+}
+function validLessonContentItem(item) {
+  return validLessonContentText(item) && (item.lesson_number == null ||
+    (typeof item.lesson_number === 'string' && !item.lesson_number.includes('\u0000')) ||
+    (typeof item.lesson_number === 'number' && Number.isFinite(item.lesson_number)));
+}
+
 /** 一覧取得 */
 app.get('/', async (c) => {
   try {
@@ -33,7 +47,9 @@ app.get('/', async (c) => {
 /** 新規作成 */
 app.post('/', async (c) => {
   try {
-    const { lesson_number, title, content } = await c.req.json();
+    const body = await readLessonContentBody(c);
+    if (!validLessonContentItem(body)) return c.json({ success: false, error: 'Invalid lesson content fields' }, 400);
+    const { lesson_number, title, content } = body;
     if (lesson_number == null) {
       return c.json({ success: false, error: 'lesson_number は必須です' }, 400);
     }
@@ -65,7 +81,10 @@ app.post('/', async (c) => {
 app.put('/:number', async (c) => {
   try {
     const num  = c.req.param('number');  // TEXT型なのでparseInt不要
-    const { title, content } = await c.req.json();
+    if (num.includes('\u0000')) return c.json({ success: false, error: 'Invalid lesson content key' }, 400);
+    const body = await readLessonContentBody(c);
+    if (!validLessonContentText(body)) return c.json({ success: false, error: 'Invalid lesson content fields' }, 400);
+    const { title, content } = body;
     const result = await query(
       `UPDATE lesson_contents
           SET title   = COALESCE($1, title),
@@ -88,6 +107,7 @@ app.put('/:number', async (c) => {
 app.delete('/:number', async (c) => {
   try {
     const num = c.req.param('number');  // TEXT型なのでparseInt不要
+    if (num.includes('\u0000')) return c.json({ success: false, error: 'Invalid lesson content key' }, 400);
     await query('DELETE FROM lesson_contents WHERE lesson_number = $1', [num]);
     return c.json({ success: true, message: '削除しました' });
   } catch (err) {
@@ -99,10 +119,14 @@ app.delete('/:number', async (c) => {
 /** 一括登録 */
 app.post('/bulk', async (c) => {
   try {
-    const { items } = await c.req.json();
+    const body = await readLessonContentBody(c);
+    if (!body) return c.json({ success: false, error: 'Invalid lesson content fields' }, 400);
+    const { items } = body;
     if (!Array.isArray(items) || items.length === 0) {
       return c.json({ success: false, error: 'items 配列が空です' }, 400);
     }
+    // Check the entire shape before the first write; invalid lesson keys still skip as before.
+    if (!items.every(validLessonContentItem)) return c.json({ success: false, error: 'Invalid lesson content fields' }, 400);
     let count = 0;
     for (const item of items) {
       if (item.lesson_number == null) continue;
