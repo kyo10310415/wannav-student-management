@@ -1075,3 +1075,13 @@ VQ履歴の日付・数値・削除通知は保存値をHTMLとして解釈し�
 PRO開始日更新のJSON本文は256KiBまでです。認証・crew担当確認後、handlerのJSON解析前に計数し、宣言超過は未読413、未指定/虚偽長も実バイトで超過413、壊れたstreamは400。managerのencoded slash parameterもraw route判定で制限します。不正JSON/null/配列は400で既存日付を変更せず、通常日付の月初正規化・明示nullのクリア操作は維持します。他のstudents更新APIへの包括上限ではありません。
 
 赤リストの通常/テスト送信は、現在のmanager・認証・root/画面/tab/modal/入力・対象ID/cacheを検証して開始し、同じ対象への実行中送信を抑止します。応答の通知・close・ログ再取得・再描画はcaptured対象と現表示が一致する場合だけ実施し、氏名はテキスト表示、エラーは固定文です。送信後の担当者cacheはID+月で一致する当月entryだけ更新します。既に送ったAPIは取消さず、サーバー側の冪等性や配信結果確認を追加したものではありません。タイムアウト等の後に再送すると重複する可能性は残ります。
+
+## 設定・日報・ヘルパー入力と提出後処理（2026-10-29、第154〜158工程）
+
+設定PUTのJSONは認証・manager確認後に256KiBまで計数し、超過413、壊れたstream/不正JSON/非objectは400です。encoded parameterを含むraw routeにも適用します。設定値の既存JSON型は維持し、updatedByは受信しても信用せず、updated_byへセッションのemailを保存します（確認できない場合503、保存なし）。更新者表示が従来の任意Tutor名から認証emailへ変わります。GET共有/既存設定キーは維持し、他API全体への上限ではありません。
+
+日報のTutor/報告/コメントIDとPOSTのtutor_idはSERIAL範囲の正整数表記（数値または数字文字列）、日付は実在YYYY-MM-DD（0001〜9999年）のみです。不正はhandlerの業務SQL/通知前400、crewの既存担当/役割認可が先に403にする経路は維持。数値/文字列Tutor ID、閏日、通常提出・コメント・削除の契約は維持します。日付/IDの不正値に対する従来500等が400へ変わります。
+
+ヘルパー作成はDB必須lesson_date/student_id/student_name/reason/deadlineと、nullable列の型・文字列長・NUL・進捗int4を確認します。nullable列を新たに必須にせず、過去期限や既存の進捗整数文字列を許可。期限は現在UIのISO、SQL日時、date-only、offset等を受け付け、保存文字列を変換せずPostgreSQL TIMESTAMP without time zoneの既存挙動を維持します。特殊な自由形式日時は400になる場合があります。受諾は選択employee_idの非空文字列/長さと名前の型を確認し、crewの信頼済み本人情報を優先します。URL内容の検証や期間の業務制約、作成後通知失敗の部分保存は未変更です。
+
+日報提出・コメントはcaptured認証/role/page/root/modal/対象/cache/inputを照合し、同一対象の多重実行を抑止、古い応答のclose/通知/入力消去/追記を拒否します。提出後再取得も親操作が現在の間だけ反映します。固定エラー/ログと既存の著者テキスト表示を維持。crew自身の画面上の日報権限とサーバー認可を広げず、送信済APIを取消しません。日報/コメント削除、履歴read、通常ナビゲーションの描画全体のstale guardは今回対象外です。
