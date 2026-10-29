@@ -56,7 +56,7 @@ function realRefresh(f){
  const extract=(name)=>{const start=source.indexOf('async function '+name+'(');return source.slice(start,source.indexOf('\n}',start)+2)};
  f.c.schedules=['old'];f.c.renderSchedulesContent=()=>f.reads.push('content');
  f.c.axios.get=url=>{const d=deferred();f.calls.push(['get',url]);f.requests.push(d);return d.promise};
- vm.runInContext(extract('renderSchedulesPage')+'\n'+extract('handleScheduleTabChange'),f.c);
+ vm.runInContext(source.slice(source.indexOf('let scheduleReadGeneration ='),source.indexOf('async function renderSchedulesPage('))+'\n'+extract('renderSchedulesPage')+'\n'+extract('handleScheduleTabChange'),f.c);
 }
 test('write-owned refresh ignores old schedule GET success and failure after page change',async()=>{
  for(const reject of [false,true]){const f=fixture();realRefresh(f);const p=f.c.submitAbsenceRequest();f.requests[0].resolve(success);await new Promise(r=>setImmediate(r));assert.equal(f.calls.length,2);f.c.currentPage='students';f.elements.content.innerHTML='new view';if(reject)f.requests[1].reject(new Error('private fixture'));else f.requests[1].resolve({data:{success:true,data:[{event_id:'new'}]}});await p;assert.equal(f.elements.content.innerHTML,'new view');assert.deepEqual(f.c.schedules,['old']);assert.equal(f.reads.length,0);assert.equal(f.errors.length,0);}
@@ -68,4 +68,36 @@ test('write-owned second schedule read and pending refresh ignore auth changes',
 test('normal write-owned refresh still renders schedule and pending results',async()=>{
  const f=fixture();realRefresh(f);const p=f.c.submitAbsenceRequest();f.requests[0].resolve(success);await new Promise(r=>setImmediate(r));f.requests[1].resolve({data:{success:true,data:[{event_id:'new'}]}});await new Promise(r=>setImmediate(r));f.requests[2].resolve({data:{success:true,data:{requests:{}}}});await p;assert.deepEqual(f.reads,['content']);
  const g=fixture('admin');realRefresh(g);const q=g.c.approveAbsenceRequest(7,'ignored');g.requests[0].resolve(success);await new Promise(r=>setImmediate(r));g.requests[1].resolve({data:{success:true,data:{pendingRequests:[]}}});await q;assert.deepEqual(g.reads,['content']);assert.equal(g.c.pendingRequests.length,0);
+});
+
+test('real list preparation opens the canonical cached schedule and real submit sends its payload', async()=>{
+ const f=fixture();
+ f.c.escapeHtml=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+ f.elements.content.contains=node=>node.root===f.elements.content;
+ f.c.document.addEventListener=()=>{};
+ f.c.document.createElement=()=>{const modal={contains:node=>[f.radio,f.reason,f.button].includes(node),querySelector:()=>f.radio};Object.defineProperty(modal,'id',{set(id){f.elements[id]=modal}});return modal};
+ f.c.document.body.appendChild=()=>{};
+ const extract=name=>{const start=source.indexOf('function '+name+'(');return source.slice(start,source.indexOf('\n}',start)+2)};
+ vm.runInContext(extract('renderSchedulesList')+'\n'+extract('openAbsenceRequestModal'),f.c);
+ vm.runInContext(await readFile(new URL('../public/absence-prepare-events.js',import.meta.url),'utf8'),f.c);
+ const html=f.c.renderSchedulesList(), encoded=html.match(/data-absence-schedule="([^"]+)"/)[1];
+ const button={root:f.elements.content,dataset:{absencePrepareAction:'open',absenceSchedule:encoded},closest(){return this}};
+ f.c.selectedScheduleForAbsence=null;
+ f.c.handleAbsencePrepareClick({target:button});
+ assert.equal(f.c.selectedScheduleForAbsence,f.schedule);
+ assert.ok(f.elements['absence-request-modal'].innerHTML.includes('fixture title'));
+ const pending=f.c.submitAbsenceRequest();assert.equal(f.calls.length,1);
+ assert.equal(f.calls[0][2].event_id,f.schedule.unique_event_key);assert.equal(f.calls[0][2].reason,'regular reason');
+ f.requests[0].resolve(success);await pending;assert.equal(f.alerts.length,1);
+});
+
+test('preparation rejects stale snapshots and filtered-out events before modal creation', async()=>{
+ const f=fixture(), opened=[];
+ f.c.document.addEventListener=()=>{};f.elements.content.contains=node=>node.root===f.elements.content;
+ f.c.openAbsenceRequestModal=schedule=>opened.push(schedule);
+ vm.runInContext(await readFile(new URL('../public/absence-prepare-events.js',import.meta.url),'utf8'),f.c);
+ const button={root:f.elements.content,dataset:{absencePrepareAction:'open',absenceSchedule:encodeURIComponent(JSON.stringify(f.schedule))},closest(){return this}};
+ f.schedule.title='updated title';f.c.handleAbsencePrepareClick({target:button});assert.equal(opened.length,0);
+ button.dataset.absenceSchedule=encodeURIComponent(JSON.stringify(f.schedule));f.c.getFilteredSchedules=()=>[];f.c.handleAbsencePrepareClick({target:button});assert.equal(opened.length,0);
+ f.c.getFilteredSchedules=()=>[f.schedule];f.c.handleAbsencePrepareClick({target:button});assert.equal(opened[0],f.schedule);
 });

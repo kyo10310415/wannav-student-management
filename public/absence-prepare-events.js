@@ -11,6 +11,8 @@ function handleAbsencePrepareClick(event) {
   if (!schedule || typeof schedule !== 'object' || Array.isArray(schedule)) return;
   const key = schedule.unique_event_key || schedule.event_id;
   if (typeof key !== 'string' || !key) return;
-  return openAbsenceRequestModal(schedule);
+  const cached = getFilteredSchedules().find(row => (row.unique_event_key || row.event_id) === key);
+  if (!cached || JSON.stringify(cached) !== JSON.stringify(schedule)) return;
+  return openAbsenceRequestModal(cached);
 }
 document.addEventListener('click', handleAbsencePrepareClick);

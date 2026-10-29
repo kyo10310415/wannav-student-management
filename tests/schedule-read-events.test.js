@@ -14,7 +14,7 @@ function fixture(){
 function real(f){
  Object.assign(f.c,{selectedScheduleYear:2026,selectedScheduleMonth:1,scheduleTab:'confirmed',selectedKeyword:'synthetic',selectedDateRange:'synthetic',selectedLeader:'synthetic',selectedAttendee:'synthetic',API_BASE:'',console:{error(){}}});
  f.c.renderSchedulesContent=()=>f.calls.push(['render-content']);f.c.axios={get:async url=>{f.calls.push(['get',url]);return{data:{success:true,data:{pendingRequests:[{id:'synthetic-request'}]}}}}};
- const start=appSource.indexOf('async function changeScheduleMonth(offset)'),end=appSource.indexOf('function renderLeaderFilterOptions()',start);vm.runInContext(appSource.slice(start,end),f.c);
+ const start=appSource.indexOf('async function changeScheduleMonth(offset)'),end=appSource.indexOf('function renderLeaderFilterOptions()',start);vm.runInContext(appSource.slice(appSource.indexOf('let scheduleReadGeneration ='),appSource.indexOf('async function renderSchedulesPage('))+'\n'+appSource.slice(start,end),f.c);
 }
 test('twelve schedule controls migrate to fixed namespaces while mutation handlers remain',()=>{
  for(const name of ['changeScheduleMonth','handleScheduleTabChange','handleKeywordFilterChange','handleDateRangeFilterChange','handleLeaderFilterChange','handleAttendeeFilterChange','toggleScheduleViewMode','renderSchedulesPage','clearScheduleFilters'])assert.equal(new RegExp('on(?:click|change)="'+name+'\\(').test(appSource),false);

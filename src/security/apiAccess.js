@@ -36,6 +36,11 @@ export const SCHEDULE_REQUEST_MAX_BYTES = 256 * 1024;
 const limitScheduleBody = uploadRequestBodyLimit(SCHEDULE_REQUEST_MAX_BYTES, {
   tooLargeError: 'Schedule request too large', invalidError: 'Invalid schedule request'
 });
+// Completion is a bulk read of student/date pairs used by reservation lists.
+export const LESSON_COMPLETION_REQUEST_MAX_BYTES = 1024 * 1024;
+const limitLessonCompletionBody = uploadRequestBodyLimit(LESSON_COMPLETION_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Lesson completion request too large', invalidError: 'Invalid lesson completion request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -146,6 +151,10 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     // Hono matches a raw parameter segment before decoding it; %2F is still one segment.
     // Keep crew's decoded-path allowlist, but cover every manager route parameter before parsing.
     const bodyWritePath = user.role === 'crew' ? path : c.req.path.replace(/\/+$/, '');
+    if (method === 'POST' && path === '/api/lesson-completion/batch') {
+      const rejected = await limitLessonCompletionBody(c, async () => {});
+      if (rejected) return rejected;
+    }
     if (method === 'POST' && (path === '/api/schedules/absence' ||
         /^\/api\/schedules\/absence\/[^/]+\/approve$/.test(bodyWritePath))) {
       const rejected = await limitScheduleBody(c, async () => {});

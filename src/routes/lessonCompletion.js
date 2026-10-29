@@ -8,6 +8,22 @@ import {
 
 const app = new Hono();
 
+function validCompletionStudentId(value) {
+  return typeof value === 'string' && value.trim().length > 0 && !value.includes('\u0000');
+}
+function validCompletionDate(value) {
+  if (typeof value !== 'string' || !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+function validCompletionMonth(value) {
+  return typeof value === 'string' && /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+async function readCompletionBody(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
+  catch { return null; }
+}
+
 // Cache for lesson completion status (1 hour)
 let lessonCompletionCache = null;
 let lessonCompletionCacheTime = null;
@@ -44,6 +60,9 @@ app.get('/check', async (c) => {
         success: false,
         error: 'studentId and lessonDate are required'
       }, 400);
+    }
+    if (!validCompletionStudentId(studentId) || !validCompletionDate(lessonDate)) {
+      return c.json({ success: false, error: 'Invalid lesson completion reference' }, 400);
     }
     
     // 【優先】レッスン報告データベースから取得
@@ -163,14 +182,18 @@ app.get('/check', async (c) => {
  */
 app.post('/batch', async (c) => {
   try {
-    const body = await c.req.json();
-    const { items } = body;
+    const body = await readCompletionBody(c);
+    const items = body?.items;
     
     if (!items || !Array.isArray(items)) {
       return c.json({
         success: false,
         error: 'items array is required'
       }, 400);
+    }
+    if (!items.every(item => item && typeof item === 'object' && !Array.isArray(item) &&
+        validCompletionStudentId(item.studentId) && validCompletionDate(item.lessonDate))) {
+      return c.json({ success: false, error: 'Invalid lesson completion items' }, 400);
     }
     
     console.log("[Lesson Completion Batch] Processing items");
@@ -203,6 +226,7 @@ app.post('/batch', async (c) => {
 app.get('/completed-students', async (c) => {
   try {
     const { yearMonth } = c.req.query();
+    if (!validCompletionMonth(yearMonth)) return c.json({ success: false, error: 'yearMonth is required (format: YYYY-MM)' }, 400);
     const data = await getCompletedStudentIdsForMonth(yearMonth);
 
     return c.json({
@@ -229,7 +253,7 @@ app.get('/month', async (c) => {
   try {
     const { yearMonth } = c.req.query();
     
-    if (!yearMonth) {
+    if (!validCompletionMonth(yearMonth)) {
       return c.json({
         success: false,
         error: 'yearMonth is required (format: YYYY-MM)'
