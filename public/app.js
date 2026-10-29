@@ -2285,39 +2285,45 @@ function formatDateForMonthInput(dateStr) {
 /**
  * Update PRO plan start date for a student
  */
-async function updateProPlanStartDate(studentId, monthValue) {
+const proPlanPendingWrites = new Set();
+async function updateProPlanStartDate(studentId, monthValue, input) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'students' ||
+      typeof studentId !== 'string' || !studentId || !input || input.disabled || !root.contains(input) ||
+      input.dataset.studentProPlanId !== studentId || input.value !== monthValue || typeof monthValue !== 'string' ||
+      (monthValue && !/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(monthValue))) return;
+  const student = getFilteredStudents().find(row => row.student_id === studentId);
+  if (!student) return;
+  if (proPlanPendingWrites.has(studentId)) return;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role, notionName = currentUser.notion_name;
+  const previous = student.pro_plan_start_date, previousMonths = student.pro_plan_continued_months, tutor = student.homeroom_tutor;
+  const current = () => sessionToken === token && currentUser?.id === id && currentUser?.role === role && currentUser?.notion_name === notionName &&
+    currentPage === 'students' && document.getElementById('content') === root && root.contains(input) && input.value === monthValue &&
+    input.dataset.studentProPlanId === studentId && getFilteredStudents().includes(student) && student.student_id === studentId &&
+    student.homeroom_tutor === tutor && student.pro_plan_start_date === previous && student.pro_plan_continued_months === previousMonths;
+  const restore = () => { if (current()) input.value = previous ? formatDateForMonthInput(previous) : ''; };
+  if (!monthValue && (!confirm('PROプラン開始日をクリアしますか？') || !current())) { restore(); return; }
+  if (!current() || proPlanPendingWrites.has(studentId)) return;
+  proPlanPendingWrites.add(studentId); input.disabled = true;
   try {
-    if (!monthValue) {
-      // User cleared the field
-      if (!confirm('PROプラン開始日をクリアしますか？')) {
-        // Reload to restore previous value
-        await refreshData();
-        return;
-      }
-    }
-    
-    // Force to 1st of the month
-    const date = monthValue ? new Date(monthValue + '-01') : null;
-    const proPlanStartDate = date ? date.toISOString().split('T')[0] : null;
-    
-    const response = await axios.patch(`${API_BASE}/api/students/${studentId}/pro-plan`, {
-      proPlanStartDate: proPlanStartDate
-    }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
-    if (response.data.success) {
-      showAlert('success', 'PROプラン開始日を更新しました');
-      // Refresh to show updated continued months
-      await refreshData();
-    } else {
-      showAlert('error', 'PROプラン開始日の更新に失敗しました');
-      await refreshData();
-    }
-  } catch (error) {
-    console.error('Error updating PRO plan start date:', error);
-    showAlert('error', 'PROプラン開始日の更新中にエラーが発生しました: ' + (error.response?.data?.error || error.message));
-    await refreshData();
+    const response = await axios.patch(`${API_BASE}/api/students/${encodeURIComponent(studentId)}/pro-plan`, {
+      proPlanStartDate: monthValue ? `${monthValue}-01` : null
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    const updated = response.data.data;
+    if (!response.data.success || !updated || updated.student_id !== studentId) throw new Error('PRO update rejected');
+    student.pro_plan_start_date = updated.pro_plan_start_date;
+    student.pro_plan_continued_months = updated.pro_plan_continued_months;
+    showAlert('success', 'PROプラン開始日を更新しました');
+    renderStudentsPage();
+  } catch {
+    if (!current()) return;
+    console.error('PRO plan update failed');
+    showAlert('error', 'PROプラン開始日の更新に失敗しました');
+    restore();
+  } finally {
+    proPlanPendingWrites.delete(studentId);
+    if (document.getElementById('content') === root && root.contains(input)) input.disabled = false;
   }
 }
 
@@ -2893,42 +2899,34 @@ function renderStudentsPage() {
 }
 
 // Load Wanami usage data for all visible students (batch mode with cache)
+let wanamiBatchReadGeneration = 0;
 async function loadWanamiUsageDataBatch() {
+  const generation = ++wanamiBatchReadGeneration, root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'students') return;
+  const cells = Array.from(root.querySelectorAll('.wanami-usage-loading'));
+  if (!cells.length) return;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role, selected = [...getFilteredStudents()];
+  const studentIds = selected.map(row => row.student_id);
+  const snapshots = cells.map(cell => [cell, cell.dataset.studentId]);
+  const current = () => generation === wanamiBatchReadGeneration && sessionToken === token && currentUser?.id === id &&
+    currentUser?.role === role && currentPage === 'students' && document.getElementById('content') === root &&
+    (() => { const now = getFilteredStudents(); return now.length === selected.length && now.every((row, i) => row === selected[i] && row.student_id === studentIds[i]); })() &&
+    snapshots.every(([cell, studentId]) => root.contains(cell) && cell.dataset.studentId === studentId);
   try {
-    // Fetch all usage counts in one API call (cached for 24 hours)
     const response = await axios.get('/api/students/wanami-usage-all');
-    
-    if (!response.data.success) {
-      console.error('Failed to load Wanami usage data');
-      return;
-    }
-    
-    const usageCounts = response.data.data.usage_counts;
-    
-    // Update all loading elements
-    const loadingElements = document.querySelectorAll('.wanami-usage-loading');
-    
-    loadingElements.forEach(element => {
-      const studentId = element.getAttribute('data-student-id');
+    if (!current()) return;
+    if (!response.data.success || !response.data.data?.usage_counts || typeof response.data.data.usage_counts !== 'object') throw new Error('Wanami lookup rejected');
+    const counts = response.data.data.usage_counts;
+    snapshots.forEach(([cell, studentId]) => {
       if (!studentId) return;
-      
-      const count = usageCounts[studentId] || 0;
-      element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" data-student-history-action="wanami" data-student-history-id="${escapeHtml(studentId).replace(/"/g, '&quot;')}">${count}回</span>`;
-      element.classList.remove('text-gray-400');
-      element.classList.remove('wanami-usage-loading');
+      const count = Object.prototype.hasOwnProperty.call(counts, studentId) ? counts[studentId] : 0;
+      cell.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" data-student-history-action="wanami" data-student-history-id="${escapeHtml(studentId).replace(/"/g, '&quot;')}">${escapeHtml(String(count || 0))}回</span>`;
+      cell.classList.remove('text-gray-400'); cell.classList.remove('wanami-usage-loading');
     });
-    
-    console.log(`[Wanami] Loaded usage counts for ${Object.keys(usageCounts).length} students`);
-  } catch (error) {
-    console.error('Error loading Wanami usage data:', error);
-    
-    // Fallback: show '-' for all elements
-    const loadingElements = document.querySelectorAll('.wanami-usage-loading');
-    loadingElements.forEach(element => {
-      element.textContent = '-';
-      element.classList.remove('text-gray-400');
-      element.classList.remove('wanami-usage-loading');
-    });
+  } catch {
+    if (!current()) return;
+    console.error('Wanami usage lookup failed');
+    cells.forEach(cell => { cell.textContent = '-'; cell.classList.remove('text-gray-400'); cell.classList.remove('wanami-usage-loading'); });
   }
 }
 
