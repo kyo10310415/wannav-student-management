@@ -61,3 +61,12 @@ test('delete rejects old success after cache, role, root or modal changes',async
 test('current accept/delete failures use fixed diagnostics and release the pending lock',async()=>{
  for(const accept of [false,true]){const f=fixture();f.stubRender();if(accept)f.selection();const send=()=>accept?f.c.confirmAcceptHelperRequest(1):f.c.deleteHelperRequest(1);const pending=send();f.requests[0].reject(Error('PRIVATE_SENTINEL'));await pending;assert.ok(!JSON.stringify([f.logs,f.alerts]).includes('PRIVATE_SENTINEL'));const again=send();assert.equal(f.requests.length,2);f.resolve(1);await again;}
 });
+
+test('helper page follows the latest existing badge read before rendering shared cache',async()=>{
+ const f=fixture();let pageDone=false;const page=f.c.renderHelpersPage().then(()=>pageDone=true);
+ const badge=f.c.loadHelperRequests();f.resolve(0,[{id:1,reason:'OLD',deadline:'2099-01-01'}]);await new Promise(setImmediate);
+ assert.equal(pageDone,false);assert.equal(f.elements.content.innerHTML,'');
+ f.resolve(1,[{id:2,reason:'LATEST',deadline:'2099-01-01'}]);await badge;await page;
+ assert.equal(pageDone,true);assert.ok(f.elements.content.innerHTML.includes('LATEST'));assert.ok(!f.elements.content.innerHTML.includes('OLD'));
+ assert.equal(f.elements.loading.classList.hidden,true);assert.equal(f.elements.content.classList.hidden,false);assert.equal(f.requests.length,2);
+});

@@ -6250,6 +6250,7 @@ async function submitHelperRequest() {
 let helperRequests = [];
 let helperStatusFilter = 'all'; // 'all', 'pending', 'accepted', 'rescheduled'
 let helperReadGeneration = 0;
+let helperReadCompletion = Promise.resolve();
 let helperPageGeneration = 0;
 const helperPendingWrites = new Set();
 function helperViewContext(pageRequired = true) {
@@ -6275,6 +6276,12 @@ async function renderHelpersPage(parentCurrent = () => true) {
   
   // Load helper requests
   await loadHelperRequests(current);
+  // Follow only already-started reads; a badge refresh must not leave the page on old cache.
+  while (current()) {
+    const completion = helperReadCompletion;
+    await completion;
+    if (helperReadCompletion === completion) break;
+  }
   if (!current()) return;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
@@ -6336,6 +6343,8 @@ async function loadHelperRequests(parentCurrent = () => true) {
   const state = helperViewContext(false), generation = ++helperReadGeneration;
   if (!state || !parentCurrent()) return false;
   const current = () => state.current() && generation === helperReadGeneration && parentCurrent();
+  let complete;
+  helperReadCompletion = new Promise(resolve => { complete = resolve; });
   try {
     const res = await axios.get(`${API_BASE}/api/helper-requests`, { headers: { Authorization: `Bearer ${state.token}` } });
     if (!current()) return false;
@@ -6349,7 +6358,7 @@ async function loadHelperRequests(parentCurrent = () => true) {
     helperRequests = [];
     updateHelperBadge();
     return false;
-  }
+  } finally { complete(); }
 }
 
 // Update helper requests badge count
