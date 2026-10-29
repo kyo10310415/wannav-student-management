@@ -7231,6 +7231,8 @@ function getFilteredSchedules() {
  * Render schedules list view
  */
 function renderSchedulesList() {
+  const text = value => escapeHtml(String(value ?? ''));
+  const attribute = value => text(value).replace(/"/g, '&quot;');
   const filteredSchedules = getFilteredSchedules();
   
   if (filteredSchedules.length === 0) {
@@ -7309,12 +7311,12 @@ function renderSchedulesList() {
                   const isOwnRequest = currentTutorEmail && req.tutor_email === currentTutorEmail;
                   const uniqueKey = schedule.unique_event_key || schedule.event_id;
                   const cancelButton = isOwnRequest 
-                    ? `<button onclick="cancelAbsenceRequest('${uniqueKey}', '${req.tutor_email}')" class="ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded" title="取り下げる">
+                    ? `<button data-absence-action="cancel" data-absence-event-key="${attribute(uniqueKey)}" data-absence-email="${attribute(req.tutor_email)}" class="ml-2 text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded" title="取り下げる">
                          <i class="fas fa-times"></i>
                        </button>`
                     : '';
                   
-                  return `<span class="${typeColor} font-semibold">${req.tutor_name} (${typeLabel})${cancelButton}</span>`;
+                  return `<span class="${typeColor} font-semibold">${text(req.tutor_name)} (${typeLabel})${cancelButton}</span>`;
                 }).join(', ')
               : '<span class="text-gray-400">-</span>';
             
@@ -7335,14 +7337,14 @@ function renderSchedulesList() {
               <tr class="hover:bg-gray-50">
                 <td class="px-4 py-3 whitespace-nowrap">
                   <span class="px-2 py-1 text-xs font-semibold rounded-full ${colorClass}">
-                    ${keyword}
+                    ${text(keyword)}
                   </span>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${leaderName}</td>
-                <td class="px-4 py-3 text-sm text-gray-900">${title}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleDate}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${scheduleTime}</td>
-                <td class="px-4 py-3 text-sm text-gray-600">${attendeeNames}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${text(leaderName)}</td>
+                <td class="px-4 py-3 text-sm text-gray-900">${text(title)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${text(scheduleDate)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${text(scheduleTime)}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${text(attendeeNames)}</td>
                 <td class="px-4 py-3 text-sm">${absenceNames}</td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <button 
@@ -7507,6 +7509,7 @@ function renderAttendanceStatistics() {
  * Render pending absence requests
  */
 function renderPendingRequests() {
+  const text = value => escapeHtml(String(value ?? ''));
   if (!pendingRequests || pendingRequests.length === 0) {
     return `
       <div class="text-center py-12">
@@ -7537,12 +7540,12 @@ function renderPendingRequests() {
               <div>
                 <div class="flex items-center gap-2 mb-2">
                   <span class="px-3 py-1 rounded-full text-sm font-semibold ${colorClass}">
-                    ${event.matched_keyword || '-'}
+                    ${text(event.matched_keyword || '-')}
                   </span>
-                  <h3 class="text-lg font-semibold text-gray-900">${event.schedule_title || '（タイトルなし）'}</h3>
+                  <h3 class="text-lg font-semibold text-gray-900">${text(event.schedule_title || '（タイトルなし）')}</h3>
                 </div>
                 <p class="text-gray-600">
-                  <i class="fas fa-calendar mr-2"></i>${event.schedule_date} ${event.schedule_time}
+                  <i class="fas fa-calendar mr-2"></i>${text(event.schedule_date)} ${text(event.schedule_time)}
                 </p>
               </div>
             </div>
@@ -7552,17 +7555,17 @@ function renderPendingRequests() {
                 <div class="bg-gray-50 rounded-lg p-3 flex items-start justify-between">
                   <div class="flex-1">
                     <div class="flex items-center gap-2 mb-1">
-                      <span class="font-semibold text-gray-900">${req.tutor_name}</span>
+                      <span class="font-semibold text-gray-900">${text(req.tutor_name)}</span>
                       <span class="px-2 py-1 rounded text-xs font-semibold ${req.absence_type === 'cancel' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}">
                         ${req.absence_type === 'cancel' ? 'キャンセル' : 'リスケ'}
                       </span>
                     </div>
-                    <p class="text-sm text-gray-600 mb-1">理由: ${req.reason || '（理由なし）'}</p>
+                    <p class="text-sm text-gray-600 mb-1">理由: ${text(req.reason || '（理由なし）')}</p>
                     <p class="text-xs text-gray-500">申請日時: ${new Date(req.created_at).toLocaleString('ja-JP')}</p>
                   </div>
-                  ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') ? `
+                  ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader') && Number.isSafeInteger(Number(req.id)) && Number(req.id) > 0 ? `
                     <button 
-                      onclick="approveAbsenceRequest(${req.id}, '${req.tutor_name}')" 
+                      data-absence-action="approve" data-absence-request-id="${Number(req.id)}"
                       class="ml-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold">
                       <i class="fas fa-check mr-1"></i>受理
                     </button>
@@ -7578,6 +7581,27 @@ function renderPendingRequests() {
 }
 
 
+
+function handleAbsenceActionClick(event) {
+  const control = event.target?.closest?.('button[data-absence-action]');
+  const root = document.getElementById('content');
+  if (!control || control.disabled || !root?.contains(control) || !sessionToken || !currentUser ||
+      !['admin', 'leader', 'crew'].includes(currentUser.role) || currentPage !== 'schedules') return;
+  if (control.dataset.absenceAction === 'approve') {
+    if (!['admin', 'leader'].includes(currentUser.role) || !/^[1-9]\d*$/.test(control.dataset.absenceRequestId || '')) return;
+    const id = Number(control.dataset.absenceRequestId);
+    if (!Number.isSafeInteger(id)) return;
+    const request = pendingRequests.flatMap(event => event.requests || []).find(row => Number(row.id) === id);
+    if (request) return approveAbsenceRequest(id, request.tutor_name || '');
+  } else if (control.dataset.absenceAction === 'cancel') {
+    const key = control.dataset.absenceEventKey, email = control.dataset.absenceEmail;
+    if (!key || !email || email !== currentTutorEmail) return;
+    const schedule = getFilteredSchedules().find(row => String(row.unique_event_key || row.event_id) === key);
+    if (schedule?.absence_requests?.some(row => row.tutor_email === email)) return cancelAbsenceRequest(key, email);
+  }
+}
+
+document.addEventListener('click', handleAbsenceActionClick);
 
 // ==================== Absence Request Modal ====================
 
