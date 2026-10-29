@@ -18283,7 +18283,8 @@ async function deleteTutorRedListEntry(tutorId, tutorName) {
 // =============================================================================
 
 // ─── ページ描画 ───────────────────────────────────────────────────────────────
-async function renderDailyReportsPage() {
+async function renderDailyReportsPage(parentCurrent = () => true) {
+  if (!parentCurrent()) return;
   document.getElementById('loading').classList.remove('hidden');
   document.getElementById('content').classList.add('hidden');
 
@@ -18292,13 +18293,16 @@ async function renderDailyReportsPage() {
       axios.get('/api/daily-reports/tutors'),
       axios.get('/api/daily-reports/reminder-setting').catch(() => ({ data: { enabled: true } }))
     ]);
+    if (!parentCurrent()) return;
     dailyReportTutors          = tutorsRes.data.success  ? tutorsRes.data.data    : [];
     dailyReportReminderEnabled = settingRes.data.enabled !== false;
   } catch (e) {
-    console.error('[DailyReports] fetch error:', e);
+    if (!parentCurrent()) return;
+    console.error('[DailyReports] fetch error');
     dailyReportTutors = [];
   }
 
+  if (!parentCurrent()) return;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
   _renderDailyReportsContent();
@@ -18550,7 +18554,33 @@ function _renderDailyReportsContent() {
 let _drCurrentTutorId   = null;
 let _drCurrentTutorName = null;
 
+let dailyReportModalGeneration = 0;
+const dailyReportPendingWrites = new Set();
+const dailyReportBusyOwners = new WeakMap();
+function dailyReportWriteView() {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !currentUser || !['admin', 'leader', 'crew'].includes(currentUser.role) || currentPage !== 'daily-reports') return null;
+  const state = { root, token: sessionToken, userId: currentUser.id, role: currentUser.role };
+  state.current = () => sessionToken === state.token && currentUser?.id === state.userId && currentUser?.role === state.role &&
+    currentPage === 'daily-reports' && document.getElementById('content') === root;
+  return state;
+}
+function beginDailyReportWrite(state, key, control) {
+  if (!control || control.disabled || dailyReportPendingWrites.has(key)) return false;
+  dailyReportPendingWrites.add(key);
+  dailyReportBusyOwners.set(control, state);
+  control.disabled = true;
+  state.finish = () => {
+    dailyReportPendingWrites.delete(key);
+    if (dailyReportBusyOwners.get(control) !== state) return;
+    dailyReportBusyOwners.delete(control);
+    if (state.root.contains(control)) control.disabled = false;
+  };
+  return true;
+}
+
 function openDailyReportModal(tutorId, tutorName, defaultDate) {
+  dailyReportModalGeneration++;
   _drCurrentTutorId   = tutorId;
   _drCurrentTutorName = tutorName;
 
@@ -18598,42 +18628,45 @@ function _drHighlightDateBtn(clickedBtn) {
 }
 
 function closeDailyReportModal() {
+  dailyReportModalGeneration++;
   document.getElementById('dailyReportModal').classList.add('hidden');
 }
 
 async function submitDailyReport() {
-  const date    = document.getElementById('drModalDate').value.trim();
-  const content = document.getElementById('drModalContent').value.trim();
-
-  if (!date) {
-    showNotification('日付を選択してください', 'error');
-    return;
-  }
-  if (!content) {
-    showNotification('内容を入力してください', 'error');
-    return;
-  }
-
+  const state = dailyReportWriteView();
+  const modal = document.getElementById('dailyReportModal');
+  const dateInput = document.getElementById('drModalDate');
+  const contentInput = document.getElementById('drModalContent');
   const btn = document.getElementById('drModalSubmitBtn');
-  btn.disabled = true;
+  const tutorId = _drCurrentTutorId, generation = dailyReportModalGeneration;
+  if (!state || !modal || !state.root.contains(modal) || modal.classList.contains('hidden') ||
+      !dateInput || !contentInput || !btn || ![dateInput, contentInput, btn].every(node => modal.contains(node)) || !dailyHistoryTutorAllowed(tutorId)) return;
+  const date = dateInput.value.trim(), content = contentInput.value.trim();
+  if (!date) { showNotification('日付を選択してください', 'error'); return; }
+  if (!content) { showNotification('内容を入力してください', 'error'); return; }
+  const current = () => state.current() && generation === dailyReportModalGeneration && _drCurrentTutorId === tutorId &&
+    document.getElementById('dailyReportModal') === modal && !modal.classList.contains('hidden') &&
+    document.getElementById('drModalSubmitBtn') === btn && document.getElementById('drModalDate') === dateInput && document.getElementById('drModalContent') === contentInput &&
+    dateInput.value.trim() === date && contentInput.value.trim() === content && dailyHistoryTutorAllowed(tutorId);
+  if (!beginDailyReportWrite(state, JSON.stringify(['report', state.userId, tutorId, date]), btn)) return;
+  const original = btn.innerHTML;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>提出中...';
-
   try {
-    await axios.post('/api/daily-reports', {
-      tutor_id:    _drCurrentTutorId,
-      report_date: date,
-      content
-    });
-
+    const res = await axios.post('/api/daily-reports', { tutor_id: tutorId, report_date: date, content },
+      { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Daily report rejected');
     closeDailyReportModal();
     showNotification('日報を提出しました', 'success');
-    await renderDailyReportsPage(); // 一覧を更新
-  } catch (e) {
-    console.error('[DailyReports] submit error:', e);
-    showNotification(e.response?.data?.error || '提出に失敗しました', 'error');
+    const closedGeneration = dailyReportModalGeneration;
+    await renderDailyReportsPage(() => state.current() && dailyReportModalGeneration === closedGeneration);
+  } catch {
+    if (!current()) return;
+    console.error('[DailyReports] submit error');
+    showNotification('提出に失敗しました', 'error');
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>提出する';
+    if (dailyReportBusyOwners.get(btn) === state && state.root.contains(btn)) btn.innerHTML = original;
+    state.finish();
   }
 }
 
@@ -18779,16 +18812,26 @@ function _renderDailyReportHistoryPager() {
 
 // ─── コメント投稿 ─────────────────────────────────────────────────────────────
 async function submitDailyReportComment(reportId) {
-  if (!currentUser) return;
-  const input   = document.getElementById(`drCommentInput-${reportId}`);
-  const content = input?.value?.trim();
+  const state = dailyReportWriteView();
+  const modal = document.getElementById('dailyReportHistoryModal');
+  const history = dailyReportHistory, tutorId = dailyReportViewTutorId;
+  const input = document.getElementById(`drCommentInput-${reportId}`);
+  const container = document.getElementById(`drComments-${reportId}`);
+  if (!state || !Number.isSafeInteger(Number(reportId)) || Number(reportId) <= 0 || !modal || !state.root.contains(modal) ||
+      modal.classList.contains('hidden') || !history || String(history.tutorId) !== String(tutorId) || !dailyHistoryTutorAllowed(tutorId) ||
+      !history.reports.some(report => Number(report.id) === Number(reportId)) || !input || !container || !modal.contains(input) || !modal.contains(container)) return;
+  const content = input.value.trim();
   if (!content) { showNotification('コメントを入力してください', 'error'); return; }
-
+  const current = () => state.current() && dailyReportHistory === history && dailyReportViewTutorId === tutorId && dailyHistoryTutorAllowed(tutorId) &&
+    document.getElementById('dailyReportHistoryModal') === modal && !modal.classList.contains('hidden') &&
+    document.getElementById(`drCommentInput-${reportId}`) === input && document.getElementById(`drComments-${reportId}`) === container && input.value.trim() === content;
+  if (!beginDailyReportWrite(state, JSON.stringify(['comment', state.userId, reportId]), input)) return;
   try {
     const res = await axios.post(`/api/daily-reports/${reportId}/comments`, {
-      user_id: currentUser.id,
+      user_id: state.userId,
       content
-    });
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
     if (!res.data.success) throw new Error(res.data.error);
 
     input.value = '';
@@ -18815,13 +18858,13 @@ async function submitDailyReportComment(reportId) {
         ` : ''}
       </div>
     `;
-    const container = document.getElementById(`drComments-${reportId}`);
-    if (container) container.insertAdjacentHTML('beforeend', cmHtml);
+    container.insertAdjacentHTML('beforeend', cmHtml);
     showNotification('コメントを送信しました', 'success');
-  } catch (e) {
-    console.error('[DailyReports] comment error:', e);
-    showNotification(e.response?.data?.error || 'コメントの送信に失敗しました', 'error');
-  }
+  } catch {
+    if (!current()) return;
+    console.error('[DailyReports] comment error');
+    showNotification('コメントの送信に失敗しました', 'error');
+  } finally { state.finish(); }
 }
 
 // ─── 日報削除 ─────────────────────────────────────────────────────────────────

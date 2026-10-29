@@ -19,6 +19,10 @@ export const STUDENT_PRO_PLAN_REQUEST_MAX_BYTES = 256 * 1024;
 const limitStudentProPlanBody = uploadRequestBodyLimit(STUDENT_PRO_PLAN_REQUEST_MAX_BYTES, {
   tooLargeError: 'Student PRO plan request too large', invalidError: 'Invalid student PRO plan request'
 });
+export const SETTINGS_REQUEST_MAX_BYTES = 256 * 1024;
+const limitSettingsBody = uploadRequestBodyLimit(SETTINGS_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Settings request too large', invalidError: 'Invalid settings request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -129,6 +133,10 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     // Hono matches a raw parameter segment before decoding it; %2F is still one segment.
     // Keep crew's decoded-path allowlist, but cover every manager route parameter before parsing.
     const bodyWritePath = user.role === 'crew' ? path : c.req.path.replace(/\/+$/, '');
+    if (method === 'PUT' && /^\/api\/settings\/[^/]+$/.test(bodyWritePath)) {
+      const rejected = await limitSettingsBody(c, async () => {});
+      if (rejected) return rejected;
+    }
     if ((method === 'POST' && (path === '/api/daily-reports' || new RegExp(`^/api/daily-reports/${writeId}/comments$`).test(bodyWritePath))) ||
         (method === 'PUT' && path === '/api/daily-reports/reminder-setting')) {
       const rejected = await limitDailyReportBody(c, async () => {});

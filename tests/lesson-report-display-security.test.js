@@ -88,8 +88,13 @@ test('daily history and new comments escape author names without changing existi
   const marker='<b data-synthetic="author">author</b>';
   const comment={id:2,commenter_name:marker,content:'Synthetic comment',created_at:'2026-10-28T00:00:00Z'};
   for(const role of ['crew','leader']) {
-    const elements={drHistoryBody:{innerHTML:''},'drCommentInput-1':{value:'Synthetic comment'},'drComments-1':{insertAdjacentHTML(_position,html){this.html=html}}};
-    const context=vm.createContext({escapeHtml,Date,currentUser:{id:1,role},dailyReportHistory:{reports:[{id:1,report_date:'2026-10-28',content:'Synthetic report',comments:[comment]}]},document:{getElementById:id=>elements[id]},axios:{post:async()=>({data:{success:true,data:comment}})},showNotification(){},console:{error(){}}});
+    const node=parent=>({parent,contains(n){for(;n;n=n.parent)if(n===this)return true;return false},classList:{contains(){return false}}});
+    const elements={content:node()};elements.dailyReportHistoryModal=node(elements.content);
+    elements.drHistoryBody=Object.assign(node(elements.dailyReportHistoryModal),{innerHTML:''});
+    elements['drCommentInput-1']=Object.assign(node(elements.dailyReportHistoryModal),{value:'Synthetic comment'});
+    elements['drComments-1']=Object.assign(node(elements.dailyReportHistoryModal),{insertAdjacentHTML(_position,html){this.html=html}});
+    const context=vm.createContext({escapeHtml,Date,currentUser:{id:1,role},sessionToken:'synthetic-session',currentPage:'daily-reports',dailyReportViewTutorId:7,dailyHistoryTutorAllowed:()=>true,dailyReportHistory:{tutorId:7,reports:[{id:1,report_date:'2026-10-28',content:'Synthetic report',comments:[comment]}]},document:{getElementById:id=>elements[id]},axios:{post:async()=>({data:{success:true,data:comment}})},showNotification(){},console:{error(){}}});
+    vm.runInContext(source.slice(source.indexOf('const dailyReportPendingWrites ='),source.indexOf('function openDailyReportModal(')),context);
     vm.runInContext(functionSource('_renderDailyReportHistoryBody'),context);
     vm.runInContext(functionSource('submitDailyReportComment'),context);
     context._renderDailyReportHistoryBody(); await context.submitDailyReportComment(1);
