@@ -8,6 +8,18 @@ const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf
 const extract = name => { const start = source.indexOf('function ' + name + '('); return source.slice(start, source.indexOf('\n}', start) + 2); };
 const marker = '<b data-synthetic="display">fixture</b>';
 const escapeHtml = value => String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+test('leader and attendee option text and values escape external names while preserving selected raw values', () => {
+  const value = '" ' + marker;
+  const context = { escapeHtml, schedules: [{ leader_name: value, attendee_names: [value, 'Normal'] }], selectedLeader: value, selectedAttendee: value };
+  vm.createContext(context);
+  vm.runInContext(['renderLeaderFilterOptions', 'renderAttendeeFilterOptions'].map(extract).join('\n'), context);
+  for (const html of [context.renderLeaderFilterOptions(), context.renderAttendeeFilterOptions()]) {
+    assert.equal(html.includes(marker), false);
+    assert.ok(html.includes('value="&quot; &lt;b data-synthetic=&quot;display&quot;&gt;fixture&lt;/b&gt;" selected'));
+    assert.ok(html.includes('すべての'));
+  }
+  assert.ok(context.renderAttendeeFilterOptions().includes('value="Normal" >Normal</option>'));
+});
 function fixture() {
   const container = { innerHTML: '' };
   const schedule = { start_time: '2026-10-15T12:00:00', title: '" ' + marker, matched_keyword: marker, schedule_time: marker, attendee_names: [marker] };
