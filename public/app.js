@@ -16789,7 +16789,7 @@ function renderRedListSenders() {
               <a ${redListSafeBookingUrl(s.booking_url) ? `href="${escapeHtml(s.booking_url).replace(/"/g, '&quot;')}"` : ''} target="_blank" rel="noopener"
                  class="text-xs text-indigo-600 hover:underline break-all">${escapeHtml(s.booking_url)}</a>
             </div>
-            <p class="text-xs text-gray-400 mt-1">最終更新: ${updated} ／ ${s.created_by || '-'}</p>
+            <p class="text-xs text-gray-400 mt-1">最終更新: ${updated} ／ ${escapeHtml(String(s.created_by || '-'))}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
             <button data-red-prepare-action="sender-edit" data-red-prepare-id="${escapeHtml(String(s.id)).replace(/"/g, '&quot;')}"

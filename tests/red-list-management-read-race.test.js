@@ -68,6 +68,8 @@ test('shared crew reads remain available but modal preparation requires manager 
  f.c.sessionToken='';assert.equal(await f.c.loadRedListMessages(),false);assert.equal(f.requests.length,1);
 });
 
-test('message creator display treats stored values as text',()=>{
- const f=fixture();const marker='<b data-synthetic="creator">creator</b>';f.c.redListMessages=[{id:1,title:'Synthetic',content:'Synthetic',created_by:marker,created_at:'2026-10-29'}];f.c.Date=Date;f.c.escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');vm.runInContext(fn('renderRedListMessages'),f.c);f.c.renderRedListMessages();const html=f.elements['redlist-messages-content'].innerHTML;assert.ok(html.includes('&lt;b data-synthetic='));assert.ok(!html.includes(marker));
+test('message and sender creator display treats stored values as text',()=>{
+ for(const kind of ['Messages','Senders']){
+  const f=fixture();const marker='<b data-synthetic="creator">creator</b>';f.c['redList'+kind]=[{id:1,title:'Synthetic',name:'Synthetic',booking_url:'https://example.invalid/',content:'Synthetic',created_by:marker,created_at:'2026-10-29',updated_at:'2026-10-29'}];f.c.Date=Date;f.c.redListSafeBookingUrl=()=>true;f.c.escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');vm.runInContext(fn('renderRedList'+kind),f.c);f.c['renderRedList'+kind]();const html=f.elements['redlist-'+kind.toLowerCase()+'-content'].innerHTML;assert.ok(html.includes('&lt;b data-synthetic='));assert.ok(!html.includes(marker));
+ }
 });
