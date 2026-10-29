@@ -81,10 +81,11 @@ test('completion browser logs omit student/date samples and raw upstream errors'
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const start = source.indexOf('async function loadLessonCompletionBatch()');
   const fn = source.slice(start, source.indexOf('\n}', start) + 2), logs = [], updates = [];
-  const studentId = 'SYNTHETIC_PRIVATE_ID', context = { API_BASE: '', getFilteredStudents: () => [{ student_id: studentId }], lessonDates: { [studentId]: [{ date: new Date(2026,9,29) }] },
+  const studentId = 'SYNTHETIC_PRIVATE_ID', selected = [{ student_id: studentId }], body = {}, root = { contains: node => node === body, querySelectorAll: () => [] };
+  const context = { sessionToken: 'synthetic', currentUser: { id: 1, role: 'crew' }, currentPage: 'reservations', currentTab: 'active', activeSubTab: 'lesson', selectedTutor: 'all', reservationCountFilter: 'all', currentMonth: new Date(2026,9,1), studentSearchQuery: '', document: { getElementById: id => id === 'content' ? root : body }, API_BASE: '', getFilteredStudents: () => selected, lessonDates: { [studentId]: [{ date: new Date(2026,9,29) }] },
     axios: { post: async () => ({ data: { success: true, data: [{ studentId, lessonDate: '2026-10-29', completed: true }] } }) },
     updateLessonCompletionDisplay: (...args) => updates.push(args), console: { log: (...args) => logs.push(args.join(' ')), error: (...args) => logs.push(args.join(' ')) } };
-  vm.createContext(context); vm.runInContext(fn, context); await context.loadLessonCompletionBatch();
+  vm.createContext(context); vm.runInContext('let lessonCompletionReadGeneration = 0;\n'+fn, context); await context.loadLessonCompletionBatch();
   assert.equal(updates.length, 1); assert.ok(!logs.join('\n').includes(studentId)); assert.ok(!logs.join('\n').includes('2026-10-29'));
   context.axios.post = async () => { throw Error('SYNTHETIC_PRIVATE_ERROR'); }; await context.loadLessonCompletionBatch();
   assert.ok(!logs.join('\n').includes('SYNTHETIC_PRIVATE_ERROR'));

@@ -11945,70 +11945,62 @@ async function resetTestRouletteResults() {
 /**
  * Load lesson completion status for all students in batch
  */
+let lessonCompletionReadGeneration = 0;
 async function loadLessonCompletionBatch() {
+  const generation = ++lessonCompletionReadGeneration;
+  const root = document.getElementById('content'), body = document.getElementById('student-table-body');
+  if (!root || !body || !root.contains(body) || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'reservations') return;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role;
+  const tab = currentTab, subTab = activeSubTab, tutor = selectedTutor, countFilter = reservationCountFilter;
+  const month = currentMonth.getTime(), search = studentSearchQuery;
+  const filteredStudents = getFilteredStudents(), cache = lessonDates;
+  const cells = Array.from(root.querySelectorAll('.lesson-completion-loading[data-student-id]'));
+  const datesFor = studentId => Array.isArray(lessonDates[studentId]) ? lessonDates[studentId] : [];
+  const snapshots = filteredStudents.map(student => {
+    const dates = datesFor(student.student_id);
+    return { student, studentId: student.student_id, entries: dates.map(entry => [entry, entry.date, entry.date?.getTime()]) };
+  });
+  const current = () => generation === lessonCompletionReadGeneration && sessionToken === token && currentUser?.id === id &&
+    currentUser?.role === role && currentPage === 'reservations' && document.getElementById('content') === root &&
+    document.getElementById('student-table-body') === body && root.contains(body) && currentTab === tab && activeSubTab === subTab &&
+    selectedTutor === tutor && reservationCountFilter === countFilter && currentMonth.getTime() === month && studentSearchQuery === search && lessonDates === cache && (() => {
+      const selected = getFilteredStudents();
+      return selected.length === snapshots.length && snapshots.every((snapshot, i) => selected[i] === snapshot.student && snapshot.student.student_id === snapshot.studentId &&
+        datesFor(snapshot.studentId).length === snapshot.entries.length &&
+        snapshot.entries.every(([entry, date, time], j) => datesFor(snapshot.studentId)[j] === entry && entry.date === date && date?.getTime() === time));
+    })() && cells.every(cell => root.contains(cell));
   try {
-    const filteredStudents = getFilteredStudents();
-    
-    // Build items array: for each student, get their lesson dates
     const items = [];
-    filteredStudents.forEach(student => {
-      const dates = lessonDates[student.student_id] || [];
-      dates.forEach(dateObj => {
-        // Convert Date object to YYYY-MM-DD format
-        const date = dateObj.date;
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const lessonDate = `${year}-${month}-${day}`;
-        
-        items.push({
-          studentId: student.student_id,
-          lessonDate: lessonDate
-        });
-      });
+    snapshots.forEach(({ studentId, entries }) => entries.forEach(([, date]) => {
+      const year = date.getFullYear(), month = String(date.getMonth() + 1).padStart(2, '0'), day = String(date.getDate()).padStart(2, '0');
+      items.push({ studentId, lessonDate: `${year}-${month}-${day}` });
+    }));
+    if (!items.length) return;
+    const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, { items });
+    if (!current()) return;
+    if (!response.data.success || !Array.isArray(response.data.data)) throw new Error('Completion lookup rejected');
+    const expected = new Map(), grouped = new Map();
+    items.forEach(item => {
+      if (!expected.has(item.studentId)) expected.set(item.studentId, new Set());
+      expected.get(item.studentId).add(item.lessonDate);
     });
-    
-    if (items.length === 0) {
-      console.log('[Lesson Completion] No lesson dates to check');
-      return;
-    }
-    
-    console.log(`[Lesson Completion] Checking ${items.length} lesson dates for ${filteredStudents.length} students`);
-    
-    // Call batch API
-    const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, {
-      items
+    response.data.data.forEach(result => {
+      if (!result || !expected.get(result.studentId)?.has(result.lessonDate)) return;
+      if (!grouped.has(result.studentId)) grouped.set(result.studentId, []);
+      grouped.get(result.studentId).push(result);
     });
-    
-    if (response.data.success) {
-      const results = response.data.data;
-      console.log(`[Lesson Completion] Loaded ${results.length} lesson completion records`);
-      
-      // Group results by studentId
-      const completionByStudent = {};
-      results.forEach(result => {
-        if (!completionByStudent[result.studentId]) {
-          completionByStudent[result.studentId] = [];
-        }
-        completionByStudent[result.studentId].push(result);
-      });
-      
-      // Update UI for each student
-      filteredStudents.forEach(student => {
-        const studentCompletions = completionByStudent[student.student_id] || [];
-        updateLessonCompletionDisplay(student.student_id, studentCompletions);
-      });
-    }
-  } catch (error) {
-    console.error('[Lesson Completion] Error loading lesson completion');
+    snapshots.forEach(({ studentId }) => updateLessonCompletionDisplay(studentId, grouped.get(studentId) || [], root));
+  } catch {
+    if (current()) console.error('[Lesson Completion] Error loading lesson completion');
   }
 }
 
 /**
  * Update lesson completion display for a student
  */
-function updateLessonCompletionDisplay(studentId, completions) {
-  const cell = document.querySelector(`.lesson-completion-loading[data-student-id="${studentId}"]`);
+function updateLessonCompletionDisplay(studentId, completions, root = document.getElementById('content')) {
+  const cell = root && Array.from(root.querySelectorAll('.lesson-completion-loading[data-student-id]'))
+    .find(node => node.dataset.studentId === String(studentId));
   
   if (!cell) return;
   
@@ -12046,7 +12038,6 @@ function updateLessonCompletionDisplay(studentId, completions) {
     const statusIcon = c.completed 
       ? '<i class="fas fa-check text-green-600"></i>' 
       : '<i class="fas fa-times text-red-600"></i>';
-    const statusText = c.lessonResult || '未記入';
     // Ensure lessonDate is a string and extract M/D format
     const lessonDateStr = String(c.lessonDate);
     let dateStr;
@@ -12060,7 +12051,7 @@ function updateLessonCompletionDisplay(studentId, completions) {
     }
     
     html += `<div class="text-xs text-gray-600 flex items-center justify-between gap-2">
-      <span>${dateStr}</span>
+      <span>${escapeHtml(String(dateStr))}</span>
       ${statusIcon}
     </div>`;
   });
