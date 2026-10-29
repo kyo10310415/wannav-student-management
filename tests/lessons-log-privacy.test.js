@@ -13,9 +13,10 @@ async function fixture({ query = async () => ({ rows: [] }), calendar = async ()
     console: Object.fromEntries(['log', 'error', 'warn'].map(level => [level, (...args) => logs.push(inspect(args))])),
     query: async (sql, params) => { queries.push({ sql, params }); return query(sql, params); },
     fetchLessonsForMonth: calendar, fetchLessonsFromSheet: sheet, getLastSyncTime: metadata };
+  deps.getClient = async () => ({ query: deps.query, release(){} });
   let source = await readFile(new URL('../src/routes/lessons.js', import.meta.url), 'utf8');
   source = source.replace("import { Hono } from 'hono';", 'const Hono = deps.Hono;')
-    .replace("import { query } from '../db/connection.js';", 'const query = deps.query;')
+    .replace("import { query, getClient } from '../db/connection.js';", 'const { query, getClient } = deps;')
     .replace("import { fetchLessonsForMonth } from '../services/calendarService.js';", 'const fetchLessonsForMonth = deps.fetchLessonsForMonth;')
     .replace("import { fetchLessonsFromSheet, getLastSyncTime } from '../services/sheetsService.js';", 'const { fetchLessonsFromSheet, getLastSyncTime } = deps;');
   const key = 'lessonPrivacyFixture' + sequence++;
@@ -78,7 +79,7 @@ test('Calendar sync preserves matching, upsert parameters and partial failure co
   privateLogs(failed);
 });
 
-test('Sheet sync keeps all sheet IDs, deletion batching and success metadata without logging individual records', async () => {
+test('Sheet sync rolls back on an upsert failure without deletion or personal logs', async () => {
   const data = syncData();
   const stale = Array.from({ length: 205 }, (_, i) => marker + '-stale-' + i);
   const f = await fixture({ sheet: async () => data.lessons, metadata: async () => ({ lastSync: marker, extra: marker }), query: async (sql, params) => {
@@ -88,11 +89,11 @@ test('Sheet sync keeps all sheet IDs, deletion batching and success metadata wit
     return { rows: [] };
   } });
   const response = await f.app.request('/sync-from-sheet');
-  assert.deepEqual(await response.json(), { success: true, message: 'Synced 1 lessons from Google Sheets', count: 1, skipped: 2, errors: 1, deleted: 205, lastGasSync: marker, totalEventsInSheet: 4 });
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { success: false, error: 'Failed to sync lessons from sheet' });
   const deletions = f.queries.filter(call => call.sql.startsWith('DELETE FROM lessons'));
-  assert.deepEqual(deletions.map(call => call.params.length), [100, 100, 5]);
-  assert.deepEqual(deletions.flatMap(call => call.params), stale);
-  assert.ok(deletions[0].sql.endsWith('$100)'));
+  assert.equal(deletions.length, 0);
+  assert.ok(f.queries.some(call => call.sql === 'ROLLBACK'));
   privateLogs(f);
 });
 
@@ -104,7 +105,7 @@ test('Sheet provider failure keeps the existing cache response and performs no D
   privateLogs(f);
 });
 
-test('Sheet mapping and deletion failures never expose provider errors while preserving partial-success behavior', async () => {
+test('Sheet mapping failures conceal details and successful sync never queries deletion candidates', async () => {
   const sheet = async () => [lesson('valid-source', 'fixture-valid', 'synthetic@example.test')];
   const failed = await fixture({ sheet, query: async () => { throw secretError(); } });
   const response = await failed.app.request('/sync-from-sheet');
@@ -118,6 +119,8 @@ test('Sheet mapping and deletion failures never expose provider errors while pre
   const body = await (await cleanup.app.request('/sync-from-sheet')).json();
   assert.equal(body.success, true);
   assert.equal(body.deleted, 0);
+  assert.equal(body.cleanup_skipped, true);
+  assert.equal(cleanup.queries.some(call => call.sql === 'SELECT calendar_event_id FROM lessons'), false);
   privateLogs(cleanup);
 });
 
