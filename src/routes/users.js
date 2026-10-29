@@ -5,6 +5,14 @@ import { generateTemporaryPassword } from '../security/temporaryPassword.js';
 
 const app = new Hono();
 
+async function readUserSettingsBody(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
+  catch { return null; }
+}
+function optionalUserText(value) {
+  return value == null || (typeof value === 'string' && !value.includes('\u0000'));
+}
+
 /**
  * Middleware to verify admin role
  */
@@ -147,15 +155,17 @@ app.put('/:id/booking-links', requireAdmin, async (c) => {
   let client;
   try {
     const userId = c.req.param('id');
-    const { regularUrl = '', proUrl = '' } = await c.req.json();
+    const body = await readUserSettingsBody(c);
+    if (!body || !optionalUserText(body.regularUrl) || !optionalUserText(body.proUrl)) return c.json({ success: false, error: '設定が不正です' }, 400);
+    const { regularUrl = '', proUrl = '' } = body;
     for (const [label, value] of [['通常レッスン', regularUrl], ['PROプランレッスン', proUrl]]) {
       if (value && !/^https:\/\//i.test(String(value).trim())) {
         return c.json({ success: false, error: `${label}の予約URLは https:// から入力してください` }, 400);
       }
     }
 
-    const normalizedRegularUrl = String(regularUrl).trim() || null;
-    const normalizedProUrl = String(proUrl).trim() || null;
+    const normalizedRegularUrl = String(regularUrl ?? '').trim() || null;
+    const normalizedProUrl = String(proUrl ?? '').trim() || null;
     client = await getClient();
     await client.query('BEGIN');
     await client.query(
@@ -203,13 +213,18 @@ app.put('/:id/booking-links', requireAdmin, async (c) => {
  */
 app.post('/', requireAdmin, async (c) => {
   try {
-    const { email, role } = await c.req.json();
+    const body = await readUserSettingsBody(c);
+    if (!body) return c.json({ success: false, error: '設定が不正です' }, 400);
+    const { email, role } = body;
     
     if (!email || !role) {
       return c.json({
         success: false,
         error: 'メールアドレスと権限を入力してください'
       }, 400);
+    }
+    if (typeof email !== 'string' || !email.trim() || [...email].length > 255 || email.includes('\u0000')) {
+      return c.json({ success: false, error: 'メールアドレスが不正です' }, 400);
     }
     
     if (!['admin', 'leader', 'crew'].includes(role)) {
@@ -385,7 +400,9 @@ app.get('/:id/discord', requireAdmin, async (c) => {
 app.put('/:id/discord', requireAdmin, async (c) => {
   try {
     const userId = c.req.param('id');
-    const { discord_webhook_url, discord_user_id } = await c.req.json();
+    const body = await readUserSettingsBody(c);
+    if (!body || !optionalUserText(body.discord_webhook_url) || !optionalUserText(body.discord_user_id)) return c.json({ success: false, error: '設定が不正です' }, 400);
+    const { discord_webhook_url, discord_user_id } = body;
     
     // Check if user exists
     const userResult = await query('SELECT id FROM users WHERE id = $1', [userId]);

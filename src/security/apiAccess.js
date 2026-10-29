@@ -28,6 +28,10 @@ export const LESSON_CONTENT_REQUEST_MAX_BYTES = 1024 * 1024;
 const limitLessonContentBody = uploadRequestBodyLimit(LESSON_CONTENT_REQUEST_MAX_BYTES, {
   tooLargeError: 'Lesson content request too large', invalidError: 'Invalid lesson content request'
 });
+export const USER_SETTINGS_REQUEST_MAX_BYTES = 256 * 1024;
+const limitUserSettingsBody = uploadRequestBodyLimit(USER_SETTINGS_REQUEST_MAX_BYTES, {
+  tooLargeError: 'User settings request too large', invalidError: 'Invalid user settings request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -138,6 +142,10 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     // Hono matches a raw parameter segment before decoding it; %2F is still one segment.
     // Keep crew's decoded-path allowlist, but cover every manager route parameter before parsing.
     const bodyWritePath = user.role === 'crew' ? path : c.req.path.replace(/\/+$/, '');
+    if (['POST', 'PUT'].includes(method) && under(path, '/api/users')) {
+      const rejected = await limitUserSettingsBody(c, async () => {});
+      if (rejected) return rejected;
+    }
     if ((method === 'POST' && ['/api/lesson-contents', '/api/lesson-contents/bulk'].includes(path)) ||
         (method === 'PUT' && /^\/api\/lesson-contents\/[^/]+$/.test(bodyWritePath))) {
       const rejected = await limitLessonContentBody(c, async () => {});
