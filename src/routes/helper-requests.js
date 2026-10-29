@@ -14,6 +14,45 @@ async function readHelperRequestBody(c) {
   catch { return null; }
 }
 
+function helperText(value, maxLength = Infinity) {
+  return typeof value === 'string' && [...value].length <= maxLength && !value.includes('\u0000');
+}
+function optionalHelperText(value, maxLength = Infinity) {
+  return value === undefined || value === null || helperText(value, maxLength);
+}
+function requiredHelperText(value, maxLength = Infinity) {
+  return helperText(value, maxLength) && value.trim().length > 0;
+}
+function validHelperDate(value) {
+  if (typeof value !== 'string' || !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+function validHelperDeadline(value) {
+  if (typeof value !== 'string') return false;
+  // Keep ISO/SQL timestamps and date-only values; do not normalize timezone or impose a future-date rule.
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[Tt ](\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?(?:[Zz]|([+-])(\d{2})(?::?(\d{2}))?)?)?$/.exec(value);
+  if (!match || !validHelperDate(match[1])) return false;
+  if (match[2] === undefined) return true;
+  const hour = Number(match[2]), minute = Number(match[3]), second = Number(match[4] || 0);
+  return hour <= 24 && minute <= 59 && second <= 59 &&
+    (hour !== 24 || (minute === 0 && second === 0 && !/[1-9]/.test(match[5] || ''))) &&
+    (match[7] === undefined || (Number(match[7]) <= 15 && Number(match[8] || 0) <= 59));
+}
+function validHelperProgress(value) {
+  if (value === undefined || value === null) return true;
+  // Older clients may send integer text, which PostgreSQL already accepts.
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^[+-]?\d+$/.test(value))) return false;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= -2147483648 && number <= 2147483647;
+}
+function validHelperCreate(data) {
+  return validHelperDate(data.lesson_date) && validHelperDeadline(data.deadline) &&
+    requiredHelperText(data.student_id, 100) && requiredHelperText(data.student_name, 200) && requiredHelperText(data.reason) &&
+    optionalHelperText(data.lesson_time, 50) && optionalHelperText(data.notion_url) && optionalHelperText(data.notes) &&
+    optionalHelperText(data.requesting_tutor_id, 100) && optionalHelperText(data.requesting_tutor_name, 200) && validHelperProgress(data.lesson_progress);
+}
+
 // Get all helper requests
 app.get('/', async (c) => {
   try {
@@ -72,6 +111,7 @@ app.post('/', async (c) => {
       data.requesting_tutor_id = actor.employee_id;
       data.requesting_tutor_name = actor.tutor_name;
     }
+    if (!validHelperCreate(data)) return c.json({ success: false, error: 'Invalid helper request fields' }, 400);
     
     const result = await query(`
       INSERT INTO helper_requests (
@@ -121,6 +161,9 @@ app.post('/:id/accept', async (c) => {
     const actor = c.get('authenticatedUser');
     const tutor_id = actor.role === 'crew' ? actor.employee_id : submitted.tutor_id;
     const tutor_name = actor.role === 'crew' ? actor.tutor_name : submitted.tutor_name;
+    if (!requiredHelperText(tutor_id, 100) || !optionalHelperText(tutor_name, 200)) {
+      return c.json({ success: false, error: 'Invalid accepting tutor fields' }, 400);
+    }
     
     // Check if request exists and is not expired
     const checkResult = await query(`
