@@ -69,3 +69,35 @@ test('normal write-owned refresh still renders schedule and pending results',asy
  const f=fixture();realRefresh(f);const p=f.c.submitAbsenceRequest();f.requests[0].resolve(success);await new Promise(r=>setImmediate(r));f.requests[1].resolve({data:{success:true,data:[{event_id:'new'}]}});await new Promise(r=>setImmediate(r));f.requests[2].resolve({data:{success:true,data:{requests:{}}}});await p;assert.deepEqual(f.reads,['content']);
  const g=fixture('admin');realRefresh(g);const q=g.c.approveAbsenceRequest(7,'ignored');g.requests[0].resolve(success);await new Promise(r=>setImmediate(r));g.requests[1].resolve({data:{success:true,data:{pendingRequests:[]}}});await q;assert.deepEqual(g.reads,['content']);assert.equal(g.c.pendingRequests.length,0);
 });
+
+test('real list preparation opens the canonical cached schedule and real submit sends its payload', async()=>{
+ const f=fixture();
+ f.c.escapeHtml=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+ f.elements.content.contains=node=>node.root===f.elements.content;
+ f.c.document.addEventListener=()=>{};
+ f.c.document.createElement=()=>{const modal={contains:node=>[f.radio,f.reason,f.button].includes(node),querySelector:()=>f.radio};Object.defineProperty(modal,'id',{set(id){f.elements[id]=modal}});return modal};
+ f.c.document.body.appendChild=()=>{};
+ const extract=name=>{const start=source.indexOf('function '+name+'(');return source.slice(start,source.indexOf('\n}',start)+2)};
+ vm.runInContext(extract('renderSchedulesList')+'\n'+extract('openAbsenceRequestModal'),f.c);
+ vm.runInContext(await readFile(new URL('../public/absence-prepare-events.js',import.meta.url),'utf8'),f.c);
+ const html=f.c.renderSchedulesList(), encoded=html.match(/data-absence-schedule="([^"]+)"/)[1];
+ const button={root:f.elements.content,dataset:{absencePrepareAction:'open',absenceSchedule:encoded},closest(){return this}};
+ f.c.selectedScheduleForAbsence=null;
+ f.c.handleAbsencePrepareClick({target:button});
+ assert.equal(f.c.selectedScheduleForAbsence,f.schedule);
+ assert.ok(f.elements['absence-request-modal'].innerHTML.includes('fixture title'));
+ const pending=f.c.submitAbsenceRequest();assert.equal(f.calls.length,1);
+ assert.equal(f.calls[0][2].event_id,f.schedule.unique_event_key);assert.equal(f.calls[0][2].reason,'regular reason');
+ f.requests[0].resolve(success);await pending;assert.equal(f.alerts.length,1);
+});
+
+test('preparation rejects stale snapshots and filtered-out events before modal creation', async()=>{
+ const f=fixture(), opened=[];
+ f.c.document.addEventListener=()=>{};f.elements.content.contains=node=>node.root===f.elements.content;
+ f.c.openAbsenceRequestModal=schedule=>opened.push(schedule);
+ vm.runInContext(await readFile(new URL('../public/absence-prepare-events.js',import.meta.url),'utf8'),f.c);
+ const button={root:f.elements.content,dataset:{absencePrepareAction:'open',absenceSchedule:encodeURIComponent(JSON.stringify(f.schedule))},closest(){return this}};
+ f.schedule.title='updated title';f.c.handleAbsencePrepareClick({target:button});assert.equal(opened.length,0);
+ button.dataset.absenceSchedule=encodeURIComponent(JSON.stringify(f.schedule));f.c.getFilteredSchedules=()=>[];f.c.handleAbsencePrepareClick({target:button});assert.equal(opened.length,0);
+ f.c.getFilteredSchedules=()=>[f.schedule];f.c.handleAbsencePrepareClick({target:button});assert.equal(opened[0],f.schedule);
+});

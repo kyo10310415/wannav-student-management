@@ -7000,7 +7000,7 @@ function renderScheduleStatistics() {
   const total = filteredSchedules.length;
   
   // Count by keyword
-  const keywords = {};
+  const keywords = Object.create(null);
   filteredSchedules.forEach(schedule => {
     const keyword = schedule.matched_keyword || '不明';
     keywords[keyword] = (keywords[keyword] || 0) + 1;
@@ -7028,7 +7028,7 @@ function renderScheduleStatistics() {
     
     statsHtml += `
       <div class="${color.bg} p-4 rounded-lg">
-        <div class="text-sm text-gray-600 mb-1">${keyword}</div>
+        <div class="text-sm text-gray-600 mb-1">${escapeHtml(String(keyword))}</div>
         <div class="text-3xl font-bold ${color.text}">${count}件</div>
       </div>
     `;
@@ -7659,6 +7659,8 @@ let selectedScheduleForAbsence = null;
  * Open absence request modal
  */
 function openAbsenceRequestModal(schedule) {
+  if (!sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'schedules' || !getFilteredSchedules().includes(schedule)) return;
   selectedScheduleForAbsence = schedule;
   
   const modal = document.createElement('div');
