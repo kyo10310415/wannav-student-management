@@ -3418,9 +3418,7 @@ function renderTutorsPage() {
   
   // Load absence stats for current month (only for leaders and admins)
   if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'leader')) {
-    fetchAbsenceStats(selectedStatsYear, selectedStatsMonth).then(() => {
-      renderAbsenceStatsSection();
-    });
+    fetchAbsenceStats(selectedStatsYear, selectedStatsMonth);
   }
   
   // Load Wanami usage data for all tutors
@@ -6776,8 +6774,19 @@ async function deleteHelperRequest(requestId) {
 /**
  * Render Tutor Schedules Page
  */
+let scheduleReadGeneration = 0;
+function beginScheduleRead(operationCurrent) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'schedules' || !operationCurrent()) return null;
+  const generation = ++scheduleReadGeneration, token = sessionToken, id = currentUser.id, role = currentUser.role;
+  const year = selectedScheduleYear, month = selectedScheduleMonth, tab = scheduleTab;
+  return () => generation === scheduleReadGeneration && operationCurrent() && sessionToken === token &&
+    currentUser?.id === id && currentUser?.role === role && currentPage === 'schedules' &&
+    document.getElementById('content') === root && selectedScheduleYear === year && selectedScheduleMonth === month && scheduleTab === tab;
+}
 async function renderSchedulesPage(operationCurrent = () => true) {
-  if (!operationCurrent()) return;
+  const readCurrent = beginScheduleRead(operationCurrent);
+  if (!readCurrent) return;
   const content = document.getElementById('content');
   
   // Show loading
@@ -6792,19 +6801,19 @@ async function renderSchedulesPage(operationCurrent = () => true) {
     // Fetch schedules from API
     const res = await axios.get(`${API_BASE}/api/schedules`);
     
-    if (!operationCurrent()) return;
+    if (!readCurrent()) return;
     if (res.data.success) {
-      schedules = res.data.data;
+      let nextSchedules = res.data.data;
       
       // Fetch absence requests for current month
       try {
         const absenceRes = await axios.get(`${API_BASE}/api/schedules/absence-requests?year=${selectedScheduleYear}&month=${selectedScheduleMonth}`);
-        if (!operationCurrent()) return;
+        if (!readCurrent()) return;
         if (absenceRes.data.success) {
           const absenceRequests = absenceRes.data.data.requests;
           
           // Add absence information to schedules
-          schedules = schedules.map(schedule => {
+          nextSchedules = nextSchedules.map(schedule => {
             const uniqueKey = schedule.unique_event_key || schedule.event_id;
             const eventAbsences = absenceRequests[uniqueKey] || [];
             return {
@@ -6814,30 +6823,31 @@ async function renderSchedulesPage(operationCurrent = () => true) {
           });
         }
       } catch (absenceError) {
-        if (!operationCurrent()) return;
-        console.error('Error fetching absence requests:', absenceError);
+        if (!readCurrent()) return;
+        console.error('Error fetching absence requests');
         // Continue without absence data
       }
       
-      if (!operationCurrent()) return;
+      if (!readCurrent()) return;
+      schedules = nextSchedules;
       renderSchedulesContent();
     } else {
       content.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
           <i class="fas fa-exclamation-circle text-red-600 text-4xl mb-4"></i>
           <p class="text-red-800 font-semibold">スケジュールの取得に失敗しました</p>
-          <p class="text-red-600 mt-2">${res.data.error || '不明なエラー'}</p>
+          <p class="text-red-600 mt-2">時間をおいて再度お試しください</p>
         </div>
       `;
     }
   } catch (error) {
-    if (!operationCurrent()) return;
-    console.error('スケジュール取得エラー:', error);
+    if (!readCurrent()) return;
+    console.error('スケジュール取得エラー');
     content.innerHTML = `
       <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
         <i class="fas fa-exclamation-circle text-red-600 text-4xl mb-4"></i>
         <p class="text-red-800 font-semibold">スケジュールの取得に失敗しました</p>
-        <p class="text-red-600 mt-2">${error.message}</p>
+        <p class="text-red-600 mt-2">時間をおいて再度お試しください</p>
       </div>
     `;
   }
@@ -7043,6 +7053,8 @@ function renderScheduleStatistics() {
  * Change schedule month
  */
 async function changeScheduleMonth(offset) {
+  if (!sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'schedules' ||
+      !document.getElementById('content') || ![-1, 1].includes(offset)) return;
   selectedScheduleMonth += offset;
   if (selectedScheduleMonth > 12) {
     selectedScheduleMonth = 1;
@@ -7074,7 +7086,11 @@ function handleKeywordFilterChange(value) {
  */
 async function handleScheduleTabChange(tab, operationCurrent = () => true) {
   if (!operationCurrent()) return;
+  if (!['confirmed', 'pending'].includes(tab) || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'schedules' || !document.getElementById('content') || (tab === 'pending' && currentUser.role === 'crew')) return;
   scheduleTab = tab;
+  const readCurrent = beginScheduleRead(operationCurrent);
+  if (!readCurrent) return;
   
   // Show loading
   const content = document.getElementById('content');
@@ -7089,18 +7105,18 @@ async function handleScheduleTabChange(tab, operationCurrent = () => true) {
     // Fetch pending requests
     try {
       const res = await axios.get(`${API_BASE}/api/schedules/absence-requests/pending?year=${selectedScheduleYear}&month=${selectedScheduleMonth}`);
-      if (!operationCurrent()) return;
+      if (!readCurrent()) return;
       if (res.data.success) {
         pendingRequests = res.data.data.pendingRequests;
       }
     } catch (error) {
-      if (!operationCurrent()) return;
-      console.error('Error fetching pending requests:', error);
+      if (!readCurrent()) return;
+      console.error('Error fetching pending requests');
       pendingRequests = [];
     }
   }
   
-  if (!operationCurrent()) return;
+  if (!readCurrent()) return;
   renderSchedulesContent();
 }
 
@@ -7908,39 +7924,39 @@ let selectedStatsMonth = new Date().getMonth() + 1;
 /**
  * Fetch absence stats for selected month
  */
+let absenceStatsReadGeneration = 0;
 async function fetchAbsenceStats(year, month) {
+  const root = document.getElementById('content'), container = document.getElementById('absence-stats-container');
+  if (!root || !container || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'tutors' ||
+      year !== selectedStatsYear || month !== selectedStatsMonth) return null;
+  const generation = ++absenceStatsReadGeneration, token = sessionToken, id = currentUser.id, role = currentUser.role;
+  const current = () => generation === absenceStatsReadGeneration && sessionToken === token && currentUser?.id === id &&
+    currentUser?.role === role && currentPage === 'tutors' && document.getElementById('content') === root &&
+    document.getElementById('absence-stats-container') === container && selectedStatsYear === year && selectedStatsMonth === month;
   try {
     const response = await axios.get(`${API_BASE}/api/schedules/absence-stats?year=${year}&month=${month}`);
-    if (response.data.success) {
-      absenceStats = response.data.data;
-      return absenceStats;
-    }
-  } catch (error) {
-    console.error('Error fetching absence stats:', error);
+    if (!current()) return null;
+    if (!response.data.success) throw new Error('Absence stats rejected');
+    absenceStats = response.data.data;
+    renderAbsenceStatsSection();
+    return absenceStats;
+  } catch {
+    if (!current()) return null;
+    console.error('Error fetching absence stats');
+    absenceStats = null;
+    container.innerHTML = '<p class="text-red-600 text-center py-8">統計の取得に失敗しました</p>';
   }
   return null;
 }
 
-/**
- * Change absence stats month
- */
+/** Change absence stats month. */
 async function changeAbsenceStatsMonth(offset) {
-  // Check permission
-  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
-    return;
-  }
-  
+  if (!sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'tutors' ||
+      !document.getElementById('absence-stats-container') || ![-1, 1].includes(offset)) return;
   selectedStatsMonth += offset;
-  if (selectedStatsMonth > 12) {
-    selectedStatsMonth = 1;
-    selectedStatsYear++;
-  } else if (selectedStatsMonth < 1) {
-    selectedStatsMonth = 12;
-    selectedStatsYear--;
-  }
-  
+  if (selectedStatsMonth > 12) { selectedStatsMonth = 1; selectedStatsYear++; }
+  else if (selectedStatsMonth < 1) { selectedStatsMonth = 12; selectedStatsYear--; }
   await fetchAbsenceStats(selectedStatsYear, selectedStatsMonth);
-  renderAbsenceStatsSection();
 }
 
 /**

@@ -56,7 +56,7 @@ function realRefresh(f){
  const extract=(name)=>{const start=source.indexOf('async function '+name+'(');return source.slice(start,source.indexOf('\n}',start)+2)};
  f.c.schedules=['old'];f.c.renderSchedulesContent=()=>f.reads.push('content');
  f.c.axios.get=url=>{const d=deferred();f.calls.push(['get',url]);f.requests.push(d);return d.promise};
- vm.runInContext(extract('renderSchedulesPage')+'\n'+extract('handleScheduleTabChange'),f.c);
+ vm.runInContext(source.slice(source.indexOf('let scheduleReadGeneration ='),source.indexOf('async function renderSchedulesPage('))+'\n'+extract('renderSchedulesPage')+'\n'+extract('handleScheduleTabChange'),f.c);
 }
 test('write-owned refresh ignores old schedule GET success and failure after page change',async()=>{
  for(const reject of [false,true]){const f=fixture();realRefresh(f);const p=f.c.submitAbsenceRequest();f.requests[0].resolve(success);await new Promise(r=>setImmediate(r));assert.equal(f.calls.length,2);f.c.currentPage='students';f.elements.content.innerHTML='new view';if(reject)f.requests[1].reject(new Error('private fixture'));else f.requests[1].resolve({data:{success:true,data:[{event_id:'new'}]}});await p;assert.equal(f.elements.content.innerHTML,'new view');assert.deepEqual(f.c.schedules,['old']);assert.equal(f.reads.length,0);assert.equal(f.errors.length,0);}
