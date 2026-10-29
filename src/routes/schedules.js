@@ -14,11 +14,11 @@ async function readScheduleBody(c) {
 const scheduleText = value => typeof value === 'string' && !value.includes('\u0000');
 function schedulePeriod(c) {
   const now = new Date();
-  const year = String(c.req.query('year') || now.getFullYear());
-  const month = String(c.req.query('month') || now.getMonth() + 1);
+  const year = c.req.query('year') || now.getFullYear();
+  const month = c.req.query('month') || now.getMonth() + 1;
   if (!/^\d{1,4}$/.test(year) || Number(year) < 1 ||
       !/^\d{1,2}$/.test(month) || Number(month) < 1 || Number(month) > 12) return null;
-  return { year: Number(year), month: Number(month) };
+  return { year, month };
 }
 
 /**
