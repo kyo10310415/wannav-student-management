@@ -320,6 +320,13 @@ app.get('/sync-from-sheet', async (c) => {
       });
     }
     
+    // A blank or malformed source is not an authoritative request to remove lessons.
+    if (!Array.isArray(lessons) || lessons.length === 0 || lessons.some(lesson =>
+      !lesson || typeof lesson.calendar_event_id !== 'string' ||
+      !lesson.calendar_event_id.trim() || lesson.calendar_event_id.includes('\u0000'))) {
+      return c.json({ success: false, error: 'Lesson source is empty or invalid; existing lessons were preserved' }, 400);
+    }
+
     // Get student-tutor mapping from database
     const studentTutorMapping = await query(`
       SELECT 
