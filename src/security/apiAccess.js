@@ -172,6 +172,10 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
       }
       const helperDelete = method === 'DELETE' && path.match(/^\/api\/helper-requests\/(\d+)$/);
       if (helperDelete) {
+        // Validate SERIAL bounds before the crew ownership query casts this parameter.
+        if (!/^[1-9][0-9]*$/.test(helperDelete[1]) || Number(helperDelete[1]) > 2147483647) {
+          return c.json({ success: false, error: 'Invalid helper request ID' }, 400);
+        }
         let owned;
         try { owned = (await db('SELECT id FROM helper_requests WHERE id = $1 AND requesting_tutor_id = $2', [helperDelete[1], user.employee_id])).rows[0]; }
         catch { return c.json({ success: false, error: '依頼確認を利用できません' }, 503); }
