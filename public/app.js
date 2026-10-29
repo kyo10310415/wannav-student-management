@@ -16234,8 +16234,13 @@ function getCurrentYearMonthStr() {
 let _rlDiscordTarget = { studentId: null, studentName: null, yearMonth: null };
 
 async function openRedListDiscordModal(studentId, studentName, yearMonth) {
+  const state = beginRedListRead('discord-prepare', ['redlist-discord-modal']);
+  if (!state || currentPage !== 'red-list' || !['admin', 'leader'].includes(state.role)) return;
+  const target = { studentId, studentName, yearMonth };
+  const current = () => state.current() && _rlDiscordTarget === target;
+  document.getElementById('redlist-discord-modal').classList.add('hidden');
   clearRedListAuthenticatedImage(document.getElementById('redlist-discord-modal-img'), document.getElementById('redlist-discord-modal-img-wrap'));
-  _rlDiscordTarget = { studentId, studentName, yearMonth };
+  _rlDiscordTarget = target;
 
   // 生徒名表示
   document.getElementById('redlist-discord-modal-student').textContent =
@@ -16243,14 +16248,16 @@ async function openRedListDiscordModal(studentId, studentName, yearMonth) {
 
   // テンプレート選択肢を最新状態に更新
   if (redListMessages.length === 0) {
-    await loadRedListMessages(true); // silent
+    if (!await loadRedListMessages(true)) return;
   }
+  if (!current()) return;
   populateRedListDiscordSelect();
 
   // 送信者選択肢を最新状態に更新
   if (redListSenders.length === 0) {
-    await loadRedListSenders(true); // silent
+    if (!await loadRedListSenders(true)) return;
   }
+  if (!current()) return;
   populateRedListSenderSelect();
 
   // テキストエリア・画像・送信者をリセット
@@ -16402,25 +16409,32 @@ async function sendRedListDiscordMessage() {
 // ═══════════════════════════════════════════════════════════════
 
 async function loadRedListMessages(silent = false) {
-  const loadingEl  = document.getElementById('redlist-messages-loading');
-  const contentEl  = document.getElementById('redlist-messages-content');
+  const state = beginRedListRead('messages', ['redlist-messages-loading', 'redlist-messages-content']);
+  if (!state || currentPage !== 'red-list') return false;
+  const loadingEl = document.getElementById('redlist-messages-loading');
+  const contentEl = document.getElementById('redlist-messages-content');
   if (!silent && loadingEl) loadingEl.classList.remove('hidden');
 
   try {
     const res = await axios.get(`${API_BASE}/api/red-list/messages`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!state.current()) return false;
     if (res.data.success) {
       redListMessages = res.data.data;
-      if (!silent) renderRedListMessages();
+      if (!silent || currentRedListTab === 'messages') renderRedListMessages();
+      return true;
     }
-  } catch (e) {
-    console.error('loadRedListMessages error:', e);
+    return false;
+  } catch {
+    if (!state.current()) return false;
+    console.error('Red list messages load failed');
     if (!silent && contentEl) {
       contentEl.innerHTML = '<div class="text-center py-8 text-red-600">読み込みに失敗しました</div>';
     }
+    return false;
   } finally {
-    if (!silent && loadingEl) loadingEl.classList.add('hidden');
+    if (state.current() && loadingEl) loadingEl.classList.add('hidden');
   }
 }
 
@@ -16452,7 +16466,7 @@ function renderRedListMessages() {
               <h4 class="font-semibold text-gray-800 text-sm">${escapeHtml(m.title)}</h4>
               ${imgBadge}
             </div>
-            <p class="text-xs text-gray-400 mt-0.5">${created} 作成 ／ ${m.created_by || '-'}</p>
+            <p class="text-xs text-gray-400 mt-0.5">${created} 作成 ／ ${escapeHtml(String(m.created_by || '-'))}</p>
             <p class="text-sm text-gray-600 mt-2 whitespace-pre-wrap line-clamp-3">${escapeHtml(m.content)}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
@@ -16712,25 +16726,32 @@ async function executeRedListTestSend() {
 // ═══════════════════════════════════════════════════════════════
 
 async function loadRedListSenders(silent = false) {
+  const state = beginRedListRead('senders', ['redlist-senders-loading', 'redlist-senders-content']);
+  if (!state || currentPage !== 'red-list') return false;
   const loadingEl = document.getElementById('redlist-senders-loading');
   const contentEl = document.getElementById('redlist-senders-content');
   if (!silent && loadingEl) loadingEl.classList.remove('hidden');
 
   try {
     const res = await axios.get(`${API_BASE}/api/red-list/senders`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!state.current()) return false;
     if (res.data.success) {
       redListSenders = res.data.data;
-      if (!silent) renderRedListSenders();
+      if (!silent || currentRedListTab === 'senders') renderRedListSenders();
+      return true;
     }
-  } catch (e) {
-    console.error('loadRedListSenders error:', e);
+    return false;
+  } catch {
+    if (!state.current()) return false;
+    console.error('Red list senders load failed');
     if (!silent && contentEl) {
       contentEl.innerHTML = '<div class="text-center py-8 text-red-600">読み込みに失敗しました</div>';
     }
+    return false;
   } finally {
-    if (!silent && loadingEl) loadingEl.classList.add('hidden');
+    if (state.current() && loadingEl) loadingEl.classList.add('hidden');
   }
 }
 
