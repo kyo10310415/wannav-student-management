@@ -105,12 +105,13 @@ test('Sheet provider failure keeps the existing cache response and performs no D
 });
 
 test('Sheet mapping and deletion failures never expose provider errors while preserving partial-success behavior', async () => {
-  const failed = await fixture({ query: async () => { throw secretError(); } });
+  const sheet = async () => [lesson('valid-source', 'fixture-valid', 'synthetic@example.test')];
+  const failed = await fixture({ sheet, query: async () => { throw secretError(); } });
   const response = await failed.app.request('/sync-from-sheet');
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { success: false, error: 'Failed to sync lessons from sheet' });
   privateLogs(failed);
-  const cleanup = await fixture({ query: async sql => {
+  const cleanup = await fixture({ sheet, query: async sql => {
     if (sql === 'SELECT calendar_event_id FROM lessons') throw secretError();
     return { rows: [] };
   } });

@@ -2285,39 +2285,45 @@ function formatDateForMonthInput(dateStr) {
 /**
  * Update PRO plan start date for a student
  */
-async function updateProPlanStartDate(studentId, monthValue) {
+const proPlanPendingWrites = new Set();
+async function updateProPlanStartDate(studentId, monthValue, input) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'students' ||
+      typeof studentId !== 'string' || !studentId || !input || input.disabled || !root.contains(input) ||
+      input.dataset.studentProPlanId !== studentId || input.value !== monthValue || typeof monthValue !== 'string' ||
+      (monthValue && !/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(monthValue))) return;
+  const student = getFilteredStudents().find(row => row.student_id === studentId);
+  if (!student) return;
+  if (proPlanPendingWrites.has(studentId)) return;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role, notionName = currentUser.notion_name;
+  const previous = student.pro_plan_start_date, previousMonths = student.pro_plan_continued_months, tutor = student.homeroom_tutor;
+  const current = () => sessionToken === token && currentUser?.id === id && currentUser?.role === role && currentUser?.notion_name === notionName &&
+    currentPage === 'students' && document.getElementById('content') === root && root.contains(input) && input.value === monthValue &&
+    input.dataset.studentProPlanId === studentId && getFilteredStudents().includes(student) && student.student_id === studentId &&
+    student.homeroom_tutor === tutor && student.pro_plan_start_date === previous && student.pro_plan_continued_months === previousMonths;
+  const restore = () => { if (current()) input.value = previous ? formatDateForMonthInput(previous) : ''; };
+  if (!monthValue && (!confirm('PROプラン開始日をクリアしますか？') || !current())) { restore(); return; }
+  if (!current() || proPlanPendingWrites.has(studentId)) return;
+  proPlanPendingWrites.add(studentId); input.disabled = true;
   try {
-    if (!monthValue) {
-      // User cleared the field
-      if (!confirm('PROプラン開始日をクリアしますか？')) {
-        // Reload to restore previous value
-        await refreshData();
-        return;
-      }
-    }
-    
-    // Force to 1st of the month
-    const date = monthValue ? new Date(monthValue + '-01') : null;
-    const proPlanStartDate = date ? date.toISOString().split('T')[0] : null;
-    
-    const response = await axios.patch(`${API_BASE}/api/students/${studentId}/pro-plan`, {
-      proPlanStartDate: proPlanStartDate
-    }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
-    if (response.data.success) {
-      showAlert('success', 'PROプラン開始日を更新しました');
-      // Refresh to show updated continued months
-      await refreshData();
-    } else {
-      showAlert('error', 'PROプラン開始日の更新に失敗しました');
-      await refreshData();
-    }
-  } catch (error) {
-    console.error('Error updating PRO plan start date:', error);
-    showAlert('error', 'PROプラン開始日の更新中にエラーが発生しました: ' + (error.response?.data?.error || error.message));
-    await refreshData();
+    const response = await axios.patch(`${API_BASE}/api/students/${encodeURIComponent(studentId)}/pro-plan`, {
+      proPlanStartDate: monthValue ? `${monthValue}-01` : null
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    const updated = response.data.data;
+    if (!response.data.success || !updated || updated.student_id !== studentId) throw new Error('PRO update rejected');
+    student.pro_plan_start_date = updated.pro_plan_start_date;
+    student.pro_plan_continued_months = updated.pro_plan_continued_months;
+    showAlert('success', 'PROプラン開始日を更新しました');
+    renderStudentsPage();
+  } catch {
+    if (!current()) return;
+    console.error('PRO plan update failed');
+    showAlert('error', 'PROプラン開始日の更新に失敗しました');
+    restore();
+  } finally {
+    proPlanPendingWrites.delete(studentId);
+    if (document.getElementById('content') === root && root.contains(input)) input.disabled = false;
   }
 }
 
@@ -2893,42 +2899,34 @@ function renderStudentsPage() {
 }
 
 // Load Wanami usage data for all visible students (batch mode with cache)
+let wanamiBatchReadGeneration = 0;
 async function loadWanamiUsageDataBatch() {
+  const generation = ++wanamiBatchReadGeneration, root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'students') return;
+  const cells = Array.from(root.querySelectorAll('.wanami-usage-loading'));
+  if (!cells.length) return;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role, selected = [...getFilteredStudents()];
+  const studentIds = selected.map(row => row.student_id);
+  const snapshots = cells.map(cell => [cell, cell.dataset.studentId]);
+  const current = () => generation === wanamiBatchReadGeneration && sessionToken === token && currentUser?.id === id &&
+    currentUser?.role === role && currentPage === 'students' && document.getElementById('content') === root &&
+    (() => { const now = getFilteredStudents(); return now.length === selected.length && now.every((row, i) => row === selected[i] && row.student_id === studentIds[i]); })() &&
+    snapshots.every(([cell, studentId]) => root.contains(cell) && cell.dataset.studentId === studentId);
   try {
-    // Fetch all usage counts in one API call (cached for 24 hours)
     const response = await axios.get('/api/students/wanami-usage-all');
-    
-    if (!response.data.success) {
-      console.error('Failed to load Wanami usage data');
-      return;
-    }
-    
-    const usageCounts = response.data.data.usage_counts;
-    
-    // Update all loading elements
-    const loadingElements = document.querySelectorAll('.wanami-usage-loading');
-    
-    loadingElements.forEach(element => {
-      const studentId = element.getAttribute('data-student-id');
+    if (!current()) return;
+    if (!response.data.success || !response.data.data?.usage_counts || typeof response.data.data.usage_counts !== 'object') throw new Error('Wanami lookup rejected');
+    const counts = response.data.data.usage_counts;
+    snapshots.forEach(([cell, studentId]) => {
       if (!studentId) return;
-      
-      const count = usageCounts[studentId] || 0;
-      element.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" data-student-history-action="wanami" data-student-history-id="${escapeHtml(studentId).replace(/"/g, '&quot;')}">${count}回</span>`;
-      element.classList.remove('text-gray-400');
-      element.classList.remove('wanami-usage-loading');
+      const count = Object.prototype.hasOwnProperty.call(counts, studentId) ? counts[studentId] : 0;
+      cell.innerHTML = `<span class="font-semibold text-blue-600 cursor-pointer hover:underline" data-student-history-action="wanami" data-student-history-id="${escapeHtml(studentId).replace(/"/g, '&quot;')}">${escapeHtml(String(count || 0))}回</span>`;
+      cell.classList.remove('text-gray-400'); cell.classList.remove('wanami-usage-loading');
     });
-    
-    console.log(`[Wanami] Loaded usage counts for ${Object.keys(usageCounts).length} students`);
-  } catch (error) {
-    console.error('Error loading Wanami usage data:', error);
-    
-    // Fallback: show '-' for all elements
-    const loadingElements = document.querySelectorAll('.wanami-usage-loading');
-    loadingElements.forEach(element => {
-      element.textContent = '-';
-      element.classList.remove('text-gray-400');
-      element.classList.remove('wanami-usage-loading');
-    });
+  } catch {
+    if (!current()) return;
+    console.error('Wanami usage lookup failed');
+    cells.forEach(cell => { cell.textContent = '-'; cell.classList.remove('text-gray-400'); cell.classList.remove('wanami-usage-loading'); });
   }
 }
 
@@ -3086,11 +3084,13 @@ function renderStudentRowsSimple() {
 
   return filtered.map(student => {
     // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
-    const notionUrl = student.notion_url || 
-      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    const notionUrl = studentDisplayLink(student.notion_url ||
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null));
     
     // Discord URL from Discord destination spreadsheet
-    const discordUrl = student.discord_url || null;
+    const discordUrl = studentDisplayLink(student.discord_url);
+    const youtubeUrl = studentDisplayLink(formatYouTubeUrl(student.youtube_channel_id));
+    const xUrl = studentDisplayLink(formatXUrl(student.x_account_id));
     
     // Result scores (総合のみ)
     const resultOverall = student.result_overall || '-';
@@ -3118,21 +3118,21 @@ function renderStudentRowsSimple() {
           <!-- Student ID & Name -->
           <div class="col-span-2 md:col-span-2">
             <div class="text-xs text-gray-500">学籍番号 / 生徒名</div>
-            <div class="font-semibold text-sm text-gray-900">${student.student_id || '-'}</div>
-            <div class="text-xs text-gray-700">${student.name || '-'}</div>
+            <div class="font-semibold text-sm text-gray-900">${studentDisplayText(student.student_id || '-')}</div>
+            <div class="text-xs text-gray-700">${studentDisplayText(student.name || '-')}</div>
           </div>
           
           <!-- Status & Contract Plan -->
           <div>
             <div class="text-xs text-gray-500">ステータス</div>
-            <div class="text-xs text-gray-700">${student.status || '-'}</div>
-            <div class="text-xs text-gray-600">${student.contract_plan || '-'}</div>
+            <div class="text-xs text-gray-700">${studentDisplayText(student.status || '-')}</div>
+            <div class="text-xs text-gray-600">${studentDisplayText(student.contract_plan || '-')}</div>
           </div>
           
           <!-- Character Name -->
           <div>
             <div class="text-xs text-gray-500">キャラ名</div>
-            <div class="text-xs text-gray-700 truncate" title="${student.character_name || '-'}">${student.character_name || '-'}</div>
+            <div class="text-xs text-gray-700 truncate" title="${studentDisplayAttribute(student.character_name || '-')}">${studentDisplayText(student.character_name || '-')}</div>
           </div>
 
           <!-- Text Type -->
@@ -3144,7 +3144,7 @@ function renderStudentRowsSimple() {
           <!-- Tutor -->
           <div>
             <div class="text-xs text-gray-500">担任Tutor</div>
-            <div class="text-xs font-medium text-gray-700">${getTutorDisplayName(student.homeroom_tutor)}</div>
+            <div class="text-xs font-medium text-gray-700">${studentDisplayText(getTutorDisplayName(student.homeroom_tutor))}</div>
           </div>
           
           <!-- Links -->
@@ -3153,9 +3153,9 @@ function renderStudentRowsSimple() {
             <div class="flex gap-1">
               ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notion"><i class="fas fa-file-alt text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-sm"></i></span>'}
               ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discord"><i class="fab fa-discord text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-sm"></i></span>'}
-              ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-sm"></i></span>'}
-              ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-sm"></i></span>'}
-              ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-sm"></i></span>'}
+              ${youtubeUrl ? `<a href="${youtubeUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTube"><i class="fab fa-youtube text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-sm"></i></span>'}
+              ${xUrl ? `<a href="${xUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X"><i class="fab fa-twitter text-sm"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-sm"></i></span>'}
+              ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${encodeURIComponent(student.student_id)}&amp;month=${encodeURIComponent(getPreviousMonth())}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルト"><i class="fas fa-chart-bar text-sm"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-sm"></i></span>'}
               ${student.student_id ? `<button data-student-history-action="vq" data-student-history-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-purple-600 transition" title="VQ診断履歴"><i class="fas fa-clipboard-check text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-clipboard-check text-sm"></i></span>'}
               ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-sm"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-sm"></i></span>'}
             </div>
@@ -3168,7 +3168,7 @@ function renderStudentRowsSimple() {
           <div class="${rowBgColor} rounded p-1">
             <div class="text-xs text-gray-600">進捗</div>
             <div class="text-xs font-semibold ${getLessonProgressClass(student.lesson_progress)}">
-              ${student.lesson_progress === 'Proプラン' ? 'Pro' : (student.lesson_progress ? `L${student.lesson_progress}` : '-')}
+              ${studentDisplayText(student.lesson_progress === 'Proプラン' ? 'Pro' : (student.lesson_progress ? `L${student.lesson_progress}` : '-'))}
             </div>
           </div>
           
@@ -3184,13 +3184,13 @@ function renderStudentRowsSimple() {
           <!-- Start Date -->
           <div class="bg-gray-50 rounded p-1">
             <div class="text-xs text-gray-600">開始</div>
-            <div class="text-xs text-gray-700">${lessonStartDate}</div>
+            <div class="text-xs text-gray-700">${studentDisplayText(lessonStartDate)}</div>
           </div>
           
           <!-- Continued Months -->
           <div class="bg-blue-50 rounded p-1">
             <div class="text-xs text-gray-600">継続</div>
-            <div class="text-xs font-semibold text-blue-600">${continuedMonths}月</div>
+            <div class="text-xs font-semibold text-blue-600">${studentDisplayText(continuedMonths)}月</div>
           </div>
           
           <!-- Red List -->
@@ -3198,7 +3198,7 @@ function renderStudentRowsSimple() {
             <div class="text-xs text-gray-600">
               <i class="fas fa-exclamation-triangle text-red-600 text-xs"></i>
             </div>
-            <div class="red-list-loading text-gray-400 text-xs" data-student-id="${student.student_id}">
+            <div class="red-list-loading text-gray-400 text-xs" data-student-id="${studentDisplayAttribute(student.student_id)}">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
           </div>
@@ -3207,8 +3207,8 @@ function renderStudentRowsSimple() {
           <div class="bg-purple-50 rounded p-1">
             <div class="text-xs text-gray-600">PRO</div>
             <input type="month" 
-                   value="${student.pro_plan_start_date ? formatDateForMonthInput(student.pro_plan_start_date) : ''}"
-                   onchange="updateProPlanStartDate('${student.student_id}', this.value)"
+                   value="${studentDisplayAttribute(student.pro_plan_start_date ? formatDateForMonthInput(student.pro_plan_start_date) : '')}"
+                   data-student-pro-plan-id="${studentDisplayAttribute(student.student_id)}"
                    class="w-full px-1 py-0.5 border border-purple-300 rounded text-xs text-purple-700 font-semibold focus:ring-1 focus:ring-purple-500"
                    placeholder="-">
           </div>
@@ -3216,27 +3216,27 @@ function renderStudentRowsSimple() {
           <!-- PRO Plan Months -->
           <div class="bg-purple-50 rounded p-1">
             <div class="text-xs text-gray-600">PRO月</div>
-            <div class="text-xs font-semibold text-purple-700">${student.pro_plan_continued_months ? student.pro_plan_continued_months + '月' : '-'}</div>
+            <div class="text-xs font-semibold text-purple-700">${studentDisplayText(student.pro_plan_continued_months ? student.pro_plan_continued_months + '月' : '-')}</div>
           </div>
           
           <!-- Result Overall -->
           <div class="bg-gray-50 rounded p-1">
             <div class="text-xs text-gray-600">評価</div>
-            <div class="text-xs font-semibold ${resultOverallColor}">${resultOverall}</div>
+            <div class="text-xs font-semibold ${resultOverallColor}">${studentDisplayText(resultOverall)}</div>
           </div>
           
           <!-- Wanami Usage -->
           <div class="bg-gray-50 rounded p-1">
             <div class="text-xs text-gray-600">わなみ</div>
             <div class="text-xs">
-              <span class="wanami-usage-loading text-gray-400" data-student-id="${student.student_id}">...</span>
+              <span class="wanami-usage-loading text-gray-400" data-student-id="${studentDisplayAttribute(student.student_id)}">...</span>
             </div>
           </div>
           
           <!-- Absence Count -->
           <div class="bg-gray-50 rounded p-1">
             <div class="text-xs text-gray-600">欠席</div>
-            <div class="text-xs font-semibold ${absenceColorClass}">${absenceCount}</div>
+            <div class="text-xs font-semibold ${absenceColorClass}">${studentDisplayText(absenceCount)}</div>
           </div>
           
           <!-- Survey Status (hidden) -->
@@ -3244,7 +3244,7 @@ function renderStudentRowsSimple() {
             <div class="text-xs text-gray-600">
               <i class="fas fa-clipboard-check text-blue-600 text-xs"></i>
             </div>
-            <div class="survey-stats-loading text-gray-400 text-xs" data-student-id="${student.student_id}">
+            <div class="survey-stats-loading text-gray-400 text-xs" data-student-id="${studentDisplayAttribute(student.student_id)}">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
           </div>
@@ -3254,7 +3254,7 @@ function renderStudentRowsSimple() {
             <div class="text-xs text-gray-600">
               <i class="fas fa-dice text-purple-600 text-xs"></i>
             </div>
-            <div class="roulette-result-loading text-gray-400 text-xs" data-student-id="${student.student_id}">
+            <div class="roulette-result-loading text-gray-400 text-xs" data-student-id="${studentDisplayAttribute(student.student_id)}">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
           </div>
@@ -3263,6 +3263,17 @@ function renderStudentRowsSimple() {
     `;
   }).join('');
 }
+
+function handleStudentProPlanChange(event) {
+  const input = event.target?.closest?.('input[data-student-pro-plan-id]');
+  if (!input || input.disabled || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'students' || !document.getElementById('content')?.contains(input)) return;
+  const studentId = input.dataset.studentProPlanId;
+  if (!studentId || !getFilteredStudents().some(student => String(student.student_id) === studentId)) return;
+  return updateProPlanStartDate(studentId, input.value, input);
+}
+
+document.addEventListener('change', handleStudentProPlanChange);
 
 // ========== Tutors Page ==========
 

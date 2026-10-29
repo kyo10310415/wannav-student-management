@@ -1127,3 +1127,13 @@ PRO開始日更新のJSON本文は256KiBまでです。認証・crew担当確認
 日別/予約一覧の2rendererでは生徒名・キャラクター名・進捗・評価・時間等をテキスト/属性に応じてescapeし、Notion/Discord/Meet/SNSリンクをHTTP(S)だけに限定します。固定評価リンクの学籍番号/月はqueryencodeします。正常HTTP(S)リンクは維持し、専用schemeや不正URLはリンクを表示しません。ドメイン許可リストは追加していません。外部Sheets/Notion/Calendar値を編集できる条件下の経路として評価し、crewがこれら全てを直接保存できるとは判定していません。
 
 renderStudentRowsSimpleのカード一覧は同種の未修正表示が残るため、次の優先確認対象です。2rendererの修正をアプリ全体の保存表示対策完了とは扱いません。停止中rouletteは共有行属性のescapeのみで、機能自体は監査/修正件数に含めません。
+
+## 生徒カード・PRO更新・同期元保護（2026-10-29、第184〜188工程）
+
+カード一覧の保存文字列・title・data属性を既存表示helperでescapeし、Notion/Discord/SNSはHTTP(S)だけをリンクにします。固定評価リンクの学籍番号/月はqueryencode。PRO開始月のinline handler1箇所を固定changeへ移し、現在の生徒画面・認証・DOM・filtered cacheを照合して実inputを更新処理へ渡します。停止中rouletteは共通属性escapeだけで機能検証対象に含めません。
+
+PRO更新は認証・role・input/対象cache・既存値・画面を照合し、同一生徒の多重送信を抑止。成功時はAPI返却のPRO開始日/継続月だけを現cacheへ反映し、生徒画面を再描画します。取消/失敗時も全件同期やglobal event依存のrefreshDataを呼びません。日付クリア確認、月初保存、既存のcrew本人認可はサーバー側で維持します。ログイン応答にnotion_nameが無いcrewをUIで拒否する新条件は加えていません。別端末の冪等性と送信済更新の取消は対象外です。
+
+わなみ利用数のbatch readは世代・認証・現在画面・選択生徒cache・セルDOMを照合し、旧応答を新画面へ書き込みません。件数はテキスト表示し、prototype名と同じIDもown propertyで扱います。既存の参照範囲と履歴入口を維持します。
+
+レッスンのSheets同期は取得配列が空、またはcalendar_event_idが空/非文字列/NULを含む場合、業務SQL前に400で停止し既存レッスンを保持します。空シートを全削除指示として扱わない意図した運用変更です。Google取得例外の既存fallback、通常のadmin/leader同期と有効な取得元での既存削除動作は維持。crewのGET/HEAD拒否も再検証しました。非空の部分取得、途中DB失敗時のrollback、削除率閾値の一般化は追加していません。正当な全件消去もこの同期からは実行できません。

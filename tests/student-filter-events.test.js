@@ -33,7 +33,7 @@ test('student filter controls migrate local controls only and keep all fixed col
  for(const name of ['toggleSort','toggleFilter','toggleSurveyFilter','clearAllFilters','closeFilterModal','applyFilter','clearFilter','filterOptions','updateSearchInput'])assert.equal(new RegExp('on(?:click|change|input)="'+name+'\\(').test(app),false);
  assert.ok(app.includes('data-student-filter-backdrop'));
  assert.ok(app.includes('onclick="resetTestRouletteResults()"'));
- assert.ok(app.includes('onclick="refreshData()"'));assert.ok(app.includes('onchange="updateProPlanStartDate('));
+ assert.ok(app.includes('onclick="refreshData()"'));assert.ok(app.includes('data-student-pro-plan-id='));assert.equal(app.includes('onchange="updateProPlanStartDate('),false);
  const f=fixture();assert.deepEqual(f.listeners.map(l=>l.type),['click','input','change']);
  for(const col of ['student_id','name','status','contract_plan','character_name','homeroom_tutor','lesson_progress','lesson_start_date','continued_months','pro_plan_start_date','pro_plan_continued_months','result_overall','wanami_usage','result_absence'])f.click(f.button('sort',col));
  assert.equal(f.calls.length,14);
