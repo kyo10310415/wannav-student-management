@@ -7158,7 +7158,8 @@ function renderLeaderFilterOptions() {
   let html = `<option value="all" ${selectedLeader === 'all' ? 'selected' : ''}>すべてのリーダー</option>`;
   leaders.forEach(leader => {
     const isSelected = leader === selectedLeader ? 'selected' : '';
-    html += `<option value="${leader}" ${isSelected}>${leader}</option>`;
+    const text = escapeHtml(String(leader));
+    html += `<option value="${text.replace(/"/g, '&quot;')}" ${isSelected}>${text}</option>`;
   });
   
   return html;
@@ -7183,7 +7184,8 @@ function renderAttendeeFilterOptions() {
   let html = `<option value="all" ${selectedAttendee === 'all' ? 'selected' : ''}>すべての参加者</option>`;
   attendees.forEach(attendee => {
     const isSelected = attendee === selectedAttendee ? 'selected' : '';
-    html += `<option value="${attendee}" ${isSelected}>${attendee}</option>`;
+    const text = escapeHtml(String(attendee));
+    html += `<option value="${text.replace(/"/g, '&quot;')}" ${isSelected}>${text}</option>`;
   });
   
   return html;
