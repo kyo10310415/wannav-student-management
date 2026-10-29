@@ -7401,6 +7401,7 @@ function renderSchedulesList() {
  * Render schedules calendar view
  */
 function renderSchedulesCalendar() {
+  const text = value => escapeHtml(String(value ?? ''));
   const filteredSchedules = getFilteredSchedules();
   
   // Get days in selected month
@@ -7463,9 +7464,9 @@ function renderSchedulesCalendar() {
                 const colorClass = keywordColors[keyword] || 'bg-gray-200 border-gray-400';
                 
                 return `
-                  <div class="text-xs p-1 rounded border ${colorClass} truncate" title="${schedule.title || ''}">
-                    <div class="font-semibold">${time}</div>
-                    <div>${keyword}</div>
+                  <div class="text-xs p-1 rounded border ${colorClass} truncate" title="${text(schedule.title || '').replace(/"/g, '&quot;')}">
+                    <div class="font-semibold">${text(time)}</div>
+                    <div>${text(keyword)}</div>
                   </div>
                 `;
               }).join('')}
@@ -7481,11 +7482,12 @@ function renderSchedulesCalendar() {
  * Render attendance statistics
  */
 function renderAttendanceStatistics() {
+  const text = value => escapeHtml(String(value ?? ''));
   // Get filtered schedules
   const filteredSchedules = getFilteredSchedules();
   
   // Count attendance by tutor and keyword
-  const attendanceMap = {};
+  const attendanceMap = Object.create(null);
   
   filteredSchedules.forEach(schedule => {
     const keyword = schedule.matched_keyword || '不明';
@@ -7527,7 +7529,7 @@ function renderAttendanceStatistics() {
   return sortedAttendees.map(([name, counts]) => {
     return `
       <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${name}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${text(name)}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['ロープレ']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['1on1']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['チームMTG']}回</td>
@@ -7959,6 +7961,7 @@ async function changeAbsenceStatsMonth(offset) {
  * Render absence stats section
  */
 function renderAbsenceStatsSection() {
+  const text = value => escapeHtml(String(value ?? ''));
   const statsContainer = document.getElementById('absence-stats-container');
   if (!statsContainer) return;
   
@@ -7971,7 +7974,7 @@ function renderAbsenceStatsSection() {
     statsContainer.innerHTML = `
       <div class="text-center py-8 text-gray-500">
         <i class="fas fa-inbox text-4xl mb-2"></i>
-        <p>${selectedStatsYear}年${selectedStatsMonth}月のデータがありません</p>
+        <p>${text(selectedStatsYear)}年${text(selectedStatsMonth)}月のデータがありません</p>
       </div>
     `;
     return;
@@ -8003,11 +8006,11 @@ function renderAbsenceStatsSection() {
           
           return `
             <tr class="hover:bg-gray-50">
-              <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${stat.tutor_name}</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm text-gray-600">${stat.scheduled_count || 0}回</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${cancelClass}">${stat.cancel_count}回</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${rescheduleClass}">${stat.reschedule_count}回</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${totalClass}">${stat.total_count}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${text(stat.tutor_name)}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm text-gray-600">${text(stat.scheduled_count || 0)}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${cancelClass}">${text(stat.cancel_count)}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${rescheduleClass}">${text(stat.reschedule_count)}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${totalClass}">${text(stat.total_count)}回</td>
               <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${attendanceRateClass}">${attendanceRate.toFixed(1)}%</td>
             </tr>
           `;
