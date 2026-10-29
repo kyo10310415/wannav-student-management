@@ -450,49 +450,51 @@ function getRoleLabel(role) {
 // Load initial data
 async function loadInitialData() {
   try {
-    // Sync data from Notion (Google API 一時障害時はスキップしてDBの既存データで続行)
-    try {
-      await axios.get(`${API_BASE}/api/students/sync`);
-    } catch (syncError) {
-      if (syncError.response && syncError.response.data) {
-        const errorData = syncError.response.data;
-        if (errorData.error && errorData.error.includes('Cache spreadsheet is empty')) {
-          alert('⚠️ キャッシュシートが空です\n\nNotionからのデータ同期が必要です。\nキャッシュ更新スクリプトを実行してください。');
-          throw syncError;
+    if (['admin', 'leader'].includes(currentUser?.role)) {
+      // Sync data from Notion (Google API 一時障害時はスキップしてDBの既存データで続行)
+      try {
+        await axios.get(`${API_BASE}/api/students/sync`);
+      } catch (syncError) {
+        if (syncError.response && syncError.response.data) {
+          const errorData = syncError.response.data;
+          if (errorData.error && errorData.error.includes('Cache spreadsheet is empty')) {
+            alert('⚠️ キャッシュシートが空です\n\nNotionからのデータ同期が必要です。\nキャッシュ更新スクリプトを実行してください。');
+            throw syncError;
+          }
         }
+        const status = syncError.response ? syncError.response.status : 'network';
+        console.warn(`⚠️ students/sync failed (HTTP ${status}) — continuing with existing DB data`);
       }
-      const status = syncError.response ? syncError.response.status : 'network';
-      console.warn(`⚠️ students/sync failed (HTTP ${status}) — continuing with existing DB data`);
-    }
-    
-    try {
-      const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
-      console.log('Tutor sync result:', tutorSyncRes.data);
-      if (tutorSyncRes.data && tutorSyncRes.data.deleted > 0) {
-        console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+
+      try {
+        const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+        console.log('Tutor sync completed');
+        if (tutorSyncRes.data && tutorSyncRes.data.deleted > 0) {
+          console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+        }
+      } catch (tutorSyncError) {
+        const status = tutorSyncError.response ? tutorSyncError.response.status : 'network';
+        console.warn(`⚠️ tutors/sync failed (HTTP ${status}) — continuing with existing DB data`);
       }
-    } catch (tutorSyncError) {
-      const status = tutorSyncError.response ? tutorSyncError.response.status : 'network';
-      console.warn(`⚠️ tutors/sync failed (HTTP ${status}) — continuing with existing DB data`);
+
+      // Sync lessons from Google Sheets (populated by GAS)
+      try {
+        console.log('Syncing lessons from Google Sheets...');
+        const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
+        console.log('Sheet sync completed');
+      } catch (lessonSyncError) {
+        // Google API 一時障害時はスキップして続行（DBの既存データを使用）
+        const status = lessonSyncError.response ? lessonSyncError.response.status : 'network';
+        console.warn(`⚠️ lessons/sync-from-sheet failed (HTTP ${status}) — continuing with existing DB data`);
+      }
     }
-    
-    // Sync lessons from Google Sheets (populated by GAS)
-    try {
-      console.log('Syncing lessons from Google Sheets...');
-      const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
-      console.log('Sheet sync result:', sheetSyncRes.data);
-    } catch (lessonSyncError) {
-      // Google API 一時障害時はスキップして続行（DBの既存データを使用）
-      const status = lessonSyncError.response ? lessonSyncError.response.status : 'network';
-      console.warn(`⚠️ lessons/sync-from-sheet failed (HTTP ${status}) — continuing with existing DB data`);
-    }
-    
+
     // Load data
     const [studentsRes, tutorsRes] = await Promise.all([
       axios.get(`${API_BASE}/api/students`),
       axios.get(`${API_BASE}/api/tutors`)
     ]);
-    
+
     students = studentsRes.data.data;
     tutors = tutorsRes.data.data;
     
@@ -1813,6 +1815,19 @@ function renderStatistics() {
 }
 
 // Render student rows
+function studentDisplayText(value) {
+  return escapeHtml(String(value ?? ''));
+}
+function studentDisplayAttribute(value) {
+  return studentDisplayText(value).replace(/"/g, '&quot;');
+}
+function studentDisplayLink(value) {
+  try {
+    const url = new URL(String(value ?? ''));
+    return ['http:', 'https:'].includes(url.protocol) ? studentDisplayAttribute(url.href) : null;
+  } catch { return null; }
+}
+
 function renderStudentRows() {
   const filteredStudents = getFilteredStudents();
   
@@ -1835,11 +1850,13 @@ function renderStudentRows() {
       : '-';
     
     // Use pre-fetched Notion URL from cache (or generate from page ID as fallback)
-    const notionUrl = student.notion_url || 
-      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    const notionUrl = studentDisplayLink(student.notion_url ||
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null));
     
     // Discord URL from Discord destination spreadsheet
-    const discordUrl = student.discord_url || null;
+    const discordUrl = studentDisplayLink(student.discord_url);
+    const youtubeUrl = studentDisplayLink(formatYouTubeUrl(student.youtube_channel_id));
+    const xUrl = studentDisplayLink(formatXUrl(student.x_account_id));
     
     // Payment status with color coding
     // Show payment status for the month BEFORE the displayed month
@@ -1884,30 +1901,30 @@ function renderStudentRows() {
     
     return `
       <tr class="hover:bg-gray-50 ${colorClass}">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${studentDisplayText(student.student_id || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
           <div class="flex items-center gap-2">
-            <span>${student.name || '-'}</span>
-            <span class="roulette-marker-loading" data-student-id="${student.student_id}"></span>
+            <span>${studentDisplayText(student.name || '-')}</span>
+            <span class="roulette-marker-loading" data-student-id="${studentDisplayAttribute(student.student_id)}"></span>
           </div>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.status || '-'}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${student.contract_plan || '-'}</td>
-        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(student.status || '-')}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(student.contract_plan || '-')}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${studentDisplayAttribute(student.character_name || '-')}">${studentDisplayText(student.character_name || '-')}</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">${renderStudentTextTypeBadge(student.text_type)}</td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${paymentStatus}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(getTutorDisplayName(student.homeroom_tutor))}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${studentDisplayText(getLessonProgressDisplay(student.lesson_progress))}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-xs text-center ${paymentColorClass}">${studentDisplayText(paymentStatus)}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold">
           <span class="px-2 py-1 rounded-full text-xs ${getLessonCountBadgeColor(lessonCount)}">
-            ${lessonCount}回
+            ${studentDisplayText(lessonCount)}回
           </span>
         </td>
         <td class="px-4 py-3 text-sm text-gray-600" style="max-width: 180px;">
-          <div class="overflow-x-auto whitespace-nowrap text-xs">${datesStr}</div>
+          <div class="overflow-x-auto whitespace-nowrap text-xs">${studentDisplayText(datesStr)}</div>
         </td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
-          <div class="lesson-completion-loading" data-student-id="${student.student_id}">
+          <div class="lesson-completion-loading" data-student-id="${studentDisplayAttribute(student.student_id)}">
             <i class="fas fa-spinner fa-spin text-gray-400"></i>
           </div>
         </td>
@@ -1915,9 +1932,9 @@ function renderStudentRows() {
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-            ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-            ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
-            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+            ${youtubeUrl ? `<a href="${youtubeUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+            ${xUrl ? `<a href="${xUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${encodeURIComponent(student.student_id)}&amp;month=${encodeURIComponent(getPreviousMonth())}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
             ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
@@ -2343,7 +2360,8 @@ async function refreshData() {
   
   try {
     // Tutor同期を個別に実行して結果を取得
-    const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+    const tutorSyncRes = ['admin', 'leader'].includes(currentUser?.role)
+      ? await axios.get(`${API_BASE}/api/tutors/sync`) : null;
     
     // その他のデータ同期
     await loadInitialData();
@@ -2351,7 +2369,7 @@ async function refreshData() {
     
     // 同期結果を通知
     let message = 'データを更新しました';
-    if (tutorSyncRes.data.deleted > 0) {
+    if (tutorSyncRes?.data?.deleted > 0) {
       message += `\n\n⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたため、DBからも削除されました`;
     }
     alert(message);
@@ -5314,11 +5332,13 @@ function renderTodayStudentRows(dayStudents, displayDate) {
 
   return dayStudents.map(student => {
     // Use pre-fetched Notion URL from cache
-    const notionUrl = student.notion_url || 
-      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null);
+    const notionUrl = studentDisplayLink(student.notion_url ||
+      (student.notion_page_id ? `https://www.notion.so/${student.notion_page_id.replace(/-/g, '')}` : null));
     
     // Discord URL
-    const discordUrl = student.discord_url || null;
+    const discordUrl = studentDisplayLink(student.discord_url);
+    const youtubeUrl = studentDisplayLink(formatYouTubeUrl(student.youtube_channel_id));
+    const xUrl = studentDisplayLink(formatXUrl(student.x_account_id));
     
     // Result overall
     const resultOverall = student.result_overall || '-';
@@ -5338,7 +5358,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
     const displayMonth = displayDate.getMonth() + 1;
     const dateFormatted = `${displayMonth}/${displayDay}`;
     const dayLesson = studentLessonDates.find(d => d.formatted === dateFormatted);
-    const meetLink = dayLesson?.meet_link || null;
+    const meetLink = studentDisplayLink(dayLesson?.meet_link);
     const lessonTime = dayLesson?.time || null;
     
     // Format date for API (YYYY-MM-DD)
@@ -5349,10 +5369,10 @@ function renderTodayStudentRows(dayStudents, displayDate) {
     
     return `
       <tr class="hover:bg-gray-50 ${isFirstLesson ? 'bg-yellow-50' : ''}">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${student.student_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${studentDisplayText(student.student_id || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
           <div class="flex items-center gap-2">
-            <span>${student.name || '-'}</span>
+            <span>${studentDisplayText(student.name || '-')}</span>
             ${isFirstLesson ? `
               <span class="inline-flex items-center px-2 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg animate-pulse">
                 <i class="fas fa-star mr-1"></i>本日リザルトお伝え
@@ -5360,14 +5380,14 @@ function renderTodayStudentRows(dayStudents, displayDate) {
             ` : ''}
           </div>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${getTutorDisplayName(student.homeroom_tutor)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${lessonTime || '-'}</td>
-        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${student.character_name || '-'}">${student.character_name || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(getTutorDisplayName(student.homeroom_tutor))}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold text-green-600">${studentDisplayText(lessonTime || '-')}</td>
+        <td class="px-3 py-3 text-sm text-gray-600" style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${studentDisplayAttribute(student.character_name || '-')}">${studentDisplayText(student.character_name || '-')}</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">${renderStudentTextTypeBadge(student.text_type)}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${getLessonProgressDisplay(student.lesson_progress)}</td>
-        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${continuedMonths}ヶ月</td>
-        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${resultOverall}</td>
-        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${absenceCount}回</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${getLessonProgressClass(student.lesson_progress)}">${studentDisplayText(getLessonProgressDisplay(student.lesson_progress))}</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold text-blue-600">${studentDisplayText(continuedMonths)}ヶ月</td>
+        <td class="px-2 py-3 whitespace-nowrap text-sm text-center font-semibold ${resultOverallColor}">${studentDisplayText(resultOverall)}</td>
+        <td class="px-3 py-3 whitespace-nowrap text-sm text-center font-semibold ${absenceColorClass}">${studentDisplayText(absenceCount)}回</td>
         <td class="px-3 py-3 whitespace-nowrap text-center">
           ${meetLink ? `<a href="${meetLink}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition" title="Google Meetを開く"><i class="fas fa-video mr-1"></i>Meet</a>` : '<span class="text-gray-400 text-xs">-</span>'}
         </td>
@@ -5384,9 +5404,9 @@ function renderTodayStudentRows(dayStudents, displayDate) {
           <div class="flex gap-2 justify-center">
             ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-blue-600 transition" title="Notionページを開く"><i class="fas fa-file-alt text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
             ${discordUrl ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-indigo-600 transition" title="Discordを開く"><i class="fab fa-discord text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-discord text-lg"></i></span>'}
-            ${student.youtube_channel_id ? `<a href="${formatYouTubeUrl(student.youtube_channel_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
-            ${student.x_account_id ? `<a href="${formatXUrl(student.x_account_id)}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
-            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${student.student_id}&month=${getPreviousMonth()}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
+            ${youtubeUrl ? `<a href="${youtubeUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-red-600 transition" title="YouTubeチャンネルを開く"><i class="fab fa-youtube text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-youtube text-lg"></i></span>'}
+            ${xUrl ? `<a href="${xUrl}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-black transition" title="X (Twitter)アカウントを開く"><i class="fab fa-twitter text-lg"></i></a>` : '<span class="text-gray-300"><i class="fab fa-twitter text-lg"></i></span>'}
+            ${student.student_id ? `<a href="https://vtuber-school-evaluation.onrender.com/evaluation-detail?studentId=${encodeURIComponent(student.student_id)}&amp;month=${encodeURIComponent(getPreviousMonth())}" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-orange-600 transition" title="リザルトシステムを開く"><i class="fas fa-chart-bar text-lg"></i></a>` : '<span class="text-gray-300"><i class="fas fa-chart-bar text-lg"></i></span>'}
             ${student.student_id ? `<button data-minutes-read-action="open-student" data-minutes-student-id="${escapeHtml(student.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(student.name||'').replace(/"/g, '&quot;')}" class="text-gray-600 hover:text-teal-600 transition" title="議事録"><i class="fas fa-file-alt text-lg"></i></button>` : '<span class="text-gray-300"><i class="fas fa-file-alt text-lg"></i></span>'}
           </div>
         </td>
@@ -11925,70 +11945,62 @@ async function resetTestRouletteResults() {
 /**
  * Load lesson completion status for all students in batch
  */
+let lessonCompletionReadGeneration = 0;
 async function loadLessonCompletionBatch() {
+  const generation = ++lessonCompletionReadGeneration;
+  const root = document.getElementById('content'), body = document.getElementById('student-table-body');
+  if (!root || !body || !root.contains(body) || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'reservations') return;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role;
+  const tab = currentTab, subTab = activeSubTab, tutor = selectedTutor, countFilter = reservationCountFilter;
+  const month = currentMonth.getTime(), search = studentSearchQuery;
+  const filteredStudents = getFilteredStudents(), cache = lessonDates;
+  const cells = Array.from(root.querySelectorAll('.lesson-completion-loading[data-student-id]'));
+  const datesFor = studentId => Array.isArray(lessonDates[studentId]) ? lessonDates[studentId] : [];
+  const snapshots = filteredStudents.map(student => {
+    const dates = datesFor(student.student_id);
+    return { student, studentId: student.student_id, entries: dates.map(entry => [entry, entry.date, entry.date?.getTime()]) };
+  });
+  const current = () => generation === lessonCompletionReadGeneration && sessionToken === token && currentUser?.id === id &&
+    currentUser?.role === role && currentPage === 'reservations' && document.getElementById('content') === root &&
+    document.getElementById('student-table-body') === body && root.contains(body) && currentTab === tab && activeSubTab === subTab &&
+    selectedTutor === tutor && reservationCountFilter === countFilter && currentMonth.getTime() === month && studentSearchQuery === search && lessonDates === cache && (() => {
+      const selected = getFilteredStudents();
+      return selected.length === snapshots.length && snapshots.every((snapshot, i) => selected[i] === snapshot.student && snapshot.student.student_id === snapshot.studentId &&
+        datesFor(snapshot.studentId).length === snapshot.entries.length &&
+        snapshot.entries.every(([entry, date, time], j) => datesFor(snapshot.studentId)[j] === entry && entry.date === date && date?.getTime() === time));
+    })() && cells.every(cell => root.contains(cell));
   try {
-    const filteredStudents = getFilteredStudents();
-    
-    // Build items array: for each student, get their lesson dates
     const items = [];
-    filteredStudents.forEach(student => {
-      const dates = lessonDates[student.student_id] || [];
-      dates.forEach(dateObj => {
-        // Convert Date object to YYYY-MM-DD format
-        const date = dateObj.date;
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const lessonDate = `${year}-${month}-${day}`;
-        
-        items.push({
-          studentId: student.student_id,
-          lessonDate: lessonDate
-        });
-      });
+    snapshots.forEach(({ studentId, entries }) => entries.forEach(([, date]) => {
+      const year = date.getFullYear(), month = String(date.getMonth() + 1).padStart(2, '0'), day = String(date.getDate()).padStart(2, '0');
+      items.push({ studentId, lessonDate: `${year}-${month}-${day}` });
+    }));
+    if (!items.length) return;
+    const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, { items });
+    if (!current()) return;
+    if (!response.data.success || !Array.isArray(response.data.data)) throw new Error('Completion lookup rejected');
+    const expected = new Map(), grouped = new Map();
+    items.forEach(item => {
+      if (!expected.has(item.studentId)) expected.set(item.studentId, new Set());
+      expected.get(item.studentId).add(item.lessonDate);
     });
-    
-    if (items.length === 0) {
-      console.log('[Lesson Completion] No lesson dates to check');
-      return;
-    }
-    
-    console.log(`[Lesson Completion] Checking ${items.length} lesson dates for ${filteredStudents.length} students`);
-    
-    // Call batch API
-    const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, {
-      items
+    response.data.data.forEach(result => {
+      if (!result || !expected.get(result.studentId)?.has(result.lessonDate)) return;
+      if (!grouped.has(result.studentId)) grouped.set(result.studentId, []);
+      grouped.get(result.studentId).push(result);
     });
-    
-    if (response.data.success) {
-      const results = response.data.data;
-      console.log(`[Lesson Completion] Loaded ${results.length} lesson completion records`);
-      
-      // Group results by studentId
-      const completionByStudent = {};
-      results.forEach(result => {
-        if (!completionByStudent[result.studentId]) {
-          completionByStudent[result.studentId] = [];
-        }
-        completionByStudent[result.studentId].push(result);
-      });
-      
-      // Update UI for each student
-      filteredStudents.forEach(student => {
-        const studentCompletions = completionByStudent[student.student_id] || [];
-        updateLessonCompletionDisplay(student.student_id, studentCompletions);
-      });
-    }
-  } catch (error) {
-    console.error('[Lesson Completion] Error loading lesson completion');
+    snapshots.forEach(({ studentId }) => updateLessonCompletionDisplay(studentId, grouped.get(studentId) || [], root));
+  } catch {
+    if (current()) console.error('[Lesson Completion] Error loading lesson completion');
   }
 }
 
 /**
  * Update lesson completion display for a student
  */
-function updateLessonCompletionDisplay(studentId, completions) {
-  const cell = document.querySelector(`.lesson-completion-loading[data-student-id="${studentId}"]`);
+function updateLessonCompletionDisplay(studentId, completions, root = document.getElementById('content')) {
+  const cell = root && Array.from(root.querySelectorAll('.lesson-completion-loading[data-student-id]'))
+    .find(node => node.dataset.studentId === String(studentId));
   
   if (!cell) return;
   
@@ -12026,7 +12038,6 @@ function updateLessonCompletionDisplay(studentId, completions) {
     const statusIcon = c.completed 
       ? '<i class="fas fa-check text-green-600"></i>' 
       : '<i class="fas fa-times text-red-600"></i>';
-    const statusText = c.lessonResult || '未記入';
     // Ensure lessonDate is a string and extract M/D format
     const lessonDateStr = String(c.lessonDate);
     let dateStr;
@@ -12040,7 +12051,7 @@ function updateLessonCompletionDisplay(studentId, completions) {
     }
     
     html += `<div class="text-xs text-gray-600 flex items-center justify-between gap-2">
-      <span>${dateStr}</span>
+      <span>${escapeHtml(String(dateStr))}</span>
       ${statusIcon}
     </div>`;
   });
