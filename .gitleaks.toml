@@ -8,6 +8,11 @@ regexes = ['''\d{17,20}''']
 
 # Explicit sample values only; do not exempt entire source/test directories.
 [[allowlists]]
+targetRules = ['discord-client-secret']
+# Fixed public DOM ID in the modal fixture, not a Discord credential.
+regexes = ['''^redlist-discord-booking-url-wrap$''']
+
+[[allowlists]]
 targetRules = ['curl-auth-header']
 regexes = ['''YOUR_SESSION_TOKEN''']
 
