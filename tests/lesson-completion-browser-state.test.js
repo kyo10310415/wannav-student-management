@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import{readFile}from'node:fs/promises';
-const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
+const source=(await readFile(new URL('../public/app.js',import.meta.url),'utf8')).replace(/\r\n/g,'\n');
+assert.ok(source.includes('/**\n * Load survey stats for a single student'));
 const block=source.slice(source.indexOf('let lessonCompletionReadGeneration ='),source.indexOf('/**\n * Load survey stats for a single student'));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return{promise,resolve,reject}};
 const escapeHtml=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
