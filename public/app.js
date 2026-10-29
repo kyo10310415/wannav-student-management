@@ -11936,7 +11936,6 @@ async function loadLessonCompletionBatch() {
     }
     
     console.log(`[Lesson Completion] Checking ${items.length} lesson dates for ${filteredStudents.length} students`);
-    console.log('[Lesson Completion] Sample items:', items.slice(0, 3));
     
     // Call batch API
     const response = await axios.post(`${API_BASE}/api/lesson-completion/batch`, {
@@ -11946,7 +11945,6 @@ async function loadLessonCompletionBatch() {
     if (response.data.success) {
       const results = response.data.data;
       console.log(`[Lesson Completion] Loaded ${results.length} lesson completion records`);
-      console.log('[Lesson Completion] Sample results:', results.slice(0, 3));
       
       // Group results by studentId
       const completionByStudent = {};
@@ -11964,7 +11962,7 @@ async function loadLessonCompletionBatch() {
       });
     }
   } catch (error) {
-    console.error('[Lesson Completion] Error loading lesson completion:', error);
+    console.error('[Lesson Completion] Error loading lesson completion');
   }
 }
 
