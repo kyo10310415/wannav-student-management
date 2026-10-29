@@ -1757,16 +1757,11 @@ function getTutorOptions() {
   
   // Map notion_name to tutor_name for display
   return uniqueNotionNames
-    .map(notionName => {
-      const displayName = getTutorDisplayName(notionName);
+    .map(notionName => ({ notionName, displayName: String(getTutorDisplayName(notionName)) }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'))
+    .map(({ notionName, displayName }) => {
       const isSelected = notionName === selectedTutor ? 'selected' : '';
-      return `<option value="${notionName}" ${isSelected}>${displayName}</option>`;
-    })
-    .sort((a, b) => {
-      // Sort by display name
-      const aText = a.match(/>(.*?)<\/option>/)[1];
-      const bText = b.match(/>(.*?)<\/option>/)[1];
-      return aText.localeCompare(bText, 'ja');
+      return `<option value="${studentDisplayAttribute(notionName)}" ${isSelected}>${studentDisplayText(displayName)}</option>`;
     })
     .join('');
 }
@@ -5430,10 +5425,16 @@ function renderTodayStudentRows(dayStudents, displayDate) {
 }
 
 async function showPreviousLessonTargets(studentId, lessonDate) {
+  const root = document.getElementById('content');
+  const student = students.find(item => item.student_id === studentId);
+  const displayDate = new Date(currentLessonDate);
+  const dateKey = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')}`;
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'today' || !student || lessonDate !== dateKey) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role, tutor = selectedTutor;
+  const dateValue = displayDate.getTime(), studentName = student.name || studentId;
   document.getElementById('previous-lesson-targets-modal')?.remove();
 
-  const student = students.find(item => item.student_id === studentId);
-  const studentName = student?.name || studentId;
   const modal = document.createElement('div');
   modal.id = 'previous-lesson-targets-modal';
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
@@ -5458,14 +5459,21 @@ async function showPreviousLessonTargets(studentId, lessonDate) {
     </div>
   `;
   document.body.appendChild(modal);
+  const target = document.getElementById('previous-lesson-targets-content');
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'today' && selectedTutor === tutor && new Date(currentLessonDate).getTime() === dateValue &&
+    document.getElementById('content') === root && students.includes(student) && student.student_id === studentId && (student.name || studentId) === studentName &&
+    document.getElementById('previous-lesson-targets-modal') === modal && document.body.contains(modal) &&
+    document.getElementById('previous-lesson-targets-content') === target && modal.contains(target);
 
   try {
     const response = await axios.get(
       `${API_BASE}/api/minutes/previous-context/${encodeURIComponent(studentId)}`,
-      { params: { beforeDate: lessonDate } }
+      { params: { beforeDate: lessonDate }, headers: { Authorization: `Bearer ${token}` } }
     );
+    if (!current()) return;
     const data = response.data.data;
-    const content = document.getElementById('previous-lesson-targets-content');
+    const content = target;
     if (!content) return;
 
     if (!data.hasPreviousMinutes) {
@@ -5499,13 +5507,14 @@ async function showPreviousLessonTargets(studentId, lessonDate) {
       </div>
     `;
   } catch (error) {
-    console.error('前回の悩み・小目標取得エラー:', error);
-    const content = document.getElementById('previous-lesson-targets-content');
+    if (!current()) return;
+    console.error('前回の悩み・小目標取得エラー');
+    const content = target;
     if (content) {
       content.innerHTML = `
         <div class="py-6 text-red-600">
           <i class="fas fa-exclamation-circle text-3xl"></i>
-          <p class="mt-3">${escapeHtml(error.response?.data?.error || '前回情報の取得に失敗しました')}</p>
+          <p class="mt-3">前回情報の取得に失敗しました</p>
         </div>
       `;
     }
