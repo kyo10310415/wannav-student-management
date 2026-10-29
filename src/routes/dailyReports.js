@@ -4,6 +4,11 @@ import axios from 'axios';
 
 const app = new Hono();
 
+async function readDailyReportBody(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
+  catch { return null; }
+}
+
 // ─────────────────────────────────────────────
 // GET /api/daily-reports/tutors
 // アクティブTutor一覧＋最新日報提出日（役職問わず全員）
@@ -80,7 +85,9 @@ app.get('/reminder-setting', async (c) => {
 // ─────────────────────────────────────────────
 app.put('/reminder-setting', async (c) => {
   try {
-    const { enabled } = await c.req.json();
+    const body = await readDailyReportBody(c);
+    if (!body || typeof body.enabled !== 'boolean') return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { enabled } = body;
     await query(
       `UPDATE system_settings SET setting_value = $1, updated_at = NOW()
        WHERE setting_key = 'daily_report_reminder_enabled'`,
@@ -179,9 +186,11 @@ app.get('/tutor/:tutorId', async (c) => {
 // ─────────────────────────────────────────────
 app.post('/', async (c) => {
   try {
-    const { tutor_id, report_date, content } = await c.req.json();
+    const body = await readDailyReportBody(c);
+    if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { tutor_id, report_date, content } = body;
 
-    if (!tutor_id || !report_date || !content?.trim()) {
+    if (!tutor_id || !report_date || typeof content !== 'string' || !content.trim()) {
       return c.json({ success: false, error: '必須項目が不足しています' }, 400);
     }
 
@@ -226,10 +235,12 @@ app.delete('/:id', async (c) => {
 app.post('/:id/comments', async (c) => {
   const { id } = c.req.param();
   try {
-    const { content } = await c.req.json();
+    const body = await readDailyReportBody(c);
+    if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { content } = body;
     const user_id = c.get('authenticatedUser').id;
 
-    if (!user_id || !content?.trim()) {
+    if (!user_id || typeof content !== 'string' || !content.trim()) {
       return c.json({ success: false, error: '必須項目が不足しています' }, 400);
     }
 

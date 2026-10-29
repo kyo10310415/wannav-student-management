@@ -4,6 +4,11 @@ import { notifyHelperRequestCreated } from '../services/helperNotificationServic
 
 const app = new Hono();
 
+async function readHelperRequestBody(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
+  catch { return null; }
+}
+
 // Get all helper requests
 app.get('/', async (c) => {
   try {
@@ -54,7 +59,8 @@ app.get('/:id', async (c) => {
 // Create new helper request
 app.post('/', async (c) => {
   try {
-    const data = await c.req.json();
+    const data = await readHelperRequestBody(c);
+    if (!data) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
     const actor = c.get('authenticatedUser');
     if (actor.role === 'crew') {
       data.requesting_tutor_id = actor.employee_id;
@@ -103,7 +109,8 @@ app.post('/', async (c) => {
 app.post('/:id/accept', async (c) => {
   try {
     const { id } = c.req.param();
-    const submitted = await c.req.json();
+    const submitted = await readHelperRequestBody(c);
+    if (!submitted) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
     const actor = c.get('authenticatedUser');
     const tutor_id = actor.role === 'crew' ? actor.employee_id : submitted.tutor_id;
     const tutor_name = actor.role === 'crew' ? actor.tutor_name : submitted.tutor_name;

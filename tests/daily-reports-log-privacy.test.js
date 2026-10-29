@@ -26,6 +26,22 @@ async function fixture(query, post = async () => ({})) {
 const json = (body, method = 'POST') => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const safe = f => assert.equal(f.logs.join('\n').includes(marker), false);
 
+test('daily writes reject malformed JSON, non-object bodies and non-string content without SQL or notifications', async () => {
+  const f = await fixture(async () => { throw Error('Unexpected query'); });
+  for (const path of ['/', '/1/comments', '/reminder-setting']) {
+    const method = path === '/reminder-setting' ? 'PUT' : 'POST';
+    for (const body of ['{', 'null', '[]', '1', '"text"']) {
+      assert.equal((await f.app.request(path, {method, headers:{'Content-Type':'application/json'}, body})).status, 400);
+    }
+  }
+  for (const content of [1, {}, [], true]) {
+    assert.equal((await f.app.request('/', json({tutor_id:7,report_date:'2026-10-29',content}))).status,400);
+    assert.equal((await f.app.request('/1/comments', json({content}))).status,400);
+  }
+  for (const enabled of ['false',0,null])assert.equal((await f.app.request('/reminder-setting',json({enabled},'PUT'))).status,400);
+  assert.equal(f.queries.length,0);assert.equal(f.notifications.length,0);safe(f);
+});
+
 test('all nine route exception responses conceal upstream messages and metadata', async () => {
   const f = await fixture(async () => { throw rawError(); });
   for (const [path, options] of [['/tutors'], ['/reminder-setting'], ['/reminder-setting', json({ enabled: true }, 'PUT')],

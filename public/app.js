@@ -15800,135 +15800,157 @@ function showScoreBreakdown(studentId) {
   }
 }
 
-async function updateRedListStatus(studentId, yearMonth, status) {
-  try {
-    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/status`, {
-      yearMonth,
-      correspondence_status: status
-    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+const redListPendingWrites = new Set();
+let exReasonTarget = null;
+let exReasonGeneration = 0;
+function redListWriteContext(studentId, yearMonth, action) {
+  const root = document.getElementById('content');
+  const tab = currentRedListTab;
+  const panel = document.getElementById(tab === 'history' ? 'redlist-history-content' : 'redlist-current-content');
+  if (!root || !panel || !root.contains(panel) || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) ||
+      currentPage !== 'red-list' || !['current', 'history'].includes(tab) ||
+      typeof studentId !== 'string' || !studentId || !/^(?!0000)\d{4}-(?:0[1-9]|1[0-2])$/.test(yearMonth || '')) return null;
+  const data = tab === 'history' ? historyRedListData : currentRedListData;
+  const entry = data.find(row => row.student_id === studentId && row.year_month === yearMonth);
+  const select = tab === 'history' ? document.getElementById('redlist-history-month') : null;
+  const controls = [...panel.querySelectorAll('[data-red-list-card-action]')].filter(control =>
+    control.dataset.redListCardAction === action && control.dataset.redListStudentId === studentId && control.dataset.redListYearMonth === yearMonth);
+  if (!entry || !controls.length || controls.some(control => control.disabled) || (tab === 'history' && select?.value !== yearMonth)) return null;
+  const state = { root, panel, tab, entry, controls, token: sessionToken, userId: currentUser.id, role: currentUser.role };
+  state.current = () => sessionToken === state.token && currentUser?.id === state.userId && currentUser?.role === state.role &&
+    currentPage === 'red-list' && currentRedListTab === tab && document.getElementById('content') === root &&
+    document.getElementById(tab === 'history' ? 'redlist-history-content' : 'redlist-current-content') === panel &&
+    controls.some(control => panel.contains(control)) &&
+    (tab !== 'history' || (document.getElementById('redlist-history-month') === select && select.value === yearMonth)) &&
+    (tab === 'history' ? historyRedListData : currentRedListData).find(row => row.student_id === studentId && row.year_month === yearMonth) === entry;
+  return state;
+}
+function beginRedListWrite(studentId, yearMonth, action) {
+  const key = JSON.stringify([studentId, yearMonth, action]);
+  if (redListPendingWrites.has(key)) return null;
+  const state = redListWriteContext(studentId, yearMonth, action);
+  if (!state) return null;
+  redListPendingWrites.add(key);
+  state.controls.forEach(control => { control.disabled = true; });
+  state.finish = () => {
+    redListPendingWrites.delete(key);
+    if (state.current()) state.controls.forEach(control => { if (state.panel.contains(control)) control.disabled = false; });
+  };
+  return state;
+}
 
-    if (res.data.success) {
-      // ローカルデータを更新（今月・過去タブ両方を検索）
-      const entry = currentRedListData.find(d => d.student_id === studentId)
-                 || historyRedListData.find(d => d.student_id === studentId);
-      if (entry) entry.correspondence_status = status;
-      updateRedListStats();
-      showNotification(
-        status === '対応済み' ? '対応済みに変更しました' :
-        status === '対応中'  ? '対応中に変更しました'  : '未対応に変更しました',
-        'success'
-      );
-    } else {
-      showNotification(res.data.error || 'ステータスの更新に失敗しました', 'error');
-    }
-  } catch (error) {
+async function updateRedListStatus(studentId, yearMonth, status) {
+  if (!['未対応', '対応中', '対応済み'].includes(status)) return;
+  const state = beginRedListWrite(studentId, yearMonth, 'status');
+  if (!state) return;
+  const previous = state.entry.correspondence_status || '未対応';
+  try {
+    const res = await axios.patch(`${API_BASE}/api/red-list/${encodeURIComponent(studentId)}/status`, {
+      yearMonth, correspondence_status: status
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Red list status rejected');
+    state.entry.correspondence_status = status;
+    updateRedListStats();
+    showNotification(status === '対応済み' ? '対応済みに変更しました' : status === '対応中' ? '対応中に変更しました' : '未対応に変更しました', 'success');
+  } catch {
+    if (!state.current()) return;
+    state.controls.forEach(control => { control.value = previous; });
     console.error('Red list status update failed');
     showNotification('ステータスの更新に失敗しました', 'error');
-  }
+  } finally { state.finish(); }
 }
 
 async function updateRedListAssigned(studentId, yearMonth, assignedTo) {
+  if (typeof assignedTo !== 'string') return;
+  const state = beginRedListWrite(studentId, yearMonth, 'assigned');
+  if (!state) return;
+  const previous = state.entry.assigned_to || '';
   try {
-    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/status`, {
-      yearMonth,
-      assigned_to: assignedTo
-    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
-
-    if (res.data.success) {
-      const entry = currentRedListData.find(d => d.student_id === studentId)
-                 || historyRedListData.find(d => d.student_id === studentId);
-      if (entry) entry.assigned_to = assignedTo;
-      showNotification('担当者を更新しました', 'success');
-    } else {
-      showNotification(res.data.error || '担当者の更新に失敗しました', 'error');
-    }
-  } catch (error) {
+    const res = await axios.patch(`${API_BASE}/api/red-list/${encodeURIComponent(studentId)}/status`, {
+      yearMonth, assigned_to: assignedTo
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Red list assignment rejected');
+    state.entry.assigned_to = assignedTo;
+    showNotification('担当者を更新しました', 'success');
+  } catch {
+    if (!state.current()) return;
+    state.controls.forEach(control => { control.value = previous; });
     console.error('Red list assignment update failed');
     showNotification('担当者の更新に失敗しました', 'error');
-  }
+  } finally { state.finish(); }
 }
 
 async function toggleExRank(studentId, yearMonth, currentEx) {
-  if (!currentEx) {
-    // EX設定 → モーダルを開いて理由入力
-    openExReasonModal(studentId, yearMonth);
-  } else {
-    // EX解除 → 直接API実行
-    await confirmClearExRank(studentId, yearMonth);
-  }
+  const state = redListWriteContext(studentId, yearMonth, 'ex');
+  if (!state) return;
+  if (state.entry.ex_rank === true || state.entry.final_ex_rank === true) await confirmClearExRank(studentId, yearMonth);
+  else openExReasonModal(studentId, yearMonth);
 }
 
 function openExReasonModal(studentId, yearMonth) {
+  const state = redListWriteContext(studentId, yearMonth, 'ex');
+  const modal = document.getElementById('ex-reason-modal');
+  if (!state || !modal || redListPendingWrites.has(JSON.stringify([studentId, yearMonth, 'ex']))) return;
+  exReasonGeneration++;
+  exReasonTarget = { state, studentId, yearMonth, modal };
   document.getElementById('ex-reason-student-id').value = studentId;
   document.getElementById('ex-reason-year-month').value = yearMonth;
   document.getElementById('ex-reason-input').value = '';
-  document.getElementById('ex-reason-modal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('ex-reason-input').focus(), 100);
+  modal.classList.remove('hidden');
+  const target = exReasonTarget;
+  setTimeout(() => { if (exReasonTarget === target && state.current()) document.getElementById('ex-reason-input')?.focus(); }, 100);
 }
 
 function closeExReasonModal() {
-  document.getElementById('ex-reason-modal').classList.add('hidden');
-  document.getElementById('ex-reason-student-id').value = '';
-  document.getElementById('ex-reason-year-month').value = '';
-  document.getElementById('ex-reason-input').value = '';
+  exReasonGeneration++;
+  exReasonTarget = null;
+  document.getElementById('ex-reason-modal')?.classList.add('hidden');
+  for (const id of ['ex-reason-student-id', 'ex-reason-year-month', 'ex-reason-input']) {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  }
 }
 
 async function confirmExRank() {
-  const studentId = document.getElementById('ex-reason-student-id').value;
-  const yearMonth = document.getElementById('ex-reason-year-month').value;
-  const reason    = document.getElementById('ex-reason-input').value.trim();
-  if (!studentId || !yearMonth) return;
-
+  const target = exReasonTarget;
+  if (!target || !target.state.current() || document.getElementById('ex-reason-modal') !== target.modal ||
+      document.getElementById('ex-reason-student-id')?.value !== target.studentId ||
+      document.getElementById('ex-reason-year-month')?.value !== target.yearMonth) return;
+  const reason = document.getElementById('ex-reason-input').value.trim();
+  const state = beginRedListWrite(target.studentId, target.yearMonth, 'ex');
+  if (!state) return;
   closeExReasonModal();
-
-  try {
-    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/ex-rank`, {
-      yearMonth,
-      ex_rank: true,
-      ex_reason: reason || null
-    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
-
-    if (res.data.success) {
-      const entry = currentRedListData.find(d => d.student_id === studentId);
-      if (entry) {
-        entry.ex_rank = true;
-        entry.ex_reason = reason || null;
-      }
-      updateRedListStats();
-      renderRedListCurrentList();
-      showNotification('EXランクを設定しました', 'success');
-    } else {
-      showNotification(res.data.error || 'EXランクの更新に失敗しました', 'error');
-    }
-  } catch (error) {
-    console.error('Error setting EX rank:', error);
-    showNotification('EXランクの更新に失敗しました', 'error');
-  }
+  await saveRedListExRank(state, target.studentId, target.yearMonth, true, reason || null);
 }
 
 async function confirmClearExRank(studentId, yearMonth) {
-  try {
-    const res = await axios.patch(`${API_BASE}/api/red-list/${studentId}/ex-rank`, {
-      yearMonth,
-      ex_rank: false
-    }, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+  const state = beginRedListWrite(studentId, yearMonth, 'ex');
+  if (!state) return;
+  await saveRedListExRank(state, studentId, yearMonth, false, null);
+}
 
-    if (res.data.success) {
-      const entry = currentRedListData.find(d => d.student_id === studentId);
-      if (entry) {
-        entry.ex_rank = false;
-        entry.ex_reason = null;
-      }
-      updateRedListStats();
-      renderRedListCurrentList();
-      showNotification('EXランクを解除しました', 'success');
-    } else {
-      showNotification(res.data.error || 'EXランクの更新に失敗しました', 'error');
-    }
-  } catch (error) {
-    console.error('Error clearing EX rank:', error);
+async function saveRedListExRank(state, studentId, yearMonth, enabled, reason) {
+  const generation = exReasonGeneration;
+  const current = () => state.current() && generation === exReasonGeneration;
+  try {
+    const res = await axios.patch(`${API_BASE}/api/red-list/${encodeURIComponent(studentId)}/ex-rank`, {
+      yearMonth, ex_rank: enabled, ...(enabled ? { ex_reason: reason } : {})
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Red list EX rejected');
+    // This API updates red_list only, not historical snapshot fields.
+    const entry = currentRedListData.find(row => row.student_id === studentId && row.year_month === yearMonth);
+    if (entry) { entry.ex_rank = enabled; entry.ex_reason = enabled ? reason : null; }
+    updateRedListStats();
+    if (state.tab === 'current') renderRedListCurrentList();
+    showNotification(enabled ? 'EXランクを設定しました' : 'EXランクを解除しました', 'success');
+  } catch {
+    if (!current()) return;
+    console.error('Red list EX update failed');
     showNotification('EXランクの更新に失敗しました', 'error');
-  }
+  } finally { state.finish(); }
 }
 
 function populateRedListHistoryMonths() {
@@ -16234,8 +16256,13 @@ function getCurrentYearMonthStr() {
 let _rlDiscordTarget = { studentId: null, studentName: null, yearMonth: null };
 
 async function openRedListDiscordModal(studentId, studentName, yearMonth) {
+  const state = beginRedListRead('discord-prepare', ['redlist-discord-modal']);
+  if (!state || currentPage !== 'red-list' || !['admin', 'leader'].includes(state.role)) return;
+  const target = { studentId, studentName, yearMonth };
+  const current = () => state.current() && _rlDiscordTarget === target;
+  document.getElementById('redlist-discord-modal').classList.add('hidden');
   clearRedListAuthenticatedImage(document.getElementById('redlist-discord-modal-img'), document.getElementById('redlist-discord-modal-img-wrap'));
-  _rlDiscordTarget = { studentId, studentName, yearMonth };
+  _rlDiscordTarget = target;
 
   // 生徒名表示
   document.getElementById('redlist-discord-modal-student').textContent =
@@ -16243,14 +16270,22 @@ async function openRedListDiscordModal(studentId, studentName, yearMonth) {
 
   // テンプレート選択肢を最新状態に更新
   if (redListMessages.length === 0) {
-    await loadRedListMessages(true); // silent
+    if (!await loadRedListMessages(true)) {
+      if (current()) showNotification('送信準備に失敗しました。再度開いてください', 'error');
+      return;
+    }
   }
+  if (!current()) return;
   populateRedListDiscordSelect();
 
   // 送信者選択肢を最新状態に更新
   if (redListSenders.length === 0) {
-    await loadRedListSenders(true); // silent
+    if (!await loadRedListSenders(true)) {
+      if (current()) showNotification('送信準備に失敗しました。再度開いてください', 'error');
+      return;
+    }
   }
+  if (!current()) return;
   populateRedListSenderSelect();
 
   // テキストエリア・画像・送信者をリセット
@@ -16402,25 +16437,32 @@ async function sendRedListDiscordMessage() {
 // ═══════════════════════════════════════════════════════════════
 
 async function loadRedListMessages(silent = false) {
-  const loadingEl  = document.getElementById('redlist-messages-loading');
-  const contentEl  = document.getElementById('redlist-messages-content');
+  const state = beginRedListRead('messages', ['redlist-messages-loading', 'redlist-messages-content']);
+  if (!state || currentPage !== 'red-list') return false;
+  const loadingEl = document.getElementById('redlist-messages-loading');
+  const contentEl = document.getElementById('redlist-messages-content');
   if (!silent && loadingEl) loadingEl.classList.remove('hidden');
 
   try {
     const res = await axios.get(`${API_BASE}/api/red-list/messages`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!state.current()) return false;
     if (res.data.success) {
       redListMessages = res.data.data;
-      if (!silent) renderRedListMessages();
+      if (!silent || currentRedListTab === 'messages') renderRedListMessages();
+      return true;
     }
-  } catch (e) {
-    console.error('loadRedListMessages error:', e);
+    return false;
+  } catch {
+    if (!state.current()) return false;
+    console.error('Red list messages load failed');
     if (!silent && contentEl) {
       contentEl.innerHTML = '<div class="text-center py-8 text-red-600">読み込みに失敗しました</div>';
     }
+    return false;
   } finally {
-    if (!silent && loadingEl) loadingEl.classList.add('hidden');
+    if (state.current() && loadingEl) loadingEl.classList.add('hidden');
   }
 }
 
@@ -16452,7 +16494,7 @@ function renderRedListMessages() {
               <h4 class="font-semibold text-gray-800 text-sm">${escapeHtml(m.title)}</h4>
               ${imgBadge}
             </div>
-            <p class="text-xs text-gray-400 mt-0.5">${created} 作成 ／ ${m.created_by || '-'}</p>
+            <p class="text-xs text-gray-400 mt-0.5">${created} 作成 ／ ${escapeHtml(String(m.created_by || '-'))}</p>
             <p class="text-sm text-gray-600 mt-2 whitespace-pre-wrap line-clamp-3">${escapeHtml(m.content)}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
@@ -16712,25 +16754,32 @@ async function executeRedListTestSend() {
 // ═══════════════════════════════════════════════════════════════
 
 async function loadRedListSenders(silent = false) {
+  const state = beginRedListRead('senders', ['redlist-senders-loading', 'redlist-senders-content']);
+  if (!state || currentPage !== 'red-list') return false;
   const loadingEl = document.getElementById('redlist-senders-loading');
   const contentEl = document.getElementById('redlist-senders-content');
   if (!silent && loadingEl) loadingEl.classList.remove('hidden');
 
   try {
     const res = await axios.get(`${API_BASE}/api/red-list/senders`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
+      headers: { Authorization: `Bearer ${state.token}` }
     });
+    if (!state.current()) return false;
     if (res.data.success) {
       redListSenders = res.data.data;
-      if (!silent) renderRedListSenders();
+      if (!silent || currentRedListTab === 'senders') renderRedListSenders();
+      return true;
     }
-  } catch (e) {
-    console.error('loadRedListSenders error:', e);
+    return false;
+  } catch {
+    if (!state.current()) return false;
+    console.error('Red list senders load failed');
     if (!silent && contentEl) {
       contentEl.innerHTML = '<div class="text-center py-8 text-red-600">読み込みに失敗しました</div>';
     }
+    return false;
   } finally {
-    if (!silent && loadingEl) loadingEl.classList.add('hidden');
+    if (state.current() && loadingEl) loadingEl.classList.add('hidden');
   }
 }
 
@@ -16768,7 +16817,7 @@ function renderRedListSenders() {
               <a ${redListSafeBookingUrl(s.booking_url) ? `href="${escapeHtml(s.booking_url).replace(/"/g, '&quot;')}"` : ''} target="_blank" rel="noopener"
                  class="text-xs text-indigo-600 hover:underline break-all">${escapeHtml(s.booking_url)}</a>
             </div>
-            <p class="text-xs text-gray-400 mt-1">最終更新: ${updated} ／ ${s.created_by || '-'}</p>
+            <p class="text-xs text-gray-400 mt-1">最終更新: ${updated} ／ ${escapeHtml(String(s.created_by || '-'))}</p>
           </div>
           <div class="flex space-x-2 flex-shrink-0">
             <button data-red-prepare-action="sender-edit" data-red-prepare-id="${escapeHtml(String(s.id)).replace(/"/g, '&quot;')}"
