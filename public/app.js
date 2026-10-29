@@ -16248,14 +16248,20 @@ async function openRedListDiscordModal(studentId, studentName, yearMonth) {
 
   // テンプレート選択肢を最新状態に更新
   if (redListMessages.length === 0) {
-    if (!await loadRedListMessages(true)) return;
+    if (!await loadRedListMessages(true)) {
+      if (current()) showNotification('送信準備に失敗しました。再度開いてください', 'error');
+      return;
+    }
   }
   if (!current()) return;
   populateRedListDiscordSelect();
 
   // 送信者選択肢を最新状態に更新
   if (redListSenders.length === 0) {
-    if (!await loadRedListSenders(true)) return;
+    if (!await loadRedListSenders(true)) {
+      if (current()) showNotification('送信準備に失敗しました。再度開いてください', 'error');
+      return;
+    }
   }
   if (!current()) return;
   populateRedListSenderSelect();

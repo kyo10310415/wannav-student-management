@@ -5,18 +5,18 @@ import {readFile} from 'node:fs/promises';
 const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
 function fn(name){const a=source.indexOf(`async function ${name}(`)>=0?source.indexOf(`async function ${name}(`):source.indexOf(`function ${name}(`);assert.ok(a>=0);return source.slice(a,source.indexOf('\n}',a)+2)}
 function fixture(){
- const requests=[],calls=[],logs=[];
+ const requests=[],calls=[],logs=[],notices=[];
  const node=parent=>({parent,value:'',innerHTML:'',textContent:'',dataset:{},classList:{hidden:true,add(){this.hidden=true},remove(){this.hidden=false}},contains(n){for(;n;n=n.parent)if(n===this)return true;return false}});
  const elements={content:node()};
  for(const id of ['redlist-messages-loading','redlist-messages-content','redlist-senders-loading','redlist-senders-content','redlist-discord-modal','redlist-discord-modal-img','redlist-discord-modal-img-wrap','redlist-discord-modal-student','redlist-discord-modal-content','redlist-discord-sender-select','redlist-discord-booking-url-wrap'])elements[id]=node(elements.content);
  const c={sessionToken:'synthetic-session',currentUser:{id:7,role:'admin'},currentPage:'red-list',currentRedListTab:'current',API_BASE:'',redListMessages:[],redListSenders:[],
  document:{getElementById:id=>elements[id]},console:{error:(...args)=>logs.push(args)},
- clearRedListAuthenticatedImage:()=>calls.push('clear-image'),populateRedListDiscordSelect:()=>calls.push('message-select'),populateRedListSenderSelect:()=>calls.push('sender-select'),renderRedListMessages:()=>calls.push('messages-render'),renderRedListSenders:()=>calls.push('senders-render'),
+ showNotification:(...args)=>notices.push(args),clearRedListAuthenticatedImage:()=>calls.push('clear-image'),populateRedListDiscordSelect:()=>calls.push('message-select'),populateRedListSenderSelect:()=>calls.push('sender-select'),renderRedListMessages:()=>calls.push('messages-render'),renderRedListSenders:()=>calls.push('senders-render'),
  axios:{get:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))}};
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('const redListReadStates ='),source.indexOf('// Red List Page')),c);vm.runInContext('let _rlDiscordTarget={studentId:null,studentName:null,yearMonth:null};',c);
  for(const name of ['loadRedListMessages','loadRedListSenders','openRedListDiscordModal','closeRedListDiscordModal'])vm.runInContext(fn(name),c);
  const resolve=(i,data)=>requests[i].resolve({data:{success:true,data}});
- return {c,elements,requests,calls,logs,node,resolve};
+ return {c,elements,requests,calls,logs,notices,node,resolve};
 }
 const tick=()=>new Promise(setImmediate);
 
@@ -44,6 +44,17 @@ test('current failures show fixed diagnostic without private values; silent refr
 test('close while modal preparation waits never reopens or resets fields',async()=>{
  const f=fixture();const pending=f.c.openRedListDiscordModal('A','Synthetic A','2026-10');f.c.closeRedListDiscordModal();f.elements['redlist-discord-modal-content'].value='KEEP';f.resolve(0,[{id:1}]);await pending;
  assert.equal(f.requests.length,1);assert.equal(f.elements['redlist-discord-modal'].classList.hidden,true);assert.equal(f.elements['redlist-discord-modal-content'].value,'KEEP');assert.ok(!f.calls.includes('message-select'));
+});
+
+test('current modal preparation failure gives fixed feedback while closed preparation stays silent',async()=>{
+ for(const close of [false,true])for(const kind of ['messages','senders']){
+  const f=fixture();if(kind==='senders')f.c.redListMessages=[{id:1}];
+  const pending=f.c.openRedListDiscordModal('A','Synthetic','2026-10');
+  if(close)f.c.closeRedListDiscordModal();
+  f.requests[0].reject(Error('PRIVATE_SENTINEL'));await pending;
+  assert.equal(f.elements['redlist-discord-modal'].classList.hidden,true);
+  assert.equal(f.notices.length,close?0:1);assert.ok(!JSON.stringify(f.notices).includes('PRIVATE_SENTINEL'));
+ }
 });
 
 test('latest student preparation wins across two awaits and old opener cannot reset it',async()=>{
