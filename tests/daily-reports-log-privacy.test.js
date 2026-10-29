@@ -26,6 +26,33 @@ async function fixture(query, post = async () => ({})) {
 const json = (body, method = 'POST') => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const safe = f => assert.equal(f.logs.join('\n').includes(marker), false);
 
+test('daily SERIAL path identifiers reject malformed input before queries and notifications',async()=>{
+  const f=await fixture(async()=>{throw Error('Unexpected query')});
+  for(const id of ['0','01','-1','1.5','1e2','2147483648','abc','%2F','%00']){
+    for(const [path,options] of [['/tutor/'+id],['/check/'+id+'/2026-10-29'],['/'+id,{method:'DELETE'}],['/comments/'+id,{method:'DELETE'}],['/'+id+'/comments',json({content:'Synthetic comment'})]])assert.equal((await f.app.request(path,options)).status,400,path);
+  }
+  assert.equal(f.queries.length,0);assert.equal(f.notifications.length,0);
+});
+
+test('daily dates and posted tutor identifiers reject invalid calendar or type without saving',async()=>{
+  const f=await fixture(async()=>{throw Error('Unexpected query')});
+  for(const date of ['2026-02-30','2026-13-01','0000-01-01','2026-1-01','not-date']){
+    assert.equal((await f.app.request('/check/7/'+date)).status,400);
+    assert.equal((await f.app.request('/',json({tutor_id:7,report_date:date,content:'Synthetic'}))).status,400);
+  }
+  for(const tutor_id of [true,{},[],0,-1,1.5,'01','2147483648'])assert.equal((await f.app.request('/',json({tutor_id,report_date:'2026-10-29',content:'Synthetic'}))).status,400);
+  assert.equal(f.queries.length,0);assert.equal(f.notifications.length,0);
+});
+
+test('daily valid numeric/string tutor IDs and leap-day dates preserve date-only values',async()=>{
+  const row={id:42,content:'Synthetic'};const f=await fixture(async()=>({rows:[row]}));
+  for(const tutor_id of [7,'7']){
+    assert.equal((await f.app.request('/',json({tutor_id,report_date:'2024-02-29',content:' Synthetic '}))).status,200);
+    assert.deepEqual(f.queries.at(-1)[1],[tutor_id,'2024-02-29','Synthetic']);
+  }
+  assert.equal((await f.app.request('/check/2147483647/2024-02-29')).status,200);assert.deepEqual(f.queries.at(-1)[1],['2147483647','2024-02-29']);
+});
+
 test('daily report pagination rejects invalid or excessive values before all queries',async()=>{
   const f=await fixture(async()=>{throw Error('Unexpected query')});
   for(const query of ['limit=','limit=0','limit=-1','limit=1001','limit=1.5','limit=20junk','limit=1e2','offset=','offset=-1','offset=1.2','offset=1x','offset=9007199254740992']){
@@ -57,9 +84,9 @@ test('daily writes reject malformed JSON, non-object bodies and non-string conte
 test('all nine route exception responses conceal upstream messages and metadata', async () => {
   const f = await fixture(async () => { throw rawError(); });
   for (const [path, options] of [['/tutors'], ['/reminder-setting'], ['/reminder-setting', json({ enabled: true }, 'PUT')],
-    ['/tutor/' + marker], ['/', json({ tutor_id: marker, report_date: marker, content: marker })],
-    ['/' + marker, { method: 'DELETE' }], ['/' + marker + '/comments', json({ content: marker })],
-    ['/comments/' + marker, { method: 'DELETE' }], ['/check/' + marker + '/2026-10-01']]) {
+    ['/tutor/7'], ['/', json({ tutor_id: 7, report_date: '2026-10-29', content: marker })],
+    ['/42', { method: 'DELETE' }], ['/42/comments', json({ content: marker })],
+    ['/comments/99', { method: 'DELETE' }], ['/check/7/2026-10-01']]) {
     const response = await f.app.request(path, options);
     assert.equal(response.status, 500, path);
     assert.deepEqual(await response.json(), { success: false, error: 'Daily report operation failed' });
@@ -72,18 +99,18 @@ test('report pagination and comment association retain data and query parameters
   const comment = { id: 99, report_id: 42, content: marker, commenter_name: marker };
   let count = 0;
   const f = await fixture(async () => ({ rows: [[report], [{ total: '1' }], [comment]][count++] }));
-  const response = await f.app.request('/tutor/' + marker + '?limit=3&offset=2');
+  const response = await f.app.request('/tutor/7?limit=3&offset=2');
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { success: true, data: [{ ...report, comments: [comment] }], total: 1, limit: 3, offset: 2 });
-  assert.deepEqual(f.queries.map(q => q[1]), [[marker, 3, 2], [marker], [[42]]]); safe(f);
+  assert.deepEqual(f.queries.map(q => q[1]), [['7', 3, 2], ['7'], [[42]]]); safe(f);
 });
 
 test('report create, report and comment deletes, and validation preserve CRUD contracts', async () => {
   const row = { id: 42, content: marker };
   const f = await fixture(async () => ({ rows: [row] }));
-  const response = await f.app.request('/', json({ tutor_id: marker, report_date: '2026-10-01', content: '  ' + marker + '  ' }));
+  const response = await f.app.request('/', json({ tutor_id: 7, report_date: '2026-10-01', content: '  ' + marker + '  ' }));
   assert.deepEqual(await response.json(), { success: true, data: row });
-  assert.deepEqual(f.queries[0][1], [marker, '2026-10-01', marker]);
+  assert.deepEqual(f.queries[0][1], [7, '2026-10-01', marker]);
   for (const path of ['/42', '/comments/99']) assert.deepEqual(await (await f.app.request(path, { method: 'DELETE' })).json(), { success: true });
   assert.deepEqual(f.queries.slice(1).map(q => q[1]), [['42'], ['99']]);
   const before = f.queries.length;
@@ -100,8 +127,8 @@ test('settings defaults, updates, tutor list and submission checks retain succes
   assert.deepEqual(await (await f.app.request('/reminder-setting')).json(), { success: true, enabled: true });
   assert.deepEqual(await (await f.app.request('/reminder-setting', json({ enabled: false }, 'PUT'))).json(), { success: true, enabled: false });
   assert.deepEqual(f.queries[2][1], ['false']);
-  assert.deepEqual(await (await f.app.request('/check/' + marker + '/2026-10-01')).json(), { success: true, submitted: false });
-  assert.deepEqual(f.queries[3][1], [marker, '2026-10-01']); safe(f);
+  assert.deepEqual(await (await f.app.request('/check/7/2026-10-01')).json(), { success: true, submitted: false });
+  assert.deepEqual(f.queries[3][1], ['7', '2026-10-01']); safe(f);
 });
 
 test('comment response uses authenticated user and stays successful after notification failure', async () => {

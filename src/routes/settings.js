@@ -46,12 +46,16 @@ app.get('/:key', async (c) => {
 /**
  * PUT /api/settings/:key
  * システム設定を更新（リーダー以上の権限が必要）
- * Body: { value, updatedBy }
+ * Body: { value }; updated_by comes from the authenticated session.
  */
 app.put('/:key', async (c) => {
   try {
     const { key } = c.req.param();
-    const { value, updatedBy } = await c.req.json();
+    let body;
+    try { body = await c.req.json(); }
+    catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { value } = body;
 
     if (value === undefined) {
       return c.json({
@@ -59,6 +63,9 @@ app.put('/:key', async (c) => {
         error: 'value is required'
       }, 400);
     }
+
+    const actor = c.get('authenticatedUser');
+    if (typeof actor?.email !== 'string' || !actor.email) return c.json({ success: false, error: '更新者を確認できません' }, 503);
 
     const pool = getPool();
 
@@ -71,7 +78,7 @@ app.put('/:key', async (c) => {
         updated_at = NOW()
       WHERE setting_key = $3
       RETURNING *
-    `, [value, updatedBy || 'unknown', key]);
+    `, [value, actor.email, key]);
 
     if (result.rows.length === 0) {
       return c.json({

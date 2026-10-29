@@ -4,6 +4,16 @@ import axios from 'axios';
 
 const app = new Hono();
 
+function validDailyReportId(value) {
+  return (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 2147483647) ||
+    (typeof value === 'string' && /^[1-9][0-9]*$/.test(value) && Number(value) <= 2147483647);
+}
+function validDailyReportDate(value) {
+  if (typeof value !== 'string' || !/^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 async function readDailyReportBody(c) {
   try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
   catch { return null; }
@@ -107,6 +117,7 @@ app.put('/reminder-setting', async (c) => {
 // ─────────────────────────────────────────────
 app.get('/tutor/:tutorId', async (c) => {
   const { tutorId } = c.req.param();
+  if (!validDailyReportId(tutorId)) return c.json({ success: false, error: 'Invalid tutor ID' }, 400);
   const suppliedLimit = c.req.query('limit') ?? '20';
   const suppliedOffset = c.req.query('offset') ?? '0';
   if (!/^[1-9][0-9]*$/.test(suppliedLimit) || !Number.isSafeInteger(Number(suppliedLimit)) || Number(suppliedLimit) > 1000 ||
@@ -198,6 +209,7 @@ app.post('/', async (c) => {
     if (!tutor_id || !report_date || typeof content !== 'string' || !content.trim()) {
       return c.json({ success: false, error: '必須項目が不足しています' }, 400);
     }
+    if (!validDailyReportId(tutor_id) || !validDailyReportDate(report_date)) return c.json({ success: false, error: 'Invalid daily report reference' }, 400);
 
     const result = await query(`
       INSERT INTO daily_reports (tutor_id, report_date, content, submitted_at, updated_at)
@@ -223,6 +235,7 @@ app.post('/', async (c) => {
 // ─────────────────────────────────────────────
 app.delete('/:id', async (c) => {
   const { id } = c.req.param();
+  if (!validDailyReportId(id)) return c.json({ success: false, error: 'Invalid report ID' }, 400);
   try {
     await query(`DELETE FROM daily_reports WHERE id = $1`, [id]);
     return c.json({ success: true });
@@ -239,6 +252,7 @@ app.delete('/:id', async (c) => {
 // ─────────────────────────────────────────────
 app.post('/:id/comments', async (c) => {
   const { id } = c.req.param();
+  if (!validDailyReportId(id)) return c.json({ success: false, error: 'Invalid report ID' }, 400);
   try {
     const body = await readDailyReportBody(c);
     if (!body) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
@@ -370,6 +384,7 @@ async function sendCommentDiscordNotification({ reportId, commenterId, commenter
 // ─────────────────────────────────────────────
 app.delete('/comments/:commentId', async (c) => {
   const { commentId } = c.req.param();
+  if (!validDailyReportId(commentId)) return c.json({ success: false, error: 'Invalid comment ID' }, 400);
   try {
     await query(`DELETE FROM daily_report_comments WHERE id = $1`, [commentId]);
     return c.json({ success: true });
@@ -385,6 +400,7 @@ app.delete('/comments/:commentId', async (c) => {
 // ─────────────────────────────────────────────
 app.get('/check/:tutorId/:date', async (c) => {
   const { tutorId, date } = c.req.param();
+  if (!validDailyReportId(tutorId) || !validDailyReportDate(date)) return c.json({ success: false, error: 'Invalid daily report reference' }, 400);
   try {
     const result = await query(
       `SELECT id FROM daily_reports WHERE tutor_id = $1 AND report_date = $2 LIMIT 1`,

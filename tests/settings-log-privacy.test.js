@@ -18,7 +18,8 @@ async function fixture(query) {
   let app;
   try { app = (await import(`data:text/javascript;base64,${Buffer.from(`const deps = globalThis[${JSON.stringify(key)}]; const console = deps.console;\n${source}`).toString('base64')}`)).default; }
   finally { delete globalThis[key]; }
-  return { app, logs, queries };
+  const root=new Hono(); root.use('*',async(c,next)=>{c.set('authenticatedUser',{id:7,email:marker,role:'admin'});return next()}); root.route('/',app);
+  return { app:root, logs, queries };
 }
 const update = value => ({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value, updatedBy: marker }) });
 
