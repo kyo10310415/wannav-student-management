@@ -1117,3 +1117,13 @@ PRO開始日更新のJSON本文は256KiBまでです。認証・crew担当確認
 欠席申請入口は一覧datasetのコピーを現在のfiltered cacheと照合し、元の参照をmodalへ渡します。前工程のcache参照照合が通常UIからの申請を拒否していた退行を修正し、一覧→準備→modal→送信までの合成統合回帰を追加しました。古いsnapshot/フィルター外対象は拒否し、本人申請・manager受理のサーバー権限を変更しません。予定統計の外部キーワードもテキスト表示・null-prototype集計に統一します。
 
 実施状況のbatch POSTは認証後、JSON解析前に1MiBまで計数します（予約一覧の多数の生徒/日付ペア用）。超過413、不正stream/JSON/非object/items形状は400。項目は非空文字列studentId（NUL不可）と実在YYYY-MM-DD（日付年0001〜9999）、GET checkも同じ境界、月次GETは実在YYYY-MMを要求します。以前受け取れたtimestamp等は400になります。空batch、ID原値、順序/重複、DB優先/Sheets fallbackを維持し、サービス内部の柔軟な日付正規化は変更していません。認証済みの共有参照範囲を変更せず、全API共通上限や件数上限は追加していません。ブラウザーの生徒/日付sampleと生errorログを除去し、件数ログ・通常画面更新を維持します。
+
+## 完了表示・同期権限・予約表示（2026-10-29、第179〜183工程）
+
+全件同期のstudents/sync・tutors/syncはGET/HEADを含めadmin/leaderに限定します。従来crewのGETもhandlerへ到達し、生徒/Tutorのupsertや既存条件によるTutor削除を開始できました。crewの初回読込/データ更新は同期を呼ばず既存DBの共有readを使い、admin/leaderの同期順序と、サーバー内定期同期・認証済み連携キーの限定経路は維持します。同期のDB更新方式/削除閾値は変更していません。
+
+予約の完了状況batch readは世代、認証、画面、table/セルDOM、タブ、Tutor/件数/search/月filter、生徒と日付cacheを照合し、送信した生徒/日付ペアの結果だけ反映します。IDはCSS selectorへ挿入せずdataset完全一致で探し、集計はMapに変更しました。表示日付はテキスト化しますが、現APIは既に厳密日付を返すため、この箇所を保存XSSの直接経路とは判定しません。予約画面render→load→updateの正常回帰と旧応答拒否を確認。送信済リクエストの取消は行いません。
+
+日別/予約一覧の2rendererでは生徒名・キャラクター名・進捗・評価・時間等をテキスト/属性に応じてescapeし、Notion/Discord/Meet/SNSリンクをHTTP(S)だけに限定します。固定評価リンクの学籍番号/月はqueryencodeします。正常HTTP(S)リンクは維持し、専用schemeや不正URLはリンクを表示しません。ドメイン許可リストは追加していません。外部Sheets/Notion/Calendar値を編集できる条件下の経路として評価し、crewがこれら全てを直接保存できるとは判定していません。
+
+renderStudentRowsSimpleのカード一覧は同種の未修正表示が残るため、次の優先確認対象です。2rendererの修正をアプリ全体の保存表示対策完了とは扱いません。停止中rouletteは共有行属性のescapeのみで、機能自体は監査/修正件数に含めません。
