@@ -4,6 +4,11 @@ import { notifyHelperRequestCreated } from '../services/helperNotificationServic
 
 const app = new Hono();
 
+// helper_requests.id is a PostgreSQL SERIAL (signed 32-bit integer).
+function validHelperRequestId(value) {
+  return typeof value === 'string' && /^[1-9][0-9]*$/.test(value) && Number(value) <= 2147483647;
+}
+
 async function readHelperRequestBody(c) {
   try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
   catch { return null; }
@@ -34,6 +39,7 @@ app.get('/', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const { id } = c.req.param();
+    if (!validHelperRequestId(id)) return c.json({ success: false, error: 'Invalid helper request ID' }, 400);
     const result = await query(`
       SELECT 
         hr.*,
@@ -109,6 +115,7 @@ app.post('/', async (c) => {
 app.post('/:id/accept', async (c) => {
   try {
     const { id } = c.req.param();
+    if (!validHelperRequestId(id)) return c.json({ success: false, error: 'Invalid helper request ID' }, 400);
     const submitted = await readHelperRequestBody(c);
     if (!submitted) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
     const actor = c.get('authenticatedUser');
@@ -210,6 +217,7 @@ app.post('/check-expired', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const { id } = c.req.param();
+    if (!validHelperRequestId(id)) return c.json({ success: false, error: 'Invalid helper request ID' }, 400);
     
     // Get request details before deletion
     const requestResult = await query(`

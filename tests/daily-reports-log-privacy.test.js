@@ -26,6 +26,18 @@ async function fixture(query, post = async () => ({})) {
 const json = (body, method = 'POST') => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const safe = f => assert.equal(f.logs.join('\n').includes(marker), false);
 
+test('daily report pagination rejects invalid or excessive values before all queries',async()=>{
+  const f=await fixture(async()=>{throw Error('Unexpected query')});
+  for(const query of ['limit=','limit=0','limit=-1','limit=1001','limit=1.5','limit=20junk','limit=1e2','offset=','offset=-1','offset=1.2','offset=1x','offset=9007199254740992']){
+    assert.equal((await f.app.request('/tutor/7?'+query)).status,400,query);
+  }
+  assert.equal(f.queries.length,0);assert.equal(f.notifications.length,0);
+  const g=await fixture(async sql=>({rows:sql.includes('COUNT(*)')?[{total:'0'}]:[]}));
+  for(const [query,limit,offset] of [['',20,0],['?limit=1000&offset=0',1000,0],['?limit=5&offset=10',5,10]]){
+    const r=await g.app.request('/tutor/7'+query);assert.equal(r.status,200);const body=await r.json();assert.equal(body.limit,limit);assert.equal(body.offset,offset);assert.deepEqual(g.queries.at(-2)[1],['7',limit,offset]);
+  }
+});
+
 test('daily writes reject malformed JSON, non-object bodies and non-string content without SQL or notifications', async () => {
   const f = await fixture(async () => { throw Error('Unexpected query'); });
   for (const path of ['/', '/1/comments', '/reminder-setting']) {

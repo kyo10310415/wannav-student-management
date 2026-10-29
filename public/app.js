@@ -16373,63 +16373,92 @@ function onRedListMessageSelectChange() {
   }
 }
 
+const redListPendingSends = new Set();
+const redListSendButtonOwners = new WeakMap();
+function redListSendSelection(value, rows) {
+  if (value === '') return null;
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) return undefined;
+  const id = Number(value);
+  return rows.some(row => Number(row.id) === id) ? id : undefined;
+}
+function redListSendContext(test = false) {
+  const root = document.getElementById('content');
+  const modalId = test ? 'redlist-test-send-modal' : 'redlist-discord-modal';
+  const buttonId = test ? 'redlist-test-send-btn' : 'redlist-discord-send-btn';
+  const modal = document.getElementById(modalId), button = document.getElementById(buttonId);
+  if (!root || !modal || !button || !root.contains(modal) || !modal.contains(button) || modal.classList.contains('hidden') || button.disabled ||
+      !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'red-list') return null;
+  const fieldIds = test ? ['redlist-test-send-message-id', 'redlist-test-send-sender-select'] :
+    ['redlist-discord-modal-select', 'redlist-discord-sender-select', 'redlist-discord-modal-content'];
+  const fields = fieldIds.map(id => [id, document.getElementById(id)]);
+  if (fields.some(([,field]) => !field || !modal.contains(field))) return null;
+  const values = fields.map(([,field]) => field.value);
+  const state = {root, modal, button, token:sessionToken, userId:currentUser.id, role:currentUser.role, tab:currentRedListTab,
+    target: test ? modal.dataset.redListSendGeneration : _rlDiscordTarget};
+  state.viewCurrent = () => sessionToken === state.token && currentUser?.id === state.userId && currentUser?.role === state.role &&
+    currentPage === 'red-list' && currentRedListTab === state.tab && document.getElementById('content') === root &&
+    document.getElementById(modalId) === modal && document.getElementById(buttonId) === button &&
+    fields.every(([id,field]) => document.getElementById(id) === field && modal.contains(field));
+  state.current = () => state.viewCurrent() && !modal.classList.contains('hidden') && fields.every(([,field], index) => field.value === values[index]) &&
+    (test ? modal.dataset.redListSendGeneration === state.target : _rlDiscordTarget === state.target);
+  return state;
+}
+function beginRedListSend(state, key) {
+  if (redListPendingSends.has(key)) return false;
+  redListPendingSends.add(key);
+  redListSendButtonOwners.set(state.button, state);
+  const original = state.button.innerHTML;
+  state.button.disabled = true;
+  state.button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>送信中...';
+  state.finish = () => {
+    redListPendingSends.delete(key);
+    if (redListSendButtonOwners.get(state.button) !== state) return;
+    redListSendButtonOwners.delete(state.button);
+    // Release only the captured busy button, never a replacement/new operation's button.
+    if (document.getElementById(state.button.id) === state.button && document.getElementById('content') === state.root) {
+      state.button.disabled = false;
+      state.button.innerHTML = original;
+    }
+  };
+  return true;
+}
+
 async function sendRedListDiscordMessage() {
-  const { studentId, studentName, yearMonth } = _rlDiscordTarget;
-  const sel        = document.getElementById('redlist-discord-modal-select');
-  const senderSel  = document.getElementById('redlist-discord-sender-select');
-  const content    = document.getElementById('redlist-discord-modal-content').value.trim();
-  const btn        = document.getElementById('redlist-discord-send-btn');
-
-  if (!content) {
-    showNotification('メッセージを入力してください', 'error');
-    return;
-  }
-
-  const messageId = sel.value     ? parseInt(sel.value)     : null;
-  const senderId  = senderSel.value ? parseInt(senderSel.value) : null;
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>送信中...';
-
+  const state = redListSendContext();
+  if (!state || !['current', 'history'].includes(state.tab)) return;
+  const { studentId, studentName, yearMonth } = state.target || {};
+  const data = state.tab === 'history' ? historyRedListData : currentRedListData;
+  if (typeof studentId !== 'string' || !studentId || !/^(?!0000)\d{4}-(?:0[1-9]|1[0-2])$/.test(yearMonth || '') ||
+      !data.some(row => row.student_id === studentId && row.year_month === yearMonth)) return;
+  const content = document.getElementById('redlist-discord-modal-content').value.trim();
+  if (!content) { showNotification('メッセージを入力してください', 'error'); return; }
+  const messageId = redListSendSelection(document.getElementById('redlist-discord-modal-select').value, redListMessages);
+  const senderId = redListSendSelection(document.getElementById('redlist-discord-sender-select').value, redListSenders);
+  if (messageId === undefined || senderId === undefined) { showNotification('メッセージまたは送信者を選び直してください', 'error'); return; }
+  if (!beginRedListSend(state, JSON.stringify(['send', studentId, yearMonth]))) return;
   try {
     const res = await axios.post(`${API_BASE}/api/red-list/discord/send`, {
-      studentId,
-      yearMonth,
-      studentName,           // サーバー側で 〇〇 置換に使用
-      messageId,
-      messageContent: messageId ? undefined : content,
-      senderId               // 送信者ID（予約URL付加）
-    }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-
-    if (res.data.success) {
-      showNotification(`${studentName} 様に Discord メッセージを送信しました`, 'success');
-      closeRedListDiscordModal();
-
-      // サーバーが返した担当者名をローカルデータへ即時反映
-      if (res.data.assignedTo) {
-        const entry = currentRedListData.find(d => d.student_id === studentId);
-        if (entry) entry.assigned_to = res.data.assignedTo;
-      }
-
-      // ログを再取得してカードを再描画
-      await fetchRedListDiscordLogs(yearMonth);
-      if (currentRedListTab === 'current') {
-        renderRedListCurrentList();
-      } else if (currentRedListTab === 'history') {
-        renderRedListHistoryList();
-      }
-    } else {
-      showNotification(res.data.error || '送信に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('Discord send error:', e);
-    showNotification(e.response?.data?.error || '送信に失敗しました', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fab fa-discord mr-1"></i>送信';
-  }
+      studentId, yearMonth, studentName, messageId,
+      messageContent: messageId ? undefined : content, senderId
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Discord send rejected');
+    showNotification(`${escapeHtml(String(studentName || studentId))} 様に Discord メッセージを送信しました`, 'success');
+    // The server updates red_list, not historical snapshots. Match the exact month.
+    const entry = currentRedListData.find(row => row.student_id === studentId && row.year_month === yearMonth);
+    if (entry && res.data.assignedTo) entry.assigned_to = res.data.assignedTo;
+    closeRedListDiscordModal();
+    const closedTarget = _rlDiscordTarget;
+    const refreshCurrent = () => state.viewCurrent() && _rlDiscordTarget === closedTarget;
+    await fetchRedListDiscordLogs(yearMonth, {current:refreshCurrent});
+    if (!refreshCurrent()) return;
+    if (state.tab === 'current') renderRedListCurrentList();
+    else renderRedListHistoryList();
+  } catch {
+    if (!state.current()) return;
+    console.error('Discord send failed');
+    showNotification('送信に失敗しました', 'error');
+  } finally { state.finish(); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -16669,6 +16698,8 @@ async function deleteRedListMessage(id, button) {
 // ═══════════════════════════════════════════════════════════════
 
 function openRedListTestSendModal(messageId, messageTitle) {
+  const modal = document.getElementById('redlist-test-send-modal');
+  modal.dataset.redListSendGeneration = String((Number(modal.dataset.redListSendGeneration) || 0) + 1);
   document.getElementById('redlist-test-send-message-id').value = messageId;
   document.getElementById('redlist-test-send-title').textContent = messageTitle;
 
@@ -16690,6 +16721,8 @@ function openRedListTestSendModal(messageId, messageTitle) {
 }
 
 function closeRedListTestSendModal() {
+  const modal = document.getElementById('redlist-test-send-modal');
+  modal.dataset.redListSendGeneration = String((Number(modal.dataset.redListSendGeneration) || 0) + 1);
   document.getElementById('redlist-test-send-modal').classList.add('hidden');
   document.getElementById('redlist-test-send-message-id').value = '';
   document.getElementById('redlist-test-send-title').textContent = '';
@@ -16713,40 +16746,27 @@ function onRedListTestSendSenderChange() {
 }
 
 async function executeRedListTestSend() {
-  const messageId = document.getElementById('redlist-test-send-message-id').value;
-  const senderSel = document.getElementById('redlist-test-send-sender-select');
-  const senderId  = senderSel.value ? parseInt(senderSel.value) : null;
-  const btn       = document.getElementById('redlist-test-send-btn');
-
-  if (!messageId) {
-    showNotification('メッセージが指定されていません', 'error');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>送信中...';
-
+  const state = redListSendContext(true);
+  if (!state) return;
+  const messageField = document.getElementById('redlist-test-send-message-id');
+  const messageId = redListSendSelection(messageField.value, redListMessages);
+  const senderId = redListSendSelection(document.getElementById('redlist-test-send-sender-select').value, redListSenders);
+  if (!messageId || senderId === undefined) { showNotification('メッセージまたは送信者を選び直してください', 'error'); return; }
+  if (!beginRedListSend(state, JSON.stringify(['test', messageId, senderId]))) return;
+  const current = () => state.current() && messageField.value === String(messageId);
   try {
     const res = await axios.post(`${API_BASE}/api/red-list/discord/test-send`, {
-      messageId: parseInt(messageId),
-      senderId
-    }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-
-    if (res.data.success) {
-      showNotification('テスト送信が完了しました ✓', 'success');
-      closeRedListTestSendModal();
-    } else {
-      showNotification(res.data.error || 'テスト送信に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('Test send error:', e);
-    showNotification(e.response?.data?.error || 'テスト送信に失敗しました', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>テスト送信';
-  }
+      messageId, senderId
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Discord test rejected');
+    showNotification('テスト送信が完了しました ✓', 'success');
+    closeRedListTestSendModal();
+  } catch {
+    if (!current()) return;
+    console.error('Discord test send failed');
+    showNotification('テスト送信に失敗しました', 'error');
+  } finally { state.finish(); }
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -27,6 +27,14 @@ function fixture(role = 'crew') {
 const authorized = { Authorization: `Bearer ${token}` };
 const json = (body, headers = authorized) => ({ method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
+test('invalid crew helper delete SERIAL IDs stop before ownership SQL', async () => {
+  for (const id of ['0','01','2147483648','999999999999999999999999']) {
+    const {app,state}=fixture();
+    assert.equal((await app.request('/api/helper-requests/'+id,{method:'DELETE',headers:authorized})).status,400);
+    assert.equal(state.lookups,1);assert.equal(state.calls,0);
+  }
+});
+
 test('anonymous, invalid, expired and query-string credentials never reach business handlers', async () => {
   const { app, state } = fixture();
   for (const url of ['/api/students', '/api/database', '/api/survey/stats-all', `/api/students?sessionToken=${token}`, '/api/students.js']) {

@@ -497,7 +497,11 @@ app.get('/:studentId/wanami-history', async (c) => {
 app.patch('/:id/pro-plan', async (c) => {
   try {
     const studentId = c.req.param('id');
-    const { proPlanStartDate } = await c.req.json();
+    let body;
+    try { body = await c.req.json(); }
+    catch { return c.json({ success: false, error: 'JSON入力が不正です' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ success: false, error: 'JSON入力が不正です' }, 400);
+    const { proPlanStartDate } = body;
     
     // null is the explicit clear operation used by the UI after confirmation.
     // Missing/empty/invalid values must never silently erase a saved month.
