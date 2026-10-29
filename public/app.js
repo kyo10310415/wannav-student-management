@@ -6249,15 +6249,33 @@ async function submitHelperRequest() {
 
 let helperRequests = [];
 let helperStatusFilter = 'all'; // 'all', 'pending', 'accepted', 'rescheduled'
+let helperReadGeneration = 0;
+let helperPageGeneration = 0;
+const helperPendingWrites = new Set();
+function helperViewContext(pageRequired = true) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !currentUser || !['admin', 'leader', 'crew'].includes(currentUser.role) || (pageRequired && currentPage !== 'helpers')) return null;
+  const state = { root, token: sessionToken, userId: currentUser.id, role: currentUser.role, page: currentPage };
+  state.current = () => sessionToken === state.token && currentUser?.id === state.userId && currentUser?.role === state.role &&
+    currentPage === state.page && document.getElementById('content') === root;
+  return state;
+}
+function helperRequestForWrite(id) {
+  return Number.isSafeInteger(Number(id)) && Number(id) > 0 && helperRequests.find(row => Number(row.id) === Number(id));
+}
 
 // Render helpers page
-async function renderHelpersPage() {
+async function renderHelpersPage(parentCurrent = () => true) {
+  const state = helperViewContext();
+  const generation = ++helperPageGeneration;
+  if (!state || !parentCurrent()) return;
+  const current = () => state.current() && generation === helperPageGeneration && parentCurrent();
   document.getElementById('loading').classList.remove('hidden');
   document.getElementById('content').classList.add('hidden');
   
   // Load helper requests
-  await loadHelperRequests();
-  
+  await loadHelperRequests(current);
+  if (!current()) return;
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
   
@@ -6314,18 +6332,23 @@ async function renderHelpersPage() {
 }
 
 // Load helper requests from API
-async function loadHelperRequests() {
+async function loadHelperRequests(parentCurrent = () => true) {
+  const state = helperViewContext(false), generation = ++helperReadGeneration;
+  if (!state || !parentCurrent()) return false;
+  const current = () => state.current() && generation === helperReadGeneration && parentCurrent();
   try {
-    const res = await axios.get(`${API_BASE}/api/helper-requests`);
-    helperRequests = res.data.data || [];
-    console.log(`Loaded ${helperRequests.length} helper requests`);
-    
-    // Update helper badge
+    const res = await axios.get(`${API_BASE}/api/helper-requests`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
+    if (!res.data.success || !Array.isArray(res.data.data)) throw new Error('Helper read rejected');
+    helperRequests = res.data.data;
     updateHelperBadge();
-  } catch (error) {
-    console.error('Error loading helper requests:', error);
+    return true;
+  } catch {
+    if (!current()) return false;
+    console.error('Helper requests load failed');
     helperRequests = [];
     updateHelperBadge();
+    return false;
   }
 }
 
@@ -6451,7 +6474,9 @@ async function filterHelpersByStatus(status) {
 
 // Render helper requests list
 function renderHelperRequestsList() {
-  let filteredRequests = helperRequests;
+  const text = value => escapeHtml(String(value ?? ''));
+  const safeLink = value => { try { const url = new URL(String(value)); return ['http:', 'https:'].includes(url.protocol) ? text(url.href).replace(/"/g, '&quot;') : null; } catch { return null; } };
+  let filteredRequests = [...helperRequests];
   
   if (helperStatusFilter !== 'all') {
     filteredRequests = helperRequests.filter(r => r.status === helperStatusFilter);
@@ -6470,6 +6495,9 @@ function renderHelperRequestsList() {
   }
   
   return filteredRequests.map(request => {
+    const requestId = Number(request.id);
+    const validId = Number.isSafeInteger(requestId) && requestId > 0;
+    const notionUrl = safeLink(request.notion_url);
     const statusColor = {
       'pending': 'bg-orange-100 text-orange-800',
       'accepted': 'bg-green-100 text-green-800',
@@ -6505,12 +6533,12 @@ function renderHelperRequestsList() {
         <div class="flex justify-between items-start mb-3">
           <div>
             <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold ${statusColor}">
-              <i class="fas ${statusIcon} mr-1"></i>${statusText}
+              <i class="fas ${statusIcon} mr-1"></i>${text(statusText)}
             </span>
             ${isExpired ? '<span class="ml-2 inline-block px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800"><i class="fas fa-exclamation-triangle mr-1"></i>期限切れ</span>' : ''}
           </div>
           <div class="text-sm text-gray-500">
-            依頼ID: #${request.id}
+            依頼ID: #${text(request.id)}
           </div>
         </div>
         
@@ -6525,21 +6553,21 @@ function renderHelperRequestsList() {
           </div>
           <div>
             <div class="text-sm text-gray-600 mb-1">生徒情報</div>
-            <div class="font-semibold text-gray-800">${request.student_name}</div>
-            <div class="text-sm text-gray-600">学籍番号: ${request.student_id}</div>
-            <div class="text-sm text-gray-600">進捗: ${request.lesson_progress}回</div>
+            <div class="font-semibold text-gray-800">${text(request.student_name)}</div>
+            <div class="text-sm text-gray-600">学籍番号: ${text(request.student_id)}</div>
+            <div class="text-sm text-gray-600">進捗: ${text(request.lesson_progress)}回</div>
           </div>
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
           <div>
             <div class="text-sm text-gray-600 mb-1">依頼Tutor</div>
-            <div class="font-semibold text-gray-800">${request.requesting_tutor_name || '-'}</div>
+            <div class="font-semibold text-gray-800">${text(request.requesting_tutor_name || '-')}</div>
           </div>
           ${request.status === 'accepted' ? `
           <div>
             <div class="text-sm text-gray-600 mb-1">受諾Tutor</div>
-            <div class="font-semibold text-green-700">${request.accepted_by_tutor_name || '-'}</div>
+            <div class="font-semibold text-green-700">${text(request.accepted_by_tutor_name || '-')}</div>
             <div class="text-sm text-gray-500">受諾日時: ${new Date(request.accepted_at).toLocaleString('ja-JP')}</div>
           </div>
           ` : ''}
@@ -6547,13 +6575,13 @@ function renderHelperRequestsList() {
         
         <div class="mb-3">
           <div class="text-sm text-gray-600 mb-1">依頼理由</div>
-          <div class="text-gray-800 whitespace-pre-wrap">${request.reason}</div>
+          <div class="text-gray-800 whitespace-pre-wrap">${text(request.reason)}</div>
         </div>
         
         ${request.notes ? `
         <div class="mb-3">
           <div class="text-sm text-gray-600 mb-1">備考</div>
-          <div class="text-gray-800 whitespace-pre-wrap">${request.notes}</div>
+          <div class="text-gray-800 whitespace-pre-wrap">${text(request.notes)}</div>
         </div>
         ` : ''}
         
@@ -6563,11 +6591,11 @@ function renderHelperRequestsList() {
         </div>
         
         <div class="flex gap-2 mt-4">
-          <a href="${request.notion_url}" target="_blank" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
+          ${notionUrl ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm">
             <i class="fas fa-external-link-alt mr-2"></i>Notionで開く
-          </a>
-          ${request.status === 'pending' && !isExpired ? `
-          <button onclick="acceptHelperRequest(${request.id})" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
+          </a>` : '<span class="text-gray-400 text-sm">Notionリンクなし</span>'}
+          ${validId && request.status === 'pending' && !isExpired ? `
+          <button onclick="acceptHelperRequest(${requestId})" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">
             <i class="fas fa-check mr-2"></i>この依頼を受諾する
           </button>
           ` : ''}
@@ -6576,7 +6604,7 @@ function renderHelperRequestsList() {
             <i class="fas fa-times mr-2"></i>期限切れのため受諾不可
           </button>
           ` : ''}
-          <button onclick="deleteHelperRequest(${request.id})" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">
+          <button ${validId ? `onclick="deleteHelperRequest(${requestId})"` : 'disabled'} class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">
             <i class="fas fa-trash mr-2"></i>削除
           </button>
         </div>
@@ -6587,14 +6615,17 @@ function renderHelperRequestsList() {
 
 // Accept helper request
 async function acceptHelperRequest(requestId) {
-  // Show tutor selection modal
-  showTutorSelectionModal(requestId);
+  const state = helperViewContext(), request = helperRequestForWrite(requestId);
+  if (!state || !request || request.status !== 'pending' || helperPendingWrites.has(Number(requestId))) return;
+  showTutorSelectionModal(Number(requestId));
 }
 
 // Show tutor selection modal
 function showTutorSelectionModal(requestId) {
+  closeTutorSelectionModal();
   const modal = document.createElement('div');
   modal.id = 'tutor-selection-modal';
+  modal.dataset.helperRequestId = String(requestId);
   modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
   modal.innerHTML = `
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
@@ -6620,7 +6651,7 @@ function showTutorSelectionModal(requestId) {
         </div>
         
         <div class="flex gap-3 justify-end">
-          <button onclick="confirmAcceptHelperRequest(${requestId})" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+          <button id="helper-accept-confirm" onclick="confirmAcceptHelperRequest(${requestId})" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
             <i class="fas fa-check mr-2"></i>確定する
           </button>
           <button data-helper-selection-close class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition">
@@ -6643,58 +6674,58 @@ function closeTutorSelectionModal() {
 
 // Confirm accept helper request
 async function confirmAcceptHelperRequest(requestId) {
-  const tutorSelect = document.getElementById('accepting-tutor-select');
-  const tutorId = tutorSelect.value;
-  
-  if (!tutorId) {
-    alert('Tutorを選択してください');
-    return;
-  }
-  
+  const state = helperViewContext(), request = helperRequestForWrite(requestId);
+  const modal = document.getElementById('tutor-selection-modal');
+  const select = document.getElementById('accepting-tutor-select');
+  const button = document.getElementById('helper-accept-confirm');
+  if (!state || !request || request.status !== 'pending' || !modal || modal.dataset.helperRequestId !== String(Number(requestId)) ||
+      !select || !button || !modal.contains(select) || !modal.contains(button) || button.disabled || helperPendingWrites.has(Number(requestId))) return;
+  const tutorId = select.value;
+  if (!tutorId) { alert('Tutorを選択してください'); return; }
   const tutor = tutors.find(t => t.employee_id === tutorId);
-  if (!tutor) {
-    alert('選択されたTutorが見つかりません');
-    return;
-  }
-  
+  if (!tutor) { alert('選択されたTutorが見つかりません'); return; }
+  const current = () => state.current() && helperRequestForWrite(requestId) === request && document.getElementById('tutor-selection-modal') === modal &&
+    document.getElementById('accepting-tutor-select') === select && document.getElementById('helper-accept-confirm') === button && select.value === tutorId;
+  helperPendingWrites.add(Number(requestId)); button.disabled = true;
   try {
-    const res = await axios.post(`${API_BASE}/api/helper-requests/${requestId}/accept`, {
-      tutor_id: tutor.employee_id,
-      tutor_name: tutor.tutor_name
-    });
-    
-    if (res.data.success) {
-      alert('助っ人依頼を受諾しました！');
-      closeTutorSelectionModal();
-      await renderHelpersPage();
-    } else {
-      alert('エラーが発生しました: ' + (res.data.error || '不明なエラー'));
-    }
-  } catch (error) {
-    console.error('助っ人依頼の受諾エラー:', error);
+    const res = await axios.post(`${API_BASE}/api/helper-requests/${Number(requestId)}/accept`, {
+      tutor_id: tutor.employee_id, tutor_name: tutor.tutor_name
+    }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Helper accept rejected');
+    alert('助っ人依頼を受諾しました！');
+    closeTutorSelectionModal();
+    await renderHelpersPage(() => state.current() && !document.getElementById('tutor-selection-modal'));
+  } catch {
+    if (!current()) return;
+    console.error('Helper acceptance failed');
     alert('助っ人依頼の受諾に失敗しました');
+  } finally {
+    helperPendingWrites.delete(Number(requestId));
+    if (document.getElementById('helper-accept-confirm') === button && document.getElementById('tutor-selection-modal') === modal) button.disabled = false;
   }
 }
 
 // Delete helper request
 async function deleteHelperRequest(requestId) {
-  if (!confirm('この助っ人依頼を削除しますか？\n\nこの操作は取り消せません。')) {
-    return;
-  }
-  
+  const state = helperViewContext(), request = helperRequestForWrite(requestId);
+  if (!state || !request || helperPendingWrites.has(Number(requestId))) return;
+  const selection = document.getElementById('tutor-selection-modal');
+  const viewCurrent = () => state.current() && document.getElementById('tutor-selection-modal') === selection;
+  const current = () => viewCurrent() && helperRequestForWrite(requestId) === request;
+  if (!confirm('この助っ人依頼を削除しますか？\n\nこの操作は取り消せません。') || !current()) return;
+  helperPendingWrites.add(Number(requestId));
   try {
-    const res = await axios.delete(`${API_BASE}/api/helper-requests/${requestId}`);
-    
-    if (res.data.success) {
-      alert('助っ人依頼を削除しました');
-      await renderHelpersPage();
-    } else {
-      alert('エラーが発生しました: ' + (res.data.error || '不明なエラー'));
-    }
-  } catch (error) {
-    console.error('助っ人依頼の削除エラー:', error);
+    const res = await axios.delete(`${API_BASE}/api/helper-requests/${Number(requestId)}`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Helper delete rejected');
+    alert('助っ人依頼を削除しました');
+    await renderHelpersPage(viewCurrent);
+  } catch {
+    if (!current()) return;
+    console.error('Helper deletion failed');
     alert('助っ人依頼の削除に失敗しました');
-  }
+  } finally { helperPendingWrites.delete(Number(requestId)); }
 }
 
 // ========== Tutor Schedules Page ==========

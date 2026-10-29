@@ -75,3 +75,12 @@ test('crew accept uses trusted employee/name and preserves pending predicate wit
   const f=await fixture('crew');assert.equal((await f.app.request('/api/helper-requests/42/accept',post({tutor_id:'E7',tutor_name:{forged:true}}))).status,200);
   assert.deepEqual(f.queries[1].params,['E7','Synthetic Tutor','42']);assert.ok(f.queries[1].sql.includes("WHERE id = $3 AND status = 'pending'"));assert.equal(f.queries.length,3);assert.equal(f.notifications.length,0);
 });
+
+test('crew-owned request stores benign tag-shaped reason/notes as text, so shared renderer must escape them',async()=>{
+  const marker='<b data-synthetic="helper-text">Synthetic text</b>';
+  const f=await fixture('crew');
+  assert.equal((await f.app.request('/api/helper-requests',post({...normal,reason:marker,notes:marker}))).status,200);
+  assert.ok(f.authQueries.some(q=>q.sql.includes('FROM students')&&q.params[0]==='OWN'));
+  assert.equal(f.queries[0].params[8],marker);assert.equal(f.queries[0].params[9],marker);
+  const denied=await fixture('crew');assert.equal((await denied.app.request('/api/helper-requests',post({...normal,student_id:'OTHER',reason:marker}))).status,403);assert.equal(denied.queries.length,0);assert.equal(denied.notifications.length,0);
+});
