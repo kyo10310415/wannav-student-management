@@ -32,6 +32,10 @@ export const USER_SETTINGS_REQUEST_MAX_BYTES = 256 * 1024;
 const limitUserSettingsBody = uploadRequestBodyLimit(USER_SETTINGS_REQUEST_MAX_BYTES, {
   tooLargeError: 'User settings request too large', invalidError: 'Invalid user settings request'
 });
+export const SCHEDULE_REQUEST_MAX_BYTES = 256 * 1024;
+const limitScheduleBody = uploadRequestBodyLimit(SCHEDULE_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Schedule request too large', invalidError: 'Invalid schedule request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -142,6 +146,11 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     // Hono matches a raw parameter segment before decoding it; %2F is still one segment.
     // Keep crew's decoded-path allowlist, but cover every manager route parameter before parsing.
     const bodyWritePath = user.role === 'crew' ? path : c.req.path.replace(/\/+$/, '');
+    if (method === 'POST' && (path === '/api/schedules/absence' ||
+        /^\/api\/schedules\/absence\/[^/]+\/approve$/.test(bodyWritePath))) {
+      const rejected = await limitScheduleBody(c, async () => {});
+      if (rejected) return rejected;
+    }
     if (['POST', 'PUT'].includes(method) && under(path, '/api/users')) {
       const rejected = await limitUserSettingsBody(c, async () => {});
       if (rejected) return rejected;

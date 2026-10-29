@@ -5,6 +5,22 @@ import { notifyAbsenceRequest, notifyAbsenceApproval } from '../services/discord
 
 const app = new Hono();
 
+async function readScheduleBody(c) {
+  try {
+    const body = await c.req.json();
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  } catch { return null; }
+}
+const scheduleText = value => typeof value === 'string' && !value.includes('\u0000');
+function schedulePeriod(c) {
+  const now = new Date();
+  const year = c.req.query('year') || now.getFullYear();
+  const month = c.req.query('month') || now.getMonth() + 1;
+  if (!/^\d{1,4}$/.test(year) || Number(year) < 1 ||
+      !/^\d{1,2}$/.test(month) || Number(month) < 1 || Number(month) > 12) return null;
+  return { year, month };
+}
+
 /**
  * Get all tutor schedules from Google Sheets
  */
@@ -24,7 +40,7 @@ app.get('/', async (c) => {
     const tutors = tutorsResult.rows;
     
     // Create email to tutor name mapping (case-insensitive)
-    const emailToTutorMap = {};
+    const emailToTutorMap = Object.create(null);
     tutors.forEach(tutor => {
       if (tutor.email) {
         emailToTutorMap[tutor.email.toLowerCase()] = tutor.tutor_name;
@@ -72,7 +88,8 @@ app.get('/', async (c) => {
  */
 app.post('/absence', async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await readScheduleBody(c);
+    if (!body) return c.json({ success: false, error: '申請内容が不正です' }, 400);
     const { 
       event_id,
       tutor_email,
@@ -85,6 +102,10 @@ app.post('/absence', async (c) => {
       matched_keyword,
       leader_email  // リーダーのメールアドレス
     } = body;
+    if (![event_id, tutor_email, tutor_name, absence_type, reason].every(value => scheduleText(value) && value.trim()) ||
+        ![schedule_date, schedule_time, schedule_title, matched_keyword, leader_email].every(value => value == null || scheduleText(value))) {
+      return c.json({ success: false, error: '申請内容が不正です' }, 400);
+    }
     
     // Validation
     if (!event_id || !tutor_email || !tutor_name || !absence_type || !reason) {
@@ -273,7 +294,7 @@ app.delete('/absence/:eventId/:tutorEmail', async (c) => {
     const eventId = c.req.param('eventId');
     const tutorEmail = c.req.param('tutorEmail');
     
-    if (!eventId || !tutorEmail) {
+    if (!eventId || !tutorEmail || !scheduleText(eventId) || !scheduleText(tutorEmail)) {
       return c.json({
         success: false,
         error: 'イベントIDとメールアドレスが必要です'
@@ -333,8 +354,9 @@ app.delete('/absence/:eventId/:tutorEmail', async (c) => {
  */
 app.get('/absence-stats', async (c) => {
   try {
-    const year = c.req.query('year') || new Date().getFullYear();
-    const month = c.req.query('month') || new Date().getMonth() + 1;
+    const period = schedulePeriod(c);
+    if (!period) return c.json({ success: false, error: '年月が不正です' }, 400);
+    const { year, month } = period;
     
     // Get absence requests for the specified month
     const requestsQuery = `
@@ -352,7 +374,7 @@ app.get('/absence-stats', async (c) => {
     const requestsResult = await query(requestsQuery, [year, month]);
     
     // Organize data by tutor
-    const statsByTutor = {};
+    const statsByTutor = Object.create(null);
     requestsResult.rows.forEach(row => {
       if (!statsByTutor[row.tutor_email]) {
         statsByTutor[row.tutor_email] = {
@@ -388,7 +410,7 @@ app.get('/absence-stats', async (c) => {
     // Get tutors for email to tutor name mapping
     const tutorsResult = await query('SELECT email, tutor_name FROM tutors');
     const tutors = tutorsResult.rows;
-    const emailToTutorMap = {};
+    const emailToTutorMap = Object.create(null);
     tutors.forEach(tutor => {
       if (tutor.email) {
         emailToTutorMap[tutor.email.toLowerCase()] = tutor.tutor_name;
@@ -396,7 +418,7 @@ app.get('/absence-stats', async (c) => {
     });
     
     // Count scheduled events for each tutor in the specified month
-    const scheduledCountByTutor = {};
+    const scheduledCountByTutor = Object.create(null);
     schedules.forEach(schedule => {
       const scheduleDate = new Date(schedule.start_time);
       const scheduleYear = scheduleDate.getFullYear();
@@ -486,8 +508,9 @@ app.get('/absence-stats', async (c) => {
  */
 app.get('/absence-requests', async (c) => {
   try {
-    const year = c.req.query('year') || new Date().getFullYear();
-    const month = c.req.query('month') || new Date().getMonth() + 1;
+    const period = schedulePeriod(c);
+    if (!period) return c.json({ success: false, error: '年月が不正です' }, 400);
+    const { year, month } = period;
     
     // Get all APPROVED absence requests for the specified month
     const requestsQuery = `
@@ -506,10 +529,10 @@ app.get('/absence-requests', async (c) => {
     const requestsResult = await query(requestsQuery, [year, month]);
     
     // Group by event_id and remove duplicates (keep only latest per tutor per event)
-    const requestsByEvent = {};
+    const requestsByEvent = Object.create(null);
     requestsResult.rows.forEach(row => {
       if (!requestsByEvent[row.event_id]) {
-        requestsByEvent[row.event_id] = {};
+        requestsByEvent[row.event_id] = Object.create(null);
       }
       
       // Keep only the latest request per tutor (rows are already sorted by created_at DESC)
@@ -525,7 +548,7 @@ app.get('/absence-requests', async (c) => {
     });
     
     // Convert to array format
-    const requestsByEventArray = {};
+    const requestsByEventArray = Object.create(null);
     Object.keys(requestsByEvent).forEach(eventId => {
       requestsByEventArray[eventId] = Object.values(requestsByEvent[eventId]);
     });
@@ -553,8 +576,9 @@ app.get('/absence-requests', async (c) => {
  */
 app.get('/absence-requests/pending', async (c) => {
   try {
-    const year = c.req.query('year') || new Date().getFullYear();
-    const month = c.req.query('month') || new Date().getMonth() + 1;
+    const period = schedulePeriod(c);
+    if (!period) return c.json({ success: false, error: '年月が不正です' }, 400);
+    const { year, month } = period;
     
     // Get all PENDING absence requests for the specified month
     const requestsQuery = `
@@ -578,7 +602,7 @@ app.get('/absence-requests/pending', async (c) => {
     const requestsResult = await query(requestsQuery, [year, month]);
     
     // Group by event_id
-    const requestsByEvent = {};
+    const requestsByEvent = Object.create(null);
     requestsResult.rows.forEach(row => {
       if (!requestsByEvent[row.event_id]) {
         requestsByEvent[row.event_id] = {
@@ -625,7 +649,11 @@ app.get('/absence-requests/pending', async (c) => {
 app.post('/absence/:requestId/approve', async (c) => {
   try {
     const requestId = c.req.param('requestId');
-    const body = await c.req.json();
+    if (!/^[1-9]\d*$/.test(requestId) || Number(requestId) > 2147483647) {
+      return c.json({ success: false, error: '申請IDが不正です' }, 400);
+    }
+    const body = await readScheduleBody(c);
+    if (!body) return c.json({ success: false, error: '受理内容が不正です' }, 400);
     const approver = c.get('authenticatedUser');
     const leader_email = approver.email;
     const leader_name = approver.tutor_name || approver.email;

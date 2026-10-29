@@ -6776,7 +6776,8 @@ async function deleteHelperRequest(requestId) {
 /**
  * Render Tutor Schedules Page
  */
-async function renderSchedulesPage() {
+async function renderSchedulesPage(operationCurrent = () => true) {
+  if (!operationCurrent()) return;
   const content = document.getElementById('content');
   
   // Show loading
@@ -6791,12 +6792,14 @@ async function renderSchedulesPage() {
     // Fetch schedules from API
     const res = await axios.get(`${API_BASE}/api/schedules`);
     
+    if (!operationCurrent()) return;
     if (res.data.success) {
       schedules = res.data.data;
       
       // Fetch absence requests for current month
       try {
         const absenceRes = await axios.get(`${API_BASE}/api/schedules/absence-requests?year=${selectedScheduleYear}&month=${selectedScheduleMonth}`);
+        if (!operationCurrent()) return;
         if (absenceRes.data.success) {
           const absenceRequests = absenceRes.data.data.requests;
           
@@ -6811,10 +6814,12 @@ async function renderSchedulesPage() {
           });
         }
       } catch (absenceError) {
+        if (!operationCurrent()) return;
         console.error('Error fetching absence requests:', absenceError);
         // Continue without absence data
       }
       
+      if (!operationCurrent()) return;
       renderSchedulesContent();
     } else {
       content.innerHTML = `
@@ -6826,6 +6831,7 @@ async function renderSchedulesPage() {
       `;
     }
   } catch (error) {
+    if (!operationCurrent()) return;
     console.error('スケジュール取得エラー:', error);
     content.innerHTML = `
       <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
@@ -7066,7 +7072,8 @@ function handleKeywordFilterChange(value) {
 /**
  * Handle schedule tab change
  */
-async function handleScheduleTabChange(tab) {
+async function handleScheduleTabChange(tab, operationCurrent = () => true) {
+  if (!operationCurrent()) return;
   scheduleTab = tab;
   
   // Show loading
@@ -7082,15 +7089,18 @@ async function handleScheduleTabChange(tab) {
     // Fetch pending requests
     try {
       const res = await axios.get(`${API_BASE}/api/schedules/absence-requests/pending?year=${selectedScheduleYear}&month=${selectedScheduleMonth}`);
+      if (!operationCurrent()) return;
       if (res.data.success) {
         pendingRequests = res.data.data.pendingRequests;
       }
     } catch (error) {
+      if (!operationCurrent()) return;
       console.error('Error fetching pending requests:', error);
       pendingRequests = [];
     }
   }
   
+  if (!operationCurrent()) return;
   renderSchedulesContent();
 }
 
@@ -7401,6 +7411,7 @@ function renderSchedulesList() {
  * Render schedules calendar view
  */
 function renderSchedulesCalendar() {
+  const text = value => escapeHtml(String(value ?? ''));
   const filteredSchedules = getFilteredSchedules();
   
   // Get days in selected month
@@ -7463,9 +7474,9 @@ function renderSchedulesCalendar() {
                 const colorClass = keywordColors[keyword] || 'bg-gray-200 border-gray-400';
                 
                 return `
-                  <div class="text-xs p-1 rounded border ${colorClass} truncate" title="${schedule.title || ''}">
-                    <div class="font-semibold">${time}</div>
-                    <div>${keyword}</div>
+                  <div class="text-xs p-1 rounded border ${colorClass} truncate" title="${text(schedule.title || '').replace(/"/g, '&quot;')}">
+                    <div class="font-semibold">${text(time)}</div>
+                    <div>${text(keyword)}</div>
                   </div>
                 `;
               }).join('')}
@@ -7481,11 +7492,12 @@ function renderSchedulesCalendar() {
  * Render attendance statistics
  */
 function renderAttendanceStatistics() {
+  const text = value => escapeHtml(String(value ?? ''));
   // Get filtered schedules
   const filteredSchedules = getFilteredSchedules();
   
   // Count attendance by tutor and keyword
-  const attendanceMap = {};
+  const attendanceMap = Object.create(null);
   
   filteredSchedules.forEach(schedule => {
     const keyword = schedule.matched_keyword || '不明';
@@ -7527,7 +7539,7 @@ function renderAttendanceStatistics() {
   return sortedAttendees.map(([name, counts]) => {
     return `
       <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${name}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${text(name)}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['ロープレ']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['1on1']}回</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${counts['チームMTG']}回</td>
@@ -7719,7 +7731,7 @@ function openAbsenceRequestModal(schedule) {
             キャンセル
           </button>
           <button 
-            onclick="submitAbsenceRequest()" 
+            id="absence-request-submit" onclick="submitAbsenceRequest()"
             class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
           >
             <i class="fas fa-paper-plane mr-2"></i>申請する
@@ -7746,143 +7758,115 @@ function closeAbsenceRequestModal() {
 /**
  * Submit absence request
  */
+const absencePendingWrites = new Set();
+function captureAbsenceOperation() {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'schedules') return null;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role, email = currentTutorEmail;
+  const name = currentTutorName, tab = scheduleTab, year = selectedScheduleYear, month = selectedScheduleMonth;
+  return () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'schedules' && document.getElementById('content') === root && currentTutorEmail === email &&
+    currentTutorName === name && scheduleTab === tab && selectedScheduleYear === year && selectedScheduleMonth === month;
+}
 async function submitAbsenceRequest() {
-  if (!selectedScheduleForAbsence) {
-    alert('スケジュールが選択されていません');
-    return;
-  }
-  
-  // Check if tutor is selected
-  if (!currentTutorEmail || !currentTutorName) {
-    alert('ヘッダーから現在のTutorを選択してください');
-    return;
-  }
-  
-  // Get selected absence type
-  const absenceTypeRadio = document.querySelector('input[name="absence-type"]:checked');
-  if (!absenceTypeRadio) {
-    alert('種別を選択してください');
-    return;
-  }
-  const absenceType = absenceTypeRadio.value;
-  
-  // Get reason
+  const active = captureAbsenceOperation(), schedule = selectedScheduleForAbsence;
+  const modal = document.getElementById('absence-request-modal'), button = document.getElementById('absence-request-submit');
   const reasonInput = document.getElementById('absence-reason');
-  const reason = reasonInput.value.trim();
-  if (!reason) {
-    alert('理由を入力してください');
-    return;
-  }
-  
+  const radio = modal?.querySelector('input[name="absence-type"]:checked');
+  if (!active || !schedule || !modal || !button || button.disabled || !modal.contains(button) ||
+      !modal.contains(reasonInput) || !document.body.contains(modal) || !radio) return;
+  if (!currentTutorEmail || !currentTutorName) { alert('ヘッダーから現在のTutorを選択してください'); return; }
+  const reason = reasonInput.value.trim(), absenceType = radio.value;
+  if (!reason) { alert('理由を入力してください'); return; }
+  if (!['cancel', 'reschedule'].includes(absenceType)) return;
+  const eventId = schedule.unique_event_key || schedule.event_id;
+  if (typeof eventId !== 'string' || !eventId || !getFilteredSchedules().includes(schedule)) return;
+  const key = JSON.stringify([eventId, currentTutorEmail]);
+  if (absencePendingWrites.has(key)) return;
+  const fields = ['unique_event_key', 'event_id', 'schedule_date', 'schedule_time', 'title', 'matched_keyword', 'account'];
+  const values = fields.map(field => schedule[field]);
+  const current = () => active() && selectedScheduleForAbsence === schedule && getFilteredSchedules().includes(schedule) &&
+    fields.every((field, i) => schedule[field] === values[i]) && document.getElementById('absence-request-modal') === modal &&
+    document.body.contains(modal) && document.getElementById('absence-request-submit') === button && modal.contains(button) &&
+    document.getElementById('absence-reason') === reasonInput && reasonInput.value.trim() === reason &&
+    modal.querySelector('input[name="absence-type"]:checked') === radio && radio.value === absenceType;
+  const payload = { event_id: eventId, tutor_email: currentTutorEmail, tutor_name: currentTutorName,
+    absence_type: absenceType, reason, schedule_date: schedule.schedule_date, schedule_time: schedule.schedule_time,
+    schedule_title: schedule.title, matched_keyword: schedule.matched_keyword, leader_email: schedule.account };
+  const originalText = button.innerHTML;
+  absencePendingWrites.add(key);
+  button.disabled = true;
+  button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>送信中...';
   try {
-    // Show loading state
-    const submitButtons = document.querySelectorAll('#absence-request-modal button');
-    const submitButton = Array.from(submitButtons).find(btn => btn.textContent.includes('申請する'));
-    if (submitButton) {
-      const originalText = submitButton.innerHTML;
-      submitButton.disabled = true;
-      submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>送信中...';
-    }
-    
-    // Submit request
-    const response = await axios.post(`${API_BASE}/api/schedules/absence`, {
-      event_id: selectedScheduleForAbsence.unique_event_key || selectedScheduleForAbsence.event_id, // Use unique key if available
-      tutor_email: currentTutorEmail,
-      tutor_name: currentTutorName,
-      absence_type: absenceType,
-      reason: reason,
-      schedule_date: selectedScheduleForAbsence.schedule_date,
-      schedule_time: selectedScheduleForAbsence.schedule_time,
-      schedule_title: selectedScheduleForAbsence.title,
-      matched_keyword: selectedScheduleForAbsence.matched_keyword,
-      leader_email: selectedScheduleForAbsence.account  // リーダーのメールアドレスを送信
-    });
-    
-    if (response.data.success) {
-      // Show different message based on absence type
-      if (absenceType === 'reschedule') {
-        alert(`不参加申請が完了しました\n種別: リスケ\n\n⚠️ 忘れずに再予約してください！`);
-      } else {
-        alert(`不参加申請が完了しました\n種別: キャンセル`);
-      }
-      closeAbsenceRequestModal();
-      
-      // Reload schedules to show updated absence information
-      if (currentPage === 'schedules') {
-        await renderSchedulesPage();
-      }
-    } else {
-      alert('申請に失敗しました: ' + (response.data.error || '不明なエラー'));
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>申請する';
-      }
-    }
-  } catch (error) {
-    console.error('Absence request error:', error);
-    alert('申請に失敗しました: ' + error.message);
-    const submitButtons = document.querySelectorAll('#absence-request-modal button');
-    const submitButton = Array.from(submitButtons).find(btn => btn.textContent.includes('送信中'));
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.innerHTML = '<i class="fas fa-paper-plane mr-2"></i>申請する';
+    const response = await axios.post(`${API_BASE}/api/schedules/absence`, payload);
+    if (!current()) return;
+    if (!response.data.success) throw new Error('Absence request rejected');
+    alert(absenceType === 'reschedule' ? '不参加申請が完了しました\n種別: リスケ\n\n⚠️ 忘れずに再予約してください！' : '不参加申請が完了しました\n種別: キャンセル');
+    closeAbsenceRequestModal();
+    if (active()) await renderSchedulesPage(active);
+  } catch {
+    if (current()) { console.error('Absence request failed'); alert('申請に失敗しました'); }
+  } finally {
+    absencePendingWrites.delete(key);
+    if (document.getElementById('absence-request-modal') === modal && document.getElementById('absence-request-submit') === button && modal.contains(button)) {
+      button.disabled = false; button.innerHTML = originalText;
     }
   }
 }
 
-/**
- * Cancel/withdraw absence request
- */
+/** Withdraw only the selected Tutor's cached request. */
 async function cancelAbsenceRequest(eventId, tutorEmail) {
-  if (!confirm('不参加申請を取り下げますか？')) {
-    return;
-  }
-  
+  const active = captureAbsenceOperation();
+  if (!active || typeof eventId !== 'string' || !eventId || !tutorEmail || tutorEmail !== currentTutorEmail) return;
+  const schedule = getFilteredSchedules().find(row => String(row.unique_event_key || row.event_id) === eventId);
+  const request = schedule?.absence_requests?.find(row => row.tutor_email === tutorEmail);
+  if (!request) return;
+  const current = () => active() && getFilteredSchedules().includes(schedule) &&
+    String(schedule.unique_event_key || schedule.event_id) === eventId && schedule.absence_requests?.includes(request) && request.tutor_email === tutorEmail;
+  const key = JSON.stringify([eventId, tutorEmail]);
+  if (absencePendingWrites.has(key) || !confirm('不参加申請を取り下げますか？') || !current() || absencePendingWrites.has(key)) return;
+  absencePendingWrites.add(key);
   try {
     const response = await axios.delete(`${API_BASE}/api/schedules/absence/${encodeURIComponent(eventId)}/${encodeURIComponent(tutorEmail)}`);
-    
-    if (response.data.success) {
-      alert('不参加申請を取り下げました');
-      
-      // Reload schedules to show updated information
-      if (currentPage === 'schedules') {
-        await renderSchedulesPage();
-      }
-    } else {
-      alert('取り下げに失敗しました: ' + (response.data.error || '不明なエラー'));
-    }
-  } catch (error) {
-    console.error('Cancel absence request error:', error);
-    alert('取り下げに失敗しました: ' + error.message);
-  }
+    if (!current()) return;
+    if (!response.data.success) throw new Error('Absence withdrawal rejected');
+    alert('不参加申請を取り下げました');
+    if (active()) await renderSchedulesPage(active);
+  } catch {
+    if (current()) { console.error('Absence withdrawal failed'); alert('取り下げに失敗しました'); }
+  } finally { absencePendingWrites.delete(key); }
 }
 
-/**
- * Approve absence request
- */
+/** Approve only a currently cached request as a manager. */
 async function approveAbsenceRequest(requestId, tutorName) {
-  if (!confirm(`${tutorName} さんの不参加申請を受理しますか？`)) {
-    return;
-  }
-  
+  const active = captureAbsenceOperation();
+  if (!active || !['admin', 'leader'].includes(currentUser.role) || !/^[1-9]\d*$/.test(String(requestId)) || !Number.isSafeInteger(Number(requestId))) return;
+  const event = pendingRequests.find(event => event.requests?.some(row => Number(row.id) === Number(requestId)));
+  const request = event?.requests.find(row => Number(row.id) === Number(requestId));
+  if (!request) return;
+  const requestEmail = request.tutor_email, requestName = request.tutor_name, eventId = event.unique_event_key || event.event_id || request.event_id || '';
+  const current = () => active() && pendingRequests.includes(event) && event.requests?.includes(request) && Number(request.id) === Number(requestId) &&
+    request.tutor_email === requestEmail && request.tutor_name === requestName && (event.unique_event_key || event.event_id || request.event_id || '') === eventId;
+  const key = JSON.stringify([String(eventId), requestEmail]);
+  const idKey = `approve:${Number(requestId)}`;
+  if (absencePendingWrites.has(key) || absencePendingWrites.has(idKey) ||
+      !confirm(`${request.tutor_name || ''} さんの不参加申請を受理しますか？`) || !current() || absencePendingWrites.has(key) || absencePendingWrites.has(idKey)) return;
+  absencePendingWrites.add(key); absencePendingWrites.add(idKey);
   try {
-    const response = await axios.post(`${API_BASE}/api/schedules/absence/${requestId}/approve`, {
-      leader_email: currentUser.email,
-      leader_name: currentUser.name || currentUser.email
+    const response = await axios.post(`${API_BASE}/api/schedules/absence/${Number(requestId)}/approve`, {
+      leader_email: currentUser.email, leader_name: currentUser.name || currentUser.email
     });
-    
-    if (response.data.success) {
-      alert('不参加申請を受理しました');
-      
-      // Reload pending requests
-      await handleScheduleTabChange('pending');
-    } else {
-      alert('受理に失敗しました: ' + (response.data.error || '不明なエラー'));
+    if (!current()) return;
+    if (!response.data.success) throw new Error('Absence approval rejected');
+    alert('不参加申請を受理しました');
+    if (active()) {
+      scheduleTab = 'pending';
+      const refreshCurrent = captureAbsenceOperation();
+      if (refreshCurrent) await handleScheduleTabChange('pending', refreshCurrent);
     }
-  } catch (error) {
-    console.error('Approve absence request error:', error);
-    alert('受理に失敗しました: ' + error.message);
-  }
+  } catch {
+    if (current()) { console.error('Absence approval failed'); alert('受理に失敗しました'); }
+  } finally { absencePendingWrites.delete(key); absencePendingWrites.delete(idKey); }
 }
 
 // ==================== Current Tutor Management ====================
@@ -7959,6 +7943,7 @@ async function changeAbsenceStatsMonth(offset) {
  * Render absence stats section
  */
 function renderAbsenceStatsSection() {
+  const text = value => escapeHtml(String(value ?? ''));
   const statsContainer = document.getElementById('absence-stats-container');
   if (!statsContainer) return;
   
@@ -7971,7 +7956,7 @@ function renderAbsenceStatsSection() {
     statsContainer.innerHTML = `
       <div class="text-center py-8 text-gray-500">
         <i class="fas fa-inbox text-4xl mb-2"></i>
-        <p>${selectedStatsYear}年${selectedStatsMonth}月のデータがありません</p>
+        <p>${text(selectedStatsYear)}年${text(selectedStatsMonth)}月のデータがありません</p>
       </div>
     `;
     return;
@@ -8003,11 +7988,11 @@ function renderAbsenceStatsSection() {
           
           return `
             <tr class="hover:bg-gray-50">
-              <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${stat.tutor_name}</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm text-gray-600">${stat.scheduled_count || 0}回</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${cancelClass}">${stat.cancel_count}回</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${rescheduleClass}">${stat.reschedule_count}回</td>
-              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${totalClass}">${stat.total_count}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${text(stat.tutor_name)}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm text-gray-600">${text(stat.scheduled_count || 0)}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${cancelClass}">${text(stat.cancel_count)}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${rescheduleClass}">${text(stat.reschedule_count)}回</td>
+              <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${totalClass}">${text(stat.total_count)}回</td>
               <td class="px-4 py-3 whitespace-nowrap text-center text-sm ${attendanceRateClass}">${attendanceRate.toFixed(1)}%</td>
             </tr>
           `;
