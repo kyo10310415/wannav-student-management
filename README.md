@@ -1085,3 +1085,11 @@ PRO開始日更新のJSON本文は256KiBまでです。認証・crew担当確認
 ヘルパー作成はDB必須lesson_date/student_id/student_name/reason/deadlineと、nullable列の型・文字列長・NUL・進捗int4を確認します。nullable列を新たに必須にせず、過去期限や既存の進捗整数文字列を許可。期限は現在UIのISO、SQL日時、date-only、offset等を受け付け、保存文字列を変換せずPostgreSQL TIMESTAMP without time zoneの既存挙動を維持します。特殊な自由形式日時は400になる場合があります。受諾は選択employee_idの非空文字列/長さと名前の型を確認し、crewの信頼済み本人情報を優先します。URL内容の検証や期間の業務制約、作成後通知失敗の部分保存は未変更です。
 
 日報提出・コメントはcaptured認証/role/page/root/modal/対象/cache/inputを照合し、同一対象の多重実行を抑止、古い応答のclose/通知/入力消去/追記を拒否します。提出後再取得も親操作が現在の間だけ反映します。固定エラー/ログと既存の著者テキスト表示を維持。crew自身の画面上の日報権限とサーバー認可を広げず、送信済APIを取消しません。日報/コメント削除、履歴read、通常ナビゲーションの描画全体のstale guardは今回対象外です。
+
+## 日報履歴・共有依頼・内容マスター入力（2026-10-29、第159〜163工程）
+
+レッスン内容マスターの単体POST・PUT・bulk POSTは、manager認可後、JSON解析前に本文1MiBまで計数します。報告より長い本文/一括登録を扱うため個別報告の256KiBと区別した新しい運用上限です。宣言超過は未読413、未指定/虚偽Content-Lengthも実バイトで超過413、壊れたstreamは400。raw routeでencoded parameterも制限します。JSONはobject、title/contentは省略/nullまたは文字列（NUL不可）、lesson_numberは数値/文字列に限定します。bulkは全itemsの型を最初のSQL前に検証し、不正形状400では部分保存しません。既存の不正レッスンキーのskip、通常/PROキー正規化、PUTの省略/null保持と空文字更新は維持します。DB途中失敗時のrollbackやbulk行数上限は追加していません。
+
+日報履歴は認証/対象Tutor/画面/modal/body/pager/最新readを照合し、close/別Tutor/ページ逆順の旧応答を反映しません。managerの日報/コメント削除は表示report/cache/DOMと確認前後の状態へ束縛し、同reportのコメント投稿・削除を相互排他にします。成功後のcache/件数は正しいreportだけ更新し、旧履歴応答が完了済み投稿/削除を復活させないようread世代を無効化します。サーバー認可・自己日報参照・5件ページを維持し、送信済APIの取消ではありません。
+
+ヘルパー共有一覧は保存された氏名/学籍番号/Tutor/理由/備考等をテキスト表示し、NotionリンクはHTTP(S)のみ許可します。通常のタグ形式文字列もHTML要素にしません。crewの担当確認後に保存可能な理由/備考から共有一覧への保存型HTML解釈経路を閉じます。共有閲覧やAPIの担当/本人制限は維持します。一覧readは認証/page/root/最新世代を照合し、起動時badgeの他画面利用を保持。page/badge競合は既に始まった最新read完了を待ち、新GETや自動retryは発行しません。受諾/削除は同一requestのlock、対象cache、modal/選択値、認証/DOM、完了後の親readを照合します。保存型HTMLの実汚染・実悪用は未調査、サーバー冪等性/全件一覧ページングは未変更です。
