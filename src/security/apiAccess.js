@@ -122,12 +122,15 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
       if (rejected) return rejected;
     }
     const writeId = user.role === 'crew' ? '\\d+' : '[^/]+';
-    if ((method === 'POST' && (path === '/api/daily-reports' || new RegExp(`^/api/daily-reports/${writeId}/comments$`).test(path))) ||
+    // Hono matches a raw parameter segment before decoding it; %2F is still one segment.
+    // Keep crew's decoded-path allowlist, but cover every manager route parameter before parsing.
+    const bodyWritePath = user.role === 'crew' ? path : c.req.path.replace(/\/+$/, '');
+    if ((method === 'POST' && (path === '/api/daily-reports' || new RegExp(`^/api/daily-reports/${writeId}/comments$`).test(bodyWritePath))) ||
         (method === 'PUT' && path === '/api/daily-reports/reminder-setting')) {
       const rejected = await limitDailyReportBody(c, async () => {});
       if (rejected) return rejected;
     }
-    if (method === 'POST' && (path === '/api/helper-requests' || new RegExp(`^/api/helper-requests/${writeId}/accept$`).test(path))) {
+    if (method === 'POST' && (path === '/api/helper-requests' || new RegExp(`^/api/helper-requests/${writeId}/accept$`).test(bodyWritePath))) {
       const rejected = await limitHelperRequestBody(c, async () => {});
       if (rejected) return rejected;
     }

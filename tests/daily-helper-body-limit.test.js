@@ -19,7 +19,10 @@ function fixture(role='crew') {
     if(sql.includes('FROM students')){state.owners++;return {rows:params[0]==='OWN'?[{student_id:'OWN'}]:[]};}
     throw Error('Unexpected fixture query');
   }});
-  app.all('/api/*',async c=>{state.business++;return c.json({body:await c.req.json(),actor:c.get('authenticatedUser')?.id})});
+  const handler=async c=>{state.business++;return c.json({body:await c.req.json(),actor:c.get('authenticatedUser')?.id})};
+  app.post('/api/daily-reports/:id/comments',handler);
+  app.post('/api/helper-requests/:id/accept',handler);
+  app.all('/api/*',handler);
   return {app,state};
 }
 function stream(parts){let i=0;const seen={pulls:0,canceled:false};return {seen,body:new ReadableStream({pull(c){seen.pulls++;if(i<parts.length)c.enqueue(parts[i++]);else c.close()},cancel(){seen.canceled=true}},{highWaterMark:0})};}
@@ -40,6 +43,19 @@ test('daily/helper missing or false declared size still counts actual chunks',as
     const f=fixture(role),s=stream([new Uint8Array(131072),new Uint8Array(131073)]);
     assert.equal((await f.app.request(request(method,path,s.body,declared?{'Content-Length':declared}:{}))).status,413,path);
     assert.equal(s.seen.canceled,true);assert.equal(f.state.parses,0);assert.equal(f.state.owners,0);assert.equal(f.state.business,0);
+  }
+});
+
+test('encoded slash route parameters cannot bypass manager caps and crew still rejects without reading',async()=>{
+  for(const path of ['/api/daily-reports/%2F/comments','/api/helper-requests/%2F/accept']){
+    for(const role of ['admin','leader','crew']){
+      for(const declared of [true,false]){
+        const f=fixture(role),s=stream([new Uint8Array(262145)]);
+        const response=await f.app.request(request('POST',path,s.body,declared?{'Content-Length':'262145'}:{}));
+        assert.equal(response.status,role==='crew'?403:413);assert.equal(f.state.parses,0);assert.equal(f.state.business,0);
+        if(declared||role==='crew')assert.equal(s.seen.pulls,0);
+      }
+    }
   }
 });
 
