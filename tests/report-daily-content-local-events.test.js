@@ -77,5 +77,6 @@ test('real content edit markup keeps quote-like titles and lesson keys inside at
 
 test('daily history failure prints no raw error object and retains the failure state',async()=>{
  const f=fixture();f.install('const DR_PAGE_SIZE = 5;', 'function _renderDailyReportHistoryBody()');f.c.axios.get=async()=>{throw Error('Synthetic private details')};
+ f.c.currentPage='daily-reports';f.c.dailyReportViewTutorId=7;f.elements.dailyReportHistoryModal.classList.remove('hidden');
  await f.c.loadDailyReportHistory(7,5);assert.deepEqual(f.logs,[['[DailyReports] load history error']]);assert.ok(f.elements.drHistoryBody.innerHTML.includes('読み込みに失敗しました'));
 });
