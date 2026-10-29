@@ -450,49 +450,51 @@ function getRoleLabel(role) {
 // Load initial data
 async function loadInitialData() {
   try {
-    // Sync data from Notion (Google API 一時障害時はスキップしてDBの既存データで続行)
-    try {
-      await axios.get(`${API_BASE}/api/students/sync`);
-    } catch (syncError) {
-      if (syncError.response && syncError.response.data) {
-        const errorData = syncError.response.data;
-        if (errorData.error && errorData.error.includes('Cache spreadsheet is empty')) {
-          alert('⚠️ キャッシュシートが空です\n\nNotionからのデータ同期が必要です。\nキャッシュ更新スクリプトを実行してください。');
-          throw syncError;
+    if (['admin', 'leader'].includes(currentUser?.role)) {
+      // Sync data from Notion (Google API 一時障害時はスキップしてDBの既存データで続行)
+      try {
+        await axios.get(`${API_BASE}/api/students/sync`);
+      } catch (syncError) {
+        if (syncError.response && syncError.response.data) {
+          const errorData = syncError.response.data;
+          if (errorData.error && errorData.error.includes('Cache spreadsheet is empty')) {
+            alert('⚠️ キャッシュシートが空です\n\nNotionからのデータ同期が必要です。\nキャッシュ更新スクリプトを実行してください。');
+            throw syncError;
+          }
         }
+        const status = syncError.response ? syncError.response.status : 'network';
+        console.warn(`⚠️ students/sync failed (HTTP ${status}) — continuing with existing DB data`);
       }
-      const status = syncError.response ? syncError.response.status : 'network';
-      console.warn(`⚠️ students/sync failed (HTTP ${status}) — continuing with existing DB data`);
-    }
-    
-    try {
-      const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
-      console.log('Tutor sync result:', tutorSyncRes.data);
-      if (tutorSyncRes.data && tutorSyncRes.data.deleted > 0) {
-        console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+
+      try {
+        const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+        console.log('Tutor sync completed');
+        if (tutorSyncRes.data && tutorSyncRes.data.deleted > 0) {
+          console.log(`⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたためDBからも削除されました`);
+        }
+      } catch (tutorSyncError) {
+        const status = tutorSyncError.response ? tutorSyncError.response.status : 'network';
+        console.warn(`⚠️ tutors/sync failed (HTTP ${status}) — continuing with existing DB data`);
       }
-    } catch (tutorSyncError) {
-      const status = tutorSyncError.response ? tutorSyncError.response.status : 'network';
-      console.warn(`⚠️ tutors/sync failed (HTTP ${status}) — continuing with existing DB data`);
+
+      // Sync lessons from Google Sheets (populated by GAS)
+      try {
+        console.log('Syncing lessons from Google Sheets...');
+        const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
+        console.log('Sheet sync completed');
+      } catch (lessonSyncError) {
+        // Google API 一時障害時はスキップして続行（DBの既存データを使用）
+        const status = lessonSyncError.response ? lessonSyncError.response.status : 'network';
+        console.warn(`⚠️ lessons/sync-from-sheet failed (HTTP ${status}) — continuing with existing DB data`);
+      }
     }
-    
-    // Sync lessons from Google Sheets (populated by GAS)
-    try {
-      console.log('Syncing lessons from Google Sheets...');
-      const sheetSyncRes = await axios.get(`${API_BASE}/api/lessons/sync-from-sheet`);
-      console.log('Sheet sync result:', sheetSyncRes.data);
-    } catch (lessonSyncError) {
-      // Google API 一時障害時はスキップして続行（DBの既存データを使用）
-      const status = lessonSyncError.response ? lessonSyncError.response.status : 'network';
-      console.warn(`⚠️ lessons/sync-from-sheet failed (HTTP ${status}) — continuing with existing DB data`);
-    }
-    
+
     // Load data
     const [studentsRes, tutorsRes] = await Promise.all([
       axios.get(`${API_BASE}/api/students`),
       axios.get(`${API_BASE}/api/tutors`)
     ]);
-    
+
     students = studentsRes.data.data;
     tutors = tutorsRes.data.data;
     
@@ -2343,7 +2345,8 @@ async function refreshData() {
   
   try {
     // Tutor同期を個別に実行して結果を取得
-    const tutorSyncRes = await axios.get(`${API_BASE}/api/tutors/sync`);
+    const tutorSyncRes = ['admin', 'leader'].includes(currentUser?.role)
+      ? await axios.get(`${API_BASE}/api/tutors/sync`) : null;
     
     // その他のデータ同期
     await loadInitialData();
@@ -2351,7 +2354,7 @@ async function refreshData() {
     
     // 同期結果を通知
     let message = 'データを更新しました';
-    if (tutorSyncRes.data.deleted > 0) {
+    if (tutorSyncRes?.data?.deleted > 0) {
       message += `\n\n⚠️ ${tutorSyncRes.data.deleted}人のTutorがスプレッドシートから削除されたため、DBからも削除されました`;
     }
     alert(message);

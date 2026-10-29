@@ -132,6 +132,7 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
     }
     const leaderOnly = ['/api/handover', '/api/funnel', '/api/vq-diagnosis', '/api/minutes', '/api/lesson-contents'];
     const managerOperation = leaderOnly.some(prefix => under(path, prefix)) ||
+      ['/api/students/sync', '/api/tutors/sync'].includes(path) ||
       under(path, '/api/lessons/sync') || path === '/api/lessons/sync-from-sheet' ||
       (under(path, '/api/lesson-reports') && method === 'DELETE') ||
       (path === '/api/lesson-reports' && ['GET', 'HEAD'].includes(method)) ||
