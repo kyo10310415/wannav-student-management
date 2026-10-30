@@ -18078,38 +18078,45 @@ let tutorRedListMonth = new Date().getMonth() + 1;
 /**
  * Tutorレッドリストページを描画する
  */
-async function renderTutorRedListPage() {
-  document.getElementById('loading').classList.remove('hidden');
-  document.getElementById('content').classList.add('hidden');
-
-  // リーダー以上のみアクセス可
-  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'leader')) {
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('content').classList.remove('hidden');
-    document.getElementById('content').innerHTML = `
-      <div class="text-center py-16 text-gray-500">
-        <i class="fas fa-lock text-5xl mb-4"></i>
-        <p class="text-lg font-semibold">アクセス権限がありません</p>
-        <p class="text-sm mt-2">このページはリーダー以上のみ閲覧できます。</p>
-      </div>
-    `;
-    return;
+let tutorRedPageReadGeneration = 0;
+const tutorRedRecalcWrites = new Set();
+function captureTutorRedPageRead() {
+  const root = document.getElementById('content'), loading = document.getElementById('loading');
+  if (!root || !loading || !sessionToken || currentUser?.role !== 'admin' || currentPage !== 'tutor-red-list') return null;
+  const token = sessionToken, userId = currentUser.id, year = tutorRedListYear, month = tutorRedListMonth;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === 'admin' &&
+    currentPage === 'tutor-red-list' && tutorRedListYear === year && tutorRedListMonth === month &&
+    document.getElementById('content') === root && document.getElementById('loading') === loading;
+  return { root, loading, token, userId, year, month, current };
+}
+async function renderTutorRedListPage(operationCurrent = () => true) {
+  const root = document.getElementById('content'), loading = document.getElementById('loading');
+  if (!root || !loading || currentPage !== 'tutor-red-list' || !operationCurrent()) return false;
+  const generation = ++tutorRedPageReadGeneration, state = captureTutorRedPageRead();
+  if (!state) {
+    loading.classList.add('hidden');
+    root.classList.remove('hidden');
+    tutorRedListData = [];
+    root.innerHTML = '<div class="text-center py-16 text-gray-500"><i class="fas fa-lock text-5xl mb-4"></i><p class="text-lg font-semibold">アクセス権限がありません</p><p class="text-sm mt-2">このページは管理者のみ閲覧できます。</p></div>';
+    return false;
   }
-
+  const current = () => generation === tutorRedPageReadGeneration && state.current() && operationCurrent();
+  loading.classList.remove('hidden');
+  root.classList.add('hidden');
   try {
-    const res = await axios.get(
-      `${API_BASE}/api/tutor-red-list?year=${tutorRedListYear}&month=${tutorRedListMonth}`,
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
+    const res = await axios.get(`${API_BASE}/api/tutor-red-list?year=${state.year}&month=${state.month}`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
     tutorRedListData = res.data.success ? res.data.data : [];
-  } catch (e) {
-    console.error('[TutorRedList] fetch error:', e);
+  } catch {
+    if (!current()) return false;
+    console.error('[TutorRedList] List read failed');
     tutorRedListData = [];
   }
-
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('content').classList.remove('hidden');
+  if (!current()) return false;
+  loading.classList.add('hidden');
+  root.classList.remove('hidden');
   _renderTutorRedListContent();
+  return true;
 }
 
 /**
@@ -18389,22 +18396,26 @@ async function changeTutorRedListMonth(offset) {
  * スコア再計算APIを呼び出す
  */
 async function recalcTutorRedList() {
+  const state = captureTutorRedPageRead();
+  if (!state) return;
+  const key = JSON.stringify([state.token, state.userId, state.year, state.month]);
+  const button = document.getElementById('tutor-red-recalc');
+  if (tutorRedRecalcWrites.has(key) || (button && (!state.root.contains(button) || button.disabled))) return;
+  tutorRedRecalcWrites.add(key);
+  if (button) button.disabled = true;
   try {
     showNotification('スコアを再計算中...', 'info');
-    const res = await axios.post(
-      `${API_BASE}/api/tutor-red-list/recalc`,
-      { year: tutorRedListYear, month: tutorRedListMonth },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    if (res.data.success) {
-      showNotification(res.data.message, 'success');
-      await renderTutorRedListPage();
-    } else {
-      showNotification(res.data.error || '再計算に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('[TutorRedList] recalc error:', e);
-    showNotification(e.response?.data?.error || '再計算に失敗しました', 'error');
+    const res = await axios.post(`${API_BASE}/api/tutor-red-list/recalc`, { year: state.year, month: state.month },
+      { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Recalculation rejected');
+    showNotification(studentDisplayText(res.data.message || '再計算が完了しました'), 'success');
+    await renderTutorRedListPage(state.current);
+  } catch {
+    if (state.current()) { console.error('[TutorRedList] Recalculation failed'); showNotification('再計算に失敗しました', 'error'); }
+  } finally {
+    tutorRedRecalcWrites.delete(key);
+    if (button && document.getElementById('tutor-red-recalc') === button && document.getElementById('content') === state.root && state.root.contains(button)) button.disabled = false;
   }
 }
 
