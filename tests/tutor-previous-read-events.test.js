@@ -43,7 +43,7 @@ test('Tutor handlers reject unknown actions, invalid sessions/roles, obsolete ro
 });
 test('real Tutor month functions retain year rollover, load order and team rerender',async()=>{
  const f=fixture();Object.assign(f.c,{selectedTutorYear:2026,selectedTutorMonth:1,loadTutorMonthlyStats:async()=>f.calls.push(['monthly']),loadTutorWeeklySnapshot:async()=>f.calls.push(['weekly']),loadSatisfactionLessonCompletion:async(...args)=>f.calls.push(['completion',...args]),renderTutorsPage:()=>f.calls.push(['render'])});
- const start=appSource.indexOf('async function changeTutorStatsMonth(delta)'),end=appSource.indexOf('// Render tutor statistics',start);vm.runInContext(appSource.slice(start,end),f.c);
+ const start=appSource.indexOf('async function changeTutorStatsMonth(delta)'),end=appSource.indexOf('// Render tutor statistics',start);vm.runInContext(appSource.slice(appSource.indexOf('const tutorMonthReadStates ='),appSource.indexOf('async function loadTutorMonthlyStats()'))+'\n'+appSource.slice(start,end),f.c);
  await f.c.handleTutorReadClick({target:f.tutor('previous-month')});assert.equal(f.c.selectedTutorYear,2025);assert.equal(f.c.selectedTutorMonth,12);assert.deepEqual(f.calls,[['monthly'],['weekly'],['completion',2025,12,true],['render']]);
  await f.c.handleTutorTeamChange({target:f.node('select[data-tutor-team-filter]')});assert.equal(f.c.selectedTeam,'Synthetic team');
 });

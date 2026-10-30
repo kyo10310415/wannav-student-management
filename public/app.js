@@ -715,33 +715,46 @@ function getSatisfactionDenominator(tutor, year, month, snapshot = null) {
 }
 
 // Load monthly tutor stats (helper requests, accepted, reschedule counts)
+const tutorMonthReadStates = new Map();
+function beginTutorMonthRead(key) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role)) return null;
+  const state = { token: sessionToken, id: currentUser.id, role: currentUser.role, page: currentPage,
+    year: selectedTutorYear, month: selectedTutorMonth, root };
+  tutorMonthReadStates.set(key, state);
+  return () => tutorMonthReadStates.get(key) === state && sessionToken === state.token && currentUser?.id === state.id &&
+    currentUser?.role === state.role && currentPage === state.page && selectedTutorYear === state.year && selectedTutorMonth === state.month &&
+    document.getElementById('content') === root;
+}
 async function loadTutorMonthlyStats() {
+  const current = beginTutorMonthRead('monthly');
+  if (!current) return false;
   try {
     const res = await axios.get(`${API_BASE}/api/tutors/monthly-stats/${selectedTutorYear}/${selectedTutorMonth}`);
-    if (res.data.success) {
-      tutorMonthlyStats = res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
-      console.log(`[Tutor Stats] Loaded monthly stats for ${selectedTutorYear}/${selectedTutorMonth}`);
-    }
-  } catch (error) {
-    console.error('Error loading tutor monthly stats:', error);
+    if (!current()) return false;
+    if (res.data.success) tutorMonthlyStats = res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
+    return true;
+  } catch {
+    if (!current()) return false;
+    console.error('Error loading tutor monthly stats');
     tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} };
+    return true;
   }
 }
-
-// Load weekly snapshot for the selected year/month (前週スナップショット)
 async function loadTutorWeeklySnapshot() {
+  const current = beginTutorMonthRead('weekly');
+  if (!current) return false;
   try {
     const ym = `${selectedTutorYear}/${selectedTutorMonth}`;
     const res = await axios.get(`${API_BASE}/api/tutors/weekly-snapshot/latest?year_month=${encodeURIComponent(ym)}`);
-    if (res.data.success) {
-      tutorWeeklySnapshotData = res.data.data || {};
-      console.log(`[Tutor Snapshot] Loaded weekly snapshot for ${ym}, tutors=${Object.keys(tutorWeeklySnapshotData).length}`);
-    } else {
-      tutorWeeklySnapshotData = {};
-    }
-  } catch (error) {
-    console.error('Error loading tutor weekly snapshot:', error);
+    if (!current()) return false;
+    tutorWeeklySnapshotData = res.data.success ? (res.data.data || {}) : {};
+    return true;
+  } catch {
+    if (!current()) return false;
+    console.error('Error loading tutor weekly snapshot');
     tutorWeeklySnapshotData = {};
+    return true;
   }
 }
 
@@ -3544,28 +3557,16 @@ function renderTeamFilterOptions() {
 // Handle team filter change
 // Change tutor satisfaction stats month
 async function changeTutorStatsMonth(delta) {
+  if (!sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'tutors' || !document.getElementById('content') || ![-1, 1].includes(delta)) return;
   selectedTutorMonth += delta;
-  
-  if (selectedTutorMonth < 1) {
-    selectedTutorMonth = 12;
-    selectedTutorYear--;
-  } else if (selectedTutorMonth > 12) {
-    selectedTutorMonth = 1;
-    selectedTutorYear++;
-  }
-  
-  console.log(`[Tutor Stats] Changed to ${selectedTutorYear}/${selectedTutorMonth}`);
-  
-  // Load monthly stats for the selected month
-  await loadTutorMonthlyStats();
-  
-  // Load weekly snapshot for the selected month
-  await loadTutorWeeklySnapshot();
-
-  // Load lesson completion data used by the satisfaction denominator
+  if (selectedTutorMonth < 1) { selectedTutorMonth = 12; selectedTutorYear--; }
+  else if (selectedTutorMonth > 12) { selectedTutorMonth = 1; selectedTutorYear++; }
+  const current = beginTutorMonthRead('navigation');
+  if (!current) return;
+  if ((await loadTutorMonthlyStats()) === false || !current()) return;
+  if ((await loadTutorWeeklySnapshot()) === false || !current()) return;
   await loadSatisfactionLessonCompletion(selectedTutorYear, selectedTutorMonth, true);
-  
-  renderTutorsPage();
+  if (current()) renderTutorsPage();
 }
 
 function handleTeamFilterChange(team) {
@@ -4768,7 +4769,13 @@ async function exportTutorSatisfactionToSheet() {
 }
 
 // Show satisfaction modal for a tutor
+let satisfactionModalReadGeneration = 0;
 async function showSatisfactionModal(tutorEmployeeId) {
+  const generation = ++satisfactionModalReadGeneration, root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'tutors') return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const year = selectedTutorYear, month = selectedTutorMonth, team = selectedTeam, cache = satisfactionData;
+  let modal = document.getElementById('satisfactionModal');
   const showOverallMetrics = canViewOverallSatisfactionMetrics();
   const tutor = tutors.find(t => t.employee_id === tutorEmployeeId);
   if (!tutor) {
@@ -4777,6 +4784,12 @@ async function showSatisfactionModal(tutorEmployeeId) {
   }
   const tutorName = tutor.tutor_name;
   const tutorSatisfactionData = getTutorSatisfactionData(tutor);
+  const tutorId = tutor.employee_id, tutorNameSnapshot = tutor.tutor_name, dataSnapshot = JSON.stringify(tutorSatisfactionData);
+  const current = () => generation === satisfactionModalReadGeneration && sessionToken === token && currentUser?.id === userId &&
+    currentUser?.role === role && currentPage === 'tutors' && document.getElementById('content') === root &&
+    selectedTutorYear === year && selectedTutorMonth === month && selectedTeam === team && satisfactionData === cache &&
+    tutors.includes(tutor) && tutor.employee_id === tutorId && tutor.tutor_name === tutorNameSnapshot &&
+    JSON.stringify(getTutorSatisfactionData(tutor)) === dataSnapshot && document.getElementById('satisfactionModal') === modal;
   // 表示中の選択月を使用（currentMonthではなくselectedTutorYear/Monthを参照）
   const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
   const currentMonthData = tutorSatisfactionData[selectedYearMonth];
@@ -4798,6 +4811,7 @@ async function showSatisfactionModal(tutorEmployeeId) {
     const [year, month] = monthKey.split('/').map(Number);
     return loadSatisfactionLessonCompletion(year, month);
   }));
+  if (!current()) return;
 
   // 選択月が今月かどうか判定（分母の補足表示に使用）
   const todayForModal = getJstDateParts();
@@ -4979,11 +4993,17 @@ async function showSatisfactionModal(tutorEmployeeId) {
     </div>
   `;
   
+  if (!current()) return;
+  modal?.remove();
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+  modal = document.getElementById('satisfactionModal');
   
   // Render chart
   setTimeout(() => {
-    const ctx = document.getElementById('satisfactionChart').getContext('2d');
+    if (!current() || !modal || !document.body.contains(modal)) return;
+    const canvas = document.getElementById('satisfactionChart');
+    if (!canvas || !modal.contains(canvas)) return;
+    const ctx = canvas.getContext('2d');
     new Chart(ctx, {
       type: 'line',
       data: {
@@ -5062,6 +5082,7 @@ async function showSatisfactionModal(tutorEmployeeId) {
 // Close satisfaction modal
 function closeSatisfactionModal(event) {
   if (event && event.target.id !== 'satisfactionModal') return;
+  satisfactionModalReadGeneration++;
   const modal = document.getElementById('satisfactionModal');
   if (modal) {
     modal.remove();
