@@ -19970,7 +19970,7 @@ async function minutesSearchStudent() {
   results.innerHTML = `<div class="flex flex-wrap gap-2 mt-1">${matched.map(s => `
     <button data-minutes-read-action="select-student" data-minutes-student-id="${escapeHtml(s.student_id).replace(/"/g, '&quot;')}" data-minutes-student-name="${escapeHtml(s.name||'').replace(/"/g, '&quot;')}"
             class="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs hover:bg-teal-200">
-      ${escapeHtml(s.name || s.student_id)} (${s.student_id})
+      ${escapeHtml(s.name || s.student_id)} (${escapeHtml(s.student_id)})
     </button>`).join('')}</div>`;
 }
 

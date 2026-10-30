@@ -67,3 +67,12 @@ test('real detail uses GET only and saved-quality tab toggles text/save visibili
  await f.click(f.control('detail-tab',{minutesTab:'text'},f.elements['minutes-detail-modal']));assert.equal(f.elements['minutes-modal-save-btn'].classList.values.has('hidden'),false);assert.equal(f.requests.length,1);
  await f.click(f.control('close-detail',{},f.elements['minutes-detail-modal']));assert.equal(f.elements['minutes-detail-modal'].classList.values.has('hidden'),true);assert.equal(vm.runInContext('minutesEditingId',f.c),null);
 });
+
+test('actual cached search label escapes the ID and preserves its value through the fixed selection entry',async()=>{
+ const f=fixture(),marker='<b data-synthetic="m">SYNTHETIC</b>',id=`Synthetic'"/${marker}`,name='Synthetic Name';
+ assert.ok(id.length<=50);f.c.currentPage='minutes';f.c.students=[{student_id:id,name}];f.elements['minutes-student-input'].value='Synthetic';f.install('async function minutesSearchStudent()', '// ═══════════════════════════════════════════════════════════════');await f.click(f.control('search'));
+ const html=f.elements['minutes-student-results'].innerHTML;assert.equal(html.includes(marker),false);assert.ok(html.includes('Synthetic\'"/&lt;b data-synthetic="m"&gt;SYNTHETIC&lt;/b&gt;)'));
+ const decode=s=>s.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+ const selected={minutesStudentId:decode(html.match(/data-minutes-student-id="([^"]*)"/)[1]),minutesStudentName:decode(html.match(/data-minutes-student-name="([^"]*)"/)[1])};
+ await f.click(f.control('select-student',selected));assert.equal(f.c.minutesCurrentStudentId,id);assert.equal(f.c.minutesCurrentStudentName,name);assert.deepEqual(f.calls,[['renderMinutesPage']]);assert.equal(f.requests.length,0);
+});
