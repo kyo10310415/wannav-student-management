@@ -18281,7 +18281,7 @@ function _renderTutorRedListCard(entry, c) {
   };
   const statusColor = statusColorMap[cs] || statusColorMap['未対応'];
 
-  const ao = escapeHtml(entry.assigned_to || '');
+  const ao = studentDisplayAttribute(entry.assigned_to || '');
   const team = escapeHtml(entry.snapshot_team || entry.current_team || '未所属');
 
   // スキルスコア（アンケート点数）
@@ -18294,10 +18294,10 @@ function _renderTutorRedListCard(entry, c) {
 
   // スコア内訳バッジ
   const helperScoreBadge = entry.helper_request_score > 0
-    ? `<span class="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5">助っ人依頼 +${entry.helper_request_score}点</span>`
+    ? `<span class="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5">助っ人依頼 +${studentDisplayText(entry.helper_request_score)}点</span>`
     : '';
   const attendanceScoreBadge = entry.attendance_score > 0
-    ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${entry.attendance_score}点</span>`
+    ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${studentDisplayText(entry.attendance_score)}点</span>`
     : '';
   const skillScoreBadge = (skillTotal !== null && skillTotal !== undefined && skillTotal < 210)
     ? `<span class="text-xs bg-purple-100 text-purple-700 rounded px-2 py-0.5">熱量低下 +3点</span>`
@@ -18310,7 +18310,7 @@ function _renderTutorRedListCard(entry, c) {
         <div class="flex items-center gap-2 mb-1">
           <span class="font-bold text-gray-900 text-base">${escapeHtml(entry.tutor_name)}</span>
           <span class="text-xs text-gray-400">${escapeHtml(team)}</span>
-          <span class="${c.text} font-bold text-sm ml-1">${entry.total_score}点</span>
+          <span class="${c.text} font-bold text-sm ml-1">${studentDisplayText(entry.total_score)}点</span>
         </div>
         <div class="flex flex-wrap gap-1 mb-2">
           ${helperScoreBadge}
@@ -18337,7 +18337,7 @@ function _renderTutorRedListCard(entry, c) {
         <!-- 助っ人依頼 -->
         <div class="text-center">
           <div class="text-xs text-gray-400 mb-1">助っ人依頼</div>
-          <div class="text-lg font-bold ${helperColor}">${helperCount}回</div>
+          <div class="text-lg font-bold ${helperColor}">${studentDisplayText(helperCount)}回</div>
         </div>
         <!-- アンケート点数 -->
         <div class="text-center">
@@ -18349,8 +18349,8 @@ function _renderTutorRedListCard(entry, c) {
       <!-- 右: 対応状況 -->
       <div class="flex flex-col gap-2 items-end min-w-[9rem]">
         <!-- 対応状況セレクト -->
-        <select onchange="updateTutorRedListStatus('${entry.tutor_id}', this.value)"
-                id="trl-status-${entry.tutor_id}"
+        <select data-tutor-red-action="status" data-tutor-red-id="${studentDisplayAttribute(entry.tutor_id)}"
+                id="trl-status-${studentDisplayAttribute(entry.tutor_id)}"
                 class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-purple-400 cursor-pointer">
           <option value="未対応"  ${cs === '未対応'  ? 'selected' : ''}>未対応</option>
           <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
@@ -18359,14 +18359,14 @@ function _renderTutorRedListCard(entry, c) {
         <!-- 担当者 -->
         <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
           <i class="fas fa-user-tie text-purple-300 text-xs flex-shrink-0"></i>
-          <input id="trl-assigned-${entry.tutor_id}" type="text"
+          <input id="trl-assigned-${studentDisplayAttribute(entry.tutor_id)}" type="text"
                  value="${ao}"
                  placeholder="担当者名"
-                 onchange="updateTutorRedListAssigned('${entry.tutor_id}', this.value)"
+                 data-tutor-red-action="assigned" data-tutor-red-id="${studentDisplayAttribute(entry.tutor_id)}"
                  class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
         </div>
         <!-- 削除ボタン -->
-        <button onclick="deleteTutorRedListEntry('${entry.tutor_id}', '${escapeHtml(entry.tutor_name)}')"
+        <button data-tutor-red-action="delete" data-tutor-red-id="${studentDisplayAttribute(entry.tutor_id)}"
                 class="w-full flex items-center justify-center gap-1 border border-gray-300 text-gray-500 hover:border-red-400 hover:text-red-500 px-2 py-1 rounded-lg text-xs transition">
           <i class="fas fa-times"></i>除外
         </button>
@@ -18374,6 +18374,28 @@ function _renderTutorRedListCard(entry, c) {
     </div>
   `;
 }
+
+function tutorRedCardEntry(control) {
+  if (!control || control.disabled || !sessionToken || currentUser?.role !== 'admin' ||
+      currentPage !== 'tutor-red-list' || !document.getElementById('content')?.contains(control)) return null;
+  return tutorRedListData.find(entry => String(entry.tutor_id) === control.dataset.tutorRedId) || null;
+}
+function handleTutorRedCardChange(event) {
+  const control = event.target?.closest?.('select[data-tutor-red-action="status"], input[data-tutor-red-action="assigned"]');
+  const entry = tutorRedCardEntry(control);
+  if (!entry) return;
+  if (control.dataset.tutorRedAction === 'status' && ['未対応', '対応中', '対応済み'].includes(control.value)) {
+    return updateTutorRedListStatus(entry.tutor_id, control.value);
+  }
+  if (control.dataset.tutorRedAction === 'assigned') return updateTutorRedListAssigned(entry.tutor_id, control.value);
+}
+function handleTutorRedCardClick(event) {
+  const control = event.target?.closest?.('button[data-tutor-red-action="delete"]');
+  const entry = tutorRedCardEntry(control);
+  if (entry) return deleteTutorRedListEntry(entry.tutor_id, entry.tutor_name || '');
+}
+document.addEventListener('change', handleTutorRedCardChange);
+document.addEventListener('click', handleTutorRedCardClick);
 
 /**
  * Tutorレッドリストの集計月変更
@@ -18414,7 +18436,7 @@ async function recalcTutorRedList() {
 async function updateTutorRedListStatus(tutorId, status) {
   try {
     const res = await axios.patch(
-      `${API_BASE}/api/tutor-red-list/${tutorId}/status`,
+      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
       { correspondence_status: status },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
@@ -18444,7 +18466,7 @@ async function updateTutorRedListStatus(tutorId, status) {
 async function updateTutorRedListAssigned(tutorId, assignedTo) {
   try {
     const res = await axios.patch(
-      `${API_BASE}/api/tutor-red-list/${tutorId}/status`,
+      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
       { assigned_to: assignedTo },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
@@ -18468,7 +18490,7 @@ async function deleteTutorRedListEntry(tutorId, tutorName) {
   if (!confirm(`「${tutorName}」をTutorレッドリストから除外しますか？\n（次回の再計算で条件に該当する場合は再登録されます）`)) return;
   try {
     const res = await axios.delete(
-      `${API_BASE}/api/tutor-red-list/${tutorId}`,
+      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}`,
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     if (res.data.success) {
