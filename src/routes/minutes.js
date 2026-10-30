@@ -301,7 +301,7 @@ app.post('/generate', async (c) => {
     if (!driveResult || !driveResult.transcript) {
       return c.json({
         success: false,
-        error: `Google Drive に文字起こしファイルが見つかりませんでした（学籍番号: ${studentId}、日付: ${lessonDate}）`,
+        error: 'Google Drive に文字起こしファイルが見つかりませんでした。対象の生徒とレッスン日を確認してください。',
       }, 404);
     }
 

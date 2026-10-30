@@ -19535,26 +19535,35 @@ async function loadMinutesBackfillStatus() {
   }
 }
 
-async function loadMinutesList() {
-  const container = document.getElementById('minutes-list-container');
-  if (!container) return;
+let minutesListReadGeneration = 0;
+let minutesDetailReadGeneration = 0;
+function captureMinutesReadContext() {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'minutes') return null;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const studentId = minutesCurrentStudentId, studentName = minutesCurrentStudentName;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'minutes' && document.getElementById('content') === root &&
+    minutesCurrentStudentId === studentId && minutesCurrentStudentName === studentName;
+  return { root, token, studentId, current };
+}
+async function loadMinutesList(parentCurrent = () => true) {
+  const state = captureMinutesReadContext(), container = document.getElementById('minutes-list-container');
+  if (!state || !container || !state.root.contains(container) || !parentCurrent()) return false;
+  const generation = ++minutesListReadGeneration;
+  const current = () => generation === minutesListReadGeneration && state.current() && parentCurrent() &&
+    document.getElementById('minutes-list-container') === container && state.root.contains(container);
   try {
-    if (minutesCurrentStudentId) {
-      // 特定生徒の議事録一覧
-      const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      minutesListCache = res.data.data || [];
-    } else {
-      // 全生徒の議事録一覧
-      const res = await axios.get('/api/minutes/all', {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      minutesListCache = res.data.data || [];
-    }
+    const path = state.studentId ? `/api/minutes/list/${encodeURIComponent(state.studentId)}` : '/api/minutes/all';
+    const res = await axios.get(path, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
+    minutesListCache = res.data.data || [];
     renderMinutesList();
-  } catch (err) {
-    container.innerHTML = `<p class="text-red-500 text-sm p-4">読み込み失敗: ${err.message}</p>`;
+    return true;
+  } catch {
+    if (!current()) return false;
+    container.innerHTML = '<p class="text-red-500 text-sm p-4">読み込みに失敗しました</p>';
+    return false;
   }
 }
 
@@ -19603,27 +19612,38 @@ function renderMinutesList() {
 
 let minutesEditingId = null;
 
-async function openMinutesDetail(id) {
+async function openMinutesDetail(id, parentCurrent = () => true) {
+  const state = captureMinutesReadContext(), recordId = Number(id);
+  const modal = document.getElementById('minutes-detail-modal'), title = document.getElementById('minutes-modal-title');
+  const text = document.getElementById('minutes-modal-text'), quality = document.getElementById('minutes-detail-panel-quality');
+  if (!state || !/^[1-9]\d*$/.test(String(id)) || !Number.isSafeInteger(recordId) || !parentCurrent() ||
+      !modal || !state.root.contains(modal) || !modal.contains(title) || !modal.contains(text) || !modal.contains(quality)) return false;
+  const generation = ++minutesDetailReadGeneration, cache = minutesListCache;
+  const current = () => generation === minutesDetailReadGeneration && state.current() && parentCurrent() && minutesListCache === cache &&
+    document.getElementById('minutes-detail-modal') === modal && state.root.contains(modal) &&
+    document.getElementById('minutes-modal-title') === title && document.getElementById('minutes-modal-text') === text &&
+    document.getElementById('minutes-detail-panel-quality') === quality && modal.contains(title) && modal.contains(text) && modal.contains(quality);
   try {
-    const res  = await axios.get(`/api/minutes/detail/${id}`, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
+    const res = await axios.get(`/api/minutes/detail/${recordId}`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
     const m = res.data.data;
-    minutesEditingId = id;
+    minutesEditingId = recordId;
     minutesCurrentDetail = m;
-    document.getElementById('minutes-modal-title').textContent =
-      `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${formatMinutesLessonNumber(m.lesson_number)})` : ''}`;
-    document.getElementById('minutes-modal-text').value = m.generated_text || '';
+    title.textContent = `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${formatMinutesLessonNumber(m.lesson_number)})` : ''}`;
+    text.value = m.generated_text || '';
     renderMinutesQualityEvaluation(m.quality_evaluation);
     switchMinutesDetailTab('text');
-    document.getElementById('minutes-detail-modal').classList.remove('hidden');
-  } catch (err) {
-    showNotification('議事録の読み込みに失敗しました', 'error');
+    modal.classList.remove('hidden');
+    return true;
+  } catch {
+    if (current()) showNotification('議事録の読み込みに失敗しました', 'error');
+    return false;
   }
 }
 
 function closeMinutesModal() {
-  document.getElementById('minutes-detail-modal').classList.add('hidden');
+  minutesDetailReadGeneration++;
+  document.getElementById('minutes-detail-modal')?.classList.add('hidden');
   minutesEditingId = null;
   minutesCurrentDetail = null;
 }
@@ -19713,56 +19733,80 @@ function renderMinutesQualityEvaluation(rawEvaluation) {
     </div>`;
 }
 
+const minutesPendingWrites = new Set();
+function captureMinutesWriteView() {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'minutes') return null;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const studentId = minutesCurrentStudentId, studentName = minutesCurrentStudentName;
+  return { root, token, userId, studentId, studentName, current: () => sessionToken === token && currentUser?.id === userId &&
+    currentUser?.role === role && currentPage === 'minutes' && document.getElementById('content') === root &&
+    minutesCurrentStudentId === studentId && minutesCurrentStudentName === studentName };
+}
 async function saveMinutesEdit() {
-  if (!minutesEditingId) return;
-  const text = document.getElementById('minutes-modal-text').value;
+  const view = captureMinutesWriteView(), id = minutesEditingId, detail = minutesCurrentDetail;
+  const modal = document.getElementById('minutes-detail-modal'), textInput = document.getElementById('minutes-modal-text');
+  const button = document.getElementById('minutes-modal-save-btn');
+  if (!view || !id || !detail || String(detail.id) !== String(id) || !modal || !textInput || !button || button.disabled ||
+      modal.classList.contains('hidden') || button.classList.contains('hidden') || !view.root.contains(modal) || !modal.contains(textInput) || !modal.contains(button)) return;
+  const text = textInput.value, key = JSON.stringify(['save', view.token, view.userId, id]);
+  if (minutesPendingWrites.has(key)) return;
+  const current = () => view.current() && minutesEditingId === id && minutesCurrentDetail === detail && String(detail.id) === String(id) &&
+    document.getElementById('minutes-detail-modal') === modal && !modal.classList.contains('hidden') && view.root.contains(modal) &&
+    document.getElementById('minutes-modal-text') === textInput && modal.contains(textInput) && textInput.value === text &&
+    document.getElementById('minutes-modal-save-btn') === button && modal.contains(button);
+  minutesPendingWrites.add(key); button.disabled = true;
   try {
-    await axios.put(`/api/minutes/${minutesEditingId}`, { generated_text: text }, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
+    const res = await axios.put(`/api/minutes/${encodeURIComponent(id)}`, { generated_text: text }, { headers: { Authorization: `Bearer ${view.token}` } });
+    if (!current()) return;
+    if (res.data?.success === false) throw new Error('Minutes edit rejected');
     showNotification('議事録を保存しました', 'success');
     closeMinutesModal();
-    await loadMinutesList();
-  } catch (err) {
-    showNotification('保存に失敗しました: ' + err.message, 'error');
+    const refreshCurrent = () => view.current() && document.getElementById('minutes-detail-modal') === modal &&
+      view.root.contains(modal) && modal.classList.contains('hidden') && minutesEditingId === null && minutesCurrentDetail === null;
+    if (refreshCurrent()) await loadMinutesList(refreshCurrent);
+  } catch {
+    if (current()) showNotification('議事録の保存に失敗しました', 'error');
+  } finally {
+    minutesPendingWrites.delete(key);
+    if (document.getElementById('content') === view.root && document.getElementById('minutes-modal-save-btn') === button && view.root.contains(button)) button.disabled = false;
   }
 }
-
 async function generateMinutes() {
-  const dateEl   = document.getElementById('minutes-gen-date');
-  const numberEl = document.getElementById('minutes-gen-number');
-  const btn      = document.getElementById('minutes-gen-btn');
-  const status   = document.getElementById('minutes-gen-status');
-  if (!dateEl || !minutesCurrentStudentId) return;
-
-  const lessonDate   = dateEl.value;
-  const lessonNumber = numberEl.value?.trim() || null;
-
-  btn.disabled = true;
+  const view = captureMinutesWriteView();
+  const dateEl = document.getElementById('minutes-gen-date'), numberEl = document.getElementById('minutes-gen-number');
+  const btn = document.getElementById('minutes-gen-btn'), status = document.getElementById('minutes-gen-status');
+  if (!view || !view.studentId || !dateEl || !numberEl || !btn || !status || btn.disabled ||
+      ![dateEl, numberEl, btn, status].every(node => view.root.contains(node))) return;
+  const lessonDate = dateEl.value, numberValue = numberEl.value, lessonNumber = numberValue?.trim() || null;
+  const editingId = minutesEditingId, detail = minutesCurrentDetail, modal = document.getElementById('minutes-detail-modal');
+  const key = JSON.stringify(['generate', view.token, view.userId, view.studentId, lessonDate]);
+  if (minutesPendingWrites.has(key)) return;
+  const current = () => view.current() && minutesEditingId === editingId && minutesCurrentDetail === detail &&
+    document.getElementById('minutes-detail-modal') === modal &&
+    [['minutes-gen-date', dateEl], ['minutes-gen-number', numberEl], ['minutes-gen-btn', btn], ['minutes-gen-status', status]]
+      .every(([id, node]) => document.getElementById(id) === node && view.root.contains(node)) && dateEl.value === lessonDate && numberEl.value === numberValue;
+  const originalHTML = btn.innerHTML;
+  minutesPendingWrites.add(key); btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>生成中...';
-  status.textContent = 'Google Driveから文字起こしを取得中...';
-  status.classList.remove('hidden');
-
+  status.textContent = 'Google Driveから文字起こしを取得中...'; status.classList.remove('hidden');
   try {
-    const res = await axios.post('/api/minutes/generate', {
-      studentId:    minutesCurrentStudentId,
-      studentName:  minutesCurrentStudentName,
-      lessonDate,
-      lessonNumber,
-    }, { headers: { Authorization: `Bearer ${sessionToken}` }, timeout: 120000 });
-
-    showNotification(res.data.warning || '議事録を生成しました', res.data.warning ? 'warning' : 'success');
+    const res = await axios.post('/api/minutes/generate', { studentId: view.studentId, studentName: view.studentName, lessonDate, lessonNumber },
+      { headers: { Authorization: `Bearer ${view.token}` }, timeout: 120000 });
+    if (!current()) return;
+    if (res.data?.success === false || !res.data?.data?.id) throw new Error('Minutes generation rejected');
+    showNotification(res.data.warning ? studentDisplayText(res.data.warning) : '議事録を生成しました', res.data.warning ? 'warning' : 'success');
     status.classList.add('hidden');
-    await loadMinutesList();
-    // 生成後すぐに詳細を開く
-    openMinutesDetail(res.data.data.id);
-  } catch (err) {
-    const msg = err.response?.data?.error || err.message;
-    showNotification('生成失敗: ' + msg, 'error');
-    status.textContent = 'エラー: ' + msg;
+    const loaded = await loadMinutesList(current);
+    if (loaded === false || !current()) return;
+    await openMinutesDetail(res.data.data.id, current);
+  } catch {
+    if (!current()) return;
+    showNotification('議事録の生成に失敗しました', 'error');
+    status.textContent = 'エラー: 議事録の生成に失敗しました';
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-robot"></i>AI生成';
+    minutesPendingWrites.delete(key);
+    if (document.getElementById('content') === view.root && document.getElementById('minutes-gen-btn') === btn && view.root.contains(btn)) { btn.disabled = false; btn.innerHTML = originalHTML; }
   }
 }
 
