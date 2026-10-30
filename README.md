@@ -1169,3 +1169,11 @@ Tutorのmonthly/weekly readはkey別世代・認証・画面/root・選択月を
 Tutor一覧の保存employeeID/氏名/team・Wanami識別属性・定員valueをescapeし、区分/定員inline2箇所を固定changeへ移行します。実表示→属性値往復→固定change→既存2保存関数の正常回帰を確認し、employeeIDのURLpathはencodeします。APIとcrewのサーバー権限は変えていません。
 
 品質評価の保存evidenceをtitleへ入れる箇所は属性用escapeへ変更します。既存のtext用escapeだけでは引用符が属性を壊すためです。定義定数由来のAsanaURLは変更せず、新しい攻撃可能URLと扱っていません。他の未確認Tutor表示/履歴処理へ安全判定を一般化しません。
+
+## Tutor export・引継ぎ表示の境界（2026-10-30、第204〜208工程）
+
+満足度exportは認証・画面・月/team・元データが変わった場合、保留read後の書出し開始や旧通知を止めます。送信済みの書込は取り消しません。品質modalも現在の認証・画面・選択対象にだけread結果を反映します。
+
+Tutorの2種類のexport POSTはmanager認可後、JSON解析前に実測1MiBで制限します。満足度は1〜10,000行、各1〜512列、月ラベル1〜500件に制限し、非有限数・NUL・先頭空白後の「=」文字列を400で拒否します。正当な「=」開始テキストも対象です。通常の数値・日付解釈を維持するためUSER_ENTEREDは継続し、Sheetsの全解釈規則を保護したとは扱いません。品質exportの年/月は数値または数値文字列だけ受け付けます。実Google書込の検証は未実施です。
+
+引継ぎ・新規割振りの保存文字列は属性用escape、外部リンクはHTTP(S)限定とし、割振り/コピーのinline処理を現在cache・画面・manager権限を確認する固定入口へ移行しました。通常保存と未設定への解除を合成データで確認しています。保存完了後のsidebar再取得全体の現在性は今回対象外です。

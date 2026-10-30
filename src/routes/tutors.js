@@ -13,6 +13,21 @@ import { weeklyTutorSnapshot } from '../jobs/tutorWeeklySnapshot.js';
 
 const app = new Hono();
 
+async function readTutorExportBody(c) {
+  try { const body = await c.req.json(); return body && typeof body === 'object' && !Array.isArray(body) ? body : null; }
+  catch { return null; }
+}
+function validSatisfactionExport(rows, months, manual) {
+  const text = value => typeof value === 'string' && !value.includes('\u0000') && !/^\s*=/.test(value);
+  const cell = value => value === null || typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value)) || text(value);
+  return Array.isArray(rows) && rows.length > 0 && rows.length <= 10000 &&
+    rows.every(row => Array.isArray(row) && row.length > 0 && row.length <= 512 && row.every(cell)) &&
+    Array.isArray(months) && months.length > 0 && months.length <= 500 &&
+    months.every(value => text(value) && value.trim()) &&
+    (manual === undefined || typeof manual === 'boolean');
+}
+
 async function requireTutorQualityExportAuth(c, next) {
   const sessionToken = c.req.header('Authorization')?.replace('Bearer ', '');
   if (!sessionToken) {
@@ -349,7 +364,11 @@ app.get('/quality/monthly/:employeeId/:year/:month', async (c) => {
  */
 app.post('/quality/export', requireTutorQualityExportAuth, async (c) => {
   try {
-    const { year: rawYear, month: rawMonth } = await c.req.json();
+    const body = await readTutorExportBody(c);
+    if (!body || !['number', 'string'].includes(typeof body.year) || !['number', 'string'].includes(typeof body.month)) {
+      return c.json({ success: false, error: 'Invalid year/month' }, 400);
+    }
+    const { year: rawYear, month: rawMonth } = body;
     const year = Number(rawYear);
     const month = Number(rawMonth);
 
@@ -642,14 +661,16 @@ app.get('/monthly-stats/:year/:month', async (c) => {
 app.post('/export-satisfaction', async (c) => {
   try {
     console.log("[Export] Starting satisfaction export...");
-    const { rows, sortedMonths, isManualExport, rowGroupSize: requestedRowGroupSize } = await c.req.json();
+    const body = await readTutorExportBody(c);
+    if (!body) return c.json({ success: false, error: 'Invalid data format' }, 400);
+    const { rows, sortedMonths, isManualExport, rowGroupSize: requestedRowGroupSize } = body;
     const rowGroupSize = Number.isInteger(requestedRowGroupSize) && requestedRowGroupSize >= 1 && requestedRowGroupSize <= 10
       ? requestedRowGroupSize
       : 3;
     
     console.log("[Export] Received data:");
     
-    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    if (!validSatisfactionExport(rows, sortedMonths, isManualExport)) {
       console.error("[Export] Invalid data format:");
       return c.json({
         success: false,
