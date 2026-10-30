@@ -18146,7 +18146,7 @@ function _renderTutorRedListContent() {
         </div>
 
         <!-- 再計算ボタン -->
-        <button onclick="recalcTutorRedList()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold">
+        <button id="tutor-red-recalc" onclick="recalcTutorRedList()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold">
           <i class="fas fa-sync-alt mr-2"></i>スコア再計算
         </button>
 
