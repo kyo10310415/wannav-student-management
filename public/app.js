@@ -4088,7 +4088,7 @@ function renderTutorRows() {
     const rescheduleColor = getCounterColor(rescheduleCount);
     
     // わなみさん使用回数（担当生徒の合計）
-    const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${tutor.notion_name}">...</span>`;
+    const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${studentDisplayAttribute(tutor.notion_name)}">...</span>`;
     
     // 前週との差分バッジ生成ヘルパー
     // delta: 数値差分, suffix: 単位文字列, higherIsBetter: true=増加が緑/減少が赤
@@ -4159,14 +4159,14 @@ function renderTutorRows() {
 
     return `
       <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${studentDisplayText(tutor.employee_id || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-          <div class="flex items-center">${tutor.tutor_name || '-'}${lessonQualityButton}${extensionReviewTutorButton}</div>
+          <div class="flex items-center">${studentDisplayText(tutor.tutor_name || '-')}${lessonQualityButton}${extensionReviewTutorButton}</div>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(tutor.team || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <select
-            onchange="updateTutorSection('${tutor.employee_id}', this.value)"
+            data-tutor-setting="section" data-tutor-setting-id="${studentDisplayAttribute(tutor.employee_id)}"
             class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
             <option value="" ${!tutor.responsible_section ? 'selected' : ''}>未設定</option>
@@ -4180,10 +4180,10 @@ function renderTutorRows() {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <input 
             type="number" 
-            value="${tutor.student_capacity || ''}" 
+            value="${studentDisplayAttribute(tutor.student_capacity || '')}"
             placeholder="-"
             class="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onchange="updateTutorCapacity('${tutor.employee_id}', this.value)"
+            data-tutor-setting="capacity" data-tutor-setting-id="${studentDisplayAttribute(tutor.employee_id)}"
             min="0"
           />
         </td>
@@ -4219,6 +4219,20 @@ function renderTutorRows() {
     `;
   }).join('');
 }
+
+function handleTutorSettingChange(event) {
+  const control = event.target?.closest?.('[data-tutor-setting]');
+  if (!control || control.disabled || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'tutors' || !document.getElementById('content')?.contains(control)) return;
+  const id = control.dataset.tutorSettingId;
+  if (!id || !tutors.some(tutor => String(tutor.employee_id) === id && tutor.status === 'アクティブ' &&
+      typeof tutor.job_type === 'string' && tutor.job_type.toLowerCase().includes('tutor') &&
+      (selectedTeam === 'all' || (tutor.team || '未所属') === selectedTeam))) return;
+  if (control.dataset.tutorSetting === 'section' && ['','Pro','A','B','C'].includes(control.value)) return updateTutorSection(id, control.value);
+  if (control.dataset.tutorSetting === 'capacity') return updateTutorCapacity(id, control.value);
+}
+
+document.addEventListener('change', handleTutorSettingChange);
 
 async function showTutorMinutesQualityModal(employeeId) {
   const tutor = tutors.find(item => item.employee_id === employeeId);
@@ -4402,7 +4416,7 @@ function renderTutorMinutesQualityModal(data) {
                     const metric = lesson.quality_evaluation?.metrics?.[definition.key];
                     if (!metric) return '<td class="px-3 py-2 text-center text-gray-300">-</td>';
                     const display = getMinutesQualityStatusDisplay(metric.status);
-                    return `<td class="px-3 py-2 text-center"><span class="inline-flex items-center gap-1 px-2 py-1 rounded-full ${display.badge}" title="${escapeHtml(metric.evidence || '')}"><i class="fas ${display.icon}"></i>${display.label}</span></td>`;
+                    return `<td class="px-3 py-2 text-center"><span class="inline-flex items-center gap-1 px-2 py-1 rounded-full ${display.badge}" title="${studentDisplayAttribute(metric.evidence || '')}"><i class="fas ${display.icon}"></i>${display.label}</span></td>`;
                   }).join('')}
                 </tr>`).join('')}
             </tbody>
@@ -4436,7 +4450,7 @@ async function updateTutorCapacity(employeeId, capacity) {
   try {
     const capacityValue = capacity === '' ? null : parseInt(capacity, 10);
     
-    const response = await axios.put(`${API_BASE}/api/tutors/${employeeId}/capacity`, {
+    const response = await axios.put(`${API_BASE}/api/tutors/${encodeURIComponent(employeeId)}/capacity`, {
       student_capacity: capacityValue
     });
     
@@ -4465,7 +4479,7 @@ async function updateTutorSection(employeeId, section) {
   try {
     const sectionValue = section === '' ? null : section;
     
-    const response = await axios.put(`${API_BASE}/api/tutors/${employeeId}/section`, {
+    const response = await axios.put(`${API_BASE}/api/tutors/${encodeURIComponent(employeeId)}/section`, {
       responsible_section: sectionValue
     });
     
