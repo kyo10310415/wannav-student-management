@@ -18474,7 +18474,7 @@ async function deleteTutorRedListEntry(tutorId, tutorName) {
     if (res.data.success) {
       tutorRedListData = tutorRedListData.filter(d => d.tutor_id !== tutorId);
       _renderTutorRedListContent();
-      showNotification(`「${tutorName}」をレッドリストから除外しました`, 'success');
+      showNotification(`「${studentDisplayText(tutorName)}」をレッドリストから除外しました`, 'success');
     } else {
       showNotification(res.data.error || '削除に失敗しました', 'error');
     }
