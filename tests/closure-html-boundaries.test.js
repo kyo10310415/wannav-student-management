@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import{readFile}from'node:fs/promises';
+const source=(await readFile(new URL('../public/app.js',import.meta.url),'utf8')).replace(/\r\n/g,'\n');
+const extract=name=>{let a=source.indexOf('function '+name+'(');assert.ok(a>=0,name);if(source.slice(a-6,a)==='async ')a-=6;return source.slice(a,source.indexOf('\n}',a)+2)};
+const marker='<b data-synthetic="closure">SYNTHETIC</b>',escape=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+test('R01 actual suspension renderer treats all provider fields as text and retains empty/cache fallback',async()=>{
+ const root={innerHTML:''},calls=[],c={document:{getElementById:()=>root},studentDisplayText:escape,console:{error(){}},axios:{get:async url=>{calls.push(url);return{data:{data:[{studentName:marker,studentId:marker,suspensionMonths:marker,suspensionStartDate:marker,suspensionEndDate:marker}]}}}}};vm.createContext(c);vm.runInContext(extract('renderSuspensionsPage'),c);await c.renderSuspensionsPage();assert.equal(root.innerHTML.includes(marker),false);assert.equal((root.innerHTML.match(/&lt;b data-synthetic=/g)||[]).length,5);assert.deepEqual(calls,['/api/suspensions']);
+ c.axios.get=async()=>({data:{data:[],cache_error:true}});await c.renderSuspensionsPage();assert.ok(root.innerHTML.includes('休会中の生徒はいません'));assert.ok(root.innerHTML.includes('data-suspension-action="reload"'));
+});
+test('R02 actual recipient preview escapes persisted name ID and Tutor without sending messages',async()=>{
+ const modals=[],calls=[],c={API_BASE:'',sessionToken:'synthetic',document:{getElementById:id=>({value:id==='broadcast-target-status'?'all':'all'})},studentDisplayText:escape,showModal:html=>modals.push(html),showNotification(){},console:{error(){}},axios:{post:async(url,payload,options)=>{calls.push({url,payload,options});return{data:{success:true,students:[{name:marker,student_id:marker,homeroom_tutor:marker}]}}}}};vm.createContext(c);vm.runInContext(extract('previewBroadcast'),c);await c.previewBroadcast();assert.equal(modals.length,1);assert.equal(modals[0].includes(marker),false);assert.equal((modals[0].match(/&lt;b data-synthetic=/g)||[]).length,3);assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/broadcast/preview');assert.equal(calls[0].payload.targetTutor,null);assert.equal(calls[0].options.headers.Authorization,'Bearer synthetic');
+ c.axios.post=async()=>({data:{success:true,students:[]}});await c.previewBroadcast();assert.ok(modals[1].includes('0名'));
+});
