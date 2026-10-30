@@ -1187,3 +1187,11 @@ Tutorレッドリストの保存ID・担当者入力valueは属性用escapeを�
 割振り保存は開始時の認証・画面/root・タブ・月/filter・対象cache・sidebar/footer・実controlを照合し、現在の処理だけlocal反映・通知・後続readを行います。同じactor/生徒の保存中は選択を無効化し、完了後は現保存値を復元します。別生徒の並行保存は維持し、sidebar readは後発の世代だけ反映します。新規割振りの月変更も世代・認証・DOM・元cacheを確認し、失敗時は現要求だけ固定表示して再試行できます。送信済みPUTは取り消せず、他actorの並行書込順やDB snapshotの厳密freshnessは保証しません。
 
 同工程の追補として、除外成功toastのTutor名もテキスト用escapeを適用しました。confirmは既存のplain文字列を維持し、実固定入口→実delete（HTTPスタブ）→実toastの合成回帰を追加。カードとは別のHTML出力先も確認しています。
+
+## Tutorレッドリストの応答整合（2026-10-30、第214〜218工程）
+
+一覧readは最新世代・開始時の認証/admin・年月・画面/root/loadingを照合してからcacheと表示を更新します。現在の取得失敗では従来の空一覧fallbackを維持します。再計算は同actor/月の重複POSTを抑止し、捕捉token/year/monthで実行後、同じcontextだけで一覧を再取得します。再計算ボタンは処理中無効化し、元の所有ボタンだけ復元します。既存APIのadminOnlyに合わせ、画面の許可と拒否文言もadminに整合させました（server権限は変更なし）。
+
+対応状況・担当者・除外は同Tutorの共通lockで競合を防ぎ、3操作部品を処理中無効化します。開始時の認証/admin・画面/root・年月・cache・対象値・実controlが同じ場合だけ応答を反映し、失敗は固定文で再試行可能です。確認ダイアログ前後も照合し、担当解除・既存3状態・encoded ID・Tutor名のtoast escapeを維持しています。
+
+送信済みの再計算/更新/除外要求は取り消せません。別端末/actorの書込順やDB snapshotの厳密な新鮮性は保証せず、既に表示した進行toastの画面遷移時消去も対象外です。218は実画面関数＋HTTP/confirmスタブの合成ブラウザーと既存APIadmin制限の契約確認で、新規発見件数に含めません。実本番データ・DB・通知は操作していません。
