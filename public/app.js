@@ -19733,56 +19733,80 @@ function renderMinutesQualityEvaluation(rawEvaluation) {
     </div>`;
 }
 
+const minutesPendingWrites = new Set();
+function captureMinutesWriteView() {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'minutes') return null;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const studentId = minutesCurrentStudentId, studentName = minutesCurrentStudentName;
+  return { root, token, userId, studentId, studentName, current: () => sessionToken === token && currentUser?.id === userId &&
+    currentUser?.role === role && currentPage === 'minutes' && document.getElementById('content') === root &&
+    minutesCurrentStudentId === studentId && minutesCurrentStudentName === studentName };
+}
 async function saveMinutesEdit() {
-  if (!minutesEditingId) return;
-  const text = document.getElementById('minutes-modal-text').value;
+  const view = captureMinutesWriteView(), id = minutesEditingId, detail = minutesCurrentDetail;
+  const modal = document.getElementById('minutes-detail-modal'), textInput = document.getElementById('minutes-modal-text');
+  const button = document.getElementById('minutes-modal-save-btn');
+  if (!view || !id || !detail || String(detail.id) !== String(id) || !modal || !textInput || !button || button.disabled ||
+      modal.classList.contains('hidden') || button.classList.contains('hidden') || !view.root.contains(modal) || !modal.contains(textInput) || !modal.contains(button)) return;
+  const text = textInput.value, key = JSON.stringify(['save', view.token, view.userId, id]);
+  if (minutesPendingWrites.has(key)) return;
+  const current = () => view.current() && minutesEditingId === id && minutesCurrentDetail === detail && String(detail.id) === String(id) &&
+    document.getElementById('minutes-detail-modal') === modal && !modal.classList.contains('hidden') && view.root.contains(modal) &&
+    document.getElementById('minutes-modal-text') === textInput && modal.contains(textInput) && textInput.value === text &&
+    document.getElementById('minutes-modal-save-btn') === button && modal.contains(button);
+  minutesPendingWrites.add(key); button.disabled = true;
   try {
-    await axios.put(`/api/minutes/${minutesEditingId}`, { generated_text: text }, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
+    const res = await axios.put(`/api/minutes/${encodeURIComponent(id)}`, { generated_text: text }, { headers: { Authorization: `Bearer ${view.token}` } });
+    if (!current()) return;
+    if (res.data?.success === false) throw new Error('Minutes edit rejected');
     showNotification('議事録を保存しました', 'success');
     closeMinutesModal();
-    await loadMinutesList();
-  } catch (err) {
-    showNotification('保存に失敗しました: ' + err.message, 'error');
+    const refreshCurrent = () => view.current() && document.getElementById('minutes-detail-modal') === modal &&
+      view.root.contains(modal) && modal.classList.contains('hidden') && minutesEditingId === null && minutesCurrentDetail === null;
+    if (refreshCurrent()) await loadMinutesList(refreshCurrent);
+  } catch {
+    if (current()) showNotification('議事録の保存に失敗しました', 'error');
+  } finally {
+    minutesPendingWrites.delete(key);
+    if (document.getElementById('content') === view.root && document.getElementById('minutes-modal-save-btn') === button && view.root.contains(button)) button.disabled = false;
   }
 }
-
 async function generateMinutes() {
-  const dateEl   = document.getElementById('minutes-gen-date');
-  const numberEl = document.getElementById('minutes-gen-number');
-  const btn      = document.getElementById('minutes-gen-btn');
-  const status   = document.getElementById('minutes-gen-status');
-  if (!dateEl || !minutesCurrentStudentId) return;
-
-  const lessonDate   = dateEl.value;
-  const lessonNumber = numberEl.value?.trim() || null;
-
-  btn.disabled = true;
+  const view = captureMinutesWriteView();
+  const dateEl = document.getElementById('minutes-gen-date'), numberEl = document.getElementById('minutes-gen-number');
+  const btn = document.getElementById('minutes-gen-btn'), status = document.getElementById('minutes-gen-status');
+  if (!view || !view.studentId || !dateEl || !numberEl || !btn || !status || btn.disabled ||
+      ![dateEl, numberEl, btn, status].every(node => view.root.contains(node))) return;
+  const lessonDate = dateEl.value, numberValue = numberEl.value, lessonNumber = numberValue?.trim() || null;
+  const editingId = minutesEditingId, detail = minutesCurrentDetail, modal = document.getElementById('minutes-detail-modal');
+  const key = JSON.stringify(['generate', view.token, view.userId, view.studentId, lessonDate]);
+  if (minutesPendingWrites.has(key)) return;
+  const current = () => view.current() && minutesEditingId === editingId && minutesCurrentDetail === detail &&
+    document.getElementById('minutes-detail-modal') === modal &&
+    [['minutes-gen-date', dateEl], ['minutes-gen-number', numberEl], ['minutes-gen-btn', btn], ['minutes-gen-status', status]]
+      .every(([id, node]) => document.getElementById(id) === node && view.root.contains(node)) && dateEl.value === lessonDate && numberEl.value === numberValue;
+  const originalHTML = btn.innerHTML;
+  minutesPendingWrites.add(key); btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>生成中...';
-  status.textContent = 'Google Driveから文字起こしを取得中...';
-  status.classList.remove('hidden');
-
+  status.textContent = 'Google Driveから文字起こしを取得中...'; status.classList.remove('hidden');
   try {
-    const res = await axios.post('/api/minutes/generate', {
-      studentId:    minutesCurrentStudentId,
-      studentName:  minutesCurrentStudentName,
-      lessonDate,
-      lessonNumber,
-    }, { headers: { Authorization: `Bearer ${sessionToken}` }, timeout: 120000 });
-
-    showNotification(res.data.warning || '議事録を生成しました', res.data.warning ? 'warning' : 'success');
+    const res = await axios.post('/api/minutes/generate', { studentId: view.studentId, studentName: view.studentName, lessonDate, lessonNumber },
+      { headers: { Authorization: `Bearer ${view.token}` }, timeout: 120000 });
+    if (!current()) return;
+    if (res.data?.success === false || !res.data?.data?.id) throw new Error('Minutes generation rejected');
+    showNotification(res.data.warning ? studentDisplayText(res.data.warning) : '議事録を生成しました', res.data.warning ? 'warning' : 'success');
     status.classList.add('hidden');
-    await loadMinutesList();
-    // 生成後すぐに詳細を開く
-    openMinutesDetail(res.data.data.id);
-  } catch (err) {
-    const msg = err.response?.data?.error || err.message;
-    showNotification('生成失敗: ' + msg, 'error');
-    status.textContent = 'エラー: ' + msg;
+    const loaded = await loadMinutesList(current);
+    if (loaded === false || !current()) return;
+    await openMinutesDetail(res.data.data.id, current);
+  } catch {
+    if (!current()) return;
+    showNotification('議事録の生成に失敗しました', 'error');
+    status.textContent = 'エラー: 議事録の生成に失敗しました';
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-robot"></i>AI生成';
+    minutesPendingWrites.delete(key);
+    if (document.getElementById('content') === view.root && document.getElementById('minutes-gen-btn') === btn && view.root.contains(btn)) { btn.disabled = false; btn.innerHTML = originalHTML; }
   }
 }
 
