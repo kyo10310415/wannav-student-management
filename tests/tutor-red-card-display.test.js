@@ -32,3 +32,9 @@ test('fixed Tutor red entry rejects stale cache/root/page, non-admin, disabled a
  for(const mutate of variants){const f=fixture();f.install();mutate(f);await f.c.handleTutorRedCardChange({target:f.control('status','対応中')});await f.c.handleTutorRedCardClick({target:f.control('delete')});assert.equal(f.calls.length+f.confirmations.length,0)}
  const f=fixture();f.install();for(const change of [n=>n.root={},n=>n.disabled=true,n=>n.dataset.tutorRedId='missing',n=>n.value='invalid']){const n=f.control('status','対応中');change(n);await f.c.handleTutorRedCardChange({target:n})}await f.c.handleTutorRedCardChange({target:f.control('unknown')});assert.equal(f.calls.length,0);
 });
+
+test('fixed delete entry through actual delete and actual toast keeps cached Tutor name as text',async()=>{
+ const f=fixture(),html=[];f.install();f.c.document.body={insertAdjacentHTML:(_position,markup)=>html.push(markup)};f.c.setTimeout=()=>{};vm.runInContext(extract('showNotification'),f.c);
+ await f.c.handleTutorRedCardClick({target:f.control('delete')});
+ assert.equal(f.calls.length,1);assert.equal(f.confirmations.length,1);assert.ok(f.confirmations[0].includes(f.entry.tutor_name));assert.equal(html.length,1);assert.equal(html[0].includes(marker),false);assert.match(html[0],/&lt;b data-synthetic="red-card"&gt;SYNTHETIC&lt;\/b&gt;/);
+});

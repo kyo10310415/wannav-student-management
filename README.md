@@ -1185,3 +1185,5 @@ Tutorレッドリストの保存ID・担当者入力valueは属性用escapeを�
 品質exportは全Tutorの選択月を書き出す既存契約を維持し、現在manager・認証・画面/root・年月/team・実buttonを確認します。実行中の重複を抑止し、旧応答の通知と生error出力を止め、完了時は捕捉buttonだけ復元します。送信済み書込の取消や個別Tutorへの出力制限は追加していません。品質集計→実modal rendererの契約確認では、数値/rateは実集計由来、Asana URLは定義由来、保存evidenceは属性escapeされ読取専用であることを確認しました。212は新規発見事項に数えません。
 
 割振り保存は開始時の認証・画面/root・タブ・月/filter・対象cache・sidebar/footer・実controlを照合し、現在の処理だけlocal反映・通知・後続readを行います。同じactor/生徒の保存中は選択を無効化し、完了後は現保存値を復元します。別生徒の並行保存は維持し、sidebar readは後発の世代だけ反映します。新規割振りの月変更も世代・認証・DOM・元cacheを確認し、失敗時は現要求だけ固定表示して再試行できます。送信済みPUTは取り消せず、他actorの並行書込順やDB snapshotの厳密freshnessは保証しません。
+
+同工程の追補として、除外成功toastのTutor名もテキスト用escapeを適用しました。confirmは既存のplain文字列を維持し、実固定入口→実delete（HTTPスタブ）→実toastの合成回帰を追加。カードとは別のHTML出力先も確認しています。
