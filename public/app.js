@@ -4299,39 +4299,47 @@ async function showTutorMinutesQualityModal(employeeId) {
   }
 }
 
+const tutorQualityExportPending = new Set();
 async function exportTutorQualityToSheet(button) {
-  const targetYear = selectedTutorYear;
-  const targetMonth = selectedTutorMonth;
+  const root = document.getElementById('content');
+  if (!root || !button || button.disabled || !root.contains(button) || !sessionToken ||
+      !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'tutors' || tutorQualityExportPending.size) return;
+  const targetYear = selectedTutorYear, targetMonth = selectedTutorMonth, team = selectedTeam;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'tutors' && document.getElementById('content') === root && root.contains(button) &&
+    selectedTutorYear === targetYear && selectedTutorMonth === targetMonth && selectedTeam === team;
   const originalHTML = button.innerHTML;
+  tutorQualityExportPending.add(button);
   button.disabled = true;
   button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>品質評価を書き出し中...';
-
   try {
-    const response = await axios.post(
-      `${API_BASE}/api/tutors/quality/export`,
-      { year: targetYear, month: targetMonth },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 120000
-      }
-    );
-
+    const response = await axios.post(`${API_BASE}/api/tutors/quality/export`, { year: targetYear, month: targetMonth }, {
+      headers: { Authorization: `Bearer ${token}` }, timeout: 120000
+    });
+    if (!current()) return;
+    if (!response.data.success) throw new Error('Quality export rejected');
+    const spreadsheetUrl = studentDisplayLink(response.data.spreadsheetUrl);
     const notification = document.createElement('div');
     notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
     notification.innerHTML = `
       <i class="fas fa-check-circle mr-2"></i>
       ${targetYear}年${targetMonth}月の品質評価を追記しました<br>
-      <span class="text-sm">全体平均＋Tutor ${response.data.tutorCount}名分</span><br>
-      <a href="${response.data.spreadsheetUrl}" target="_blank" rel="noopener noreferrer" class="underline text-sm">スプレッドシートを開く</a>
+      <span class="text-sm">全体平均＋Tutor ${escapeHtml(String(response.data.tutorCount))}名分</span><br>
+      ${spreadsheetUrl ? `<a href="${spreadsheetUrl}" target="_blank" rel="noopener noreferrer" class="underline text-sm">スプレッドシートを開く</a>` : ''}
     `;
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 7000);
-  } catch (error) {
-    console.error('[Tutor Quality Export] Error:', error);
-    alert('品質評価の書き出しに失敗しました: ' + (error.response?.data?.error || error.message));
+  } catch {
+    if (!current()) return;
+    console.error('[Tutor Quality Export] Failed');
+    alert('品質評価の書き出しに失敗しました');
   } finally {
-    button.disabled = false;
-    button.innerHTML = originalHTML;
+    tutorQualityExportPending.delete(button);
+    if (document.getElementById('content') === root && root.contains(button)) {
+      button.disabled = false;
+      button.innerHTML = originalHTML;
+    }
   }
 }
 
@@ -17586,8 +17594,8 @@ function handleHandoverEntryChange(event) {
   const student = handoverEntryStudent(control);
   if (!student || (control.value !== '' && !handoverTutorSidebar.some(tutor => tutor.tutor_name === control.value))) return;
   return control.dataset.handoverEntryView === 'handover'
-    ? handoverUpdateAssignment(student.student_id, control.value)
-    : newAssignUpdateAssignment(student.student_id, control.value);
+    ? handoverUpdateAssignment(student.student_id, control.value, control)
+    : newAssignUpdateAssignment(student.student_id, control.value, control);
 }
 
 document.addEventListener('click', handleHandoverEntryClick);
@@ -17793,42 +17801,39 @@ function _refreshHandoverTable() {
 
 // ── Filter & sort handlers (新規割り振りタブ) ──
 
+let newAssignMonthReadGeneration = 0;
 async function newAssignChangeMonth(month) {
-  if (!['current', 'next'].includes(month) || month === newAssignMonth) return;
-
-  const select = document.getElementById('new-assign-month');
-  const tbody = document.getElementById('new-assign-table-body');
+  const root = document.getElementById('content');
+  if (!['current', 'next'].includes(month) || month === newAssignMonth || !root || !sessionToken ||
+      !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'handover' || handoverActiveTab !== 'new') return;
+  const generation = ++newAssignMonthReadGeneration, token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const loadedMonth = newAssignMonth, loadedStudents = newAssignStudents;
+  const assigned = newAssignFilterAssigned, handover = newAssignFilterHandover;
+  const select = document.getElementById('new-assign-month'), tbody = document.getElementById('new-assign-table-body');
+  const current = () => generation === newAssignMonthReadGeneration && sessionToken === token && currentUser?.id === userId &&
+    currentUser?.role === role && currentPage === 'handover' && handoverActiveTab === 'new' && document.getElementById('content') === root &&
+    document.getElementById('new-assign-month') === select && document.getElementById('new-assign-table-body') === tbody &&
+    newAssignMonth === loadedMonth && newAssignStudents === loadedStudents && newAssignFilterAssigned === assigned && newAssignFilterHandover === handover;
   if (select) select.disabled = true;
-  if (tbody) {
-    tbody.innerHTML = `<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400">
-      <i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...
-    </td></tr>`;
-  }
-
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...</td></tr>';
   try {
-    const res = await axios.get(`${API_BASE}/api/handover/new-assignments`, {
-      params: { month },
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-
-    if (!res.data.success) {
-      throw new Error(res.data.error || 'データの読み込みに失敗しました');
-    }
-
+    const res = await axios.get(`${API_BASE}/api/handover/new-assignments`, { params: { month }, headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Assignment month rejected');
     newAssignMonth = month;
     newAssignStudents = res.data.data || [];
     newAssignTargetMonth = res.data.target_month || res.data.next_month || '';
     newAssignFilterAssigned = 'all';
     newAssignFilterHandover = 'all';
     _renderHandoverLayout();
-  } catch (error) {
-    console.error('[Handover] Error changing new-assignment month:', error);
-    if (select) {
-      select.value = newAssignMonth;
-      select.disabled = false;
-    }
+  } catch {
+    if (!current()) return;
+    console.error('[Handover] Assignment month read failed');
+    if (select) select.value = newAssignMonth;
     _refreshNewAssignTable();
-    showNotification(error.response?.data?.error || error.message || 'データの読み込みに失敗しました', 'error');
+    showNotification('データの読み込みに失敗しました', 'error');
+  } finally {
+    if (generation === newAssignMonthReadGeneration && select && document.getElementById('new-assign-month') === select) select.disabled = false;
   }
 }
 
@@ -18006,87 +18011,60 @@ function _renderNewAssignRows() {
 
 // ── Assignment save ──
 
-async function handoverUpdateAssignment(studentId, tutorName) {
+const handoverAssignmentWrites = new Set();
+let handoverSidebarReadGeneration = 0;
+async function saveHandoverAssignment(studentId, tutorName, view, control) {
+  const root = document.getElementById('content');
+  const list = view === 'handover' ? handoverStudents : newAssignStudents;
+  const student = list.find(row => row.student_id === studentId);
+  if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'handover' ||
+      handoverActiveTab !== view || !student || (control && (control.disabled || !root.contains(control)))) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const month = newAssignMonth, targetMonth = newAssignTargetMonth;
+  const filters = [handoverFilterAssigned, handoverFilterHandover, newAssignFilterAssigned, newAssignFilterHandover];
+  const sidebar = document.getElementById('handover-sidebar-list'), footer = document.getElementById('handover-count-footer');
+  const key = JSON.stringify([token, userId, studentId]);
+  if (handoverAssignmentWrites.has(key)) return;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'handover' && handoverActiveTab === view && document.getElementById('content') === root &&
+    (view === 'handover' ? handoverStudents : newAssignStudents) === list && list.includes(student) && student.student_id === studentId &&
+    newAssignMonth === month && newAssignTargetMonth === targetMonth &&
+    [handoverFilterAssigned, handoverFilterHandover, newAssignFilterAssigned, newAssignFilterHandover].every((value, i) => value === filters[i]) &&
+    document.getElementById('handover-sidebar-list') === sidebar && document.getElementById('handover-count-footer') === footer &&
+    (!control || root.contains(control));
+  handoverAssignmentWrites.add(key);
+  if (control) control.disabled = true;
   try {
-    const res = await axios.put(
-      `${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
-      { handover_tutor_name: tutorName || null },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-
-    if (res.data.success) {
-      // Update local state
-      const student = handoverStudents.find(s => s.student_id === studentId);
-      if (student) student.handover_tutor_name = tutorName || '';
-
-      showNotification(
-        tutorName ? `引き継ぎ先を「${tutorName}」に設定しました` : '引き継ぎ先をリセットしました',
-        'success'
-      );
-
-      // Refresh sidebar counts in background
-      try {
-        const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
-          headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        handoverTutorSidebar = sidebarRes.data.data || [];
-        const sidebarEl = document.getElementById('handover-sidebar-list');
-        if (sidebarEl) sidebarEl.innerHTML = _renderHandoverSidebar();
-      } catch (_) {}
-
-      // Refresh count footer
-      const footer = document.getElementById('handover-count-footer');
-      if (footer) footer.innerHTML = _handoverCountLabel();
-
-    } else {
-      showNotification(res.data.error || '保存に失敗しました', 'error');
+    const res = await axios.put(`${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
+      { handover_tutor_name: tutorName || null }, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Assignment rejected');
+    student.handover_tutor_name = tutorName || '';
+    const label = view === 'handover' ? '引き継ぎ先' : '割り振り先';
+    showNotification(tutorName ? `${label}を「${studentDisplayText(tutorName)}」に設定しました` : `${label}をリセットしました`, 'success');
+    const generation = ++handoverSidebarReadGeneration;
+    try {
+      const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!current() || generation !== handoverSidebarReadGeneration) return;
+      handoverTutorSidebar = sidebarRes.data.data || [];
+      if (sidebar) sidebar.innerHTML = _renderHandoverSidebar();
+    } catch { if (!current() || generation !== handoverSidebarReadGeneration) return; }
+    if (current() && footer) footer.innerHTML = view === 'handover' ? _handoverCountLabel() : _newAssignCountLabel();
+  } catch {
+    if (current()) { console.error('[Handover] Assignment update failed'); showNotification('保存に失敗しました', 'error'); }
+  } finally {
+    handoverAssignmentWrites.delete(key);
+    if (control && document.getElementById('content') === root && root.contains(control)) {
+      if (current()) control.value = student.handover_tutor_name || '';
+      control.disabled = false;
     }
-  } catch (e) {
-    console.error('[Handover] Error updating assignment:', e);
-    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
   }
 }
-
-// 新規割り振りタブ用 assignment save
-async function newAssignUpdateAssignment(studentId, tutorName) {
-  try {
-    const res = await axios.put(
-      `${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
-      { handover_tutor_name: tutorName || null },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-
-    if (res.data.success) {
-      // ローカル state 更新 (新規割り振り側)
-      const student = newAssignStudents.find(s => s.student_id === studentId);
-      if (student) student.handover_tutor_name = tutorName || '';
-
-      showNotification(
-        tutorName ? `割り振り先を「${tutorName}」に設定しました` : '割り振り先をリセットしました',
-        'success'
-      );
-
-      // サイドバー更新
-      try {
-        const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
-          headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        handoverTutorSidebar = sidebarRes.data.data || [];
-        const sidebarEl = document.getElementById('handover-sidebar-list');
-        if (sidebarEl) sidebarEl.innerHTML = _renderHandoverSidebar();
-      } catch (_) {}
-
-      // フッター更新
-      const footer = document.getElementById('handover-count-footer');
-      if (footer) footer.innerHTML = _newAssignCountLabel();
-
-    } else {
-      showNotification(res.data.error || '保存に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('[Handover] Error updating new assignment:', e);
-    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
-  }
+async function handoverUpdateAssignment(studentId, tutorName, control) {
+  return saveHandoverAssignment(studentId, tutorName, 'handover', control);
+}
+async function newAssignUpdateAssignment(studentId, tutorName, control) {
+  return saveHandoverAssignment(studentId, tutorName, 'new', control);
 }
 
 // ============================================================
@@ -18281,7 +18259,7 @@ function _renderTutorRedListCard(entry, c) {
   };
   const statusColor = statusColorMap[cs] || statusColorMap['未対応'];
 
-  const ao = escapeHtml(entry.assigned_to || '');
+  const ao = studentDisplayAttribute(entry.assigned_to || '');
   const team = escapeHtml(entry.snapshot_team || entry.current_team || '未所属');
 
   // スキルスコア（アンケート点数）
@@ -18294,10 +18272,10 @@ function _renderTutorRedListCard(entry, c) {
 
   // スコア内訳バッジ
   const helperScoreBadge = entry.helper_request_score > 0
-    ? `<span class="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5">助っ人依頼 +${entry.helper_request_score}点</span>`
+    ? `<span class="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5">助っ人依頼 +${studentDisplayText(entry.helper_request_score)}点</span>`
     : '';
   const attendanceScoreBadge = entry.attendance_score > 0
-    ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${entry.attendance_score}点</span>`
+    ? `<span class="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5">出席率低下 +${studentDisplayText(entry.attendance_score)}点</span>`
     : '';
   const skillScoreBadge = (skillTotal !== null && skillTotal !== undefined && skillTotal < 210)
     ? `<span class="text-xs bg-purple-100 text-purple-700 rounded px-2 py-0.5">熱量低下 +3点</span>`
@@ -18310,7 +18288,7 @@ function _renderTutorRedListCard(entry, c) {
         <div class="flex items-center gap-2 mb-1">
           <span class="font-bold text-gray-900 text-base">${escapeHtml(entry.tutor_name)}</span>
           <span class="text-xs text-gray-400">${escapeHtml(team)}</span>
-          <span class="${c.text} font-bold text-sm ml-1">${entry.total_score}点</span>
+          <span class="${c.text} font-bold text-sm ml-1">${studentDisplayText(entry.total_score)}点</span>
         </div>
         <div class="flex flex-wrap gap-1 mb-2">
           ${helperScoreBadge}
@@ -18337,7 +18315,7 @@ function _renderTutorRedListCard(entry, c) {
         <!-- 助っ人依頼 -->
         <div class="text-center">
           <div class="text-xs text-gray-400 mb-1">助っ人依頼</div>
-          <div class="text-lg font-bold ${helperColor}">${helperCount}回</div>
+          <div class="text-lg font-bold ${helperColor}">${studentDisplayText(helperCount)}回</div>
         </div>
         <!-- アンケート点数 -->
         <div class="text-center">
@@ -18349,8 +18327,8 @@ function _renderTutorRedListCard(entry, c) {
       <!-- 右: 対応状況 -->
       <div class="flex flex-col gap-2 items-end min-w-[9rem]">
         <!-- 対応状況セレクト -->
-        <select onchange="updateTutorRedListStatus('${entry.tutor_id}', this.value)"
-                id="trl-status-${entry.tutor_id}"
+        <select data-tutor-red-action="status" data-tutor-red-id="${studentDisplayAttribute(entry.tutor_id)}"
+                id="trl-status-${studentDisplayAttribute(entry.tutor_id)}"
                 class="w-full border ${statusColor} rounded-lg px-2 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-purple-400 cursor-pointer">
           <option value="未対応"  ${cs === '未対応'  ? 'selected' : ''}>未対応</option>
           <option value="対応中"  ${cs === '対応中'  ? 'selected' : ''}>対応中</option>
@@ -18359,14 +18337,14 @@ function _renderTutorRedListCard(entry, c) {
         <!-- 担当者 -->
         <div class="flex items-center w-full border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 gap-1">
           <i class="fas fa-user-tie text-purple-300 text-xs flex-shrink-0"></i>
-          <input id="trl-assigned-${entry.tutor_id}" type="text"
+          <input id="trl-assigned-${studentDisplayAttribute(entry.tutor_id)}" type="text"
                  value="${ao}"
                  placeholder="担当者名"
-                 onchange="updateTutorRedListAssigned('${entry.tutor_id}', this.value)"
+                 data-tutor-red-action="assigned" data-tutor-red-id="${studentDisplayAttribute(entry.tutor_id)}"
                  class="bg-transparent text-xs text-gray-700 placeholder-gray-300 w-full focus:outline-none min-w-0">
         </div>
         <!-- 削除ボタン -->
-        <button onclick="deleteTutorRedListEntry('${entry.tutor_id}', '${escapeHtml(entry.tutor_name)}')"
+        <button data-tutor-red-action="delete" data-tutor-red-id="${studentDisplayAttribute(entry.tutor_id)}"
                 class="w-full flex items-center justify-center gap-1 border border-gray-300 text-gray-500 hover:border-red-400 hover:text-red-500 px-2 py-1 rounded-lg text-xs transition">
           <i class="fas fa-times"></i>除外
         </button>
@@ -18374,6 +18352,28 @@ function _renderTutorRedListCard(entry, c) {
     </div>
   `;
 }
+
+function tutorRedCardEntry(control) {
+  if (!control || control.disabled || !sessionToken || currentUser?.role !== 'admin' ||
+      currentPage !== 'tutor-red-list' || !document.getElementById('content')?.contains(control)) return null;
+  return tutorRedListData.find(entry => String(entry.tutor_id) === control.dataset.tutorRedId) || null;
+}
+function handleTutorRedCardChange(event) {
+  const control = event.target?.closest?.('select[data-tutor-red-action="status"], input[data-tutor-red-action="assigned"]');
+  const entry = tutorRedCardEntry(control);
+  if (!entry) return;
+  if (control.dataset.tutorRedAction === 'status' && ['未対応', '対応中', '対応済み'].includes(control.value)) {
+    return updateTutorRedListStatus(entry.tutor_id, control.value);
+  }
+  if (control.dataset.tutorRedAction === 'assigned') return updateTutorRedListAssigned(entry.tutor_id, control.value);
+}
+function handleTutorRedCardClick(event) {
+  const control = event.target?.closest?.('button[data-tutor-red-action="delete"]');
+  const entry = tutorRedCardEntry(control);
+  if (entry) return deleteTutorRedListEntry(entry.tutor_id, entry.tutor_name || '');
+}
+document.addEventListener('change', handleTutorRedCardChange);
+document.addEventListener('click', handleTutorRedCardClick);
 
 /**
  * Tutorレッドリストの集計月変更
@@ -18414,7 +18414,7 @@ async function recalcTutorRedList() {
 async function updateTutorRedListStatus(tutorId, status) {
   try {
     const res = await axios.patch(
-      `${API_BASE}/api/tutor-red-list/${tutorId}/status`,
+      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
       { correspondence_status: status },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
@@ -18444,7 +18444,7 @@ async function updateTutorRedListStatus(tutorId, status) {
 async function updateTutorRedListAssigned(tutorId, assignedTo) {
   try {
     const res = await axios.patch(
-      `${API_BASE}/api/tutor-red-list/${tutorId}/status`,
+      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
       { assigned_to: assignedTo },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
@@ -18468,7 +18468,7 @@ async function deleteTutorRedListEntry(tutorId, tutorName) {
   if (!confirm(`「${tutorName}」をTutorレッドリストから除外しますか？\n（次回の再計算で条件に該当する場合は再登録されます）`)) return;
   try {
     const res = await axios.delete(
-      `${API_BASE}/api/tutor-red-list/${tutorId}`,
+      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}`,
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     if (res.data.success) {
