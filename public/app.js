@@ -4236,7 +4236,13 @@ function handleTutorSettingChange(event) {
 document.addEventListener('change', handleTutorSettingChange);
 
 async function showTutorMinutesQualityModal(employeeId) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'tutors') return;
   const tutor = tutors.find(item => item.employee_id === employeeId);
+  if (!tutor) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const year = selectedTutorYear, month = selectedTutorMonth, team = selectedTeam;
+  const tutorSnapshot = JSON.stringify(tutor);
   document.getElementById('tutor-minutes-quality-modal')?.remove();
 
   const modal = document.createElement('div');
@@ -4269,19 +4275,25 @@ async function showTutorMinutesQualityModal(employeeId) {
   });
   document.body.appendChild(modal);
 
+  const container = document.getElementById('tutor-minutes-quality-content');
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role && currentPage === 'tutors' &&
+    document.getElementById('content') === root && selectedTutorYear === year && selectedTutorMonth === month && selectedTeam === team &&
+    tutors.includes(tutor) && JSON.stringify(tutor) === tutorSnapshot && document.getElementById('tutor-minutes-quality-modal') === modal &&
+    document.body.contains(modal) && document.getElementById('tutor-minutes-quality-content') === container && modal.contains(container);
   try {
     const response = await axios.get(
-      `${API_BASE}/api/tutors/quality/monthly/${encodeURIComponent(employeeId)}/${selectedTutorYear}/${selectedTutorMonth}`,
-      { headers: { Authorization: `Bearer ${sessionToken}` } }
+      `${API_BASE}/api/tutors/quality/monthly/${encodeURIComponent(employeeId)}/${year}/${month}`,
+      { headers: { Authorization: `Bearer ${token}` } }
     );
+    if (!current()) return;
     renderTutorMinutesQualityModal(response.data.data);
   } catch (error) {
-    const container = document.getElementById('tutor-minutes-quality-content');
+    if (!current()) return;
     if (container) {
       container.innerHTML = `<div class="py-12 text-center text-red-500">
         <i class="fas fa-exclamation-circle text-3xl mb-3"></i>
         <p>評価結果の取得に失敗しました。</p>
-        <p class="text-xs mt-1">${escapeHtml(error.response?.data?.error || error.message)}</p>
+        <p class="text-xs mt-1">時間をおいて再度お試しください</p>
       </div>`;
     }
   }
@@ -4501,22 +4513,36 @@ async function updateTutorSection(employeeId, section) {
 }
 
 // Export tutor satisfaction data to spreadsheet
-async function exportTutorSatisfactionToSheet() {
+const tutorSatisfactionExportPending = new Set();
+async function exportTutorSatisfactionToSheet(button = globalThis.event?.target?.closest?.('button')) {
+  const root = document.getElementById('content');
+  if (!root || !button || button.disabled || !root.contains(button) || !sessionToken ||
+      !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'tutors' || tutorSatisfactionExportPending.size) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const year = selectedTutorYear, month = selectedTutorMonth, team = selectedTeam;
+  let expectedTutors = tutors, expectedData = satisfactionData;
+  let snapshot = JSON.stringify([tutors, satisfactionData, students, tutorWeeklySnapshotData]);
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role && currentPage === 'tutors' &&
+    document.getElementById('content') === root && root.contains(button) && selectedTutorYear === year && selectedTutorMonth === month &&
+    selectedTeam === team && tutors === expectedTutors && satisfactionData === expectedData &&
+    JSON.stringify([tutors, satisfactionData, students, tutorWeeklySnapshotData]) === snapshot;
+  const originalHTML = button.innerHTML;
+  tutorSatisfactionExportPending.add(button);
   try {
-    const button = event.target.closest('button');
-    const originalHTML = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>書き出し中...';
     
     // Ensure tutors data is loaded
     if (!tutors || tutors.length === 0) {
-      console.log('[Export] Tutors not loaded, loading now...');
       try {
         const tutorsRes = await axios.get(`${API_BASE}/api/tutors`);
+        if (!current()) return;
         tutors = tutorsRes.data.data;
-        console.log('[Export] Loaded', tutors.length, 'tutors');
+        expectedTutors = tutors;
+        snapshot = JSON.stringify([tutors, satisfactionData, students, tutorWeeklySnapshotData]);
       } catch (error) {
-        console.error('[Export] Failed to load tutors:', error);
+        if (!current()) return;
+        console.error('[Export] Failed to load tutors');
         alert('Tutorデータの読み込みに失敗しました');
         button.disabled = false;
         button.innerHTML = originalHTML;
@@ -4526,13 +4552,15 @@ async function exportTutorSatisfactionToSheet() {
     
     // Ensure satisfaction data is loaded
     if (!satisfactionData || Object.keys(satisfactionData).length === 0) {
-      console.log('[Export] Satisfaction data not loaded, loading now...');
       try {
         const res = await axios.get(`${API_BASE}/api/tutors/satisfaction/all`);
+        if (!current()) return;
         satisfactionData = res.data.data || {};
-        console.log('[Export] Loaded satisfaction data for', Object.keys(satisfactionData).length, 'tutors');
+        expectedData = satisfactionData;
+        snapshot = JSON.stringify([tutors, satisfactionData, students, tutorWeeklySnapshotData]);
       } catch (error) {
-        console.error('[Export] Failed to load satisfaction data:', error);
+        if (!current()) return;
+        console.error('[Export] Failed to load satisfaction data');
         alert('満足度データの読み込みに失敗しました');
         button.disabled = false;
         button.innerHTML = originalHTML;
@@ -4567,33 +4595,19 @@ async function exportTutorSatisfactionToSheet() {
       const [year, month] = monthKey.split('/').map(Number);
       return loadSatisfactionLessonCompletion(year, month);
     }));
+    if (!current()) return;
     
     // Get active tutors (excluding きょうへい先生)
-    console.log('[Export] Total tutors:', tutors.length);
     if (tutors.length > 0) {
-      console.log('[Export] First 3 tutors:', tutors.slice(0, 3));
-      console.log('[Export] Sample tutor structure:', {
-        name: tutors[0].name,
-        tutor_name: tutors[0].tutor_name,
-        status: tutors[0].status,
-        job_type: tutors[0].job_type
-      });
     }
     
     // First, let's see all tutors with 'tutor' in job_type
     const allTutorsByJobType = tutors.filter(t => t.job_type && t.job_type.toLowerCase().includes('tutor'));
-    console.log('[Export] Tutors with job_type containing "tutor":', allTutorsByJobType.length);
     
     if (allTutorsByJobType.length > 0) {
-      console.log('[Export] Sample tutor with job_type:', {
-        name: allTutorsByJobType[0].tutor_name,
-        status: allTutorsByJobType[0].status,
-        job_type: allTutorsByJobType[0].job_type
-      });
       
       // Show unique status values
       const uniqueStatuses = [...new Set(allTutorsByJobType.map(t => t.status))];
-      console.log('[Export] Unique status values for tutors:', uniqueStatuses);
     }
     
     const activeTutors = tutors.filter(t => {
@@ -4602,15 +4616,11 @@ async function exportTutorSatisfactionToSheet() {
       const notKyohei = t.tutor_name !== 'きょうへい先生';
       
       if (!isActive && hasJobType) {
-        console.log(`[Export] Tutor ${t.tutor_name || t.name} excluded: status = "${t.status}" (expected "アクティブ")`);
       }
       
       return isActive && hasJobType && notKyohei;
     });
     
-    console.log('[Export] Active tutors after filtering:', activeTutors.length);
-    console.log('[Export] Satisfaction data keys:', Object.keys(satisfactionData).length);
-    console.log('[Export] Sorted months:', sortedMonths);
     
     if (activeTutors.length === 0) {
       console.error('[Export] No active tutors found.');
@@ -4636,7 +4646,6 @@ async function exportTutorSatisfactionToSheet() {
       const tutorName = tutor.tutor_name;
       const tutorSatisfactionData = getTutorSatisfactionData(tutor);
       
-      console.log(`[Export] Processing tutor: ${tutorName}, has data:`, Object.keys(tutorSatisfactionData).length > 0);
       
       // Row 1: レッスン満足度
       const satisfactionRow = [tutorName, 'レッスン満足度'];
@@ -4717,33 +4726,31 @@ async function exportTutorSatisfactionToSheet() {
       rows.push(allScoreRow);
     });
     
-    console.log('[Export] Total rows prepared:', rows.length);
-    console.log('[Export] Sample row 0 (header):', rows[0]);
     if (rows.length > 1) {
-      console.log('[Export] Sample row 1 (first tutor):', rows[1]);
     }
     
     // Send to backend API
-    console.log('[Export] Sending', rows.length, 'rows to backend...');
+    if (!current()) return;
     const response = await axios.post(`${API_BASE}/api/tutors/export-satisfaction`, {
       rows: rows,
       sortedMonths: sortedMonths,
       isManualExport: true,
       rowGroupSize: 5
     }, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` },
+      headers: { 'Authorization': `Bearer ${token}` },
       timeout: 120000 // 120 seconds timeout for large exports
     });
     
-    console.log('[Export] Received response:', response.data);
+    if (!current()) return;
     
     if (response.data.success) {
+      const spreadsheetUrl = studentDisplayLink(response.data.spreadsheetUrl);
       const notification = document.createElement('div');
       notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
       notification.innerHTML = `
         <i class="fas fa-check-circle mr-2"></i>
         スプレッドシートに書き出しました<br>
-        <a href="${response.data.spreadsheetUrl}" target="_blank" class="underline text-sm">スプレッドシートを開く</a>
+        ${spreadsheetUrl ? `<a href="${spreadsheetUrl}" target="_blank" rel="noopener noreferrer" class="underline text-sm">スプレッドシートを開く</a>` : ''}
       `;
       document.body.appendChild(notification);
       
@@ -4751,20 +4758,17 @@ async function exportTutorSatisfactionToSheet() {
         notification.remove();
       }, 5000);
       
-      console.log('[Export] Satisfaction data exported to spreadsheet:', response.data.spreadsheetUrl);
     } else {
-      const errorMsg = response.data.error || '不明なエラー';
-      console.error('[Export] Export failed:', errorMsg);
-      alert('書き出しに失敗しました: ' + errorMsg);
+      console.error('[Export] Export failed');
+      alert('書き出しに失敗しました');
     }
   } catch (error) {
-    console.error('[Export] Error exporting satisfaction data:', error);
-    const errorMsg = error.response?.data?.error || error.message || 'ネットワークエラー';
-    alert('書き出し中にエラーが発生しました: ' + errorMsg);
+    if (!current()) return;
+    console.error('[Export] Error exporting satisfaction data');
+    alert('書き出し中にエラーが発生しました');
   } finally {
-    const button = event.target.closest('button');
-    button.disabled = false;
-    button.innerHTML = '<i class="fas fa-file-excel mr-2"></i>満足度データをスプレッドシートに書き出し';
+    tutorSatisfactionExportPending.delete(button);
+    if (document.getElementById('content') === root && root.contains(button)) { button.disabled = false; button.innerHTML = originalHTML; }
   }
 }
 
