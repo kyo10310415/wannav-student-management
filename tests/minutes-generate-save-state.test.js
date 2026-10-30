@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import{readFile}from'node:fs/promises';
 const source=(await readFile(new URL('../public/app.js',import.meta.url),'utf8')).replace(/\r\n/g,'\n');
-const block=source.slice(source.indexOf('const minutesPendingWrites ='),source.indexOf('async function deleteMinutes(id)',source.indexOf('const minutesPendingWrites =')));
+const block=source.slice(source.indexOf('const minutesPendingWrites ='),source.indexOf('async function deleteMinutes(',source.indexOf('const minutesPendingWrites =')));
 const defer=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return{promise,resolve,reject}};
 function fixture(edit=false){
  const calls=[],notices=[],listWrites=[],detailWrites=[],callbacks=[];const nodes=[];

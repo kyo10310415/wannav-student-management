@@ -30,6 +30,12 @@ function handleMinutesReadClick(event) {
       if (Number.isSafeInteger(id) && id > 0) return openMinutesDetail(id);
       return;
     }
+    case 'delete': {
+      if (!/^[1-9]\d*$/.test(control.dataset.minutesId || '')) return;
+      const id = Number(control.dataset.minutesId);
+      if (Number.isSafeInteger(id)) return deleteMinutes(id, control);
+      return;
+    }
     case 'detail-tab':
       if (document.getElementById('minutes-detail-modal')?.contains(control) && ['text', 'quality'].includes(control.dataset.minutesTab)) return switchMinutesDetailTab(control.dataset.minutesTab);
       return;

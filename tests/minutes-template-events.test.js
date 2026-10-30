@@ -26,7 +26,8 @@ test('empty and failed template reads retain safe states without exposing raw er
  const f=fixture();f.real();await f.click(f.button('open'));assert.ok(f.elements['minutes-template-editor'].innerHTML.includes('テンプレートが見つかりません'));
  f.c.axios.get=async()=>{throw Error('Synthetic private <img src=x>')};await f.click(f.button('open'));const html=f.elements['minutes-template-editor'].innerHTML;assert.ok(html.includes('テンプレートを読み込めませんでした'));assert.equal(html.includes('Synthetic private'),false);assert.equal(html.includes('<img'),false);
 });
-test('only three template attributes migrate and all generation/save/delete controls remain',()=>{
+test('template delegation coexists with generation/save controls and fixed delete entry',()=>{
  assert.equal((app.match(/data-minutes-template-action=/g)||[]).length,4);for(const old of ['onclick="showMinutesTemplateModal()"','onclick="closeMinutesTemplateModal()"'])assert.equal(app.includes(old),false);
- for(const unchanged of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','onclick="event.stopPropagation(); deleteMinutes(${m.id})"'])assert.ok(app.includes(unchanged));
+ for(const unchanged of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"'])assert.ok(app.includes(unchanged));
+ assert.ok(app.includes('data-minutes-read-action="delete"'));
 });
