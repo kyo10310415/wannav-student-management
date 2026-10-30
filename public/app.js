@@ -19467,77 +19467,110 @@ function getMinutesDateDaysAgoJST(daysAgo) {
   return jst.toISOString().slice(0, 10);
 }
 
-async function startMinutesBackfillFromPage() {
-  const startDate = document.getElementById('minutes-backfill-start')?.value;
-  const endDate = document.getElementById('minutes-backfill-end')?.value;
+let minutesBackfillStatusGeneration = 0;
+let minutesBackfillTimerOwner = null;
+const minutesBackfillStartPending = new Set();
+function captureMinutesBackfillContext(parentCurrent = () => true) {
+  const root = document.getElementById('content'), container = document.getElementById('minutes-backfill-status');
   const button = document.getElementById('minutes-backfill-btn');
-  if (!startDate || !endDate) {
-    showNotification('開始日と終了日を指定してください', 'error');
-    return;
-  }
-  if (!confirm(`${startDate}〜${endDate} の未生成議事録を再処理しますか？\n文字起こしがあるレッスンではAI生成が実行されます。`)) return;
-
-  if (button) {
-    button.disabled = true;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>開始中...';
-  }
+  if (!root || !container || !button || !root.contains(container) || !root.contains(button) || !sessionToken ||
+      !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'minutes' || minutesCurrentStudentId || !parentCurrent()) return null;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role, studentName = minutesCurrentStudentName;
+  const current = () => parentCurrent() && sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'minutes' && !minutesCurrentStudentId && minutesCurrentStudentName === studentName &&
+    document.getElementById('content') === root && document.getElementById('minutes-backfill-status') === container &&
+    document.getElementById('minutes-backfill-btn') === button && root.contains(container) && root.contains(button);
+  return { root, container, button, token, userId, current, key: JSON.stringify([token, userId]) };
+}
+function clearMinutesBackfillPolling() {
+  minutesBackfillStatusGeneration++;
+  if (minutesBackfillPollTimer !== null) clearTimeout(minutesBackfillPollTimer);
+  minutesBackfillPollTimer = null;
+  minutesBackfillTimerOwner = null;
+}
+async function startMinutesBackfillFromPage() {
+  const state = captureMinutesBackfillContext();
+  const start = document.getElementById('minutes-backfill-start'), end = document.getElementById('minutes-backfill-end');
+  if (!state || state.button.disabled || !start || !end || !state.root.contains(start) || !state.root.contains(end) || minutesBackfillStartPending.has(state.key)) return;
+  const startDate = start.value, endDate = end.value;
+  if (!startDate || !endDate) { showNotification('開始日と終了日を指定してください', 'error'); return; }
+  const current = () => state.current() && document.getElementById('minutes-backfill-start') === start && document.getElementById('minutes-backfill-end') === end &&
+    state.root.contains(start) && state.root.contains(end) && start.value === startDate && end.value === endDate;
+  if (!confirm(`${startDate}〜${endDate} の未生成議事録を再処理しますか？\n文字起こしがあるレッスンではAI生成が実行されます。`) || !current() || minutesBackfillStartPending.has(state.key)) return;
+  clearMinutesBackfillPolling();
+  minutesBackfillStartPending.add(state.key);
+  const originalHTML = state.button.innerHTML;
+  let statusHandled = false;
+  state.button.disabled = true;
+  state.button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>開始中...';
   try {
-    await axios.post('/api/minutes/backfill', { startDate, endDate }, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
+    const response = await axios.post('/api/minutes/backfill', { startDate, endDate }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return;
+    if (response.data?.success === false) throw new Error('Backfill start rejected');
     showNotification('未生成議事録の再処理を開始しました', 'success');
-    await loadMinutesBackfillStatus();
-  } catch (err) {
-    const message = err.response?.data?.error || err.message;
-    showNotification('再処理を開始できませんでした: ' + message, 'error');
-    await loadMinutesBackfillStatus();
+    minutesBackfillStartPending.delete(state.key);
+    statusHandled = await loadMinutesBackfillStatus(state.current);
+  } catch {
+    if (!current()) return;
+    showNotification('再処理を開始できませんでした', 'error');
+    minutesBackfillStartPending.delete(state.key);
+    statusHandled = await loadMinutesBackfillStatus(state.current);
+  } finally {
+    minutesBackfillStartPending.delete(state.key);
+    if (!statusHandled && document.getElementById('content') === state.root && document.getElementById('minutes-backfill-btn') === state.button && state.root.contains(state.button)) {
+      state.button.disabled = false; state.button.innerHTML = originalHTML;
+    }
   }
 }
-
-async function loadMinutesBackfillStatus() {
-  const container = document.getElementById('minutes-backfill-status');
-  if (!container) return;
-
+async function loadMinutesBackfillStatus(parentCurrent = () => true) {
+  const state = captureMinutesBackfillContext(parentCurrent);
+  if (!state) return false;
+  clearMinutesBackfillPolling();
+  const generation = minutesBackfillStatusGeneration;
+  const current = () => generation === minutesBackfillStatusGeneration && state.current();
+  const schedulePoll = () => {
+    const owner = {};
+    minutesBackfillTimerOwner = owner;
+    minutesBackfillPollTimer = setTimeout(() => {
+      if (minutesBackfillTimerOwner !== owner || !current()) return;
+      minutesBackfillPollTimer = null; minutesBackfillTimerOwner = null;
+      loadMinutesBackfillStatus(parentCurrent);
+    }, 5000);
+  };
   try {
-    const response = await axios.get('/api/minutes/backfill/status', {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
-    const state = response.data.data || { status: 'idle' };
-    const progress = state.progress || {};
-    const button = document.getElementById('minutes-backfill-btn');
-
-    if (state.status === 'running') {
-      container.className = 'mt-3 text-sm text-blue-700';
-      container.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>処理中: ${Number(progress.processed || 0)}/${Number(progress.total || 0)}件確認、${Number(progress.generated || 0)}件生成、${Number(progress.qualityUpdated || 0)}件評価更新、${Number(progress.skipped || 0)}件スキップ、${Number(progress.errors || 0)}件エラー`;
-      if (button) {
-        button.disabled = true;
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>再処理中...';
-      }
-      minutesBackfillPollTimer = setTimeout(loadMinutesBackfillStatus, 5000);
-      return;
+    const response = await axios.get('/api/minutes/backfill/status', { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
+    if (response.data?.success === false) throw new Error('Backfill status rejected');
+    const job = response.data.data || { status: 'idle' }, progress = job.progress || {};
+    if (job.status === 'running') {
+      state.container.className = 'mt-3 text-sm text-blue-700';
+      state.container.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>処理中: ${Number(progress.processed || 0)}/${Number(progress.total || 0)}件確認、${Number(progress.generated || 0)}件生成、${Number(progress.qualityUpdated || 0)}件評価更新、${Number(progress.skipped || 0)}件スキップ、${Number(progress.errors || 0)}件エラー`;
+      state.button.disabled = true;
+      state.button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>再処理中...';
+      schedulePoll();
+      return true;
     }
-
-    if (button) {
-      button.disabled = false;
-      button.innerHTML = '<i class="fas fa-play"></i>未生成分を再処理';
-    }
-    if (state.status === 'completed') {
-      const summary = state.summary || progress;
-      container.className = 'mt-3 text-sm text-green-700';
-      container.textContent = `完了: ${Number(summary.generated || 0)}件生成、${Number(summary.qualityUpdated || 0)}件評価更新、${Number(summary.qualityPending || 0)}件評価再試行待ち、${Number(summary.skipped || 0)}件スキップ、${Number(summary.errors || 0)}件エラー`;
-      await loadMinutesList();
-    } else if (state.status === 'failed') {
-      container.className = 'mt-3 text-sm text-red-600';
-      container.textContent = `停止: ${state.error || '不明なエラー'}`;
+    state.button.disabled = minutesBackfillStartPending.has(state.key);
+    if (state.button.disabled) schedulePoll();
+    state.button.innerHTML = '<i class="fas fa-play"></i>未生成分を再処理';
+    if (job.status === 'completed') {
+      const summary = job.summary || progress;
+      state.container.className = 'mt-3 text-sm text-green-700';
+      state.container.textContent = `完了: ${Number(summary.generated || 0)}件生成、${Number(summary.qualityUpdated || 0)}件評価更新、${Number(summary.qualityPending || 0)}件評価再試行待ち、${Number(summary.skipped || 0)}件スキップ、${Number(summary.errors || 0)}件エラー`;
+      if ((await loadMinutesList(current)) === false || !current()) return false;
+    } else if (job.status === 'failed') {
+      state.container.className = 'mt-3 text-sm text-red-600';
+      state.container.textContent = '停止: 再処理に失敗しました';
     } else {
-      container.className = 'mt-3 text-sm text-gray-500';
-      container.textContent = '待機中';
+      state.container.className = 'mt-3 text-sm text-gray-500'; state.container.textContent = '待機中';
     }
-  } catch (err) {
-    container.className = 'mt-3 text-sm text-red-600';
-    container.textContent = '状態の取得に失敗しました';
-    const button = document.getElementById('minutes-backfill-btn');
-    if (button) button.disabled = false;
+    return true;
+  } catch {
+    if (!current()) return false;
+    state.container.className = 'mt-3 text-sm text-red-600'; state.container.textContent = '状態の取得に失敗しました';
+    state.button.disabled = minutesBackfillStartPending.has(state.key);
+    if (state.button.disabled) schedulePoll();
+    return false;
   }
 }
 
