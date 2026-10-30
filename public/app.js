@@ -17594,8 +17594,8 @@ function handleHandoverEntryChange(event) {
   const student = handoverEntryStudent(control);
   if (!student || (control.value !== '' && !handoverTutorSidebar.some(tutor => tutor.tutor_name === control.value))) return;
   return control.dataset.handoverEntryView === 'handover'
-    ? handoverUpdateAssignment(student.student_id, control.value)
-    : newAssignUpdateAssignment(student.student_id, control.value);
+    ? handoverUpdateAssignment(student.student_id, control.value, control)
+    : newAssignUpdateAssignment(student.student_id, control.value, control);
 }
 
 document.addEventListener('click', handleHandoverEntryClick);
@@ -17801,42 +17801,39 @@ function _refreshHandoverTable() {
 
 // ── Filter & sort handlers (新規割り振りタブ) ──
 
+let newAssignMonthReadGeneration = 0;
 async function newAssignChangeMonth(month) {
-  if (!['current', 'next'].includes(month) || month === newAssignMonth) return;
-
-  const select = document.getElementById('new-assign-month');
-  const tbody = document.getElementById('new-assign-table-body');
+  const root = document.getElementById('content');
+  if (!['current', 'next'].includes(month) || month === newAssignMonth || !root || !sessionToken ||
+      !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'handover' || handoverActiveTab !== 'new') return;
+  const generation = ++newAssignMonthReadGeneration, token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const loadedMonth = newAssignMonth, loadedStudents = newAssignStudents;
+  const assigned = newAssignFilterAssigned, handover = newAssignFilterHandover;
+  const select = document.getElementById('new-assign-month'), tbody = document.getElementById('new-assign-table-body');
+  const current = () => generation === newAssignMonthReadGeneration && sessionToken === token && currentUser?.id === userId &&
+    currentUser?.role === role && currentPage === 'handover' && handoverActiveTab === 'new' && document.getElementById('content') === root &&
+    document.getElementById('new-assign-month') === select && document.getElementById('new-assign-table-body') === tbody &&
+    newAssignMonth === loadedMonth && newAssignStudents === loadedStudents && newAssignFilterAssigned === assigned && newAssignFilterHandover === handover;
   if (select) select.disabled = true;
-  if (tbody) {
-    tbody.innerHTML = `<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400">
-      <i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...
-    </td></tr>`;
-  }
-
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...</td></tr>';
   try {
-    const res = await axios.get(`${API_BASE}/api/handover/new-assignments`, {
-      params: { month },
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-
-    if (!res.data.success) {
-      throw new Error(res.data.error || 'データの読み込みに失敗しました');
-    }
-
+    const res = await axios.get(`${API_BASE}/api/handover/new-assignments`, { params: { month }, headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Assignment month rejected');
     newAssignMonth = month;
     newAssignStudents = res.data.data || [];
     newAssignTargetMonth = res.data.target_month || res.data.next_month || '';
     newAssignFilterAssigned = 'all';
     newAssignFilterHandover = 'all';
     _renderHandoverLayout();
-  } catch (error) {
-    console.error('[Handover] Error changing new-assignment month:', error);
-    if (select) {
-      select.value = newAssignMonth;
-      select.disabled = false;
-    }
+  } catch {
+    if (!current()) return;
+    console.error('[Handover] Assignment month read failed');
+    if (select) select.value = newAssignMonth;
     _refreshNewAssignTable();
-    showNotification(error.response?.data?.error || error.message || 'データの読み込みに失敗しました', 'error');
+    showNotification('データの読み込みに失敗しました', 'error');
+  } finally {
+    if (generation === newAssignMonthReadGeneration && select && document.getElementById('new-assign-month') === select) select.disabled = false;
   }
 }
 
@@ -18014,87 +18011,60 @@ function _renderNewAssignRows() {
 
 // ── Assignment save ──
 
-async function handoverUpdateAssignment(studentId, tutorName) {
+const handoverAssignmentWrites = new Set();
+let handoverSidebarReadGeneration = 0;
+async function saveHandoverAssignment(studentId, tutorName, view, control) {
+  const root = document.getElementById('content');
+  const list = view === 'handover' ? handoverStudents : newAssignStudents;
+  const student = list.find(row => row.student_id === studentId);
+  if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'handover' ||
+      handoverActiveTab !== view || !student || (control && (control.disabled || !root.contains(control)))) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const month = newAssignMonth, targetMonth = newAssignTargetMonth;
+  const filters = [handoverFilterAssigned, handoverFilterHandover, newAssignFilterAssigned, newAssignFilterHandover];
+  const sidebar = document.getElementById('handover-sidebar-list'), footer = document.getElementById('handover-count-footer');
+  const key = JSON.stringify([token, userId, studentId]);
+  if (handoverAssignmentWrites.has(key)) return;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'handover' && handoverActiveTab === view && document.getElementById('content') === root &&
+    (view === 'handover' ? handoverStudents : newAssignStudents) === list && list.includes(student) && student.student_id === studentId &&
+    newAssignMonth === month && newAssignTargetMonth === targetMonth &&
+    [handoverFilterAssigned, handoverFilterHandover, newAssignFilterAssigned, newAssignFilterHandover].every((value, i) => value === filters[i]) &&
+    document.getElementById('handover-sidebar-list') === sidebar && document.getElementById('handover-count-footer') === footer &&
+    (!control || root.contains(control));
+  handoverAssignmentWrites.add(key);
+  if (control) control.disabled = true;
   try {
-    const res = await axios.put(
-      `${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
-      { handover_tutor_name: tutorName || null },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-
-    if (res.data.success) {
-      // Update local state
-      const student = handoverStudents.find(s => s.student_id === studentId);
-      if (student) student.handover_tutor_name = tutorName || '';
-
-      showNotification(
-        tutorName ? `引き継ぎ先を「${tutorName}」に設定しました` : '引き継ぎ先をリセットしました',
-        'success'
-      );
-
-      // Refresh sidebar counts in background
-      try {
-        const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
-          headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        handoverTutorSidebar = sidebarRes.data.data || [];
-        const sidebarEl = document.getElementById('handover-sidebar-list');
-        if (sidebarEl) sidebarEl.innerHTML = _renderHandoverSidebar();
-      } catch (_) {}
-
-      // Refresh count footer
-      const footer = document.getElementById('handover-count-footer');
-      if (footer) footer.innerHTML = _handoverCountLabel();
-
-    } else {
-      showNotification(res.data.error || '保存に失敗しました', 'error');
+    const res = await axios.put(`${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
+      { handover_tutor_name: tutorName || null }, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('Assignment rejected');
+    student.handover_tutor_name = tutorName || '';
+    const label = view === 'handover' ? '引き継ぎ先' : '割り振り先';
+    showNotification(tutorName ? `${label}を「${studentDisplayText(tutorName)}」に設定しました` : `${label}をリセットしました`, 'success');
+    const generation = ++handoverSidebarReadGeneration;
+    try {
+      const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!current() || generation !== handoverSidebarReadGeneration) return;
+      handoverTutorSidebar = sidebarRes.data.data || [];
+      if (sidebar) sidebar.innerHTML = _renderHandoverSidebar();
+    } catch { if (!current() || generation !== handoverSidebarReadGeneration) return; }
+    if (current() && footer) footer.innerHTML = view === 'handover' ? _handoverCountLabel() : _newAssignCountLabel();
+  } catch {
+    if (current()) { console.error('[Handover] Assignment update failed'); showNotification('保存に失敗しました', 'error'); }
+  } finally {
+    handoverAssignmentWrites.delete(key);
+    if (control && document.getElementById('content') === root && root.contains(control)) {
+      if (current()) control.value = student.handover_tutor_name || '';
+      control.disabled = false;
     }
-  } catch (e) {
-    console.error('[Handover] Error updating assignment:', e);
-    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
   }
 }
-
-// 新規割り振りタブ用 assignment save
-async function newAssignUpdateAssignment(studentId, tutorName) {
-  try {
-    const res = await axios.put(
-      `${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
-      { handover_tutor_name: tutorName || null },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-
-    if (res.data.success) {
-      // ローカル state 更新 (新規割り振り側)
-      const student = newAssignStudents.find(s => s.student_id === studentId);
-      if (student) student.handover_tutor_name = tutorName || '';
-
-      showNotification(
-        tutorName ? `割り振り先を「${tutorName}」に設定しました` : '割り振り先をリセットしました',
-        'success'
-      );
-
-      // サイドバー更新
-      try {
-        const sidebarRes = await axios.get(`${API_BASE}/api/handover/tutor-sidebar`, {
-          headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        handoverTutorSidebar = sidebarRes.data.data || [];
-        const sidebarEl = document.getElementById('handover-sidebar-list');
-        if (sidebarEl) sidebarEl.innerHTML = _renderHandoverSidebar();
-      } catch (_) {}
-
-      // フッター更新
-      const footer = document.getElementById('handover-count-footer');
-      if (footer) footer.innerHTML = _newAssignCountLabel();
-
-    } else {
-      showNotification(res.data.error || '保存に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('[Handover] Error updating new assignment:', e);
-    showNotification(e.response?.data?.error || '保存に失敗しました', 'error');
-  }
+async function handoverUpdateAssignment(studentId, tutorName, control) {
+  return saveHandoverAssignment(studentId, tutorName, 'handover', control);
+}
+async function newAssignUpdateAssignment(studentId, tutorName, control) {
+  return saveHandoverAssignment(studentId, tutorName, 'new', control);
 }
 
 // ============================================================
