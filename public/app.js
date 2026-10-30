@@ -3540,7 +3540,7 @@ function renderTeamFilterOptions() {
   return `
     <option value="all" ${selectedTeam === 'all' ? 'selected' : ''}>全体</option>
     ${teams.map(team => `
-      <option value="${team}" ${selectedTeam === team ? 'selected' : ''}>${team}</option>
+      <option value="${studentDisplayAttribute(team)}" ${selectedTeam === team ? 'selected' : ''}>${studentDisplayText(team)}</option>
     `).join('')}
   `;
 }
