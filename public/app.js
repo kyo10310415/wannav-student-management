@@ -9685,22 +9685,22 @@ async function renderSuspensionsPage() {
                 ` : suspensions.map(s => `
                   <tr class="hover:bg-gray-50 transition">
                     <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="font-medium text-gray-900">${s.studentName}</div>
+                      <div class="font-medium text-gray-900">${studentDisplayText(s.studentName)}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="text-sm text-gray-600">${s.studentId}</div>
+                      <div class="text-sm text-gray-600">${studentDisplayText(s.studentId)}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-center">
                       <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-orange-100 text-orange-800">
-                        <i class="fas fa-calendar mr-1"></i>${s.suspensionMonths}ヶ月
+                        <i class="fas fa-calendar mr-1"></i>${studentDisplayText(s.suspensionMonths)}ヶ月
                       </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                      ${s.suspensionStartDate || '-'}
+                      ${studentDisplayText(s.suspensionStartDate || '-')}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-center">
                       <span class="text-sm font-medium text-blue-600">
-                        ${s.suspensionEndDate || '-'}
+                        ${studentDisplayText(s.suspensionEndDate || '-')}
                       </span>
                     </td>
                   </tr>
@@ -10666,11 +10666,11 @@ async function previewBroadcast() {
       const studentListHtml = students.map(s => `
         <div class="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded">
           <div>
-            <span class="font-semibold">${s.name}</span>
-            <span class="text-gray-500 text-sm ml-2">(${s.student_id})</span>
+            <span class="font-semibold">${studentDisplayText(s.name)}</span>
+            <span class="text-gray-500 text-sm ml-2">(${studentDisplayText(s.student_id)})</span>
           </div>
           <div class="text-sm text-gray-600">
-            <i class="fas fa-chalkboard-teacher mr-1"></i>${s.homeroom_tutor}
+            <i class="fas fa-chalkboard-teacher mr-1"></i>${studentDisplayText(s.homeroom_tutor)}
           </div>
         </div>
       `).join('');
