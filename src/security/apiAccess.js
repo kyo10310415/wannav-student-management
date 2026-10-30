@@ -41,6 +41,10 @@ export const LESSON_COMPLETION_REQUEST_MAX_BYTES = 1024 * 1024;
 const limitLessonCompletionBody = uploadRequestBodyLimit(LESSON_COMPLETION_REQUEST_MAX_BYTES, {
   tooLargeError: 'Lesson completion request too large', invalidError: 'Invalid lesson completion request'
 });
+export const TUTOR_EXPORT_REQUEST_MAX_BYTES = 1024 * 1024;
+const limitTutorExportBody = uploadRequestBodyLimit(TUTOR_EXPORT_REQUEST_MAX_BYTES, {
+  tooLargeError: 'Tutor export request too large', invalidError: 'Invalid tutor export request'
+});
 
 const roles = new Set(['admin', 'leader', 'crew']);
 const leaders = new Set(['admin', 'leader']);
@@ -144,6 +148,10 @@ export function installApiAccess(app, { db, integrationKey = () => process.env.G
       (path === '/api/daily-reports/reminder-setting' && method === 'PUT') ||
       (under(path, '/api/daily-reports') && method === 'DELETE');
     if (managerOperation && !leaders.has(user.role)) return c.json({ success: false, error: 'リーダー以上の権限が必要です' }, 403);
+    if (method === 'POST' && ['/api/tutors/quality/export', '/api/tutors/export-satisfaction'].includes(path)) {
+      const rejected = await limitTutorExportBody(c, async () => {});
+      if (rejected) return rejected;
+    }
     if (method === 'POST' && path === '/api/lesson-reports') {
       const rejected = await limitLessonReportBody(c, async () => {});
       if (rejected) return rejected;
