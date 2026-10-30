@@ -19266,12 +19266,16 @@ async function openMinutesForStudent(studentId, studentName) {
   await changePage('minutes');
 }
 
+let minutesPageRenderGeneration = 0;
 async function renderMinutesPage() {
+  const generation = ++minutesPageRenderGeneration, state = captureMinutesReadContext();
+  if (!state) return false;
+  const current = () => generation === minutesPageRenderGeneration && state.current();
   if (minutesBackfillPollTimer) {
     clearTimeout(minutesBackfillPollTimer);
     minutesBackfillPollTimer = null;
   }
-  const content = document.getElementById('content');
+  const content = state.root;
   content.innerHTML = `
     <div class="max-w-4xl mx-auto px-4 py-6">
       <div class="flex items-center gap-3 mb-6">
@@ -19444,8 +19448,10 @@ async function renderMinutesPage() {
   `;
 
   // 生徒指定あり・なし問わず一覧をロード
-  await loadMinutesList();
-  if (!minutesCurrentStudentId) await loadMinutesBackfillStatus();
+  const loaded = await loadMinutesList(current);
+  if (loaded === false || !current()) return false;
+  if (!state.studentId) await loadMinutesBackfillStatus(current);
+  return current();
 }
 
 function getTodayJST() {
