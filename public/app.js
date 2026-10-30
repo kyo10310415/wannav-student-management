@@ -554,21 +554,31 @@ async function loadInitialData() {
   }
 }
 
-// Load lesson statistics
+const lessonMonthReadStates = new Map();
+function beginLessonMonthRead(key) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role)) return null;
+  const state = { token: sessionToken, id: currentUser.id, role: currentUser.role, page: currentPage, month: currentMonth.getTime(), root };
+  lessonMonthReadStates.set(key, state);
+  return () => lessonMonthReadStates.get(key) === state && sessionToken === state.token && currentUser?.id === state.id &&
+    currentUser?.role === state.role && currentPage === state.page && currentMonth.getTime() === state.month && document.getElementById('content') === root;
+}
+
+// Load lesson statistics.
 async function loadLessonStats() {
+  const current = beginLessonMonthRead('stats');
+  if (!current) return false;
+  const year = currentMonth.getFullYear(), month = currentMonth.getMonth() + 1;
   try {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth() + 1;
-    
     const res = await axios.get(`${API_BASE}/api/lessons/stats/${year}/${month}`);
-    
-    // Convert array to object for easy lookup
-    lessonStats = {};
-    res.data.data.forEach(stat => {
-      lessonStats[stat.student_id] = parseInt(stat.lesson_count);
-    });
-  } catch (error) {
-    console.error('Error loading lesson stats:', error);
+    if (!current()) return false;
+    const next = Object.create(null);
+    res.data.data.forEach(stat => { next[stat.student_id] = parseInt(stat.lesson_count); });
+    lessonStats = next;
+    return true;
+  } catch {
+    if (current()) console.error('Error loading lesson stats');
+    return false;
   }
 }
 
@@ -649,32 +659,35 @@ function getOverallSatisfactionDenominator(tutor) {
   return getSatisfactionActiveStudents(tutor).length;
 }
 
+const satisfactionCompletionReadStates = new Map();
+let satisfactionCompletionCacheOwner = null;
 async function loadSatisfactionLessonCompletion(year, month, force = false) {
-  const key = `${year}/${month}`;
-
-  if (!isLessonCompletionFilterActive(year, month)) {
-    return null;
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || !isLessonCompletionFilterActive(year, month)) return null;
+  const token = sessionToken, id = currentUser.id, role = currentUser.role, page = currentPage;
+  const selectedYear = selectedTutorYear, selectedMonth = selectedTutorMonth;
+  if (!satisfactionCompletionCacheOwner || satisfactionCompletionCacheOwner.token !== token ||
+      satisfactionCompletionCacheOwner.id !== id || satisfactionCompletionCacheOwner.role !== role) {
+    satisfactionLessonCompletionByMonth = {};
+    satisfactionCompletionCacheOwner = { token, id, role };
   }
-  if (!force && satisfactionLessonCompletionByMonth[key]?.loaded) {
-    return satisfactionLessonCompletionByMonth[key];
-  }
-
+  const owner = satisfactionCompletionCacheOwner, key = `${year}/${month}`;
+  if (!force && satisfactionLessonCompletionByMonth[key]?.loaded) return satisfactionLessonCompletionByMonth[key];
+  const state = {};
+  satisfactionCompletionReadStates.set(key, state);
+  const current = () => satisfactionCompletionReadStates.get(key) === state && satisfactionCompletionCacheOwner === owner &&
+    sessionToken === token && currentUser?.id === id && currentUser?.role === role && currentPage === page &&
+    document.getElementById('content') === root && selectedTutorYear === selectedYear && selectedTutorMonth === selectedMonth;
   try {
     const apiYearMonth = `${year}-${String(month).padStart(2, '0')}`;
-    const response = await axios.get(`${API_BASE}/api/lesson-completion/completed-students`, {
-      params: { yearMonth: apiYearMonth }
-    });
-    const completedStudentIds = new Set(
-      (response.data.data?.completedStudentIds || []).map(normalizeSatisfactionStudentId)
-    );
-    satisfactionLessonCompletionByMonth[key] = {
-      loaded: true,
-      completedStudentIds,
-      checkedLessonCount: response.data.data?.checkedLessonCount || 0
-    };
+    const response = await axios.get(`${API_BASE}/api/lesson-completion/completed-students`, { params: { yearMonth: apiYearMonth } });
+    if (!current()) return null;
+    const completedStudentIds = new Set((response.data.data?.completedStudentIds || []).map(normalizeSatisfactionStudentId));
+    satisfactionLessonCompletionByMonth[key] = { loaded: true, completedStudentIds, checkedLessonCount: response.data.data?.checkedLessonCount || 0 };
     return satisfactionLessonCompletionByMonth[key];
-  } catch (error) {
-    console.error(`[Tutor Satisfaction] Failed to load lesson completion for ${key}:`, error);
+  } catch {
+    if (!current()) return null;
+    console.error('[Tutor Satisfaction] Failed to load lesson completion');
     delete satisfactionLessonCompletionByMonth[key];
     return null;
   }
@@ -734,47 +747,25 @@ async function loadTutorWeeklySnapshot() {
 
 // Load lesson dates for current month
 async function loadLessonDates() {
+  const current = beginLessonMonthRead('dates');
+  if (!current) return false;
+  const year = currentMonth.getFullYear(), month = currentMonth.getMonth() + 1;
   try {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth() + 1;
-    
-    console.log(`Loading lesson dates for: ${year}/${month}`);
-    
     const res = await axios.get(`${API_BASE}/api/lessons/month/${year}/${month}`);
-    
-    // Group dates by student_id
-    lessonDates = {};
+    if (!current()) return false;
+    const next = Object.create(null);
     res.data.data.forEach(lesson => {
-      if (!lessonDates[lesson.student_id]) {
-        lessonDates[lesson.student_id] = [];
-      }
-      
-      // Parse UTC date from database
+      if (!next[lesson.student_id]) next[lesson.student_id] = [];
       const utcDate = new Date(lesson.lesson_date);
-      
-      // Format as JST date string (YYYY/MM/DD)
-      // Note: Database stores JST times as UTC, so we need to extract the date part
-      const dateStr = lesson.lesson_date.split('T')[0]; // "2026-02-26"
-      const [yearStr, monthStr, dayStr] = dateStr.split('-');
-      
-      lessonDates[lesson.student_id].push({
-        date: utcDate,
-        formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}`
-      });
-      
-      if (lesson.student_id === 'OLTS240499-HK') {
-        console.log(`Student ${lesson.student_id}: DB=${lesson.lesson_date}, formatted=${parseInt(monthStr)}/${parseInt(dayStr)}`);
-      }
+      const [, monthStr, dayStr] = lesson.lesson_date.split('T')[0].split('-');
+      next[lesson.student_id].push({ date: utcDate, formatted: `${parseInt(monthStr)}/${parseInt(dayStr)}` });
     });
-    
-    // Sort dates
-    Object.keys(lessonDates).forEach(studentId => {
-      lessonDates[studentId].sort((a, b) => a.date - b.date);
-    });
-    
-    console.log(`Loaded lesson dates for ${Object.keys(lessonDates).length} students`);
-  } catch (error) {
-    console.error('Error loading lesson dates:', error);
+    Object.keys(next).forEach(studentId => { next[studentId].sort((a, b) => a.date - b.date); });
+    lessonDates = next;
+    return true;
+  } catch {
+    if (current()) console.error('Error loading lesson dates');
+    return false;
   }
 }
 
@@ -2331,18 +2322,23 @@ function formatMonth(date) {
 
 // Change month
 async function changeMonth(delta) {
+  if (!sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || !['reservations', 'students'].includes(currentPage) ||
+      ![-1, 1].includes(delta) || !document.getElementById('current-month-display')) return;
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
-  
-  // Update display
+  const current = beginLessonMonthRead('navigation');
+  if (!current) return;
   document.getElementById('current-month-display').textContent = formatMonth(currentMonth);
-  
-  // Reload lesson stats and dates for the new month
   try {
-    await loadLessonStats();
-    await loadLessonDates();
+    const statsLoaded = await loadLessonStats();
+    if (!current()) return;
+    if (statsLoaded === false) { alert('月の切り替えに失敗しました'); return; }
+    const datesLoaded = await loadLessonDates();
+    if (!current()) return;
+    if (datesLoaded === false) { alert('月の切り替えに失敗しました'); return; }
     renderApp();
-  } catch (error) {
-    console.error('Error changing month:', error);
+  } catch {
+    if (!current()) return;
+    console.error('Error changing month');
     alert('月の切り替えに失敗しました');
   }
 }
@@ -3540,7 +3536,7 @@ function renderTeamFilterOptions() {
   return `
     <option value="all" ${selectedTeam === 'all' ? 'selected' : ''}>全体</option>
     ${teams.map(team => `
-      <option value="${team}" ${selectedTeam === team ? 'selected' : ''}>${team}</option>
+      <option value="${studentDisplayAttribute(team)}" ${selectedTeam === team ? 'selected' : ''}>${studentDisplayText(team)}</option>
     `).join('')}
   `;
 }

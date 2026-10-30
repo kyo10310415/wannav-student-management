@@ -8,7 +8,7 @@ const row=id=>({calendar_event_id:id,student_id:'SYNTHETIC',tutor_email:'synthet
 let sequence=0;
 async function fixture({sheet=[row('ONE')],failAt=0,failSql,connectFail=false,rollbackFail=false,role='leader'}={}){
  const state={rows:new Map([['ONE','Original'],['OMITTED','Keep']]),staged:null,calls:[],writes:0,releases:0,acquired:0,failAt,failSql};
- const query=async(sql,params)=>{state.calls.push([sql,params]);if(sql.includes('FROM students s'))return{rows:[{student_id:'SYNTHETIC',tutor_email:'synthetic@example.test'}]};throw Error('Unexpected nontransaction query')};
+ const query=async(sql,params)=>{state.calls.push([sql,params]);if(sql.includes('FROM students s'))return{rows:[{student_id:'SYNTHETIC',tutor_email:'synthetic@example.test'}]};if(sql.startsWith('SELECT * FROM lessons WHERE lesson_date'))return{rows:[...state.rows].map(([calendar_event_id,title])=>({calendar_event_id,title,student_id:'SYNTHETIC',lesson_date:'2026-10-30'}))};throw Error('Unexpected nontransaction query')};
  const client={query:async(sql,params)=>{
   state.calls.push([sql,params]);if(sql==='ROLLBACK'){state.staged=null;if(rollbackFail)throw Error('PRIVATE_SENTINEL');return{rows:[]}}
   if(sql===state.failSql)throw Error('PRIVATE_SENTINEL');
@@ -26,6 +26,13 @@ async function fixture({sheet=[row('ONE')],failAt=0,failSql,connectFail=false,ro
 test('nonempty partial Sheet updates present rows and keeps omitted lessons without cleanup SQL',async()=>{
  const f=await fixture();const response=await f.app.request('/api/lessons/sync-from-sheet',{headers});assert.equal(response.status,200);const data=await response.json();assert.equal(data.count,1);assert.equal(data.deleted,0);assert.equal(data.cleanup_skipped,true);
  assert.deepEqual([...f.state.rows],[['ONE','Updated'],['OMITTED','Keep']]);assert.equal(f.state.releases,1);assert.deepEqual(f.state.calls.filter(([sql])=>['BEGIN','COMMIT','ROLLBACK'].includes(sql)).map(([sql])=>sql),['BEGIN','COMMIT']);assert.equal(f.state.calls.some(([sql])=>/DELETE|SELECT calendar_event_id/.test(sql)),false);
+});
+test('retained omitted lessons remain visible through the real monthly route after upsert-only sync',async()=>{
+ const f=await fixture();
+ assert.equal((await f.app.request('/api/lessons/sync-from-sheet',{headers})).status,200);
+ const response=await f.app.request('/api/lessons/month/2026/10',{headers});assert.equal(response.status,200);
+ const body=await response.json();assert.equal(body.count,2);assert.equal(body.data.find(item=>item.calendar_event_id==='OMITTED').title,'Keep');assert.equal(body.data.find(item=>item.calendar_event_id==='ONE').title,'Updated');
+ const monthly=f.state.calls.find(([sql])=>sql.startsWith('SELECT * FROM lessons WHERE lesson_date'));assert.equal(monthly[1][0].getFullYear(),2026);assert.equal(monthly[1][0].getMonth(),9);
 });
 test('late upsert error rolls back earlier updates and releases the same client',async()=>{
  const f=await fixture({sheet:[row('ONE'),row('TWO')],failAt:2});const response=await f.app.request('/api/lessons/sync-from-sheet',{headers});assert.equal(response.status,500);assert.ok(!(await response.text()).includes('PRIVATE_SENTINEL'));assert.deepEqual([...f.state.rows],[['ONE','Original'],['OMITTED','Keep']]);assert.equal(f.state.staged,null);assert.equal(f.state.releases,1);assert.equal(f.state.calls.some(([sql])=>sql==='COMMIT'),false);assert.ok(f.state.calls.some(([sql])=>sql==='ROLLBACK'));
