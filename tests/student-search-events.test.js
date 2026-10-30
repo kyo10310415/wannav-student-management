@@ -68,7 +68,7 @@ test('real status and plan functions preserve active default reset and one app r
 test('real reservation month navigation preserves year boundary, load order and render without writes',async()=>{
  const f=fixture();f.c.currentMonth=new Date(2026,0,15);f.elements['current-month-display']={textContent:''};
  f.c.formatMonth=date=>date.getFullYear()+'-'+(date.getMonth()+1);f.c.loadLessonStats=async()=>f.calls.push(['stats']);f.c.loadLessonDates=async()=>f.calls.push(['dates']);f.c.renderApp=()=>f.calls.push(['render']);
- const start=appSource.indexOf('async function changeMonth(delta)');const end=appSource.indexOf('// Filter by tutor',start);vm.runInContext(appSource.slice(start,end),f.c);
+ const start=appSource.indexOf('async function changeMonth(delta)');const end=appSource.indexOf('// Filter by tutor',start);vm.runInContext(appSource.slice(appSource.indexOf('const lessonMonthReadStates ='),appSource.indexOf('// Load lesson statistics.'))+'\n'+appSource.slice(start,end),f.c);
  await f.click(f.button('previous-month'));assert.equal(f.c.currentMonth.getFullYear(),2025);assert.equal(f.c.currentMonth.getMonth(),11);assert.equal(f.c.currentMonth.getDate(),1);assert.equal(f.elements['current-month-display'].textContent,'2025-12');
  assert.deepEqual(f.calls,[['stats'],['dates'],['render']]);
 });
