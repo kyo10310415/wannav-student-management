@@ -17479,7 +17479,7 @@ function _renderHandoverRows() {
 
   // Build tutor name list for dropdown (tutor_name column)
   const tutorOptions = handoverTutorSidebar
-    .map(t => `<option value="${escapeHtml(t.tutor_name)}">${escapeHtml(t.tutor_name)}</option>`)
+    .map(t => `<option value="${studentDisplayAttribute(t.tutor_name)}">${escapeHtml(t.tutor_name)}</option>`)
     .join('');
 
   return data.map(s => {
@@ -17498,11 +17498,13 @@ function _renderHandoverRows() {
 
     const continuedMonthsBadge = _handoverContinuedMonthsBadge(s.lesson_start_date, s.suspension_months);
     const assignedDisplay = getTutorDisplayName(s.homeroom_tutor) || s.homeroom_tutor || '-';
-    const notionLink  = s.notion_url
-      ? `<a href="${escapeHtml(s.notion_url)}" target="_blank" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
+    const notionUrl = studentDisplayLink(s.notion_url);
+    const discordUrl = studentDisplayLink(s.discord_url);
+    const notionLink  = notionUrl
+      ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
       : `<span class="text-gray-300 mr-2">Notion</span>`;
-    const discordLink = s.discord_url
-      ? `<a href="${escapeHtml(s.discord_url)}" target="_blank" class="text-indigo-600 hover:underline" title="Discord"><i class="fab fa-discord"></i> Discord</a>`
+    const discordLink = discordUrl
+      ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline" title="Discord"><i class="fab fa-discord"></i> Discord</a>`
       : `<span class="text-gray-300">Discord</span>`;
 
     const currentHandover = s.handover_tutor_name || '';
@@ -17536,12 +17538,12 @@ function _renderHandoverRows() {
         <td class="px-4 py-3">
           <select
             class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-            onchange="handoverUpdateAssignment('${s.student_id}', this.value)"
+            data-handover-entry="assignment" data-handover-entry-view="handover" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
           >
             <option value="">— 未設定 —</option>
             ${tutorOptions.replace(
-              `value="${escapeHtml(currentHandover)}"`,
-              `value="${escapeHtml(currentHandover)}" selected`
+              `value="${studentDisplayAttribute(currentHandover)}"`,
+              `value="${studentDisplayAttribute(currentHandover)}" selected`
             )}
           </select>
         </td>
@@ -17549,7 +17551,7 @@ function _renderHandoverRows() {
           <div class="flex items-center gap-2">
             ${notionLink}${discordLink}
             <button
-              onclick="handoverCopyInfo('${escapeHtml(s.name || '')}', '${escapeHtml(s.notion_url || '')}', '${escapeHtml(s.discord_url || '')}')"
+              data-handover-entry="copy" data-handover-entry-view="handover" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
               class="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition text-xs font-medium"
               title="コピー"
             >
@@ -17562,6 +17564,31 @@ function _renderHandoverRows() {
 }
 
 // ── Copy info ──
+function handoverEntryStudent(control) {
+  if (!control || control.disabled || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) ||
+      currentPage !== 'handover' || !document.getElementById('content')?.contains(control)) return null;
+  const view = control.dataset.handoverEntryView;
+  if (!['handover', 'new'].includes(view) || view !== handoverActiveTab) return null;
+  const data = view === 'handover' ? _getHandoverFiltered() : _getNewAssignFiltered();
+  return data.find(student => String(student.student_id) === control.dataset.handoverEntryId) || null;
+}
+function handleHandoverEntryClick(event) {
+  const control = event.target?.closest?.('button[data-handover-entry="copy"]');
+  const student = handoverEntryStudent(control);
+  if (student) return handoverCopyInfo(student.name || '', student.notion_url || '', student.discord_url || '');
+}
+function handleHandoverEntryChange(event) {
+  const control = event.target?.closest?.('select[data-handover-entry="assignment"]');
+  const student = handoverEntryStudent(control);
+  if (!student || (control.value !== '' && !handoverTutorSidebar.some(tutor => tutor.tutor_name === control.value))) return;
+  return control.dataset.handoverEntryView === 'handover'
+    ? handoverUpdateAssignment(student.student_id, control.value)
+    : newAssignUpdateAssignment(student.student_id, control.value);
+}
+
+document.addEventListener('click', handleHandoverEntryClick);
+document.addEventListener('change', handleHandoverEntryChange);
+
 function handoverCopyInfo(name, notionUrl, discordUrl) {
   const lines = [
     `生徒名：${name ? name + '様' : ''}`,
@@ -17883,7 +17910,7 @@ function _renderNewAssignRows() {
   }
 
   const tutorOptions = handoverTutorSidebar
-    .map(t => `<option value="${escapeHtml(t.tutor_name)}">${escapeHtml(t.tutor_name)}</option>`)
+    .map(t => `<option value="${studentDisplayAttribute(t.tutor_name)}">${escapeHtml(t.tutor_name)}</option>`)
     .join('');
 
   return data.map(s => {
@@ -17907,11 +17934,13 @@ function _renderNewAssignRows() {
       ? String(s.lesson_start_date).substring(0, 7)
       : '-';
 
-    const notionLink  = s.notion_url
-      ? `<a href="${escapeHtml(s.notion_url)}" target="_blank" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
+    const notionUrl = studentDisplayLink(s.notion_url);
+    const discordUrl = studentDisplayLink(s.discord_url);
+    const notionLink  = notionUrl
+      ? `<a href="${notionUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline mr-2" title="Notion"><i class="fas fa-external-link-alt"></i> Notion</a>`
       : `<span class="text-gray-300 mr-2">Notion</span>`;
-    const discordLink = s.discord_url
-      ? `<a href="${escapeHtml(s.discord_url)}" target="_blank" class="text-indigo-600 hover:underline" title="Discord"><i class="fab fa-discord"></i> Discord</a>`
+    const discordLink = discordUrl
+      ? `<a href="${discordUrl}" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline" title="Discord"><i class="fab fa-discord"></i> Discord</a>`
       : `<span class="text-gray-300">Discord</span>`;
 
     const currentHandover = s.handover_tutor_name || '';
@@ -17946,12 +17975,12 @@ function _renderNewAssignRows() {
         <td class="px-4 py-3">
           <select
             class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 bg-white"
-            onchange="newAssignUpdateAssignment('${s.student_id}', this.value)"
+            data-handover-entry="assignment" data-handover-entry-view="new" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
           >
             <option value="">— 未設定 —</option>
             ${tutorOptions.replace(
-              `value="${escapeHtml(currentHandover)}"`,
-              `value="${escapeHtml(currentHandover)}" selected`
+              `value="${studentDisplayAttribute(currentHandover)}"`,
+              `value="${studentDisplayAttribute(currentHandover)}" selected`
             )}
           </select>
         </td>
@@ -17959,7 +17988,7 @@ function _renderNewAssignRows() {
           <div class="flex items-center gap-2">
             ${notionLink}${discordLink}
             <button
-              onclick="handoverCopyInfo('${escapeHtml(s.name || '')}', '${escapeHtml(s.notion_url || '')}', '${escapeHtml(s.discord_url || '')}')"
+              data-handover-entry="copy" data-handover-entry-view="new" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
               class="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition text-xs font-medium"
               title="コピー"
             >
@@ -17976,7 +18005,7 @@ function _renderNewAssignRows() {
 async function handoverUpdateAssignment(studentId, tutorName) {
   try {
     const res = await axios.put(
-      `${API_BASE}/api/handover/students/${studentId}/assignment`,
+      `${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
       { handover_tutor_name: tutorName || null },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
@@ -18018,7 +18047,7 @@ async function handoverUpdateAssignment(studentId, tutorName) {
 async function newAssignUpdateAssignment(studentId, tutorName) {
   try {
     const res = await axios.put(
-      `${API_BASE}/api/handover/students/${studentId}/assignment`,
+      `${API_BASE}/api/handover/students/${encodeURIComponent(studentId)}/assignment`,
       { handover_tutor_name: tutorName || null },
       { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
