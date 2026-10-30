@@ -715,33 +715,46 @@ function getSatisfactionDenominator(tutor, year, month, snapshot = null) {
 }
 
 // Load monthly tutor stats (helper requests, accepted, reschedule counts)
+const tutorMonthReadStates = new Map();
+function beginTutorMonthRead(key) {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role)) return null;
+  const state = { token: sessionToken, id: currentUser.id, role: currentUser.role, page: currentPage,
+    year: selectedTutorYear, month: selectedTutorMonth, root };
+  tutorMonthReadStates.set(key, state);
+  return () => tutorMonthReadStates.get(key) === state && sessionToken === state.token && currentUser?.id === state.id &&
+    currentUser?.role === state.role && currentPage === state.page && selectedTutorYear === state.year && selectedTutorMonth === state.month &&
+    document.getElementById('content') === root;
+}
 async function loadTutorMonthlyStats() {
+  const current = beginTutorMonthRead('monthly');
+  if (!current) return false;
   try {
     const res = await axios.get(`${API_BASE}/api/tutors/monthly-stats/${selectedTutorYear}/${selectedTutorMonth}`);
-    if (res.data.success) {
-      tutorMonthlyStats = res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
-      console.log(`[Tutor Stats] Loaded monthly stats for ${selectedTutorYear}/${selectedTutorMonth}`);
-    }
-  } catch (error) {
-    console.error('Error loading tutor monthly stats:', error);
+    if (!current()) return false;
+    if (res.data.success) tutorMonthlyStats = res.data.data || { byEmployeeId: {}, rescheduleByName: {} };
+    return true;
+  } catch {
+    if (!current()) return false;
+    console.error('Error loading tutor monthly stats');
     tutorMonthlyStats = { byEmployeeId: {}, rescheduleByName: {} };
+    return true;
   }
 }
-
-// Load weekly snapshot for the selected year/month (前週スナップショット)
 async function loadTutorWeeklySnapshot() {
+  const current = beginTutorMonthRead('weekly');
+  if (!current) return false;
   try {
     const ym = `${selectedTutorYear}/${selectedTutorMonth}`;
     const res = await axios.get(`${API_BASE}/api/tutors/weekly-snapshot/latest?year_month=${encodeURIComponent(ym)}`);
-    if (res.data.success) {
-      tutorWeeklySnapshotData = res.data.data || {};
-      console.log(`[Tutor Snapshot] Loaded weekly snapshot for ${ym}, tutors=${Object.keys(tutorWeeklySnapshotData).length}`);
-    } else {
-      tutorWeeklySnapshotData = {};
-    }
-  } catch (error) {
-    console.error('Error loading tutor weekly snapshot:', error);
+    if (!current()) return false;
+    tutorWeeklySnapshotData = res.data.success ? (res.data.data || {}) : {};
+    return true;
+  } catch {
+    if (!current()) return false;
+    console.error('Error loading tutor weekly snapshot');
     tutorWeeklySnapshotData = {};
+    return true;
   }
 }
 
@@ -3544,28 +3557,16 @@ function renderTeamFilterOptions() {
 // Handle team filter change
 // Change tutor satisfaction stats month
 async function changeTutorStatsMonth(delta) {
+  if (!sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'tutors' || !document.getElementById('content') || ![-1, 1].includes(delta)) return;
   selectedTutorMonth += delta;
-  
-  if (selectedTutorMonth < 1) {
-    selectedTutorMonth = 12;
-    selectedTutorYear--;
-  } else if (selectedTutorMonth > 12) {
-    selectedTutorMonth = 1;
-    selectedTutorYear++;
-  }
-  
-  console.log(`[Tutor Stats] Changed to ${selectedTutorYear}/${selectedTutorMonth}`);
-  
-  // Load monthly stats for the selected month
-  await loadTutorMonthlyStats();
-  
-  // Load weekly snapshot for the selected month
-  await loadTutorWeeklySnapshot();
-
-  // Load lesson completion data used by the satisfaction denominator
+  if (selectedTutorMonth < 1) { selectedTutorMonth = 12; selectedTutorYear--; }
+  else if (selectedTutorMonth > 12) { selectedTutorMonth = 1; selectedTutorYear++; }
+  const current = beginTutorMonthRead('navigation');
+  if (!current) return;
+  if ((await loadTutorMonthlyStats()) === false || !current()) return;
+  if ((await loadTutorWeeklySnapshot()) === false || !current()) return;
   await loadSatisfactionLessonCompletion(selectedTutorYear, selectedTutorMonth, true);
-  
-  renderTutorsPage();
+  if (current()) renderTutorsPage();
 }
 
 function handleTeamFilterChange(team) {
@@ -4088,7 +4089,7 @@ function renderTutorRows() {
     const rescheduleColor = getCounterColor(rescheduleCount);
     
     // わなみさん使用回数（担当生徒の合計）
-    const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${tutor.notion_name}">...</span>`;
+    const wanamiUsage = `<span class="wanami-usage-tutor text-gray-400" data-tutor-notion-name="${studentDisplayAttribute(tutor.notion_name)}">...</span>`;
     
     // 前週との差分バッジ生成ヘルパー
     // delta: 数値差分, suffix: 単位文字列, higherIsBetter: true=増加が緑/減少が赤
@@ -4159,14 +4160,14 @@ function renderTutorRows() {
 
     return `
       <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${tutor.employee_id || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${studentDisplayText(tutor.employee_id || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-          <div class="flex items-center">${tutor.tutor_name || '-'}${lessonQualityButton}${extensionReviewTutorButton}</div>
+          <div class="flex items-center">${studentDisplayText(tutor.tutor_name || '-')}${lessonQualityButton}${extensionReviewTutorButton}</div>
         </td>
-        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${tutor.team || '-'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${studentDisplayText(tutor.team || '-')}</td>
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <select
-            onchange="updateTutorSection('${tutor.employee_id}', this.value)"
+            data-tutor-setting="section" data-tutor-setting-id="${studentDisplayAttribute(tutor.employee_id)}"
             class="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
             <option value="" ${!tutor.responsible_section ? 'selected' : ''}>未設定</option>
@@ -4180,10 +4181,10 @@ function renderTutorRows() {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
           <input 
             type="number" 
-            value="${tutor.student_capacity || ''}" 
+            value="${studentDisplayAttribute(tutor.student_capacity || '')}"
             placeholder="-"
             class="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onchange="updateTutorCapacity('${tutor.employee_id}', this.value)"
+            data-tutor-setting="capacity" data-tutor-setting-id="${studentDisplayAttribute(tutor.employee_id)}"
             min="0"
           />
         </td>
@@ -4219,6 +4220,20 @@ function renderTutorRows() {
     `;
   }).join('');
 }
+
+function handleTutorSettingChange(event) {
+  const control = event.target?.closest?.('[data-tutor-setting]');
+  if (!control || control.disabled || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+      currentPage !== 'tutors' || !document.getElementById('content')?.contains(control)) return;
+  const id = control.dataset.tutorSettingId;
+  if (!id || !tutors.some(tutor => String(tutor.employee_id) === id && tutor.status === 'アクティブ' &&
+      typeof tutor.job_type === 'string' && tutor.job_type.toLowerCase().includes('tutor') &&
+      (selectedTeam === 'all' || (tutor.team || '未所属') === selectedTeam))) return;
+  if (control.dataset.tutorSetting === 'section' && ['','Pro','A','B','C'].includes(control.value)) return updateTutorSection(id, control.value);
+  if (control.dataset.tutorSetting === 'capacity') return updateTutorCapacity(id, control.value);
+}
+
+document.addEventListener('change', handleTutorSettingChange);
 
 async function showTutorMinutesQualityModal(employeeId) {
   const tutor = tutors.find(item => item.employee_id === employeeId);
@@ -4402,7 +4417,7 @@ function renderTutorMinutesQualityModal(data) {
                     const metric = lesson.quality_evaluation?.metrics?.[definition.key];
                     if (!metric) return '<td class="px-3 py-2 text-center text-gray-300">-</td>';
                     const display = getMinutesQualityStatusDisplay(metric.status);
-                    return `<td class="px-3 py-2 text-center"><span class="inline-flex items-center gap-1 px-2 py-1 rounded-full ${display.badge}" title="${escapeHtml(metric.evidence || '')}"><i class="fas ${display.icon}"></i>${display.label}</span></td>`;
+                    return `<td class="px-3 py-2 text-center"><span class="inline-flex items-center gap-1 px-2 py-1 rounded-full ${display.badge}" title="${studentDisplayAttribute(metric.evidence || '')}"><i class="fas ${display.icon}"></i>${display.label}</span></td>`;
                   }).join('')}
                 </tr>`).join('')}
             </tbody>
@@ -4436,7 +4451,7 @@ async function updateTutorCapacity(employeeId, capacity) {
   try {
     const capacityValue = capacity === '' ? null : parseInt(capacity, 10);
     
-    const response = await axios.put(`${API_BASE}/api/tutors/${employeeId}/capacity`, {
+    const response = await axios.put(`${API_BASE}/api/tutors/${encodeURIComponent(employeeId)}/capacity`, {
       student_capacity: capacityValue
     });
     
@@ -4465,7 +4480,7 @@ async function updateTutorSection(employeeId, section) {
   try {
     const sectionValue = section === '' ? null : section;
     
-    const response = await axios.put(`${API_BASE}/api/tutors/${employeeId}/section`, {
+    const response = await axios.put(`${API_BASE}/api/tutors/${encodeURIComponent(employeeId)}/section`, {
       responsible_section: sectionValue
     });
     
@@ -4754,7 +4769,13 @@ async function exportTutorSatisfactionToSheet() {
 }
 
 // Show satisfaction modal for a tutor
+let satisfactionModalReadGeneration = 0;
 async function showSatisfactionModal(tutorEmployeeId) {
+  const generation = ++satisfactionModalReadGeneration, root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) || currentPage !== 'tutors') return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const year = selectedTutorYear, month = selectedTutorMonth, team = selectedTeam, cache = satisfactionData;
+  let modal = document.getElementById('satisfactionModal');
   const showOverallMetrics = canViewOverallSatisfactionMetrics();
   const tutor = tutors.find(t => t.employee_id === tutorEmployeeId);
   if (!tutor) {
@@ -4763,6 +4784,12 @@ async function showSatisfactionModal(tutorEmployeeId) {
   }
   const tutorName = tutor.tutor_name;
   const tutorSatisfactionData = getTutorSatisfactionData(tutor);
+  const tutorId = tutor.employee_id, tutorNameSnapshot = tutor.tutor_name, dataSnapshot = JSON.stringify(tutorSatisfactionData);
+  const current = () => generation === satisfactionModalReadGeneration && sessionToken === token && currentUser?.id === userId &&
+    currentUser?.role === role && currentPage === 'tutors' && document.getElementById('content') === root &&
+    selectedTutorYear === year && selectedTutorMonth === month && selectedTeam === team && satisfactionData === cache &&
+    tutors.includes(tutor) && tutor.employee_id === tutorId && tutor.tutor_name === tutorNameSnapshot &&
+    JSON.stringify(getTutorSatisfactionData(tutor)) === dataSnapshot && document.getElementById('satisfactionModal') === modal;
   // 表示中の選択月を使用（currentMonthではなくselectedTutorYear/Monthを参照）
   const selectedYearMonth = `${selectedTutorYear}/${selectedTutorMonth}`;
   const currentMonthData = tutorSatisfactionData[selectedYearMonth];
@@ -4784,6 +4811,7 @@ async function showSatisfactionModal(tutorEmployeeId) {
     const [year, month] = monthKey.split('/').map(Number);
     return loadSatisfactionLessonCompletion(year, month);
   }));
+  if (!current()) return;
 
   // 選択月が今月かどうか判定（分母の補足表示に使用）
   const todayForModal = getJstDateParts();
@@ -4965,11 +4993,17 @@ async function showSatisfactionModal(tutorEmployeeId) {
     </div>
   `;
   
+  if (!current()) return;
+  modal?.remove();
   document.body.insertAdjacentHTML('beforeend', modalHtml);
+  modal = document.getElementById('satisfactionModal');
   
   // Render chart
   setTimeout(() => {
-    const ctx = document.getElementById('satisfactionChart').getContext('2d');
+    if (!current() || !modal || !document.body.contains(modal)) return;
+    const canvas = document.getElementById('satisfactionChart');
+    if (!canvas || !modal.contains(canvas)) return;
+    const ctx = canvas.getContext('2d');
     new Chart(ctx, {
       type: 'line',
       data: {
@@ -5048,6 +5082,7 @@ async function showSatisfactionModal(tutorEmployeeId) {
 // Close satisfaction modal
 function closeSatisfactionModal(event) {
   if (event && event.target.id !== 'satisfactionModal') return;
+  satisfactionModalReadGeneration++;
   const modal = document.getElementById('satisfactionModal');
   if (modal) {
     modal.remove();
