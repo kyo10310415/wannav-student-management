@@ -4299,39 +4299,47 @@ async function showTutorMinutesQualityModal(employeeId) {
   }
 }
 
+const tutorQualityExportPending = new Set();
 async function exportTutorQualityToSheet(button) {
-  const targetYear = selectedTutorYear;
-  const targetMonth = selectedTutorMonth;
+  const root = document.getElementById('content');
+  if (!root || !button || button.disabled || !root.contains(button) || !sessionToken ||
+      !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'tutors' || tutorQualityExportPending.size) return;
+  const targetYear = selectedTutorYear, targetMonth = selectedTutorMonth, team = selectedTeam;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'tutors' && document.getElementById('content') === root && root.contains(button) &&
+    selectedTutorYear === targetYear && selectedTutorMonth === targetMonth && selectedTeam === team;
   const originalHTML = button.innerHTML;
+  tutorQualityExportPending.add(button);
   button.disabled = true;
   button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>品質評価を書き出し中...';
-
   try {
-    const response = await axios.post(
-      `${API_BASE}/api/tutors/quality/export`,
-      { year: targetYear, month: targetMonth },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 120000
-      }
-    );
-
+    const response = await axios.post(`${API_BASE}/api/tutors/quality/export`, { year: targetYear, month: targetMonth }, {
+      headers: { Authorization: `Bearer ${token}` }, timeout: 120000
+    });
+    if (!current()) return;
+    if (!response.data.success) throw new Error('Quality export rejected');
+    const spreadsheetUrl = studentDisplayLink(response.data.spreadsheetUrl);
     const notification = document.createElement('div');
     notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
     notification.innerHTML = `
       <i class="fas fa-check-circle mr-2"></i>
       ${targetYear}年${targetMonth}月の品質評価を追記しました<br>
-      <span class="text-sm">全体平均＋Tutor ${response.data.tutorCount}名分</span><br>
-      <a href="${response.data.spreadsheetUrl}" target="_blank" rel="noopener noreferrer" class="underline text-sm">スプレッドシートを開く</a>
+      <span class="text-sm">全体平均＋Tutor ${escapeHtml(String(response.data.tutorCount))}名分</span><br>
+      ${spreadsheetUrl ? `<a href="${spreadsheetUrl}" target="_blank" rel="noopener noreferrer" class="underline text-sm">スプレッドシートを開く</a>` : ''}
     `;
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 7000);
-  } catch (error) {
-    console.error('[Tutor Quality Export] Error:', error);
-    alert('品質評価の書き出しに失敗しました: ' + (error.response?.data?.error || error.message));
+  } catch {
+    if (!current()) return;
+    console.error('[Tutor Quality Export] Failed');
+    alert('品質評価の書き出しに失敗しました');
   } finally {
-    button.disabled = false;
-    button.innerHTML = originalHTML;
+    tutorQualityExportPending.delete(button);
+    if (document.getElementById('content') === root && root.contains(button)) {
+      button.disabled = false;
+      button.innerHTML = originalHTML;
+    }
   }
 }
 
