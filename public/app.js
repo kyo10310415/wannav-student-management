@@ -19535,26 +19535,35 @@ async function loadMinutesBackfillStatus() {
   }
 }
 
-async function loadMinutesList() {
-  const container = document.getElementById('minutes-list-container');
-  if (!container) return;
+let minutesListReadGeneration = 0;
+let minutesDetailReadGeneration = 0;
+function captureMinutesReadContext() {
+  const root = document.getElementById('content');
+  if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'minutes') return null;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role;
+  const studentId = minutesCurrentStudentId, studentName = minutesCurrentStudentName;
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
+    currentPage === 'minutes' && document.getElementById('content') === root &&
+    minutesCurrentStudentId === studentId && minutesCurrentStudentName === studentName;
+  return { root, token, studentId, current };
+}
+async function loadMinutesList(parentCurrent = () => true) {
+  const state = captureMinutesReadContext(), container = document.getElementById('minutes-list-container');
+  if (!state || !container || !state.root.contains(container) || !parentCurrent()) return false;
+  const generation = ++minutesListReadGeneration;
+  const current = () => generation === minutesListReadGeneration && state.current() && parentCurrent() &&
+    document.getElementById('minutes-list-container') === container && state.root.contains(container);
   try {
-    if (minutesCurrentStudentId) {
-      // 特定生徒の議事録一覧
-      const res = await axios.get(`/api/minutes/list/${minutesCurrentStudentId}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      minutesListCache = res.data.data || [];
-    } else {
-      // 全生徒の議事録一覧
-      const res = await axios.get('/api/minutes/all', {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      minutesListCache = res.data.data || [];
-    }
+    const path = state.studentId ? `/api/minutes/list/${encodeURIComponent(state.studentId)}` : '/api/minutes/all';
+    const res = await axios.get(path, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
+    minutesListCache = res.data.data || [];
     renderMinutesList();
-  } catch (err) {
-    container.innerHTML = `<p class="text-red-500 text-sm p-4">読み込み失敗: ${err.message}</p>`;
+    return true;
+  } catch {
+    if (!current()) return false;
+    container.innerHTML = '<p class="text-red-500 text-sm p-4">読み込みに失敗しました</p>';
+    return false;
   }
 }
 
@@ -19603,27 +19612,38 @@ function renderMinutesList() {
 
 let minutesEditingId = null;
 
-async function openMinutesDetail(id) {
+async function openMinutesDetail(id, parentCurrent = () => true) {
+  const state = captureMinutesReadContext(), recordId = Number(id);
+  const modal = document.getElementById('minutes-detail-modal'), title = document.getElementById('minutes-modal-title');
+  const text = document.getElementById('minutes-modal-text'), quality = document.getElementById('minutes-detail-panel-quality');
+  if (!state || !/^[1-9]\d*$/.test(String(id)) || !Number.isSafeInteger(recordId) || !parentCurrent() ||
+      !modal || !state.root.contains(modal) || !modal.contains(title) || !modal.contains(text) || !modal.contains(quality)) return false;
+  const generation = ++minutesDetailReadGeneration, cache = minutesListCache;
+  const current = () => generation === minutesDetailReadGeneration && state.current() && parentCurrent() && minutesListCache === cache &&
+    document.getElementById('minutes-detail-modal') === modal && state.root.contains(modal) &&
+    document.getElementById('minutes-modal-title') === title && document.getElementById('minutes-modal-text') === text &&
+    document.getElementById('minutes-detail-panel-quality') === quality && modal.contains(title) && modal.contains(text) && modal.contains(quality);
   try {
-    const res  = await axios.get(`/api/minutes/detail/${id}`, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
+    const res = await axios.get(`/api/minutes/detail/${recordId}`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!current()) return false;
     const m = res.data.data;
-    minutesEditingId = id;
+    minutesEditingId = recordId;
     minutesCurrentDetail = m;
-    document.getElementById('minutes-modal-title').textContent =
-      `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${formatMinutesLessonNumber(m.lesson_number)})` : ''}`;
-    document.getElementById('minutes-modal-text').value = m.generated_text || '';
+    title.textContent = `議事録 — ${m.lesson_date}${m.lesson_number ? ` (${formatMinutesLessonNumber(m.lesson_number)})` : ''}`;
+    text.value = m.generated_text || '';
     renderMinutesQualityEvaluation(m.quality_evaluation);
     switchMinutesDetailTab('text');
-    document.getElementById('minutes-detail-modal').classList.remove('hidden');
-  } catch (err) {
-    showNotification('議事録の読み込みに失敗しました', 'error');
+    modal.classList.remove('hidden');
+    return true;
+  } catch {
+    if (current()) showNotification('議事録の読み込みに失敗しました', 'error');
+    return false;
   }
 }
 
 function closeMinutesModal() {
-  document.getElementById('minutes-detail-modal').classList.add('hidden');
+  minutesDetailReadGeneration++;
+  document.getElementById('minutes-detail-modal')?.classList.add('hidden');
   minutesEditingId = null;
   minutesCurrentDetail = null;
 }
