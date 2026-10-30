@@ -18363,14 +18363,14 @@ function handleTutorRedCardChange(event) {
   const entry = tutorRedCardEntry(control);
   if (!entry) return;
   if (control.dataset.tutorRedAction === 'status' && ['未対応', '対応中', '対応済み'].includes(control.value)) {
-    return updateTutorRedListStatus(entry.tutor_id, control.value);
+    return updateTutorRedListStatus(entry.tutor_id, control.value, control);
   }
-  if (control.dataset.tutorRedAction === 'assigned') return updateTutorRedListAssigned(entry.tutor_id, control.value);
+  if (control.dataset.tutorRedAction === 'assigned') return updateTutorRedListAssigned(entry.tutor_id, control.value, control);
 }
 function handleTutorRedCardClick(event) {
   const control = event.target?.closest?.('button[data-tutor-red-action="delete"]');
   const entry = tutorRedCardEntry(control);
-  if (entry) return deleteTutorRedListEntry(entry.tutor_id, entry.tutor_name || '');
+  if (entry) return deleteTutorRedListEntry(entry.tutor_id, entry.tutor_name || '', control);
 }
 document.addEventListener('change', handleTutorRedCardChange);
 document.addEventListener('click', handleTutorRedCardClick);
@@ -18411,79 +18411,91 @@ async function recalcTutorRedList() {
 /**
  * 対応状況を更新する
  */
-async function updateTutorRedListStatus(tutorId, status) {
-  try {
-    const res = await axios.patch(
-      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
-      { correspondence_status: status },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    if (res.data.success) {
-      const entry = tutorRedListData.find(d => d.tutor_id === tutorId);
-      if (entry) entry.correspondence_status = status;
-      // セレクトの色を即時更新
-      const sel = document.getElementById(`trl-status-${tutorId}`);
-      if (sel) {
-        const colorMap = { '未対応': 'border-gray-300 text-gray-600', '対応中': 'border-blue-400 text-blue-700 bg-blue-50', '対応済み': 'border-green-500 text-green-700 bg-green-50' };
-        sel.className = sel.className.replace(/border-\S+ text-\S+( bg-\S+)?/g, '');
-        sel.classList.add(...(colorMap[status] || colorMap['未対応']).split(' '));
-      }
-      showNotification('対応状況を更新しました', 'success');
-    } else {
-      showNotification(res.data.error || '更新に失敗しました', 'error');
+const tutorRedPendingWrites = new Set();
+function beginTutorRedWrite(tutorId, control, action, value) {
+  const root = document.getElementById('content'), id = String(tutorId);
+  if (!root || !sessionToken || currentUser?.role !== 'admin' || currentPage !== 'tutor-red-list' || !control || control.disabled ||
+      !root.contains(control) || control.dataset.tutorRedId !== id || control.dataset.tutorRedAction !== action ||
+      (action !== 'delete' && control.value !== value) || tutorRedPendingWrites.has(id)) return null;
+  const cache = tutorRedListData, entry = cache.find(row => row.tutor_id === tutorId);
+  if (!entry) return null;
+  const token = sessionToken, userId = currentUser.id, year = tutorRedListYear, month = tutorRedListMonth;
+  const previousStatus = entry.correspondence_status, previousAssigned = entry.assigned_to, name = entry.tutor_name;
+  const controls = Array.from(root.querySelectorAll('[data-tutor-red-id]')).filter(node => node.dataset.tutorRedId === id);
+  if (!controls.includes(control)) return null;
+  const disabled = controls.map(node => node.disabled);
+  const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === 'admin' &&
+    currentPage === 'tutor-red-list' && document.getElementById('content') === root && tutorRedListYear === year && tutorRedListMonth === month &&
+    tutorRedListData === cache && cache.includes(entry) && entry.tutor_id === tutorId && entry.tutor_name === name &&
+    entry.correspondence_status === previousStatus && entry.assigned_to === previousAssigned &&
+    controls.every(node => root.contains(node) && node.dataset.tutorRedId === id) && control.dataset.tutorRedAction === action &&
+    (action === 'delete' || control.value === value);
+  tutorRedPendingWrites.add(id);
+  controls.forEach(node => { node.disabled = true; });
+  return { entry, token, control, name, current,
+    restore() { if (current() && action !== 'delete') control.value = (action === 'status' ? previousStatus : previousAssigned) || ''; },
+    release() {
+      tutorRedPendingWrites.delete(id);
+      controls.forEach((node, i) => { if (document.getElementById('content') === root && root.contains(node)) node.disabled = disabled[i]; });
     }
-  } catch (e) {
-    console.error('[TutorRedList] updateStatus error:', e);
-    showNotification(e.response?.data?.error || '更新に失敗しました', 'error');
-  }
+  };
 }
-
-/**
- * 担当者を更新する
- */
-async function updateTutorRedListAssigned(tutorId, assignedTo) {
+async function updateTutorRedListStatus(tutorId, status, control) {
+  if (!['未対応', '対応中', '対応済み'].includes(status)) return;
+  const state = beginTutorRedWrite(tutorId, control, 'status', status);
+  if (!state) return;
   try {
-    const res = await axios.patch(
-      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
-      { assigned_to: assignedTo },
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    if (res.data.success) {
-      const entry = tutorRedListData.find(d => d.tutor_id === tutorId);
-      if (entry) entry.assigned_to = assignedTo;
-      showNotification('担当者を更新しました', 'success');
-    } else {
-      showNotification(res.data.error || '更新に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('[TutorRedList] updateAssigned error:', e);
-    showNotification(e.response?.data?.error || '更新に失敗しました', 'error');
-  }
+    const res = await axios.patch(`${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
+      { correspondence_status: status }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Tutor status rejected');
+    state.entry.correspondence_status = status;
+    const colorMap = { '未対応': 'border-gray-300 text-gray-600', '対応中': 'border-blue-400 text-blue-700 bg-blue-50', '対応済み': 'border-green-500 text-green-700 bg-green-50' };
+    control.className = control.className.replace(/border-\S+ text-\S+( bg-\S+)?/g, '');
+    control.classList.add(...colorMap[status].split(' '));
+    showNotification('対応状況を更新しました', 'success');
+  } catch {
+    if (!state.current()) return;
+    state.restore();
+    console.error('[TutorRedList] Status update failed');
+    showNotification('更新に失敗しました', 'error');
+  } finally { state.release(); }
 }
-
-/**
- * エントリをレッドリストから削除する
- */
-async function deleteTutorRedListEntry(tutorId, tutorName) {
-  if (!confirm(`「${tutorName}」をTutorレッドリストから除外しますか？\n（次回の再計算で条件に該当する場合は再登録されます）`)) return;
+async function updateTutorRedListAssigned(tutorId, assignedTo, control) {
+  if (typeof assignedTo !== 'string') return;
+  const state = beginTutorRedWrite(tutorId, control, 'assigned', assignedTo);
+  if (!state) return;
   try {
-    const res = await axios.delete(
-      `${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}`,
-      { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    if (res.data.success) {
-      tutorRedListData = tutorRedListData.filter(d => d.tutor_id !== tutorId);
-      _renderTutorRedListContent();
-      showNotification(`「${studentDisplayText(tutorName)}」をレッドリストから除外しました`, 'success');
-    } else {
-      showNotification(res.data.error || '削除に失敗しました', 'error');
-    }
-  } catch (e) {
-    console.error('[TutorRedList] delete error:', e);
-    showNotification(e.response?.data?.error || '削除に失敗しました', 'error');
-  }
+    const res = await axios.patch(`${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}/status`,
+      { assigned_to: assignedTo }, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Tutor assignment rejected');
+    state.entry.assigned_to = assignedTo;
+    showNotification('担当者を更新しました', 'success');
+  } catch {
+    if (!state.current()) return;
+    state.restore();
+    console.error('[TutorRedList] Assignment update failed');
+    showNotification('更新に失敗しました', 'error');
+  } finally { state.release(); }
 }
-
+async function deleteTutorRedListEntry(tutorId, tutorName, control) {
+  const state = beginTutorRedWrite(tutorId, control, 'delete');
+  if (!state) return;
+  try {
+    if (!confirm(`「${state.name || ''}」をTutorレッドリストから除外しますか？\n（次回の再計算で条件に該当する場合は再登録されます）`) || !state.current()) return;
+    const res = await axios.delete(`${API_BASE}/api/tutor-red-list/${encodeURIComponent(tutorId)}`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!state.current()) return;
+    if (!res.data.success) throw new Error('Tutor deletion rejected');
+    tutorRedListData = tutorRedListData.filter(entry => entry !== state.entry);
+    _renderTutorRedListContent();
+    showNotification(`「${studentDisplayText(state.name || '')}」をレッドリストから除外しました`, 'success');
+  } catch {
+    if (!state.current()) return;
+    console.error('[TutorRedList] Delete failed');
+    showNotification('削除に失敗しました', 'error');
+  } finally { state.release(); }
+}
 
 // =============================================================================
 // 日報管理ページ
