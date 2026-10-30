@@ -19606,7 +19606,7 @@ function renderMinutesList() {
                     class="px-3 py-1.5 bg-teal-600 text-white rounded text-xs hover:bg-teal-700">
               <i class="fas fa-eye mr-1"></i>表示
             </button>
-            <button onclick="event.stopPropagation(); deleteMinutes(${m.id})"
+            <button data-minutes-read-action="delete" data-minutes-id="${escapeHtml(String(m.id)).replace(/"/g, '&quot;')}"
                     class="px-3 py-1.5 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200">
               <i class="fas fa-trash"></i>
             </button>
@@ -19816,16 +19816,35 @@ async function generateMinutes() {
   }
 }
 
-async function deleteMinutes(id) {
-  if (!confirm('この議事録を削除しますか？')) return;
+async function deleteMinutes(id, control) {
+  const view = captureMinutesWriteView(), recordId = Number(id);
+  const list = document.getElementById('minutes-list-container'), cache = minutesListCache;
+  const entry = cache.find(row => Number(row.id) === recordId);
+  const editingId = minutesEditingId, detail = minutesCurrentDetail, modal = document.getElementById('minutes-detail-modal');
+  if (!view || !/^[1-9]\d*$/.test(String(id)) || !Number.isSafeInteger(recordId) || !entry || !control || control.disabled ||
+      !list || !view.root.contains(list) || !view.root.contains(control) || control.dataset.minutesReadAction !== 'delete' ||
+      control.dataset.minutesId !== String(recordId)) return;
+  // Share the existing edit lock so deletion and saving cannot race on the same record.
+  const key = JSON.stringify(['save', view.token, view.userId, recordId]);
+  if (minutesPendingWrites.has(key)) return;
+  const current = () => view.current() && minutesListCache === cache && cache.includes(entry) && Number(entry.id) === recordId &&
+    document.getElementById('minutes-list-container') === list && view.root.contains(list) && view.root.contains(control) &&
+    control.dataset.minutesReadAction === 'delete' && control.dataset.minutesId === String(recordId) &&
+    minutesEditingId === editingId && minutesCurrentDetail === detail && document.getElementById('minutes-detail-modal') === modal;
+  minutesPendingWrites.add(key);
+  control.disabled = true;
   try {
-    await axios.delete(`/api/minutes/${id}`, {
-      headers: { Authorization: `Bearer ${sessionToken}` }
-    });
+    if (!confirm('この議事録を削除しますか？') || !current()) return;
+    const res = await axios.delete(`/api/minutes/${recordId}`, { headers: { Authorization: `Bearer ${view.token}` } });
+    if (!current()) return;
+    if (res.data?.success === false) throw new Error('Minutes deletion rejected');
     showNotification('削除しました', 'success');
-    await loadMinutesList();
-  } catch (err) {
-    showNotification('削除に失敗しました', 'error');
+    await loadMinutesList(current);
+  } catch {
+    if (current()) showNotification('削除に失敗しました', 'error');
+  } finally {
+    minutesPendingWrites.delete(key);
+    if (document.getElementById('content') === view.root && view.root.contains(control)) control.disabled = false;
   }
 }
 

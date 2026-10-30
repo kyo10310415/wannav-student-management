@@ -18,10 +18,10 @@ function fixture(){
  const install=(start,end)=>vm.runInContext(app.slice(app.indexOf(start),app.indexOf(end,app.indexOf(start))),c);
  return{c,calls,requests,listeners,elements,root,control,click,install};
 }
-test('minutes migrates exactly fifteen read controls and leaves writes/templates unchanged',()=>{
- assert.equal((app.match(/data-minutes-read-action=/g)||[]).length,15);
+test('minutes keeps fifteen read controls plus a fixed delete entry',()=>{
+ assert.equal((app.match(/data-minutes-read-action=/g)||[]).length,16);
  for(const old of ['onclick="openMinutesForStudent(','onclick="minutesSearchStudent()"','onclick="closeMinutesModal()"','onclick="switchMinutesDetailTab(','onclick="openMinutesDetail(','onclick="event.stopPropagation(); openMinutesDetail('])assert.equal(app.includes(old),false);
- for(const write of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','data-minutes-template-action="open"','onclick="event.stopPropagation(); deleteMinutes(${m.id})"'])assert.ok(app.includes(write));
+ for(const write of ['onclick="generateMinutes()"','onclick="startMinutesBackfillFromPage()"','onclick="saveMinutesEdit()"','data-minutes-template-action="open"','data-minutes-read-action="delete"'])assert.ok(app.includes(write));
 });
 test('student entry preserves exact data only on existing source pages and requires managers',async()=>{
  for(const page of ['students','reservations','today']){
@@ -38,7 +38,7 @@ test('fixed search/all/back/student actions maintain state resets and fire only 
 test('detail row/nested button dispatch once and numeric IDs reject executable or unsafe values',async()=>{
  const f=fixture();for(const id of ['1','27'])await f.click(f.control('detail',{minutesId:id}),true);assert.deepEqual(f.calls,[['openMinutesDetail',1],['openMinutesDetail',27]]);
  for(const id of ['', '0','-1','1.5','2e2',' 1','1 ','9007199254740992','1;deleteMinutes(1)'])await f.click(f.control('detail',{minutesId:id}));
- for(const action of ['__proto__','constructor','delete','generate','save','unknown'])await f.click(f.control(action,{minutesId:'1'}));assert.equal(f.calls.length,2);
+ for(const action of ['__proto__','constructor','generate','save','unknown'])await f.click(f.control(action,{minutesId:'1'}));assert.equal(f.calls.length,2);
 });
 test('tab and close are restricted to current detail modal while stale roots/disabled/auth changes reject reads',async()=>{
  const f=fixture();const modal=f.elements['minutes-detail-modal'];await f.click(f.control('detail-tab',{minutesTab:'text'},modal));await f.click(f.control('detail-tab',{minutesTab:'quality'},modal));await f.click(f.control('close-detail',{},modal));
@@ -57,7 +57,7 @@ test('real student entry retains changePage and cached search returns escaped se
 test('real list keeps detail/student separation, escapes attributes and leaves delete stopPropagation in place',()=>{
  const f=fixture();f.c.minutesCurrentStudentId=null;f.c.minutesListCache=[{id:27,student_id:'Synthetic"<id>',student_name:'Synthetic"<name>',lesson_date:'2026-10-28',preview:'Synthetic line'}];
  f.install('function renderMinutesList()', 'let minutesEditingId = null;');f.c.renderMinutesList();const html=f.elements['minutes-list-container'].innerHTML;
- assert.equal((html.match(/data-minutes-read-action="detail"/g)||[]).length,2);assert.equal((html.match(/data-minutes-read-action="select-student"/g)||[]).length,1);assert.ok(html.includes('data-minutes-student-name="Synthetic&quot;&lt;name&gt;"'));assert.ok(html.includes('onclick="event.stopPropagation(); deleteMinutes(27)"'));
+ assert.equal((html.match(/data-minutes-read-action="detail"/g)||[]).length,2);assert.equal((html.match(/data-minutes-read-action="select-student"/g)||[]).length,1);assert.ok(html.includes('data-minutes-student-name="Synthetic&quot;&lt;name&gt;"'));assert.ok(html.includes('data-minutes-read-action="delete" data-minutes-id="27"'));
  f.c.minutesListCache=[];f.c.renderMinutesList();assert.ok(f.elements['minutes-list-container'].innerHTML.includes('議事録がありません'));
 });
 test('real detail uses GET only and saved-quality tab toggles text/save visibility without AI',async()=>{
