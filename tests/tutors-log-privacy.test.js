@@ -72,7 +72,7 @@ test('cache failures preserve sync success fallback and fixed satisfaction error
   assert.deepEqual(await (await f.app.request('/satisfaction/all')).json(), { success: true, data: {}, cache_error: true, cache_error_message: 'Tutor operation failed' }); safe(f);
 });
 
-test('sync retains deletion threshold, valid filtering and per-insert/delete failure continuation', async () => {
+test('sync skips deactivation if cache rows are invalid or upserts fail', async () => {
   for (const missingCount of [1, 2]) {
     const calls = [];
     const tutors = [0, 1, 2, 3].map(i => ({ employee_id: marker + i, name: marker, email: marker }));
@@ -84,11 +84,49 @@ test('sync retains deletion threshold, valid filtering and per-insert/delete fai
     } });
     const response = await (await f.app.request('/sync')).json();
     assert.equal(response.success, true); assert.equal(response.count, 3); assert.equal(response.errors, 1); assert.equal(response.skipped, 1);
-    assert.equal(response.deleted, missingCount === 1 ? 1 : 0);
-    const deletes = calls.filter(q => q.sql.startsWith('DELETE'));
-    assert.equal(deletes.length, missingCount === 1 ? 1 : 0); if (deletes.length) assert.deepEqual(deletes[0].params, [ids.at(-1)]);
+    assert.equal(response.deleted, 0);
+    assert.equal(response.deactivated, 0);
+    assert.ok(!calls.some(q => /DELETE FROM tutors|UPDATE tutors SET status/.test(q.sql)));
     safe(f);
   }
+});
+
+test('missing tutors are deactivated without deletion, retaining the 20% guard', async () => {
+  for (const missing of [1, 2]) {
+    const cached = [0, 1, 2, 3].map(i => ({ employee_id: `TEST-${i}`, name: marker, status: 'アクティブ' }));
+    const calls = [];
+    const f = await fixture({ fetchTutorsFromCache: async () => cached, query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.startsWith('SELECT employee_id')) return { rows: [...cached, ...Array.from({ length: missing }, (_, i) => ({ employee_id: `MISSING-${i}`, status: 'アクティブ' }))] };
+      return { rows: sql.startsWith('UPDATE tutors SET status') ? [{ employee_id: params[0] }] : [] };
+    } });
+    const response = await (await f.app.request('/sync')).json();
+    assert.equal(response.deleted, 0);
+    assert.equal(response.deactivated, missing === 1 ? 1 : 0);
+    const updates = calls.filter(q => q.sql.startsWith('UPDATE tutors SET status'));
+    assert.equal(updates.length, missing === 1 ? 1 : 0);
+    if (updates.length) {
+      assert.match(updates[0].sql, /status = '非アクティブ'/);
+      assert.deepEqual(updates[0].params, ['MISSING-0']);
+      assert.ok(!/student_capacity|responsible_section|monthly_available_hours/.test(updates[0].sql));
+    }
+    assert.ok(!calls.some(q => q.sql.startsWith('DELETE')));
+    safe(f);
+  }
+});
+
+test('empty cache preserves records and returning tutors use the normal status upsert', async () => {
+  const calls = [];
+  const empty = await fixture({ query: async (sql, params) => {
+    calls.push({ sql, params }); return { rows: [{ employee_id: 'TEST', status: 'アクティブ' }] };
+  } });
+  assert.equal((await (await empty.app.request('/sync')).json()).deactivated, 0);
+  assert.ok(!calls.some(q => /DELETE|UPDATE/.test(q.sql)));
+  const returning = await fixture({ fetchTutorsFromCache: async () => [{ employee_id: 'TEST', name: marker, status: 'アクティブ' }] });
+  await returning.app.request('/sync');
+  const insert = returning.queries.find(([sql]) => sql.includes('INSERT INTO tutors'));
+  assert.match(insert[0], /status = EXCLUDED.status/);
+  assert.equal(insert[1][7], 'アクティブ');
 });
 
 test('credential parsing failures never print plain or decoded invalid credential fragments', async () => {
@@ -118,16 +156,16 @@ test('Google export failures and invalid input logs exclude provider credentials
   assert.equal(invalid.status, 400); safe(f);
 });
 
-test('sync deletion and candidate-query failures retain nonfatal response without raw provider logs', async () => {
+test('sync deactivation and candidate-query failures retain nonfatal response without raw provider logs', async () => {
   for (const fail of ['delete', 'candidates']) {
     const tutors = Array.from({ length: 4 }, (_, i) => ({ employee_id: marker + i, name: marker }));
     let attempted = 0;
     const f = await fixture({ fetchTutorsFromCache: async () => tutors, query: async sql => {
       if (sql.startsWith('SELECT employee_id')) {
         if (fail === 'candidates') throw rawError();
-        return { rows: [...tutors, { employee_id: marker + '-missing' }] };
+        return { rows: [...tutors, { employee_id: marker + '-missing', status: 'アクティブ' }] };
       }
-      if (sql.startsWith('DELETE')) { attempted++; throw rawError(); }
+      if (sql.startsWith('UPDATE tutors SET status')) { attempted++; throw rawError(); }
       return { rows: [] };
     } });
     const body = await (await f.app.request('/sync')).json();

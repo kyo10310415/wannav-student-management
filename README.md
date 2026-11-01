@@ -437,7 +437,7 @@ npm run db:migrate
 ### Tutor API
 
 - `GET /api/tutors` - 全Tutor取得
-- `GET /api/tutors/sync` - Notionから同期
+- `GET /api/tutors/sync` - キャッシュから同期。同期元に存在しないアクティブなTutorは物理削除せず「非アクティブ」に変更し、履歴・手入力値を保持する。空データ・不正行・更新失敗・非アクティブ化対象がDB全体の20%を超える場合は変更を見送る。同期元に再登場したTutorは通常の同期でステータスを更新する。
 - `GET /api/tutors/:id` - Tutor詳細
 
 ### レッスン API

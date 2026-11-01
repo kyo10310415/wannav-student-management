@@ -14,7 +14,8 @@ async function fixture(role = 'crew') {
   const deps = { Hono, process: { env: { GOOGLE_CACHE_SHEET_ID: 'synthetic-sheet' } }, console: { log(){}, warn(){}, error(){} },
     query: async (sql, params) => {
       state.queries.push({ sql, params });
-      if (sql === 'SELECT employee_id FROM tutors') return { rows: [...tutors.map(({employee_id})=>({employee_id})), {employee_id:'OLD'}] };
+      if (sql === 'SELECT employee_id, status FROM tutors') return { rows: [...tutors.map(({employee_id})=>({employee_id, status:'アクティブ'})), {employee_id:'OLD', status:'アクティブ'}] };
+      if (sql.startsWith('UPDATE tutors SET status')) return { rows: [{ employee_id: params[0] }] };
       return { rows: [] };
     },
     getCacheSyncTime: read({ lastSync: 'synthetic' }), fetchStudentsFromCache: read([{ student_id: 'SYNTHETIC', name: 'Synthetic' }]),
@@ -41,14 +42,15 @@ test('anonymous and crew GET/HEAD full sync stop before external reads and real 
     assert.equal(f.state.reads,0);assert.equal(f.state.queries.length,0);
   }
 });
-test('admin and leader full sync retain trusted cache upserts and existing tutor deletion threshold', async () => {
+test('admin and leader full sync retain trusted cache upserts and deactivate missing tutors', async () => {
   for(const role of ['admin','leader']) {
     const f=await fixture(role);
     const students=await f.app.request('/api/students/sync',{headers});assert.equal(students.status,200);assert.equal((await students.json()).count,1);
-    const tutors=await f.app.request('/api/tutors/sync',{headers});assert.equal(tutors.status,200);const data=await tutors.json();assert.equal(data.count,4);assert.equal(data.deleted,1);
+    const tutors=await f.app.request('/api/tutors/sync',{headers});assert.equal(tutors.status,200);const data=await tutors.json();assert.equal(data.count,4);assert.equal(data.deleted,0);assert.equal(data.deactivated,1);
     assert.equal(f.state.queries.filter(row=>row.sql.includes('INSERT INTO students')).length,1);
     assert.equal(f.state.queries.filter(row=>row.sql.includes('INSERT INTO tutors')).length,4);
-    assert.deepEqual(f.state.queries.find(row=>row.sql==='DELETE FROM tutors WHERE employee_id = $1').params,['OLD']);
+    assert.deepEqual(f.state.queries.find(row=>row.sql.startsWith('UPDATE tutors SET status')).params,['OLD']);
+    assert.ok(!f.state.queries.some(row=>row.sql.startsWith('DELETE FROM tutors')));
   }
 });
 test('existing internal and scoped machine sync stay available while forged keys fail before reads', async () => {
