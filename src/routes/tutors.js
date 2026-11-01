@@ -208,52 +208,57 @@ app.get('/sync', async (c) => {
       }
     }
     
-    // Find and delete tutors that are in DB but not in cache
-    // ⚠️ 安全策: キャッシュが少数しか返さなかった場合（部分取得エラー）に
-    //   大量削除が起きないよう、削除数が全体の20%を超える場合はスキップ
-    let deletedCount = 0;
+    // 同期元に存在しないTutorも履歴・手入力値を保持し、物理削除しない。
+    // 空・不正なキャッシュや部分的な更新失敗時には非アクティブ化しない。
+    const deletedCount = 0;
+    let deactivatedCount = 0;
     try {
       // Get all tutors from database
-      const dbTutorsResult = await query('SELECT employee_id FROM tutors');
+      const dbTutorsResult = await query('SELECT employee_id, status FROM tutors');
       const dbEmployeeIds = dbTutorsResult.rows.map(row => row.employee_id);
       
       // Find employee_ids that are in DB but not in cache
-      const toDelete = dbEmployeeIds.filter(id => !cacheEmployeeIds.includes(id));
+      const toDeactivate = dbTutorsResult.rows.filter(row =>
+        row.status === 'アクティブ' && !cacheEmployeeIds.includes(row.employee_id)
+      ).map(row => row.employee_id);
       
-      if (toDelete.length > 0) {
-        // 安全チェック: 削除対象がDB全体の20%を超える場合は異常とみなしてスキップ
-        const deletionRatio = toDelete.length / dbEmployeeIds.length;
-        if (deletionRatio > 0.2) {
-          console.warn("[Tutors] Tutor deletion skipped: safety threshold exceeded");
-          console.warn("[Tutors] Tutor deletion candidates omitted");
+      if (toDeactivate.length > 0) {
+        // 既存の20%上限を維持し、大量欠落時は自動反映しない。
+        const deactivationRatio = toDeactivate.length / dbEmployeeIds.length;
+        if (validTutors.length === 0 || skippedTutors.length > 0 || errorCount > 0 || deactivationRatio > 0.2) {
+          console.warn("[Tutors] Tutor deactivation skipped: cache validation or safety threshold");
         } else {
-          console.log("[Tutors] Tutor deletion candidates prepared");
+          console.log("[Tutors] Tutor deactivation candidates prepared");
           
-          // Delete these tutors
-          for (const employeeId of toDelete) {
+          // 外部キー参照・手入力値を残したままステータスのみ変更する。
+          for (const employeeId of toDeactivate) {
             try {
-              await query('DELETE FROM tutors WHERE employee_id = $1', [employeeId]);
-              deletedCount++;
-              console.log("[Tutors] Tutor deleted");
+              const result = await query(
+                "UPDATE tutors SET status = '非アクティブ', updated_at = CURRENT_TIMESTAMP WHERE employee_id = $1 AND status = 'アクティブ' RETURNING employee_id",
+                [employeeId]
+              );
+              deactivatedCount += result.rows.length;
+              console.log("[Tutors] Tutor deactivated");
             } catch (deleteError) {
-              console.error("[Tutors] Tutor deletion failed");
+              console.error("[Tutors] Tutor deactivation failed");
             }
           }
         }
       } else {
-        console.log("No tutors to delete");
+        console.log("No tutors to deactivate");
       }
     } catch (deleteCheckError) {
-      console.error("Error checking for tutors to delete:");
+      console.error("Error checking for tutors to deactivate:");
     }
     
     return c.json({
       success: true,
-      message: `Synced ${successCount} tutors from cache (${errorCount} errors, ${skippedTutors.length} skipped, ${deletedCount} deleted)`,
+      message: `Synced ${successCount} tutors from cache (${errorCount} errors, ${skippedTutors.length} skipped, ${deactivatedCount} deactivated)`,
       count: successCount,
       errors: errorCount,
       skipped: skippedTutors.length,
       deleted: deletedCount,
+      deactivated: deactivatedCount,
       lastCacheSync: syncMeta?.lastSync
     });
   } catch (error) {
