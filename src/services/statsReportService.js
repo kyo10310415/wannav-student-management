@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { internalApi } from '../security/internalApi.js';
 import { query } from '../db/connection.js';
 import { fetchAllWanamiUsageCounts } from './sheetsService.js';
 import { getCompletedStudentIdsForMonth } from './lessonCompletionService.js';
@@ -15,6 +16,7 @@ import {
  */
 export async function sendDailyStatsReport({
   http = axios,
+  api = internalApi,
   query: queryDatabase = query,
   fetchWanami = fetchAllWanamiUsageCounts,
   fetchCompleted = getCompletedStudentIdsForMonth,
@@ -33,8 +35,8 @@ export async function sendDailyStatsReport({
     try {
       console.log('[Stats Report] Fetching extension statistics from internal API...');
       const [extensionResponse, extensionTeamResponse] = await Promise.all([
-        http.get('http://localhost:3000/api/extensions/stats'),
-        http.get('http://localhost:3000/api/extensions/by-team')
+        api.get('/api/extensions/stats'),
+        api.get('/api/extensions/by-team')
       ]);
       
       if (extensionResponse.data && extensionResponse.data.success) {
@@ -78,7 +80,7 @@ export async function sendDailyStatsReport({
     let satisfactionData = {};
     try {
       console.log('[Stats Report] Fetching satisfaction data from internal API...');
-      const satisfactionResponse = await http.get('http://localhost:3000/api/tutors/satisfaction/all');
+      const satisfactionResponse = await api.get('/api/tutors/satisfaction/all');
       if (satisfactionResponse.data && satisfactionResponse.data.success && satisfactionResponse.data.data) {
         satisfactionData = satisfactionResponse.data.data;
         console.log(`[Stats Report] Satisfaction data loaded for ${Object.keys(satisfactionData).length} tutors`);

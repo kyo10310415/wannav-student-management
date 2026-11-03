@@ -59,6 +59,7 @@ const internalRoutes = [
   ['POST', /^\/api\/(roulette\/generate|survey\/responses)$/],
   ['GET', /^\/api\/tutors\/monthly-stats\/\d{4}\/\d{1,2}$/],
   ['GET', /^\/api\/tutors\/satisfaction\/all$/],
+  ['GET', /^\/api\/extensions\/(stats|by-team)$/],
   ['GET', /^\/api\/schedules\/absence-stats$/]
 ];
 const integrationRoutes = [
