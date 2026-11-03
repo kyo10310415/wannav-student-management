@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { internalApi } from '../security/internalApi.js';
+import { EXTENSION_ROUNDS } from './extensionStatsService.js';
 import { query } from '../db/connection.js';
 import { fetchAllWanamiUsageCounts } from './sheetsService.js';
 import { getCompletedStudentIdsForMonth } from './lessonCompletionService.js';
@@ -222,7 +223,11 @@ export async function sendDailyStatsReport({
       message += `\n**【延長率統計】**\n`;
       message += `🎯 全体延長率: **${extensionStats.extensionRate}%** (${extensionStats.extensionCount}/${extensionStats.targetCount}人)\n`;
       message += `├ 1回目（5ヶ月目）: **${extensionStats.exam1st.extensionRate}%** (${extensionStats.exam1st.extensionCount}/${extensionStats.exam1st.targetCount}人)\n`;
-      message += `└ 2回目（11ヶ月目）: **${extensionStats.exam2nd.extensionRate}%** (${extensionStats.exam2nd.extensionCount}/${extensionStats.exam2nd.targetCount}人)\n`;
+      message += `├ 2回目（11ヶ月目）: **${extensionStats.exam2nd.extensionRate}%** (${extensionStats.exam2nd.extensionCount}/${extensionStats.exam2nd.targetCount}人)\n`;
+      for (const { round, key, month, pro } of EXTENSION_ROUNDS.slice(2)) {
+        const review = extensionStats[key] || { extensionRate: 0, extensionCount: 0, targetCount: 0 };
+        message += `${round === 6 ? '└' : '├'} ${round}回目（${pro ? 'PRO継続' : ''}${month}ヶ月目）: **${review.extensionRate}%** (${review.extensionCount}/${review.targetCount}人)\n`;
+      }
     }
     
     message += `\n`;
@@ -239,7 +244,10 @@ export async function sendDailyStatsReport({
       if (teamExtension && teamExtension.targetCount > 0) {
         message += `└ 延長率: **${teamExtension.extensionRate}%** (${teamExtension.extensionCount}/${teamExtension.targetCount}人)\n`;
         message += `  ├ 1回目: ${teamExtension.exam1stExtensionRate}% (${teamExtension.exam1stExtensionCount}/${teamExtension.exam1stTargetCount}人)\n`;
-        message += `  └ 2回目: ${teamExtension.exam2ndExtensionRate}% (${teamExtension.exam2ndExtensionCount}/${teamExtension.exam2ndTargetCount}人)\n`;
+        message += `  ├ 2回目: ${teamExtension.exam2ndExtensionRate}% (${teamExtension.exam2ndExtensionCount}/${teamExtension.exam2ndTargetCount}人)\n`;
+        for (const { round, key } of EXTENSION_ROUNDS.slice(2)) {
+          message += `  ${round === 6 ? '└' : '├'} ${round}回目: ${teamExtension[`${key}ExtensionRate`] ?? 0}% (${teamExtension[`${key}ExtensionCount`] ?? 0}/${teamExtension[`${key}TargetCount`] ?? 0}人)\n`;
+        }
       } else {
         message += `└ 延長率: 延長対象なし\n`;
       }
@@ -254,8 +262,9 @@ export async function sendDailyStatsReport({
       logger.warn('[Stats Report] DISCORD_STATS_WEBHOOK_URL is not configured; Discord delivery skipped');
       return { success: true, skipped: true, message: 'Stats report generated; Discord delivery skipped' };
     }
-    await http.post(webhookUrl, {
-      content: message,
+    // Discord content is limited to 2,000 characters; keep short reports unchanged.
+    for (const content of splitStatsReport(message)) await http.post(webhookUrl, {
+      content,
       username: 'WannaV 統計Bot',
       avatar_url: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
     });
@@ -268,4 +277,23 @@ export async function sendDailyStatsReport({
     // Axios errors contain the request URL, headers and payload. Do not propagate them to callers.
     throw new Error('Statistics report could not be generated or delivered');
   }
+}
+
+export function splitStatsReport(message) {
+  const chunks = [];
+  let current = '';
+  for (const line of message.split('\n')) {
+    if (current.length + line.length + 1 > 2000) {
+      if (current) chunks.push(current);
+      current = '';
+    }
+    let rest = line;
+    while (rest.length > 2000) {
+      chunks.push(rest.slice(0, 2000));
+      rest = rest.slice(2000);
+    }
+    current += (current ? '\n' : '') + rest;
+  }
+  if (current) chunks.push(current);
+  return chunks;
 }

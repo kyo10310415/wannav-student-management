@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { inspect } from 'node:util';
 import { Hono } from 'hono';
+import { aggregateExtensionStats, EXTENSION_ROUNDS } from '../src/services/extensionStatsService.js';
 
 const marker = 'SYNTHETIC_EXTENSION_PRIVATE';
 const paths = ['/stats', '/by-tutor', '/by-team'];
@@ -25,9 +26,12 @@ async function fixture({ configured = true, fail, empty = false } = {}) {
     .replace("import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';", 'const { queryExtension, getExtensionPool } = deps;')
     .replace("import { getPool } from '../db/connection.js';", 'const getPool = deps.getPool;');
   const key = 'extensionsPrivacyFixture' + sequence++;
+  deps.aggregateExtensionStats = aggregateExtensionStats;
+  deps.EXTENSION_ROUNDS = EXTENSION_ROUNDS;
   globalThis[key] = deps;
   let app;
-  try { app = (await import(`data:text/javascript;base64,${Buffer.from(`const deps = globalThis[${JSON.stringify(key)}]; const console = deps.console; const process = deps.process;\n${source}`).toString('base64')}`)).default; }
+  const executable = source.replace("import { aggregateExtensionStats, EXTENSION_ROUNDS } from '../services/extensionStatsService.js';", 'const { aggregateExtensionStats, EXTENSION_ROUNDS } = deps;');
+  try { app = (await import(`data:text/javascript;base64,${Buffer.from(`const deps = globalThis[${JSON.stringify(key)}]; const console = deps.console; const process = deps.process;\n${executable}`).toString('base64')}`)).default; }
   finally { delete globalThis[key]; }
   return { app, logs, calls };
 }
@@ -37,13 +41,18 @@ test('extension aggregate statistics preserve cycle, rates and SQL filters witho
   const f = await fixture();
   const response = await f.app.request('/stats');
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { success: true, data: {
+  const body = await response.json();
+  const { exam3rd, exam4th, exam5th, exam6th, lifetimeCount, ...legacy } = body.data;
+  for (const key of ['exam1st', 'exam2nd']) delete legacy[key].lifetimeCount;
+  assert.deepEqual({ ...body, data: legacy }, { success: true, data: {
     targetCount: 3, certaintyFilledCount: 1, extensionCount: 1, withdrawalCount: 1, extensionRate: 33.3,
     extensionRateVsResult: 50, remainingCount: 1, resultToldCount: 2,
     exam1st: { targetCount: 1, extensionCount: 1, extensionRate: 100 }, exam2nd: { targetCount: 2, extensionCount: 0, extensionRate: 0 }
   } });
   assert.equal(f.calls.length, 2);
-  assert.match(f.calls[1].sql, /WHERE status = 'アクティブ'/);
+  assert.match(f.calls[0].sql, /examination_result_6/);
+  assert.match(f.calls[1].sql, /s.pro_plan_start_date/);
+  assert.match(f.calls[1].sql, /WHERE s.status = 'アクティブ'/);
   assert.match(f.calls[1].sql, /contract_plan NOT IN \('永久会員', '在籍プラン'\)/);
   safe(f);
 });
@@ -53,7 +62,8 @@ test('tutor and team successes preserve identifiable response data while keeping
   const tutor = await (await f.app.request('/by-tutor')).json();
   assert.deepEqual(tutor.data, [{ tutorName: marker, hearingTargetCount: 2, examTargetCount: 3, hearingIncompleteCount: 1, examIncompleteCount: 1 }]);
   const team = await (await f.app.request('/by-team')).json();
-  assert.deepEqual(team.data, [{ teamName: marker, targetCount: 3, extensionCount: 1, withdrawalCount: 1, extensionRate: 33.3,
+  const legacyTeam = Object.fromEntries(Object.entries(team.data[0]).filter(([key]) => !/^exam[3-6]/.test(key) && key !== 'lifetimeCount'));
+  assert.deepEqual([legacyTeam], [{ teamName: marker, targetCount: 3, extensionCount: 1, withdrawalCount: 1, extensionRate: 33.3,
     exam1stTargetCount: 1, exam1stExtensionCount: 1, exam1stExtensionRate: 100, exam2ndTargetCount: 2, exam2ndExtensionCount: 0, exam2ndExtensionRate: 0 }]);
   assert.match(f.calls[3].sql, /LEFT JOIN tutors t ON s.homeroom_tutor = t.notion_name/);
   safe(f);

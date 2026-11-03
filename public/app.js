@@ -9408,7 +9408,7 @@ async function renderExtensionsPage() {
                 </div>
               </div>
               <div class="text-xs text-orange-100 mt-2">
-                対象: ${currentTutorStats.hearingTargetCount}人 / 4ヶ月目・10ヶ月目
+                対象: ${currentTutorStats.hearingTargetCount}人 / 通算4・10・16ヶ月目、PRO継続4・10・16ヶ月目
               </div>
             </div>
             <div class="bg-white/20 backdrop-blur-sm rounded-lg p-4">
@@ -9422,7 +9422,7 @@ async function renderExtensionsPage() {
                 </div>
               </div>
               <div class="text-xs text-red-100 mt-2">
-                対象: ${currentTutorStats.examTargetCount}人 / 5ヶ月目・11ヶ月目
+                対象: ${currentTutorStats.examTargetCount}人 / 通算5・11・17ヶ月目、PRO継続5・11・17ヶ月目
               </div>
             </div>
           </div>
@@ -9448,8 +9448,9 @@ async function renderExtensionsPage() {
               <div class="text-2xl font-bold text-purple-600">${stats.extensionCount}人</div>
             </div>
             <div class="bg-red-50 rounded-lg p-4">
-              <div class="text-sm text-gray-600 mb-1">退会数</div>
+              <div class="text-sm text-gray-600 mb-1">退会数（永久会員は別集計）</div>
               <div class="text-2xl font-bold text-red-600">${stats.withdrawalCount}人</div>
+              <div class="text-xs text-gray-500">永久会員: ${stats.lifetimeCount ?? 0}人</div>
             </div>
             <div class="bg-indigo-50 rounded-lg p-4">
               <div class="text-sm text-gray-600 mb-1">延長率</div>
@@ -9512,6 +9513,22 @@ async function renderExtensionsPage() {
         </div>
 
         <!-- Team Statistics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          ${[3, 4, 5, 6].map(round => {
+            const key = ['exam3rd', 'exam4th', 'exam5th', 'exam6th'][round - 3];
+            const review = stats[key] || { targetCount: 0, extensionCount: 0, extensionRate: 0, lifetimeCount: 0 };
+            const label = round === 3 ? '通算17ヶ月目' : `PRO継続${5 + (round - 4) * 6}ヶ月目`;
+            return `<div class="bg-white rounded-lg shadow-md p-6">
+              <h3 class="text-xl font-bold text-gray-800 mb-4">${round}回目延長審査（${label}）</h3>
+              <div class="space-y-3">
+                <div class="flex justify-between"><span>対象数</span><span>${review.targetCount}人</span></div>
+                <div class="flex justify-between"><span>延長数</span><span>${review.extensionCount}人</span></div>
+                <div class="flex justify-between"><span>永久会員数</span><span>${review.lifetimeCount}人</span></div>
+                <div class="flex justify-between"><span>延長率</span><span>${review.extensionRate}%</span></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
         <div class="bg-white rounded-lg shadow-md p-6">
           <h3 class="text-xl font-bold text-gray-800 mb-4">
             <i class="fas fa-users-cog mr-2 text-purple-600"></i>チーム別延長率
@@ -9524,9 +9541,11 @@ async function renderExtensionsPage() {
                   <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長対象数</th>
                   <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長数</th>
                   <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">退会数</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">永久会員数</th>
                   <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">延長率</th>
                   <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">1回目延長率</th>
                   <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">2回目延長率</th>
+                  ${[3, 4, 5, 6].map(round => `<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">${round}回目延長率</th>`).join('')}
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200">
@@ -9536,6 +9555,7 @@ async function renderExtensionsPage() {
                     <td class="px-4 py-3 text-center text-sm text-gray-600">${team.targetCount}人</td>
                     <td class="px-4 py-3 text-center text-sm text-green-600 font-semibold">${team.extensionCount}人</td>
                     <td class="px-4 py-3 text-center text-sm text-red-600">${team.withdrawalCount}人</td>
+                    <td class="px-4 py-3 text-center text-sm text-gray-600">${team.lifetimeCount ?? 0}人</td>
                     <td class="px-4 py-3 text-center text-sm">
                       <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
                         team.extensionRate >= 80 ? 'bg-green-100 text-green-800' :
@@ -9551,6 +9571,7 @@ async function renderExtensionsPage() {
                     <td class="px-4 py-3 text-center text-sm text-gray-600">
                       ${team.exam2ndExtensionRate}% <span class="text-xs text-gray-400">(${team.exam2ndExtensionCount}/${team.exam2ndTargetCount})</span>
                     </td>
+                    ${['exam3rd', 'exam4th', 'exam5th', 'exam6th'].map(key => `<td class="px-4 py-3 text-center text-sm text-gray-600">${team[`${key}ExtensionRate`] ?? 0}% <span class="text-xs text-gray-400">(${team[`${key}ExtensionCount`] ?? 0}/${team[`${key}TargetCount`] ?? 0})</span></td>`).join('')}
                   </tr>
                 `).join('')}
               </tbody>
