@@ -1781,6 +1781,23 @@ const migrations = [
     name: 'discord_reply_notification_preferences',
     up: `ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_reply_alerts_enabled BOOLEAN NOT NULL DEFAULT TRUE;`,
     down: `ALTER TABLE users DROP COLUMN IF EXISTS discord_reply_alerts_enabled;`
+  },
+  {
+    version: 60,
+    name: 'student_action_points',
+    up: `CREATE TABLE IF NOT EXISTS action_point_results (
+      student_id TEXT NOT NULL, year_month VARCHAR(7) NOT NULL,
+      payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY(student_id, year_month));
+      CREATE TABLE IF NOT EXISTS action_point_tutor_snapshots (
+      student_id TEXT NOT NULL, year_month VARCHAR(7) NOT NULL,
+      tutor_name TEXT, captured_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY(student_id, year_month));
+      CREATE TABLE IF NOT EXISTS action_point_x_cache (
+      username VARCHAR(15) PRIMARY KEY, x_user_id TEXT,
+      last_attempt_at TIMESTAMPTZ, last_checked_at TIMESTAMPTZ,
+      last_post_at TIMESTAMPTZ, last_inactive BOOLEAN);`,
+    down: `DROP TABLE IF EXISTS action_point_results; DROP TABLE IF EXISTS action_point_tutor_snapshots; DROP TABLE IF EXISTS action_point_x_cache;`
   }
 ];
 

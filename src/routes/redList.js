@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists } from '../services/redListService.js';
+import { calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists, getActionPointJobStatus } from '../services/actionPointService.js';
 import { query } from '../db/connection.js';
 import { sendDiscordMessage, getStudentDiscordInfo } from '../services/discordService.js';
 import { uploadRequestBodyLimit } from '../security/uploadBodyLimit.js';
@@ -92,7 +92,7 @@ app.get('/', async (c) => {
     const { yearMonth } = c.req.query();
     if (yearMonth && !validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     const redLists = await getAllRedLists(yearMonth);
-    return c.json({ success: true, data: redLists, count: redLists.length });
+    return c.json({ success: true, data: redLists, count: redLists.length, evaluation_job: typeof getActionPointJobStatus === 'function' ? getActionPointJobStatus() : null });
   } catch (error) {
     console.error('Error fetching red lists:');
     return c.json({ success: false, error: 'Red list operation failed' }, 500);
@@ -109,10 +109,11 @@ app.post('/update', async (c) => {
       const body = await c.req.json();
       yearMonth = body.yearMonth;
     } catch (e) { /* empty body → current month */ }
-    const result = await updateAllRedLists(yearMonth);
+    if (yearMonth && !validRedListMonth(yearMonth)) return c.json({ success: false, error: '当月のみ更新できます' }, 400);
+    const result = await updateAllRedLists(yearMonth, { background: true });
     return c.json({
       success: true,
-      message: `Red list updated: ${result.updated} students, ${result.errors} errors`,
+      message: result.running ? '評価を開始しました。完了後にデータを再表示してください。' : `Red list updated: ${result.updated} students, ${result.errors} errors`,
       data: result
     });
   } catch (error) {
@@ -151,9 +152,10 @@ app.get('/history', async (c) => {
     }
     if (!validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     const result = await query(
-      `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor
+      `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor, ap.payload AS action_points
        FROM red_list_history rlh
        LEFT JOIN students s ON rlh.student_id = s.student_id
+       LEFT JOIN action_point_results ap ON ap.student_id=rlh.student_id AND ap.year_month=rlh.year_month
        WHERE rlh.year_month = $1
        ORDER BY rlh.final_score DESC, rlh.student_id`,
       [yearMonth]

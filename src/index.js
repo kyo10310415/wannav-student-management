@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { snapshotActionPointTutors } from './services/actionPointService.js';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -517,3 +518,9 @@ cron.schedule('*/1 * * * *', async () => {
 }, {
   timezone: 'Asia/Tokyo'
 });
+
+// Capture assignments immediately before the month changes. No next-month backfill.
+cron.schedule('59 23 * * *', async () => {
+  try { await snapshotActionPointTutors(); }
+  catch { console.error('[Action Points] Month-end tutor snapshot failed'); }
+}, { timezone: 'Asia/Tokyo' });
