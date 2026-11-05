@@ -40,7 +40,28 @@ async function fixture({ rows = [], valueRanges = [], fail = false, credentials 
   return { api, logs, calls, queries };
 }
 function safe(f) { assert.equal(f.logs.join('\n').includes(marker), false); }
-const throwing = ['fetchStudentTextTypeMap', 'fetchLessonsFromSheet', 'fetchLessonsForTomorrow', 'fetchSchedulesFromSheet',
+
+test('deletion history reads only event IDs/reasons and excludes out-of-range, blank and unknown reasons', async () => {
+  const f = await fixture({ valueRanges: [
+    { values: [['DELETED'], ['RANGE'], ['DELETED'], ['EMPTY'], ['OTHER'], ['LAST']] },
+    { values: [['カレンダーから削除'], ['取得範囲外'], ['カレンダーから削除'], [], ['別の理由'], ['カレンダーから削除']] }
+  ] });
+  assert.deepEqual(await f.api.fetchDeletedLessonIdsFromSheet(marker), ['DELETED', 'LAST']);
+  assert.deepEqual(f.calls[0].params.ranges, ["'削除されたレッスンデータ'!A2:A", "'削除されたレッスンデータ'!L2:L"]);
+  assert.equal(f.calls[0].method, 'batchGet');safe(f);
+});
+
+test('malformed deletion event IDs reject the whole cleanup and empty history is safe', async () => {
+  for (const id of ['', ' ', null, 123, 'id\u0000', 'id\n', 'x'.repeat(256)]) {
+    const f = await fixture({ valueRanges: [{ values: [[id]] }, { values: [['カレンダーから削除']] }] });
+    await assert.rejects(f.api.fetchDeletedLessonIdsFromSheet(marker), /fetchDeletedLessonIdsFromSheet failed/);safe(f);
+  }
+  const empty = await fixture({ valueRanges: [{}, {}] });
+  assert.deepEqual(await empty.api.fetchDeletedLessonIdsFromSheet(marker), []);
+  const incomplete = await fixture({ valueRanges: [{}] });
+  await assert.rejects(incomplete.api.fetchDeletedLessonIdsFromSheet(marker));
+});
+const throwing = ['fetchStudentTextTypeMap', 'fetchLessonsFromSheet', 'fetchDeletedLessonIdsFromSheet', 'fetchLessonsForTomorrow', 'fetchSchedulesFromSheet',
   'fetchIndividualWebhooks', 'fetchTutorWebhooks', 'fetchSuspensionData', 'fetchStudentBroadcastInfo', 'fetchVQDiagnosisResults',
   'updateVQDiagnosisEmailStatus', 'batchUpdateVQDiagnosisEmailStatus', 'fetchVQDiagnosisByStudentId'];
 

@@ -6,7 +6,7 @@ import {installApiAccess} from '../src/security/apiAccess.js';
 const headers={Authorization:'Bearer '+'a'.repeat(64)};
 const row=id=>({calendar_event_id:id,student_id:'SYNTHETIC',tutor_email:'synthetic@example.test',tutor_name:'Synthetic',lesson_date:'2026-10-30',title:'Updated'});
 let sequence=0;
-async function fixture({sheet=[row('ONE')],failAt=0,failSql,connectFail=false,rollbackFail=false,role='leader'}={}){
+async function fixture({sheet=[row('ONE')],deleted=[],deletionReadFail=false,deletionWriteFail=false,failAt=0,failSql,connectFail=false,rollbackFail=false,role='leader'}={}){
  const state={rows:new Map([['ONE','Original'],['OMITTED','Keep']]),staged:null,calls:[],writes:0,releases:0,acquired:0,failAt,failSql};
  const query=async(sql,params)=>{state.calls.push([sql,params]);if(sql.includes('FROM students s'))return{rows:[{student_id:'SYNTHETIC',tutor_email:'synthetic@example.test'}]};if(sql.startsWith('SELECT * FROM lessons WHERE lesson_date'))return{rows:[...state.rows].map(([calendar_event_id,title])=>({calendar_event_id,title,student_id:'SYNTHETIC',lesson_date:'2026-10-30'}))};throw Error('Unexpected nontransaction query')};
  const client={query:async(sql,params)=>{
@@ -15,16 +15,18 @@ async function fixture({sheet=[row('ONE')],failAt=0,failSql,connectFail=false,ro
   if(sql==='BEGIN'){state.staged=new Map(state.rows);return{rows:[]}}
   if(sql==='COMMIT'){state.rows=new Map(state.staged);state.staged=null;return{rows:[]}}
   if(sql.includes('INSERT INTO lessons')){assert.ok(state.staged);state.writes++;if(state.writes===state.failAt)throw Error('PRIVATE_SENTINEL');state.staged.set(params[0],params[4]);return{rows:[]}}
+  if(sql.startsWith('DELETE FROM lessons')){assert.ok(state.staged);if(deletionWriteFail)throw Error('PRIVATE_SENTINEL');const removed=[];for(const id of params[0])if(state.staged.delete(id))removed.push({calendar_event_id:id});return{rows:removed}}
   throw Error('Unexpected transaction SQL');
  },release(){state.releases++}};
  const deps={Hono,query,getClient:async()=>{state.acquired++;if(connectFail)throw Error('PRIVATE_SENTINEL');return client},process:{env:{GOOGLE_SHEET_ID:'synthetic'}},console:{log(){},warn(){},error(){}},fetchLessonsFromSheet:async()=>sheet,getLastSyncTime:async()=>({lastSync:'synthetic'}),fetchLessonsForMonth:async()=>[]};
+ deps.fetchDeletedLessonIdsFromSheet=async()=>{if(deletionReadFail)throw Error('PRIVATE_SENTINEL');return deleted};
  const source=(await readFile(new URL('../src/routes/lessons.js',import.meta.url),'utf8')).replace(/^import .*;\r?\n/gm,'');
  const key='atomicLessonSync'+sequence++;globalThis[key]=deps;let routes;
  try{routes=(await import('data:text/javascript;base64,'+Buffer.from(`const {${Object.keys(deps).join(',')}}=globalThis[${JSON.stringify(key)}];\n`+source).toString('base64'))).default}finally{delete globalThis[key]}
  const app=new Hono();installApiAccess(app,{db:async()=>({rows:[{id:7,email:'synthetic@example.test',role,must_change_password:false}]})});app.route('/api/lessons',routes);return{app,state};
 }
 test('nonempty partial Sheet updates present rows and keeps omitted lessons without cleanup SQL',async()=>{
- const f=await fixture();const response=await f.app.request('/api/lessons/sync-from-sheet',{headers});assert.equal(response.status,200);const data=await response.json();assert.equal(data.count,1);assert.equal(data.deleted,0);assert.equal(data.cleanup_skipped,true);
+ const f=await fixture();const response=await f.app.request('/api/lessons/sync-from-sheet',{headers});assert.equal(response.status,200);const data=await response.json();assert.equal(data.count,1);assert.equal(data.deleted,0);assert.equal(data.cleanup_skipped,false);
  assert.deepEqual([...f.state.rows],[['ONE','Updated'],['OMITTED','Keep']]);assert.equal(f.state.releases,1);assert.deepEqual(f.state.calls.filter(([sql])=>['BEGIN','COMMIT','ROLLBACK'].includes(sql)).map(([sql])=>sql),['BEGIN','COMMIT']);assert.equal(f.state.calls.some(([sql])=>/DELETE|SELECT calendar_event_id/.test(sql)),false);
 });
 test('retained omitted lessons remain visible through the real monthly route after upsert-only sync',async()=>{
@@ -47,4 +49,37 @@ test('normal manager retry after rollback commits all valid source rows',async()
 });
 test('empty source and crew GET HEAD never acquire transaction clients',async()=>{
  for(const method of ['GET','HEAD']){const empty=await fixture({sheet:[]});assert.equal((await empty.app.request('/api/lessons/sync-from-sheet',{headers,method})).status,400);assert.equal(empty.state.acquired,0);const crew=await fixture({role:'crew'});assert.equal((await crew.app.request('/api/lessons/sync-from-sheet',{headers,method})).status,403);assert.equal(crew.state.acquired,0);assert.equal(crew.state.calls.length,0)}
+});
+
+test('explicit deletion history removes only matching event IDs, including events still in the live source',async()=>{
+ const f=await fixture({deleted:['ONE','UNKNOWN']});
+ const response=await f.app.request('/api/lessons/sync-from-sheet',{headers});
+ const body=await response.json();assert.equal(response.status,200);assert.equal(body.deleted,1);assert.equal(body.cleanup_skipped,false);
+ assert.deepEqual([...f.state.rows],[['OMITTED','Keep']]);
+ const deletion=f.state.calls.find(([sql])=>sql.startsWith('DELETE FROM lessons'));
+ assert.ok(deletion[0].includes('calendar_event_id = ANY($1::text[])'));assert.deepEqual(deletion[1],[['ONE','UNKNOWN']]);
+ const monthly=await(await f.app.request('/api/lessons/month/2026/10',{headers})).json();assert.equal(monthly.count,1);assert.equal(monthly.data[0].calendar_event_id,'OMITTED');
+ // History is replayable: repeats do not remove unrelated reservations.
+ assert.equal((await(await f.app.request('/api/lessons/sync-from-sheet',{headers})).json()).deleted,1);
+});
+
+test('unavailable deletion history preserves reservations while normal upserts still commit',async()=>{
+ const f=await fixture({deleted:['ONE'],deletionReadFail:true});
+ const body=await(await f.app.request('/api/lessons/sync-from-sheet',{headers})).json();
+ assert.equal(body.success,true);assert.equal(body.cleanup_skipped,true);assert.equal(body.deleted,0);
+ assert.deepEqual([...f.state.rows],[['ONE','Updated'],['OMITTED','Keep']]);assert.ok(!f.state.calls.some(([sql])=>sql.startsWith('DELETE')));
+});
+
+test('deletion DB failure rolls back source upserts and retains reservations without leaking provider errors',async()=>{
+ const f=await fixture({deleted:['ONE'],deletionWriteFail:true});const response=await f.app.request('/api/lessons/sync-from-sheet',{headers});
+ assert.equal(response.status,500);assert.ok(!(await response.text()).includes('PRIVATE_SENTINEL'));
+ assert.deepEqual([...f.state.rows],[['ONE','Original'],['OMITTED','Keep']]);assert.equal(f.state.releases,1);
+ assert.ok(f.state.calls.some(([sql])=>sql==='ROLLBACK'));assert.ok(!f.state.calls.some(([sql])=>sql==='COMMIT'));
+});
+
+test('deletion history is processed in bounded parameterized batches',async()=>{
+ const f=await fixture({deleted:Array.from({length:205},(_,i)=>'DELETED-'+i)});
+ assert.equal((await f.app.request('/api/lessons/sync-from-sheet',{headers})).status,200);
+ const calls=f.state.calls.filter(([sql])=>sql.startsWith('DELETE'));
+ assert.deepEqual(calls.map(([,params])=>params[0].length),[100,100,5]);
 });

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { query, getClient } from '../db/connection.js';
 import { fetchLessonsForMonth } from '../services/calendarService.js';
-import { fetchLessonsFromSheet, getLastSyncTime } from '../services/sheetsService.js';
+import { fetchLessonsFromSheet, getLastSyncTime, fetchDeletedLessonIdsFromSheet } from '../services/sheetsService.js';
 
 const app = new Hono();
 
@@ -328,6 +328,16 @@ app.get('/sync-from-sheet', async (c) => {
       return c.json({ success: false, error: 'Lesson source is empty or invalid; existing lessons were preserved' }, 400);
     }
 
+    let deletedEventIds = [];
+    let cleanupSkipped = false;
+    try {
+      deletedEventIds = await fetchDeletedLessonIdsFromSheet(spreadsheetId);
+    } catch {
+      // Failure to read deletion evidence must not turn source omission into deletion.
+      cleanupSkipped = true;
+      console.warn('Lesson deletion cleanup skipped: history unavailable');
+    }
+
     // Get student-tutor mapping from database
     const studentTutorMapping = await query(`
       SELECT 
@@ -416,9 +426,18 @@ app.get('/sync-from-sheet', async (c) => {
     
     console.log(`Validation results: ${validLessons} valid, ${invalidLessons} invalid, ${unmatchedStudents} unmatched, ${mismatchedTutors} tutor mismatches`);
     
+    let deletedCount = 0;
+    // Explicit history wins even if the same event is present in the current source.
+    // Do not compare against current reservations or delete merely omitted events.
+    for (let i = 0; i < deletedEventIds.length; i += 100) {
+      const result = await client.query(
+        'DELETE FROM lessons WHERE calendar_event_id = ANY($1::text[]) RETURNING calendar_event_id',
+        [deletedEventIds.slice(i, i + 100)]
+      );
+      deletedCount += result.rows.length;
+    }
     await client.query('COMMIT');
-    // Source completeness is not guaranteed. Absence alone must not delete stored lessons.
-    console.log('Automatic lesson deletion skipped: source completeness is unverified');
+    console.log(`Lesson sync committed: ${validLessons} upserts, ${deletedCount} explicit deletions`);
     
     return c.json({
       success: true,
@@ -426,8 +445,8 @@ app.get('/sync-from-sheet', async (c) => {
       count: validLessons,
       skipped: unmatchedStudents + mismatchedTutors,
       errors: invalidLessons,
-      deleted: 0,
-      cleanup_skipped: true,
+      deleted: deletedCount,
+      cleanup_skipped: cleanupSkipped,
       lastGasSync: syncMeta?.lastSync,
       totalEventsInSheet: lessons.length
     });
