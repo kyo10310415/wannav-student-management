@@ -15328,13 +15328,13 @@ async function renderRedListPage() {
       <div class="bg-white rounded-lg shadow-md p-4">
         <div class="flex items-center">
           <div class="flex-shrink-0">
-            <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <i class="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
+            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <i class="fas fa-check-circle text-green-600 text-xl"></i>
             </div>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">グリーン（30%未満）</p>
-            <p class="text-2xl font-bold text-yellow-600" id="redlist-count-low">0</p>
+            <p class="text-2xl font-bold text-green-600" id="redlist-count-low">0</p>
           </div>
         </div>
       </div>
