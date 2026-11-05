@@ -9,7 +9,7 @@ test('missing tables are initialized once before concurrent first reads', async 
   await Promise.all([ensure(), ensure(), ensure()]); await ensure();
   assert.equal(calls.length, 2); assert.match(calls[0], /to_regclass/);
   assert.equal(calls[1], ACTION_POINT_SCHEMA_SQL);
-  assert.equal((calls[1].match(/CREATE TABLE IF NOT EXISTS/g) || []).length, 3);
+  assert.equal((calls[1].match(/CREATE TABLE IF NOT EXISTS/g) || []).length, 4);
   assert.doesNotMatch(calls[1], /\b(?:DROP|DELETE|UPDATE|ALTER|migration_history)\b/i);
 });
 test('already initialized databases do not need DDL permission or another migration', async () => {

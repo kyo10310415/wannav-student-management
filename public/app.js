@@ -3205,6 +3205,7 @@ function renderStudentRowsSimple() {
             <div class="red-list-loading text-gray-400 text-xs" data-student-id="${studentDisplayAttribute(student.student_id)}">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
+            <button data-action-point-trend-student="${studentDisplayAttribute(student.student_id)}" class="text-xs text-blue-600 underline mt-1" title="月別のアクションポイントを確認">推移</button>
           </div>
           
           <!-- PRO Plan Start -->
@@ -15368,10 +15369,7 @@ async function renderRedListPage() {
       <div class="p-6">
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">対象月</label>
-          <select id="redlist-history-month" data-red-list-history-month
-                  class="border border-gray-300 rounded-lg px-4 py-2 w-64">
-            <option value="">月を選択...</option>
-          </select>
+          <input type="month" id="redlist-history-month" data-red-list-history-month class="border border-gray-300 rounded-lg px-4 py-2 w-64" aria-label="アクションポイントの対象年月">
         </div>
         <div id="redlist-history-loading" class="text-center py-8 hidden">
           <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
@@ -15766,7 +15764,7 @@ async function loadRedListCurrentData() {
     if (response.data.success) {
       const jobNotice = document.getElementById('action-point-job-status');
       if (jobNotice) jobNotice.textContent = '全項目各1Pt。60%以上レッド／30%以上イエロー／30%未満グリーン。未取得・対象外は分母から除外。' +
-        (response.data.evaluation_job?.running ? ' 評価中です。完了まで自動で再取得します。' : response.data.evaluation_job?.result?.failed ? ' 評価に失敗しました。再実行してください。' : response.data.evaluation_job?.result?.errors ? ' 一部の生徒の評価に失敗しました。再実行してください。' : '');
+        (response.data.evaluation_job?.running ? ` 評価中：${response.data.evaluation_job?.progress?.processed ?? 0}/${response.data.evaluation_job?.progress?.total ?? '－'}名・${response.data.evaluation_job?.progress?.stage || '開始準備'}。完了まで自動で再取得します。` : response.data.evaluation_job?.result?.failed ? ' 評価に失敗しました。再実行してください。' : response.data.evaluation_job?.result?.errors ? ' 一部の生徒の評価に失敗しました。再実行してください。' : '');
       if (response.data.evaluation_job?.running) setTimeout(() => { if (state.current()) loadRedListCurrentData(); }, 10000);
       currentRedListData = response.data.data.filter(item =>
         item.action_points || item.rank === 'high' || item.rank === 'middle' || item.rank === 'low' || item.ex_rank === true
@@ -15838,8 +15836,8 @@ function renderRedListStudentCard(item, isHistory) {
   };
   const cardData = `data-red-list-student-id="${attribute(item.student_id)}" data-red-list-year-month="${attribute(item.year_month)}"`;
   const student = students.find(s => s.student_id === item.student_id);
-  const studentName = student ? student.name : item.student_name || '不明';
-  const tutorName = student ? getTutorDisplayName(student.homeroom_tutor) : '-';
+  const studentName = item.snapshot_saved_at ? item.student_name || '不明' : student ? student.name : item.student_name || '不明';
+  const tutorName = item.snapshot_saved_at ? item.homeroom_tutor || '-' : student ? getTutorDisplayName(student.homeroom_tutor) : '-';
   
   const notionUrl = safeLink(cachedNotionUrls[item.student_id] || student?.notion_url || '#');
   const discordUrl = safeLink(student?.discord_url || '#');
@@ -16079,6 +16077,7 @@ function renderRedListStudentCard(item, isHistory) {
 
       <!-- カード下部：スコア内訳＋Discord送信ログ（折りたたみ） -->
       <div class="border-t border-gray-100 px-4 pb-2 pt-1">
+        ${isHistory && item.action_points ? `<p class="text-xs text-gray-500 mt-2">${item.snapshot_saved_at ? '月末固定保存：' + escapeHtml(String(item.snapshot_saved_at)) : '月末固定保存前の最終評価記録'}</p>` : ''}
         ${scoreBreakdown}
         ${renderRedListDiscordLogs(item.student_id, yearMonth)}
       </div>
@@ -16269,6 +16268,7 @@ async function saveRedListExRank(state, studentId, yearMonth, enabled, reason) {
 
 function populateRedListHistoryMonths() {
   const select = document.getElementById('redlist-history-month');
+  if (select?.type === 'month') return;
   const today = new Date();
   
   for (let i = 1; i <= 12; i++) {
@@ -16309,7 +16309,7 @@ async function loadRedListHistoryData() {
     if (!state.current()) return;
     if (response.data.success) {
       historyRedListData = response.data.data.filter(item =>
-        item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low' || item.final_ex_rank === true
+        item.action_points || item.final_rank === 'high' || item.final_rank === 'middle' || item.final_rank === 'low' || item.final_ex_rank === true
       );
       renderRedListHistoryList();
       updateRedListStats();
@@ -16430,7 +16430,7 @@ function exportRedListCsv() {
 
   const rows = data.map(item => {
     const student = students.find(s => s.student_id === item.student_id);
-    const studentName = student ? student.name : item.student_name || '不明';
+    const studentName = item.snapshot_saved_at ? item.student_name || '不明' : student ? student.name : item.student_name || '不明';
     const score = item.total_score ?? item.final_score ?? 0;
     const rank = (item.rank || item.final_rank || '-').toUpperCase();
     const exRank = (item.ex_rank || item.final_ex_rank) ? 'EX' : '';
@@ -20338,4 +20338,34 @@ function populateActionPointFilters() {
   };
   fill(statusSelect, [['アクティブ', 'アクティブ'], ['all', 'すべて']], rows.map(row => row.status), 'アクティブ');
   fill(planSelect, [['non-lifetime', '永久会員以外'], ['all', 'すべて']], rows.map(row => row.contract_plan), 'non-lifetime');
+}
+
+let actionPointTrendGeneration = 0;
+async function openStudentActionPointTrend(studentId) {
+  const root = document.getElementById('content');
+  const token = sessionToken;
+  const actorId = currentUser?.id, actorRole = currentUser?.role;
+  if (!root || !token || currentPage !== 'students' || !['admin', 'leader', 'crew'].includes(currentUser?.role)) return;
+  const student = students.find(row => row.student_id === studentId);
+  if (!student) return;
+  document.getElementById('action-point-trend-modal')?.remove();
+  const generation = ++actionPointTrendGeneration;
+  const modal = document.createElement('div');
+  modal.id = 'action-point-trend-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+  const esc = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
+  const frame = body => `<div class="bg-white rounded-xl p-5 w-full max-w-3xl max-h-screen overflow-auto"><div class="flex justify-between mb-4"><h3 class="text-lg font-bold">${esc(student.name)}：アクションポイントの推移</h3><button data-action-point-trend-close class="rounded px-3 py-1 bg-gray-100">閉じる</button></div>${body}</div>`;
+  modal.innerHTML = frame('<p>履歴を取得中...</p>');
+  root.appendChild(modal);
+  const current = () => generation === actionPointTrendGeneration && sessionToken === token && currentUser?.id === actorId && currentUser?.role === actorRole && currentPage === 'students' &&
+    document.getElementById('content') === root && root.contains(modal);
+  try {
+    const response = await axios.get(`${API_BASE}/api/red-list/student-history/${encodeURIComponent(studentId)}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    if (!response.data.success) throw new Error('History unavailable');
+    const rows = response.data.data;
+    modal.innerHTML = frame(rows.length ? `<p class="text-xs text-gray-500 mb-3">月末固定記録を優先して表示します。固定前の月は最終評価記録です。評価済み項目数が異なるため、割合も併せて確認してください。</p><table class="w-full text-sm"><thead><tr><th class="text-left p-2">年月</th><th class="text-left p-2">評価・内訳</th><th class="text-left p-2">保存区分</th></tr></thead><tbody>${rows.map(row => `<tr class="border-t"><td class="p-2 align-top">${esc(row.year_month)}</td><td class="p-2">${renderActionPointSummary(row.action_points)}</td><td class="p-2 align-top">${row.source === 'snapshot' ? '月末固定' : '最終評価'}<br>${esc(row.saved_at || row.evaluated_at)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-gray-500">アクションポイントの記録はまだありません。</p>');
+  } catch {
+    if (current()) modal.innerHTML = frame('<p class="text-red-600">履歴を取得できませんでした。閉じて再度お試しください。</p>');
+  }
 }

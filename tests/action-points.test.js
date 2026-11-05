@@ -113,6 +113,15 @@ test('a student write failure is private and does not stop subsequent students',
     assert.equal(f.writes.length, 2); assert.equal(logs.some(s => s.includes('SYNTHETIC_PRIVATE')), false);
   } finally { console.error = original; }
 });
+test('progress reports processed counts and stages without exposing student identifiers', async () => {
+  const stages = [];
+  const f = fixture({ deps: { onProgress: value => stages.push(value) } });
+  await f.service.updateAll(null, now);
+  assert.equal(stages[0].total, 1); assert.equal(stages[0].processed, 0);
+  assert.equal(stages.at(-1).processed, 1); assert.equal(stages.at(-1).stage, '完了');
+  assert.ok(stages.some(value => value.stage === 'SNS確認'));
+  assert.ok(stages.every(value => !Object.hasOwn(value, 'student_id')));
+});
 test('snapshot only records actual JST final day, never backfills on next month first', async () => {
   const f = fixture();
   assert.equal((await f.service.snapshotTutors(now)).captured, 0);

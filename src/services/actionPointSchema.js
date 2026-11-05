@@ -14,7 +14,12 @@ export const ACTION_POINT_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS action_point_x_cache (
     username VARCHAR(15) PRIMARY KEY, x_user_id TEXT,
     last_attempt_at TIMESTAMPTZ, last_checked_at TIMESTAMPTZ,
-    last_post_at TIMESTAMPTZ, last_inactive BOOLEAN);`;
+    last_post_at TIMESTAMPTZ, last_inactive BOOLEAN);
+  CREATE TABLE IF NOT EXISTS action_point_monthly_snapshots (
+    student_id TEXT NOT NULL, year_month VARCHAR(7) NOT NULL,
+    student_name TEXT, status TEXT, contract_plan TEXT, homeroom_tutor TEXT,
+    payload JSONB NOT NULL, evaluated_at TIMESTAMPTZ, saved_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY(student_id, year_month));`;
 
 export function createActionPointSchemaInitializer(db = query) {
   let pending;
@@ -23,7 +28,8 @@ export function createActionPointSchemaInitializer(db = query) {
       pending = Promise.resolve().then(async () => {
         const result = await db(`SELECT to_regclass('public.action_point_results') IS NOT NULL
           AND to_regclass('public.action_point_tutor_snapshots') IS NOT NULL
-          AND to_regclass('public.action_point_x_cache') IS NOT NULL AS ready`);
+          AND to_regclass('public.action_point_x_cache') IS NOT NULL
+          AND to_regclass('public.action_point_monthly_snapshots') IS NOT NULL AS ready`);
         if (!result.rows[0]?.ready) await db(ACTION_POINT_SCHEMA_SQL);
       }).catch(() => {
         pending = undefined;

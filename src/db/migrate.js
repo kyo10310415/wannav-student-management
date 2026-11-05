@@ -1798,6 +1798,16 @@ const migrations = [
       last_attempt_at TIMESTAMPTZ, last_checked_at TIMESTAMPTZ,
       last_post_at TIMESTAMPTZ, last_inactive BOOLEAN);`,
     down: `DROP TABLE IF EXISTS action_point_results; DROP TABLE IF EXISTS action_point_tutor_snapshots; DROP TABLE IF EXISTS action_point_x_cache;`
+  },
+  {
+    version: 61,
+    name: 'action_point_monthly_snapshots',
+    up: `CREATE TABLE IF NOT EXISTS action_point_monthly_snapshots (
+      student_id TEXT NOT NULL, year_month VARCHAR(7) NOT NULL,
+      student_name TEXT, status TEXT, contract_plan TEXT, homeroom_tutor TEXT,
+      payload JSONB NOT NULL, evaluated_at TIMESTAMPTZ, saved_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY(student_id, year_month));`,
+    down: `DROP TABLE IF EXISTS action_point_monthly_snapshots;`
   }
 ];
 
