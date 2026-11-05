@@ -16,6 +16,7 @@ async function fixture(query, role = 'crew') {
     query: async (...args) => { queries.push(args); return query(...args); },
     console: Object.fromEntries(['log', 'error'].map(level => [level, (...args) => logs.push(inspect(args))])) };
   const source = (await readFile(new URL('../src/routes/lessonReports.js', import.meta.url), 'utf8'))
+    .replace("import { ensureAutoLessonReportSchema } from '../services/autoLessonReportSchema.js';", 'const ensureAutoLessonReportSchema = async () => {};')
     .replace("import { Hono } from 'hono';", 'const { Hono } = deps;')
     .replace("import { query } from '../db/connection.js';", 'const { query } = deps;')
     .replace(/import \{\s*formatLessonLabel,\s*resolveLessonReference\s*\} from '..\/services\/lessonReferenceService.js';/, 'const { formatLessonLabel, resolveLessonReference } = deps;');
@@ -91,7 +92,8 @@ test('successful report deletion retains returned row and SQL without identifyin
   const f = await fixture(async () => ({ rows: [report] }));
   const response = await f.app.request('/' + marker, { method: 'DELETE' });
   assert.deepEqual(await response.json(), { success: true, data: report });
-  assert.equal(f.queries[0][0], 'DELETE FROM lesson_reports WHERE id = $1 RETURNING *');
+  assert.match(f.queries[0][0], /DELETE FROM lesson_reports WHERE id = \$1 RETURNING \*/);
+  assert.match(f.queries[0][0], /status='suppressed'/);
   assert.deepEqual(f.queries[0][1], [marker]);
   safe(f);
 });

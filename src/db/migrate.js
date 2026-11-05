@@ -1808,6 +1808,18 @@ const migrations = [
       payload JSONB NOT NULL, evaluated_at TIMESTAMPTZ, saved_at TIMESTAMPTZ NOT NULL,
       PRIMARY KEY(student_id, year_month));`,
     down: `DROP TABLE IF EXISTS action_point_monthly_snapshots;`
+  },
+  {
+    version: 62,
+    name: 'automatic_lesson_reports',
+    up: `ALTER TABLE lesson_reports ADD COLUMN IF NOT EXISTS report_origin TEXT NOT NULL DEFAULT 'manual';
+      ALTER TABLE lesson_reports ADD COLUMN IF NOT EXISTS auto_evidence_file_id TEXT;
+      ALTER TABLE lesson_reports ADD COLUMN IF NOT EXISTS auto_evidence JSONB;
+      CREATE TABLE IF NOT EXISTS auto_lesson_report_state (id INTEGER PRIMARY KEY CHECK(id=1),start_date DATE NOT NULL);
+      CREATE TABLE IF NOT EXISTS auto_lesson_report_checks (
+      student_id TEXT NOT NULL,lesson_date DATE NOT NULL,status TEXT NOT NULL,source_hash TEXT,
+      next_check_at TIMESTAMPTZ,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(student_id,lesson_date));`,
+    down: `DROP TABLE IF EXISTS auto_lesson_report_checks; DROP TABLE IF EXISTS auto_lesson_report_state;`
   }
 ];
 

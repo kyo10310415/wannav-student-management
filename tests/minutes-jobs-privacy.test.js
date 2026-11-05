@@ -25,6 +25,7 @@ async function autoFixture({ candidates = [candidate()], existing = [], fail, mi
       if (sql.includes('FROM lesson_contents')) { errorAt('contents'); return { rows: [{ lesson_number: 3, title: 'today', content: marker }, { lesson_number: 4, title: 'next', content: marker }] }; }
       errorAt('write'); return { rows: [] };
     }, fetchTranscript: async (...args) => { transcripts.push(args); errorAt('transcript'); return missingTranscript ? null : { transcript: marker, fileId: marker, fileName: marker }; },
+    fetchAutoReportTranscript: async (...args) => { transcripts.push(args); errorAt('transcript'); return missingTranscript ? null : { transcript: marker, fileId: marker, fileName: marker, fileDate: '2026-10-26' }; },
     buildMinutesResult: async input => { builds.push(input); errorAt('build'); return { generatedText: marker, qualityEvaluation: qualityPending ? null : { verified: true }, qualityEvaluationError: qualityPending ? rawError() : null }; },
     evaluateLessonQuality: async (...args) => { evaluations.push(args); errorAt('evaluate'); return { verified: true }; },
     isVerifiedMinutesQualityEvaluation: value => Boolean(value?.verified),
@@ -133,4 +134,14 @@ test('backfill rejected jobs and failed summaries conceal raw errors in logs and
     safe(state); safe(f.logs);
     if (!reject) assert.equal(state.summary.busy, true);
   }
+});
+
+test('automatic completed report with unknown lesson number still generates minutes from exact evidence source', async () => {
+  const f = await autoFixture({ candidates: [{ ...candidate(), lesson_number: '未確認', report_origin: 'auto', report_evidence_file_id: marker }] });
+  const result = await f.module.minutesAutoGenerate(options);
+  assert.equal(result.generated, 1); assert.equal(f.builds[0].lessonNumber, null);
+  assert.equal(f.queries.find(q => q.sql.includes('INSERT INTO minutes')).params[3], null);
+  const mismatched = await autoFixture({ candidates: [{ ...candidate(), lesson_number: '未確認', report_origin: 'auto', report_evidence_file_id: 'different-file' }] });
+  const skipped = await mismatched.module.minutesAutoGenerate(options);
+  assert.equal(skipped.generated, 0); assert.equal(skipped.skipped, 1);
 });

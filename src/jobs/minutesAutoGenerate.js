@@ -11,6 +11,7 @@
  */
 
 import { query } from '../db/connection.js';
+import { fetchAutoReportTranscript } from '../services/driveService.js';
 import { fetchTranscript } from '../services/driveService.js';
 import { buildMinutesResult, evaluateLessonQuality } from '../services/minutesService.js';
 import { isVerifiedMinutesQualityEvaluation } from '../services/minutesQualityService.js';
@@ -87,7 +88,9 @@ async function runMinutesAutoGenerate(options) {
               l.lesson_date::date::text           AS lesson_date,
               lr.lesson_number,
               lr.pro_curriculum,
-              lr.pro_text_number
+              lr.pro_text_number,
+              to_jsonb(lr)->>'report_origin' AS report_origin,
+              to_jsonb(lr)->>'auto_evidence_file_id' AS report_evidence_file_id
          FROM lessons l
          LEFT JOIN students s ON s.student_id = l.student_id
          JOIN lesson_reports lr
@@ -195,7 +198,7 @@ async function runMinutesAutoGenerate(options) {
       lesson_date,
       lesson_number,
       pro_curriculum,
-      pro_text_number
+      pro_text_number, report_origin, report_evidence_file_id
     } = target;
     const tag = `[MinutesAutoGen][${student_id}][${lesson_date}]`;
 
@@ -236,22 +239,22 @@ async function runMinutesAutoGenerate(options) {
         pro_curriculum,
         pro_text_number
       });
-      if (!lessonReference) {
+      if (!lessonReference && report_origin !== 'auto') {
         console.warn("[MinutesJob] Lesson reference unresolved; skipped");
         skipCount++;
         continue;
       }
 
       // Drive から文字起こし取得
-      const driveResult = await fetchTranscript(student_id, lesson_date);
-      if (!driveResult || !driveResult.transcript) {
+      const driveResult = report_origin === 'auto' ? await fetchAutoReportTranscript(student_id, lesson_date) : await fetchTranscript(student_id, lesson_date);
+      if (!driveResult || !driveResult.transcript || (report_origin === 'auto' && driveResult.fileId !== report_evidence_file_id)) {
         console.log("[MinutesJob] Transcript unavailable; skipped");
         skipCount++;
         continue;
       }
 
-      const todayRow = getLessonContent(lessonContentsIndex, lessonReference.lessonKey);
-      const nextRow = getLessonContent(lessonContentsIndex, lessonReference.nextLessonKey);
+      const todayRow = getLessonContent(lessonContentsIndex, lessonReference?.lessonKey);
+      const nextRow = getLessonContent(lessonContentsIndex, lessonReference?.nextLessonKey);
       const todayContent = todayRow ? `${todayRow.title}\n${todayRow.content}`.trim() : '';
       const nextContent = nextRow ? `${nextRow.title}\n${nextRow.content}`.trim() : '';
 
@@ -266,8 +269,8 @@ async function runMinutesAutoGenerate(options) {
         studentName:  student_name || student_id,
         studentId:    student_id,
         lessonDate:   lesson_date,
-        lessonNumber: lessonReference.lessonKey,
-        lessonLabel:  lessonReference.lessonLabel,
+        lessonNumber: lessonReference?.lessonKey ?? null,
+        lessonLabel:  lessonReference?.lessonLabel,
         todayContent,
         nextContent,
         transcript:   driveResult.transcript,
@@ -298,7 +301,7 @@ async function runMinutesAutoGenerate(options) {
           student_id,
           student_name || student_id,
           lesson_date,
-          lessonReference.lessonKey,
+          lessonReference?.lessonKey ?? null,
           driveResult.fileId,
           driveResult.fileName,
           driveResult.transcript,

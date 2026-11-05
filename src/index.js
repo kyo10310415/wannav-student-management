@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { autoLessonReport } from './jobs/autoLessonReport.js';
 import { snapshotMonthlyActionPoints } from './services/actionPointHistoryService.js';
 import { snapshotActionPointTutors } from './services/actionPointService.js';
 import { serve } from '@hono/node-server';
@@ -434,6 +435,12 @@ cron.schedule('0 14 * * *', async () => {
 }, {
   timezone: 'Asia/Tokyo'
 });
+
+// Independent from minutes generation: a slow proof check must not delay existing jobs.
+cron.schedule('10 * * * *', async () => {
+  try { await autoLessonReport(); }
+  catch { console.error('[AutoLessonReport] Hourly check failed'); }
+}, { timezone: 'Asia/Tokyo' });
 
 // Schedule minutes auto-generation (runs every hour)
 // Generates minutes for today's/yesterday's lessons that don't have minutes yet

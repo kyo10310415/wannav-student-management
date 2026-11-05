@@ -308,3 +308,33 @@ export async function fetchTranscript(studentId, lessonDateStr, parentFolderId) 
     throw new Error('Google Drive transcript lookup failed');
   }
 }
+
+/** Auto reporting must never borrow yesterday's transcript or a summary tab. */
+export async function fetchAutoReportTranscript(studentId, lessonDateStr, clients = {}) {
+  const auth = clients.drive && clients.docs ? null : getAuthClient();
+  const drive = clients.drive || google.drive({ version: 'v3', auth });
+  const docs = clients.docs || google.docs({ version: 'v1', auth });
+  const parent = process.env.LESSON_DRIVE_FOLDER_ID || '18YfaP1CrW5Lq_sAeVAR56tIRZR3GwMDS';
+  try {
+    const folders = await drive.files.list({
+      q: `'${escapeDriveQueryValue(parent)}' in parents and mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(studentId)}' and trashed = false`,
+      fields: 'files(id,name),nextPageToken', pageSize: 100
+    });
+    if (folders.data.nextPageToken || folders.data.files?.length !== 1) return null;
+    const listed = await drive.files.list({ q: `'${escapeDriveQueryValue(folders.data.files[0].id)}' in parents and mimeType = 'application/vnd.google-apps.document' and trashed = false`,
+      fields: 'files(id,name),nextPageToken', pageSize: 200, orderBy: 'createdTime desc' });
+    if (listed.data.nextPageToken) return null;
+    const matches = (listed.data.files || []).filter(file => {
+      const match = file.name?.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+      return match && `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}` === lessonDateStr;
+    });
+    if (matches.length !== 1) return null;
+    const file = matches[0];
+    const document = await docs.documents.get({ documentId: file.id, includeTabsContent: true });
+    const tabs = flattenTabs(document.data.tabs || []).filter(tab => /文字起こし|transcript/i.test(tab.tabProperties?.title || ''));
+    if (!tabs.length) return null;
+    const transcript = tabs.map(tab => extractTextFromBody(tab.documentTab?.body || {})).join('\n').trim();
+    if (!transcript) return null;
+    return { transcript, fileId: file.id, fileName: file.name, fileDate: lessonDateStr };
+  } catch { throw new Error('Automatic lesson transcript lookup failed'); }
+}

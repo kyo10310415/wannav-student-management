@@ -142,16 +142,20 @@ async function sendLessonReportReminder() {
       
       // PRIORITY 1: Check if lesson report exists in DATABASE
       let hasReport = false;
+      let needsLessonReference = false;
       
       try {
         const dbReportResult = await query(
-          `SELECT id FROM lesson_reports 
+          `SELECT id,lesson_number,to_jsonb(lesson_reports)->>'report_origin' AS report_origin FROM lesson_reports
            WHERE student_id = $1 AND lesson_date = $2 
            LIMIT 1`,
           [lesson.student_id, yesterdayStr]
         );
         
         if (dbReportResult.rows.length > 0) {
+          const saved = dbReportResult.rows[0];
+          needsLessonReference = saved.report_origin === 'auto' && saved.lesson_number === '未確認';
+          lesson.needs_lesson_reference = needsLessonReference;
           hasReport = true;
           console.log('[Lesson Report Reminder] Report found in database');
         }
@@ -182,7 +186,7 @@ async function sendLessonReportReminder() {
       }
       
       // If NO report exists in EITHER source, send reminder
-      if (!hasReport) {
+      if (!hasReport || needsLessonReference) {
         console.log('[Lesson Report Reminder] Report missing, sending reminder');
         
         // Get tutor user
@@ -256,8 +260,8 @@ async function sendDiscordReminder(webhookUrl, userId, lesson, recipientType) {
     const formattedDate = formatDate(lesson.lesson_date);
     
     const embed = {
-      title: `${roleLabel}レッスン報告未提出のお知らせ`,
-      description: `レッスン報告が提出されていないようです。提出をお願いします！`,
+      title: `${roleLabel}${lesson.needs_lesson_reference ? 'レッスン番号の確認依頼' : 'レッスン報告未提出のお知らせ'}`,
+      description: lesson.needs_lesson_reference ? '実施済みの自動報告は登録されています。今回使用した教材・レッスン番号を確認し、手動報告で確定してください。' : 'レッスン報告が提出されていないようです。提出をお願いします！',
       color: 0xFF6B6B, // Red color
       fields: [
         {

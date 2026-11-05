@@ -14,7 +14,8 @@ async function fixture(role='crew') {
     state.queries.push({sql,params});return {rows:sql.includes('COUNT(*)')?[{total:'1'}]:[report]};
   }};
   let source=await readFile(new URL('../src/routes/lessonReports.js',import.meta.url),'utf8');
-  source=source.replace("import { Hono } from 'hono';",'const {Hono}=deps;')
+  source=source.replace("import { ensureAutoLessonReportSchema } from '../services/autoLessonReportSchema.js';", 'const ensureAutoLessonReportSchema = async () => {};')
+    .replace("import { Hono } from 'hono';",'const {Hono}=deps;')
     .replace("import { query } from '../db/connection.js';",'const {query}=deps;')
     .replace(/import \{\s*formatLessonLabel,\s*resolveLessonReference\s*\} from '..\/services\/lessonReferenceService.js';/,'const {formatLessonLabel,resolveLessonReference}=deps;');
   const key='reportInputBoundary'+sequence++;globalThis[key]=deps;
