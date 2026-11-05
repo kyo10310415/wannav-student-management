@@ -13781,6 +13781,91 @@ let reportFilters = {
 };
 let reportCurrentPage = 0;
 const reportPageSize = 50;
+let reportCsvExportRunning = false;
+
+function lessonReportCsvCell(value) {
+  let text = String(value ?? '');
+  // Quoting alone does not stop spreadsheet formula execution.
+  if (/^[\s\uFEFF]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function lessonReportCsvLine(report) {
+  const timestamp = report.reported_at ? new Date(report.reported_at) : null;
+  const reportedAt = timestamp && Number.isFinite(timestamp.getTime())
+    ? timestamp.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false }) : '';
+  return [report.lesson_date, report.student_id, report.student_name, report.tutor_name,
+    report.lesson_result, report.lesson_number, report.pro_curriculum, report.pro_text_number,
+    report.reported_by, reportedAt].map(lessonReportCsvCell).join(',') + '\r\n';
+}
+
+async function exportLessonReportsCsv(button) {
+  if (reportCsvExportRunning || !sessionToken || !currentUser ||
+      !['admin', 'leader'].includes(currentUser.role) || currentPage !== 'lesson-reports') return;
+  const filters = { ...reportFilters };
+  const originalText = button.textContent;
+  let downloadUrl;
+  reportCsvExportRunning = true;
+  button.disabled = true;
+  button.textContent = 'CSVを作成中...';
+  try {
+    const parts = ['\uFEFF', ['レッスン日', '学籍番号', '生徒名', '担当Tutor', 'レッスン結果',
+      'レッスン番号', 'PROカリキュラム', 'PROテキスト番号', '報告者', '報告日時（日本時間）']
+      .map(lessonReportCsvCell).join(',') + '\r\n'];
+    let offset = 0;
+    let total;
+    const seen = new Set();
+    do {
+      const params = new URLSearchParams({ limit: 500, offset });
+      for (const key of ['start_date', 'end_date', 'student_id', 'tutor_name', 'lesson_result']) {
+        if (filters[key]) params.append(key, filters[key]);
+      }
+      const response = await axios.get(`${API_BASE}/api/lesson-reports?${params.toString()}`);
+      const data = response.data;
+      if (!data?.success || !Array.isArray(data.data) || !Number.isSafeInteger(data.total) || data.total < 0) {
+        throw new Error('レッスン報告を取得できませんでした。再度お試しください。');
+      }
+      if (data.total > 50000) throw new Error('出力対象が50,000件を超えています。期間などを絞り込んでください。');
+      if (total !== undefined && total !== data.total) throw new Error('出力中に報告件数が変わりました。再度お試しください。');
+      total = data.total;
+      if (data.data.length > 500 || (data.data.length === 0 && offset < total)) {
+        throw new Error('全件を取得できませんでした。再度お試しください。');
+      }
+      for (const report of data.data) {
+        if (seen.has(report.id)) throw new Error('出力中に報告一覧が変わりました。再度お試しください。');
+        seen.add(report.id);
+        parts.push(lessonReportCsvLine(report));
+      }
+      offset += data.data.length;
+      if (offset > total) throw new Error('出力中に報告一覧が変わりました。再度お試しください。');
+      button.textContent = `CSVを作成中... ${offset}/${total}件`;
+    } while (offset < total);
+    if (total === 0) {
+      showNotification('出力対象のレッスン報告がありません', 'info');
+      return;
+    }
+    const blob = new Blob(parts, { type: 'text/csv;charset=utf-8;' });
+    downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    const date = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+    link.download = `lesson_reports_${date}.csv`;
+    document.body.appendChild(link);
+    try { link.click(); } finally { link.remove(); }
+    showNotification(`CSV出力完了: ${total}件`, 'success');
+  } catch (error) {
+    // Never expose Axios response bodies, headers or personal data in logs/UI.
+    const message = error.response || error.request
+      ? 'CSV出力に失敗しました。権限・通信状態を確認し、再度お試しください。'
+      : error.message;
+    showNotification(message, 'error');
+  } finally {
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    button.disabled = false;
+    button.textContent = originalText;
+    reportCsvExportRunning = false;
+  }
+}
 
 async function renderLessonReportsPage() {
   document.getElementById('loading').classList.add('hidden');
@@ -13865,6 +13950,10 @@ async function renderLessonReportsPage() {
         
         <!-- クイックフィルター -->
         <div class="flex gap-2 flex-wrap">
+          <button data-report-read-action="export-csv"
+            class="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition disabled:opacity-50">
+            CSVエクスポート（絞り込み全件）
+          </button>
           <button data-report-read-action="quick-filter" data-report-period="today"
             class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition">
             今日

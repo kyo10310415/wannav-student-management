@@ -20,8 +20,8 @@ function fixture(date='2026-10-28T12:00:00') {
   const stub=()=>{context.searchLessonReports=(...args)=>calls.push(['search',...args]);context.setQuickFilter=period=>calls.push(['quick',period]);context.clearReportFilters=()=>calls.push(['clear'])};
   return {context,elements,calls,requests,listeners,element,node,click,stub,run:code=>vm.runInContext(code,context)};
 }
-test('report read markup migrates exactly seven controls and preserves existing input listeners',()=>{
-  assert.equal((reportSource.match(/data-report-read-action=/g)||[]).length,7);
+test('report read markup uses eight delegated controls and preserves existing input listeners',()=>{
+  assert.equal((reportSource.match(/data-report-read-action=/g)||[]).length,8);
   assert.equal(/onclick="(?:searchLessonReports|setQuickFilter|clearReportFilters)/.test(reportSource),false);
   assert.equal((reportSource.match(/\.addEventListener\('(change|input)'/g)||[]).length,5);
   assert.ok(appSource.includes('data-report-prepare-action="open"'));

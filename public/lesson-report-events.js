@@ -4,6 +4,7 @@ function handleLessonReportReadClick(event) {
   if (!button || button.disabled || !document.getElementById('content')?.contains(button)) return;
   if (!sessionToken || !currentUser || !['admin', 'leader'].includes(currentUser.role) || currentPage !== 'lesson-reports') return;
   switch (button.dataset.reportReadAction) {
+    case 'export-csv': return exportLessonReportsCsv(button);
     case 'search': return searchLessonReports();
     case 'quick-filter':
       if (['today', 'week', 'month'].includes(button.dataset.reportPeriod)) return setQuickFilter(button.dataset.reportPeriod);
