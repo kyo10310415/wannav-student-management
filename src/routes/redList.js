@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { ensureActionPointSchema } from '../services/actionPointSchema.js';
 import { calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists, getActionPointJobStatus } from '../services/actionPointService.js';
 import { query } from '../db/connection.js';
 import { sendDiscordMessage, getStudentDiscordInfo } from '../services/discordService.js';
@@ -151,6 +152,7 @@ app.get('/history', async (c) => {
       return c.json({ success: false, error: 'yearMonth is required' }, 400);
     }
     if (!validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
+    if (typeof ensureActionPointSchema === 'function') await ensureActionPointSchema();
     const result = await query(
       `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor, ap.payload AS action_points
        FROM red_list_history rlh

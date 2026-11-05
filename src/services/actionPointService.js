@@ -3,6 +3,7 @@ import { fetchSatisfactionFromCache } from './cacheService.js';
 import { fetchStudentBroadcastInfo, getSheets } from './sheetsService.js';
 import { ACTION_RULES, actionMonth, actionPeriods, summarizeActionPoints } from './actionPointRules.js';
 import { readLearningActivity, readActionConversation, evaluateActionConversation, readSocialActivity } from './actionPointSources.js';
+import { ensureActionPointSchema } from './actionPointSchema.js';
 
 const normalize = value => String(value || '').trim().toUpperCase();
 const monthOf = value => String(value || '').replace(/\//g, '-').replace(/^(\d{4})-(\d)$/, '$1-0$2');
@@ -12,6 +13,7 @@ let job = { running: false, result: null };
 
 export function createActionPointService(deps = {}) {
   const db = deps.query || query;
+  const ensureSchema = deps.ensureSchema || (deps.query ? async () => {} : ensureActionPointSchema);
   const learning = deps.learning || readLearningActivity;
   const conversation = deps.conversation || readActionConversation;
   const grade = deps.grade || evaluateActionConversation;
@@ -33,6 +35,7 @@ export function createActionPointService(deps = {}) {
     // A missing month-end is left missing. Never backfill it with next month's assignment.
     const tomorrow = actionMonth(new Date(now.getTime() + 86400000));
     if (tomorrow === actionMonth(now)) return { captured: 0 };
+    await ensureSchema();
     const result = await db(`INSERT INTO action_point_tutor_snapshots (year_month, student_id, tutor_name, captured_at)
       SELECT $1, student_id, NULLIF(TRIM(homeroom_tutor), ''), $2 FROM students
       ON CONFLICT (year_month, student_id) DO UPDATE SET tutor_name = EXCLUDED.tutor_name, captured_at = EXCLUDED.captured_at`, [actionMonth(now), now]);
@@ -43,6 +46,7 @@ export function createActionPointService(deps = {}) {
     const p = actionPeriods(now);
     // Rolling chat/video windows are only meaningful for the current month.
     if (yearMonth && yearMonth !== p.month) throw new Error('Only the current month can be recalculated');
+    await ensureSchema();
     const students = (await db("SELECT student_id, homeroom_tutor, lesson_start_date, x_account_id, youtube_channel_id FROM students WHERE status = 'アクティブ' AND ($1::text IS NULL OR student_id=$1) ORDER BY student_id", [onlyStudent])).rows;
     const reports = (await db(`SELECT student_id,
       COUNT(*) FILTER (WHERE lesson_date >= $2 AND lesson_result = '無断キャンセル')::int AS absence,
@@ -151,6 +155,7 @@ export function createActionPointService(deps = {}) {
   }
 
   async function getAll(yearMonth = actionMonth()) {
+    await ensureSchema();
     const { rows } = await db(`SELECT r.*, s.student_id, s.name AS student_name, s.homeroom_tutor,
       a.year_month, a.payload AS action_points, a.updated_at AS action_evaluated_at
       FROM students s LEFT JOIN action_point_results a ON a.student_id=s.student_id AND a.year_month=$1

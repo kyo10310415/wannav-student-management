@@ -1,11 +1,13 @@
 import axios from 'axios';
 import { query } from '../db/connection.js';
+import { ensureActionPointSchema } from './actionPointSchema.js';
 
 const WEEK = 7 * 86400000;
-export function createXActivityReader({ db = query, get = (...args) => axios.get(...args), token = () => process.env.X_BEARER_TOKEN } = {}) {
+export function createXActivityReader({ db = query, get = (...args) => axios.get(...args), token = () => process.env.X_BEARER_TOKEN, ensureSchema = db === query ? ensureActionPointSchema : async () => {} } = {}) {
   return async function readXActivity(account, periods, now) {
     const username = String(account || '').trim().replace(/^@/, '').toLowerCase();
     if (!/^[a-z0-9_]{1,15}$/.test(username) || !token()) return null;
+    await ensureSchema();
     const cached = (await db('SELECT * FROM action_point_x_cache WHERE username=$1', [username])).rows[0];
     const result = row => row?.last_checked_at && typeof row.last_inactive === 'boolean'
       ? { inactive: row.last_inactive, checkedAt: row.last_checked_at, lastPostAt: row.last_post_at } : null;
