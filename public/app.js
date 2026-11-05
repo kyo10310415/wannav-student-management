@@ -14134,7 +14134,7 @@ function renderLessonReportRow(report) {
       <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${escapeHtml(report.tutor_name || '-')}</td>
       <td class="px-4 py-3 whitespace-nowrap text-sm">
         <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${lessonResultClass}">
-          ${escapeHtml(report.lesson_result)}
+          ${escapeHtml(report.lesson_result)}${report.report_origin === 'auto' ? ' <span class="text-xs">（自動報告）</span>' : ''}
         </span>
       </td>
       <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${escapeHtml(report.lesson_number)}</td>

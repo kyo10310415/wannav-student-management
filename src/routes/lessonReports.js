@@ -1,3 +1,4 @@
+import { ensureAutoLessonReportSchema } from '../services/autoLessonReportSchema.js';
 import { Hono } from 'hono';
 import { query } from '../db/connection.js';
 import {
@@ -68,6 +69,7 @@ app.post('/', async (c) => {
       }
     }
 
+    await ensureAutoLessonReportSchema();
     // UPSERT（存在すれば更新、なければ挿入）
     const result = await query(
       `INSERT INTO lesson_reports 
@@ -81,6 +83,7 @@ app.post('/', async (c) => {
         pro_text_number = EXCLUDED.pro_text_number,
         reported_by = EXCLUDED.reported_by,
         tutor_name = EXCLUDED.tutor_name,
+        report_origin = 'manual',
         updated_at = CURRENT_TIMESTAMP
       RETURNING *`,
       [
@@ -109,6 +112,8 @@ app.post('/', async (c) => {
                       '- レッスン番号: （未確認）回目',
                       '- レッスン番号: ' || $2
                     )
+                  WHEN generated_text LIKE '%- レッスン番号: （未確認）%'
+                    THEN REPLACE(generated_text, '- レッスン番号: （未確認）', '- レッスン番号: ' || $2)
                   ELSE generated_text
                 END,
                 updated_at = CURRENT_TIMESTAMP
@@ -338,8 +343,14 @@ app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
 
+    await ensureAutoLessonReportSchema();
     const result = await query(
-      'DELETE FROM lesson_reports WHERE id = $1 RETURNING *',
+      `WITH deleted AS (DELETE FROM lesson_reports WHERE id = $1 RETURNING *),
+       suppressed AS (INSERT INTO auto_lesson_report_checks (student_id,lesson_date,status,next_check_at)
+         SELECT student_id,lesson_date,'suppressed',NULL FROM deleted
+         ON CONFLICT (student_id,lesson_date) DO UPDATE SET status='suppressed',next_check_at=NULL,updated_at=NOW()
+         RETURNING student_id)
+       SELECT * FROM deleted`,
       [id]
     );
 

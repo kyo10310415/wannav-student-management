@@ -27,7 +27,7 @@ async function fixture({ configured = true, empty = false, report = false, dbRep
     setTimeout: (resolve, delay) => { waits.push(delay); resolve(); },
     query: async (sql, params) => {
       queries.push({ sql, params }); if (queryFail) throw failure();
-      if (sql.includes('SELECT id FROM lesson_reports')) { if (dbReportFail) throw failure(); return { rows: report ? [{ id: 1 }] : [] }; }
+      if (sql.includes('AS report_origin FROM lesson_reports')) { if (dbReportFail) throw failure(); return { rows: report ? [typeof report === 'object' ? report : { id: 1 }] : [] }; }
       if (sql.includes('FROM lessons l')) return { rows: empty ? [] : [lesson] };
       if (sql.includes('FROM tutors t')) return { rows: [tutor] };
       if (sql.includes("u.role IN ('admin', 'leader')")) return { rows: [leader, tutor, { ...leader, team: marker + '-other' }] };
@@ -128,4 +128,12 @@ test('API failures expose only fixed errors while trigger success contract remai
   const success = await fixture({ empty: true });
   assert.deepEqual(await (await success.app.request('/trigger', { method: 'POST' })).json(),
     { success: true, message: 'Lesson report reminder job executed successfully' }); safe(success);
+});
+
+test('auto completed reports with unknown curriculum ask for lesson number instead of saying unsubmitted', async () => {
+  const f = await fixture({ report: { id: 1, report_origin: 'auto', lesson_number: '未確認' } });
+  await f.run();
+  assert.ok(f.posts.length > 0);
+  assert.ok(f.posts.every(post => post.body.embeds[0].title.includes('番号の確認')));
+  assert.ok(f.posts.every(post => post.body.embeds[0].description.includes('自動報告は登録')));
 });

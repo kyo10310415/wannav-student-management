@@ -7,7 +7,7 @@ const marker = 'SYNTHETIC_SCHEDULE_PRIVATE';
 async function fixture({ fail = false, disabled = false, monthEnd = true } = {}) {
   const schedules = [], calls = [], logs = [];
   const provider = name => async (...args) => { calls.push({ name, args }); if (fail) throw Object.assign(new Error(marker), { code: marker, response: { data: marker } }); return { message: marker, rowCount: 2, privateData: marker }; };
-  const names = ['sendDailyReminders','sendDailyStatsReport','checkAndExecuteSchedules','checkStampRallyAchievements','sendLessonReportReminder','sendSurveyReminderNotifications','dailyRedListUpdate','monthlyRedListReset','weeklyTutorSnapshot','monthlyTutorSnapshot','monthlyFunnelSnapshot','sendDailyReportReminder','minutesAutoGenerate','monthlyTutorSatisfactionExport','recoverPendingBroadcastJobs','snapshotActionPointTutors','snapshotMonthlyActionPoints'];
+  const names = ['sendDailyReminders','sendDailyStatsReport','checkAndExecuteSchedules','checkStampRallyAchievements','sendLessonReportReminder','sendSurveyReminderNotifications','dailyRedListUpdate','monthlyRedListReset','weeklyTutorSnapshot','monthlyTutorSnapshot','monthlyFunnelSnapshot','sendDailyReportReminder','minutesAutoGenerate','monthlyTutorSatisfactionExport','recoverPendingBroadcastJobs','snapshotActionPointTutors','snapshotMonthlyActionPoints','autoLessonReport'];
   const deps = Object.fromEntries(names.map(name => [name, provider(name)]));
   deps.internalFetch = async (...args) => { const result = await provider('internalFetch')(...args); return { json: async () => result }; };
   const imports = { './jobs/vqDiagnosisChecker.js': { default: provider('vqDiagnosisChecker') }, './db/connection.js': { query: provider('query') } };
@@ -22,7 +22,7 @@ async function fixture({ fail = false, disabled = false, monthEnd = true } = {})
 test('all scheduled job errors and initial recovery hide provider diagnostics', async () => {
   const f = await fixture({ fail: true });
   for (const job of f.schedules) await job.callback();
-  assert.equal(f.schedules.length, 20);
+  assert.equal(f.schedules.length, 21);
   assert.equal(f.logs.join('\n').includes(marker), false);
   assert.equal(f.calls.some(call => call.name === 'query'), true);
 });
@@ -37,7 +37,7 @@ test('successful scheduled jobs retain calls and Tokyo schedule configuration wi
 });
 test('disabled reminder settings retain registration behavior', async () => {
   const f = await fixture({ disabled: true });
-  assert.equal(f.schedules.length, 17);
+  assert.equal(f.schedules.length, 18);
   for (const job of f.schedules) await job.callback();
   for (const name of ['sendDailyReminders','sendDailyStatsReport','sendLessonReportReminder']) assert.equal(f.calls.some(call => call.name === name), false);
 });
