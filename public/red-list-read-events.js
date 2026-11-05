@@ -28,3 +28,13 @@ function handleRedListHistoryMonthChange(event) {
 }
 document.addEventListener('click', handleRedListReadClick);
 document.addEventListener('change', handleRedListHistoryMonthChange);
+
+function handleActionPointFilterChange(event) {
+  const select = event.target?.closest?.('select[data-action-point-filter]');
+  if (!select || select.disabled || !redListReadAllowed() || !document.getElementById('content')?.contains(select)) return;
+  if (!['action-point-status-filter', 'action-point-plan-filter'].includes(select.id) || !Array.from(select.options).some(option => option.value === select.value)) return;
+  if (currentRedListTab === 'current') renderRedListCurrentList();
+  else if (currentRedListTab === 'history') renderRedListHistoryList();
+  updateRedListStats();
+}
+document.addEventListener('change', handleActionPointFilterChange);

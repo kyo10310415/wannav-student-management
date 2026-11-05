@@ -15246,6 +15246,19 @@ async function renderRedListPage() {
     </div>
 
     <div id="action-point-job-status" class="text-sm text-gray-600 mb-4">全項目各1Pt。評価済み項目に対して60%以上：レッド／30%以上：イエロー／30%未満：グリーン。未取得・対象外は分母から除外。各生徒の詳細から基準・根拠を確認できます。</div>
+    <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-4">
+      <label class="text-sm text-gray-700">ステータス
+        <select id="action-point-status-filter" data-action-point-filter class="block border rounded px-3 py-2 mt-1">
+          <option value="アクティブ" selected>アクティブ</option><option value="all">すべて</option>
+        </select>
+      </label>
+      <label class="text-sm text-gray-700">契約プラン
+        <select id="action-point-plan-filter" data-action-point-filter class="block border rounded px-3 py-2 mt-1">
+          <option value="non-lifetime" selected>永久会員以外</option><option value="all">すべて</option>
+        </select>
+      </label>
+      <p class="text-xs text-gray-500 self-end">ステータス・契約プランは現在の登録情報で絞り込みます。評価対象はアクティブの生徒様です。</p>
+    </div>
     <!-- Tabs -->
     <div class="bg-white rounded-lg shadow-md mb-6">
       <div class="border-b border-gray-200">
@@ -15799,21 +15812,23 @@ async function updateRedListData() {
 function renderRedListCurrentList() {
   const container = document.getElementById('redlist-current-content');
   
-  if (currentRedListData.length === 0) {
+  populateActionPointFilters();
+  const visibleData = getFilteredActionPointData(currentRedListData);
+  if (visibleData.length === 0) {
     container.innerHTML = `
       <div class="text-center py-12">
         <i class="fas fa-check-circle text-6xl text-green-400 mb-4"></i>
         <p class="text-xl font-medium text-gray-600">該当する生徒はいません</p>
-        <p class="text-sm text-gray-500 mt-2">ランクがLOW以上の生徒がいません</p>
+        <p class="text-sm text-gray-500 mt-2">絞り込み条件に該当する生徒がいません</p>
       </div>
     `;
     return;
   }
   
   // Sort by total_score desc
-  currentRedListData.sort((a, b) => (b.action_points?.ratio ?? -1) - (a.action_points?.ratio ?? -1) || b.total_score - a.total_score);
+  visibleData.sort((a, b) => (b.action_points?.ratio ?? -1) - (a.action_points?.ratio ?? -1) || b.total_score - a.total_score);
   
-  container.innerHTML = currentRedListData.map(item => renderRedListStudentCard(item, false)).join('');
+  container.innerHTML = visibleData.map(item => renderRedListStudentCard(item, false)).join('');
 }
 
 function renderRedListStudentCard(item, isHistory) {
@@ -16074,7 +16089,7 @@ function renderRedListStudentCard(item, isHistory) {
 function updateRedListStats() {
   // 過去タブが選択中なら historyRedListData を、現在タブなら currentRedListData を使う
   const isHistory = currentRedListTab === 'history';
-  const data = isHistory ? historyRedListData : currentRedListData;
+  const data = getFilteredActionPointData(isHistory ? historyRedListData : currentRedListData);
   const rankField = isHistory ? 'final_rank' : 'rank';
   const exField   = isHistory ? 'final_ex_rank' : 'ex_rank';
 
@@ -16311,7 +16326,9 @@ async function loadRedListHistoryData() {
 function renderRedListHistoryList() {
   const container = document.getElementById('redlist-history-content');
   
-  if (historyRedListData.length === 0) {
+  populateActionPointFilters();
+  const visibleData = getFilteredActionPointData(historyRedListData);
+  if (visibleData.length === 0) {
     container.innerHTML = `
       <div class="text-center py-12">
         <i class="fas fa-check-circle text-6xl text-green-400 mb-4"></i>
@@ -16322,9 +16339,9 @@ function renderRedListHistoryList() {
     return;
   }
   
-  historyRedListData.sort((a, b) => b.final_score - a.final_score);
+  visibleData.sort((a, b) => b.final_score - a.final_score);
   
-  container.innerHTML = historyRedListData.map(item => renderRedListStudentCard(item, true)).join('');
+  container.innerHTML = visibleData.map(item => renderRedListStudentCard(item, true)).join('');
 }
 
 
@@ -16383,7 +16400,7 @@ function toggleRedListLogDetail(studentId, yearMonth) {
 function exportRedListCsv() {
   // 現在タブ or 過去タブのデータを使用
   const isHistory = currentRedListTab === 'history';
-  const data = isHistory ? historyRedListData : currentRedListData;
+  const data = getFilteredActionPointData(isHistory ? historyRedListData : currentRedListData);
 
   if (!data || data.length === 0) {
     showNotification('出力するデータがありません', 'error');
@@ -20299,4 +20316,26 @@ function renderActionPointSummary(result) {
   }).join('');
   return `<details class="text-xs text-left"><summary class="cursor-pointer rounded p-2 ${style.color}">${style.label} ${percent}（${esc(result.total)}Pt／評価済み${esc(result.evaluated)}項目） ▾</summary>
     <div class="bg-white text-gray-800 border rounded p-3 shadow max-h-96 overflow-auto min-w-64"><p>各項目1Pt。60%以上レッド／30%以上イエロー／30%未満グリーン。未取得・対象外は分母から除外。</p><p>評価日時：${esc(result.evaluated_at)}</p>${rows}</div></details>`;
+}
+
+function getFilteredActionPointData(data) {
+  const status = document.getElementById('action-point-status-filter')?.value || 'アクティブ';
+  const plan = document.getElementById('action-point-plan-filter')?.value || 'non-lifetime';
+  return data.filter(item => (status === 'all' || String(item.status || '').trim() === status) &&
+    (plan === 'all' || (plan === 'non-lifetime' ? String(item.contract_plan || '').trim() !== '永久会員' : String(item.contract_plan || '').trim() === plan)));
+}
+function populateActionPointFilters() {
+  const rows = [...currentRedListData, ...historyRedListData];
+  const statusSelect = document.getElementById('action-point-status-filter');
+  const planSelect = document.getElementById('action-point-plan-filter');
+  const esc = value => escapeHtml(String(value)).replace(/"/g, '&quot;');
+  const fill = (select, defaults, values, fallback) => {
+    if (!select) return;
+    const selected = select.value || fallback;
+    const options = [...defaults, ...[...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].sort().filter(value => !defaults.some(([key]) => key === value)).map(value => [value, value])];
+    select.innerHTML = options.map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+    select.value = options.some(([key]) => key === selected) ? selected : fallback;
+  };
+  fill(statusSelect, [['アクティブ', 'アクティブ'], ['all', 'すべて']], rows.map(row => row.status), 'アクティブ');
+  fill(planSelect, [['non-lifetime', '永久会員以外'], ['all', 'すべて']], rows.map(row => row.contract_plan), 'non-lifetime');
 }
