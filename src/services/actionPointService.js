@@ -48,6 +48,9 @@ export function createActionPointService(deps = {}) {
     if (yearMonth && yearMonth !== p.month) throw new Error('Only the current month can be recalculated');
     await ensureSchema();
     const students = (await db("SELECT student_id, homeroom_tutor, lesson_start_date, x_account_id, youtube_channel_id FROM students WHERE status = 'アクティブ' AND ($1::text IS NULL OR student_id=$1) ORDER BY student_id", [onlyStudent])).rows;
+    const progress = stage => deps.onProgress?.({ total: students.length, processed: updated + errors, stage });
+    let updated = 0, errors = 0;
+    progress('基礎データ取得');
     const reports = (await db(`SELECT student_id,
       COUNT(*) FILTER (WHERE lesson_date >= $2 AND lesson_result = '無断キャンセル')::int AS absence,
       COUNT(*) FILTER (WHERE lesson_date >= $2 AND lesson_result = '生徒様都合でリスケ')::int AS reschedule,
@@ -74,7 +77,6 @@ export function createActionPointService(deps = {}) {
       if (!old || !Number.isFinite(new Date(old.timestamp).getTime()) || new Date(answer.timestamp) >= new Date(old.timestamp)) answerMap.set(key, answer);
     }
     const useSet = new Set((uses || []).filter(row => Number.isFinite(new Date(row[0]).getTime()) && actionMonth(new Date(row[0])) === p.previous).map(row => normalize(row[14])));
-    let updated = 0, errors = 0;
     for (const student of students) {
       try {
         const id = normalize(student.student_id), report = reportMap.get(id) || { absence: 0, reschedule: 0, completed: 0 };
@@ -118,6 +120,7 @@ export function createActionPointService(deps = {}) {
           }
         } else {
           const info = peopleMap.get(id);
+          progress('Discord履歴取得');
           const messages = info && await safeRead(() => conversation(info, p.thirty, now));
           if (messages) {
             const own = messages.filter(m => m.authorId === info.discordId);
@@ -125,6 +128,7 @@ export function createActionPointService(deps = {}) {
             if (own.length < 2) {
               for (const key of ['chat_quality', 'dependency']) set(key, false, '本人の投稿が少なく判断材料不足', 'unknown');
             } else {
+              progress('AI判定');
               const evaluation = await safeRead(() => grade(messages, info.discordId));
               if (evaluation) for (const key of ['chat_quality', 'dependency']) {
                 const item = evaluation[key];
@@ -134,6 +138,7 @@ export function createActionPointService(deps = {}) {
           }
         }
         // X has an independent persistent weekly cache, also across month rollover.
+        progress('SNS確認');
         const activity = await safeRead(() => social(student, p, now, { xOnly: Boolean(fresh) }));
         if (!fresh && typeof activity?.youtube === 'boolean') set('youtube', activity.youtube, '公開動画の期間内実績で判定');
         if (typeof activity?.x === 'boolean') set('x', activity.x,
@@ -151,6 +156,7 @@ export function createActionPointService(deps = {}) {
         updated++;
       } catch { errors++; console.error('[Action Points] Student evaluation failed'); }
     }
+    progress('完了');
     return { updated, errors };
   }
 
@@ -169,7 +175,7 @@ export function createActionPointService(deps = {}) {
   return { updateAll, snapshotTutors, getAll };
 }
 
-const service = createActionPointService();
+const service = createActionPointService({ onProgress: progress => { job.progress = progress; } });
 export function updateAllRedLists(yearMonth = null, { background = false } = {}) {
   if (yearMonth && yearMonth !== actionMonth()) return Promise.reject(new Error('Only the current month can be recalculated'));
   if (!running) {

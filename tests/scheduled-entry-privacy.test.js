@@ -7,7 +7,7 @@ const marker = 'SYNTHETIC_SCHEDULE_PRIVATE';
 async function fixture({ fail = false, disabled = false, monthEnd = true } = {}) {
   const schedules = [], calls = [], logs = [];
   const provider = name => async (...args) => { calls.push({ name, args }); if (fail) throw Object.assign(new Error(marker), { code: marker, response: { data: marker } }); return { message: marker, rowCount: 2, privateData: marker }; };
-  const names = ['sendDailyReminders','sendDailyStatsReport','checkAndExecuteSchedules','checkStampRallyAchievements','sendLessonReportReminder','sendSurveyReminderNotifications','dailyRedListUpdate','monthlyRedListReset','weeklyTutorSnapshot','monthlyTutorSnapshot','monthlyFunnelSnapshot','sendDailyReportReminder','minutesAutoGenerate','monthlyTutorSatisfactionExport','recoverPendingBroadcastJobs','snapshotActionPointTutors'];
+  const names = ['sendDailyReminders','sendDailyStatsReport','checkAndExecuteSchedules','checkStampRallyAchievements','sendLessonReportReminder','sendSurveyReminderNotifications','dailyRedListUpdate','monthlyRedListReset','weeklyTutorSnapshot','monthlyTutorSnapshot','monthlyFunnelSnapshot','sendDailyReportReminder','minutesAutoGenerate','monthlyTutorSatisfactionExport','recoverPendingBroadcastJobs','snapshotActionPointTutors','snapshotMonthlyActionPoints'];
   const deps = Object.fromEntries(names.map(name => [name, provider(name)]));
   deps.internalFetch = async (...args) => { const result = await provider('internalFetch')(...args); return { json: async () => result }; };
   const imports = { './jobs/vqDiagnosisChecker.js': { default: provider('vqDiagnosisChecker') }, './db/connection.js': { query: provider('query') } };

@@ -22,7 +22,7 @@ function handleRedListReadClick(event) {
   }
 }
 function handleRedListHistoryMonthChange(event) {
-  const select = event.target?.closest?.('select[data-red-list-history-month]');
+  const select = event.target?.closest?.('select[data-red-list-history-month]') || event.target?.closest?.('input[data-red-list-history-month]');
   if (!select || select.disabled || !document.getElementById('content')?.contains(select) || !redListReadAllowed()) return;
   if (select.value === '' || /^\d{4}-(?:0[1-9]|1[0-2])$/.test(select.value)) return loadRedListHistoryData();
 }
@@ -38,3 +38,17 @@ function handleActionPointFilterChange(event) {
   updateRedListStats();
 }
 document.addEventListener('change', handleActionPointFilterChange);
+
+function handleActionPointTrendClick(event) {
+  const button = event.target?.closest?.('button[data-action-point-trend-student], button[data-action-point-trend-close]');
+  const root = document.getElementById('content');
+  if (!button || button.disabled || !root?.contains(button) || currentPage !== 'students' || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role)) return;
+  if (button.hasAttribute('data-action-point-trend-close')) {
+    document.getElementById('action-point-trend-modal')?.remove();
+    actionPointTrendGeneration++;
+    return;
+  }
+  const studentId = button.dataset.actionPointTrendStudent;
+  if (students.some(row => row.student_id === studentId)) return openStudentActionPointTrend(studentId);
+}
+document.addEventListener('click', handleActionPointTrendClick);

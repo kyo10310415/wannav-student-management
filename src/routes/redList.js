@@ -1,3 +1,4 @@
+import { getStudentActionPointHistory } from '../services/actionPointHistoryService.js';
 import { Hono } from 'hono';
 import { ensureActionPointSchema } from '../services/actionPointSchema.js';
 import { calculateRedListScore, updateRedList, updateAllRedLists, getRedList, getAllRedLists, getActionPointJobStatus } from '../services/actionPointService.js';
@@ -154,15 +155,30 @@ app.get('/history', async (c) => {
     if (!validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     if (typeof ensureActionPointSchema === 'function') await ensureActionPointSchema();
     const result = await query(
-      `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor, s.status, s.contract_plan, ap.payload AS action_points
-       FROM red_list_history rlh
-       LEFT JOIN students s ON rlh.student_id = s.student_id
-       LEFT JOIN action_point_results ap ON ap.student_id=rlh.student_id AND ap.year_month=rlh.year_month
-       WHERE rlh.year_month = $1
-       ORDER BY rlh.final_score DESC, rlh.student_id`,
+      `SELECT record FROM (
+       SELECT jsonb_build_object('student_id',m.student_id,'year_month',m.year_month,
+         'student_name',m.student_name,'status',m.status,'contract_plan',m.contract_plan,'homeroom_tutor',m.homeroom_tutor,
+         'action_points',m.payload,'final_score',m.payload->'total','final_rank',m.payload->'rank',
+         'snapshot_saved_at',m.saved_at) AS record
+       FROM action_point_monthly_snapshots m WHERE m.year_month=$1
+       UNION ALL
+       SELECT COALESCE(to_jsonb(rlh),'{}'::jsonb) || jsonb_build_object(
+         'student_id',ap.student_id,'year_month',ap.year_month,'student_name',s.name,
+         'status',s.status,'contract_plan',s.contract_plan,'homeroom_tutor',s.homeroom_tutor,
+         'action_points',ap.payload,'final_score',ap.payload->'total','final_rank',ap.payload->'rank')
+       FROM action_point_results ap LEFT JOIN students s ON s.student_id=ap.student_id
+       LEFT JOIN red_list_history rlh ON rlh.student_id=ap.student_id AND rlh.year_month=ap.year_month
+       WHERE ap.year_month=$1 AND NOT EXISTS (SELECT 1 FROM action_point_monthly_snapshots m WHERE m.year_month=$1)
+       UNION ALL
+       SELECT to_jsonb(rlh) || jsonb_build_object('student_name',s.name,'status',s.status,
+         'contract_plan',s.contract_plan,'homeroom_tutor',s.homeroom_tutor)
+       FROM red_list_history rlh LEFT JOIN students s ON rlh.student_id=s.student_id
+       WHERE rlh.year_month=$1 AND NOT EXISTS (SELECT 1 FROM action_point_monthly_snapshots m WHERE m.year_month=$1)
+         AND NOT EXISTS (SELECT 1 FROM action_point_results ap WHERE ap.year_month=$1 AND ap.student_id=rlh.student_id)
+       ) records ORDER BY record->>'student_id' `,
       [yearMonth]
     );
-    return c.json({ success: true, data: result.rows, count: result.rows.length });
+    return c.json({ success: true, data: result.rows.map(row => row.record || row), count: result.rows.length });
   } catch (error) {
     console.error('Error fetching red list history:');
     return c.json({ success: false, error: 'Red list operation failed' }, 500);
@@ -854,6 +870,13 @@ app.patch('/:studentId/status', async (c) => {
     console.error('Error updating red list status:');
     return c.json({ success: false, error: 'Red list operation failed' }, 500);
   }
+});
+
+app.get('/student-history/:studentId', async (c) => {
+  const studentId = c.req.param('studentId');
+  if (!validRedListStudentId(studentId)) return c.json({ success: false, error: 'Invalid student ID' }, 400);
+  try { return c.json({ success: true, data: await getStudentActionPointHistory(studentId) }); }
+  catch { console.error('[Action Points] Student history read failed'); return c.json({ success: false, error: '履歴を取得できませんでした' }, 500); }
 });
 
 // ─────────────────────────────────────────
