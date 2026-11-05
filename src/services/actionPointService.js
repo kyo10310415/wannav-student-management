@@ -156,11 +156,11 @@ export function createActionPointService(deps = {}) {
 
   async function getAll(yearMonth = actionMonth()) {
     await ensureSchema();
-    const { rows } = await db(`SELECT r.*, s.student_id, s.name AS student_name, s.homeroom_tutor,
+    const { rows } = await db(`SELECT r.*, s.student_id, s.name AS student_name, s.homeroom_tutor, s.status, s.contract_plan,
       a.year_month, a.payload AS action_points, a.updated_at AS action_evaluated_at
       FROM students s LEFT JOIN action_point_results a ON a.student_id=s.student_id AND a.year_month=$1
       LEFT JOIN red_list r ON r.student_id=s.student_id AND r.year_month=$1
-      WHERE s.status='アクティブ' ORDER BY s.student_id`, [yearMonth || actionMonth()]);
+      ORDER BY s.student_id`, [yearMonth || actionMonth()]);
     return rows.map(row => {
       const result = row.action_points || summarizeActionPoints(ACTION_RULES.map(rule => ({ ...rule, status: 'unknown', point: null, reason: '新方式で未評価', evidence: [] })));
       return { ...row, year_month: yearMonth || actionMonth(), action_points: result, total_score: result.total, rank: result.rank };

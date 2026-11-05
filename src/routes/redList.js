@@ -154,7 +154,7 @@ app.get('/history', async (c) => {
     if (!validRedListMonth(yearMonth)) return c.json({ success: false, error: 'Invalid yearMonth' }, 400);
     if (typeof ensureActionPointSchema === 'function') await ensureActionPointSchema();
     const result = await query(
-      `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor, ap.payload AS action_points
+      `SELECT rlh.*, s.name AS student_name, s.homeroom_tutor, s.status, s.contract_plan, ap.payload AS action_points
        FROM red_list_history rlh
        LEFT JOIN students s ON rlh.student_id = s.student_id
        LEFT JOIN action_point_results ap ON ap.student_id=rlh.student_id AND ap.year_month=rlh.year_month
