@@ -12,13 +12,14 @@ async function fixture({ query = async () => ({ rows: [] }), calendar = async ()
   const deps = { Hono, process: { env: configured ? { GOOGLE_SHEET_ID: marker } : {} },
     console: Object.fromEntries(['log', 'error', 'warn'].map(level => [level, (...args) => logs.push(inspect(args))])),
     query: async (sql, params) => { queries.push({ sql, params }); return query(sql, params); },
-    fetchLessonsForMonth: calendar, fetchLessonsFromSheet: sheet, getLastSyncTime: metadata };
+    fetchLessonsForMonth: calendar, fetchLessonsFromSheet: sheet, getLastSyncTime: metadata,
+    fetchDeletedLessonIdsFromSheet: async () => [] };
   deps.getClient = async () => ({ query: deps.query, release(){} });
   let source = await readFile(new URL('../src/routes/lessons.js', import.meta.url), 'utf8');
   source = source.replace("import { Hono } from 'hono';", 'const Hono = deps.Hono;')
     .replace("import { query, getClient } from '../db/connection.js';", 'const { query, getClient } = deps;')
     .replace("import { fetchLessonsForMonth } from '../services/calendarService.js';", 'const fetchLessonsForMonth = deps.fetchLessonsForMonth;')
-    .replace("import { fetchLessonsFromSheet, getLastSyncTime } from '../services/sheetsService.js';", 'const { fetchLessonsFromSheet, getLastSyncTime } = deps;');
+    .replace("import { fetchLessonsFromSheet, getLastSyncTime, fetchDeletedLessonIdsFromSheet } from '../services/sheetsService.js';", 'const { fetchLessonsFromSheet, getLastSyncTime, fetchDeletedLessonIdsFromSheet } = deps;');
   const key = 'lessonPrivacyFixture' + sequence++;
   globalThis[key] = deps;
   let app;
@@ -119,7 +120,7 @@ test('Sheet mapping failures conceal details and successful sync never queries d
   const body = await (await cleanup.app.request('/sync-from-sheet')).json();
   assert.equal(body.success, true);
   assert.equal(body.deleted, 0);
-  assert.equal(body.cleanup_skipped, true);
+  assert.equal(body.cleanup_skipped, false);
   assert.equal(cleanup.queries.some(call => call.sql === 'SELECT calendar_event_id FROM lessons'), false);
   privateLogs(cleanup);
 });

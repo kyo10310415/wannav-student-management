@@ -132,8 +132,38 @@ export async function fetchLessonsFromSheet(spreadsheetId, sheetName = 'レッ�
 }
 
 /**
- * Get last sync time from metadata sheet
+ * Read explicit calendar deletion evidence, not absence from the live source.
  */
+export async function fetchDeletedLessonIdsFromSheet(spreadsheetId) {
+  try {
+    // Do not load descriptions/contact details from the entire deletion history.
+    // A = calendar event ID, L = reason. Rows remain aligned across both ranges.
+    const response = await getSheets().spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges: ["'削除されたレッスンデータ'!A2:A", "'削除されたレッスンデータ'!L2:L"]
+    });
+    const ranges = response.data.valueRanges;
+    if (!Array.isArray(ranges) || ranges.length !== 2) throw new Error('Invalid deletion history');
+    const ids = ranges[0].values || [];
+    const reasons = ranges[1].values || [];
+    if (!Array.isArray(ids) || !Array.isArray(reasons)) throw new Error('Invalid deletion history');
+    const deleted = new Set();
+    for (let i = 0; i < reasons.length; i++) {
+      if (String(reasons[i]?.[0] || '').trim() !== 'カレンダーから削除') continue;
+      const id = ids[i]?.[0];
+      if (typeof id !== 'string' || !id.trim() || id.length > 255 || /[\u0000-\u001f\u007f]/.test(id)) {
+        throw new Error('Invalid deletion event ID');
+      }
+      deleted.add(id.trim());
+    }
+    return [...deleted];
+  } catch {
+    console.error('[Sheets] Lesson deletion history fetch failed');
+    throw new Error('[Sheets] fetchDeletedLessonIdsFromSheet failed');
+  }
+}
+
+/** Get last sync time from the metadata sheet. */
 export async function getLastSyncTime(spreadsheetId) {
   try {
     const sheets = getSheets();
