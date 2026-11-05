@@ -355,7 +355,7 @@ function renderHeader() {
                 <i class="fas fa-user-graduate mr-2"></i>生徒管理
               </button>
               <button id="nav-red-list" data-nav-page="red-list" class="px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'red-list' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
-                <i class="fas fa-exclamation-triangle mr-2"></i>レッドリスト
+                <i class="fas fa-exclamation-triangle mr-2"></i>アクションポイント
               </button>
               <button id="nav-extensions" data-nav-page="extensions" class="relative px-4 py-2 rounded-lg font-semibold transition ${currentPage === 'extensions' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}">
                 <i class="fas fa-sync-alt mr-2"></i>延長管理
@@ -15098,6 +15098,11 @@ function updateRedListDisplay(studentId, redList, capturedCell) {
   
   if (!cell || !root?.contains(cell) || cell.dataset.studentId !== String(studentId)) return;
   
+  if (redList?.action_points) {
+    cell.innerHTML = renderActionPointSummary(redList.action_points);
+    return;
+  }
+  if (redList && !redList.action_points && redList.total_score == null) { cell.innerHTML = '<span class="text-gray-400 text-xs">未評価</span>'; return; }
   if (!redList || redList.total_score === 0) {
     cell.innerHTML = '<span class="text-gray-400 text-xs">-</span>';
     return;
@@ -15157,7 +15162,7 @@ function updateRedListDisplay(studentId, redList, capturedCell) {
       <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block z-50 w-48">
         <div class="bg-gray-900 text-white rounded-lg shadow-lg p-3">
           <div class="text-xs font-bold mb-2 border-b border-gray-700 pb-1">
-            📊 レッドリスト内訳
+            📊 アクションポイント内訳
           </div>
           ${tooltipContent}
           <div class="border-t border-gray-700 mt-2 pt-2 flex justify-between items-center">
@@ -15176,22 +15181,22 @@ function updateRedListDisplay(studentId, redList, capturedCell) {
  * Update red list for all students (admin action)
  */
 async function updateAllRedLists() {
-  if (!confirm('全生徒のレッドリストを更新しますか？')) {
+  if (!confirm('全生徒のアクションポイントを更新しますか？')) {
     return;
   }
   
   try {
-    showNotification('レッドリスト更新中...', 'info');
+    showNotification('アクションポイント更新中...', 'info');
     
     const response = await axios.post(`${API_BASE}/api/red-list/update`, {});
     
     if (response.data.success) {
-      showNotification(`レッドリスト更新完了: ${response.data.data.updated}件`, 'success');
+      showNotification(response.data.data.running ? '評価を開始しました。完了後に再表示してください。' : `アクションポイント更新完了: ${response.data.data.updated}件`, 'success');
       await loadRedListData();
     }
   } catch (error) {
     console.error('[Red List] Error updating red lists:', error);
-    showNotification('レッドリスト更新に失敗しました', 'error');
+    showNotification('アクションポイント更新に失敗しました', 'error');
   }
 }
 
@@ -15226,31 +15231,32 @@ async function renderRedListPage() {
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-bold text-gray-800">
         <i class="fas fa-exclamation-triangle text-red-600 mr-2"></i>
-        レッドリスト
+        アクションポイント
       </h2>
       <div class="flex gap-2">
         <button onclick="exportRedListCsv()"
                 class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-200 shadow-md">
           <i class="fas fa-file-csv mr-2"></i>CSV出力
         </button>
-        <button onclick="updateRedListData()" 
+        <button id="action-point-update-button" onclick="updateRedListData()"
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200 shadow-md">
           <i class="fas fa-sync-alt mr-2"></i>データ更新
         </button>
       </div>
     </div>
 
+    <div id="action-point-job-status" class="text-sm text-gray-600 mb-4">全項目各1Pt。評価済み項目に対して60%以上：レッド／30%以上：イエロー／30%未満：グリーン。未取得・対象外は分母から除外。各生徒の詳細から基準・根拠を確認できます。</div>
     <!-- Tabs -->
     <div class="bg-white rounded-lg shadow-md mb-6">
       <div class="border-b border-gray-200">
         <nav class="flex -mb-px">
           <button data-red-list-read-action="tab" data-red-list-tab="current" id="redlist-tab-current"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
-            <i class="fas fa-calendar-day"></i> 今月のレッドリスト
+            <i class="fas fa-calendar-day"></i> 今月のアクションポイント
           </button>
           <button data-red-list-read-action="tab" data-red-list-tab="history" id="redlist-tab-history"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-            <i class="fas fa-history"></i> 過去のレッドリスト
+            <i class="fas fa-history"></i> 過去のアクションポイント
           </button>
           <button data-red-list-read-action="tab" data-red-list-tab="messages" id="redlist-tab-messages"
                   class="py-4 px-6 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
@@ -15274,7 +15280,7 @@ async function renderRedListPage() {
             </div>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">EX</p>
+            <p class="text-sm font-medium text-gray-600">判定不可・旧方式</p>
             <p class="text-2xl font-bold text-purple-700" id="redlist-count-ex">0</p>
           </div>
         </div>
@@ -15287,7 +15293,7 @@ async function renderRedListPage() {
             </div>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">HIGH</p>
+            <p class="text-sm font-medium text-gray-600">レッド（60%以上）</p>
             <p class="text-2xl font-bold text-red-600" id="redlist-count-high">0</p>
           </div>
         </div>
@@ -15295,13 +15301,13 @@ async function renderRedListPage() {
       <div class="bg-white rounded-lg shadow-md p-4">
         <div class="flex items-center">
           <div class="flex-shrink-0">
-            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <i class="fas fa-exclamation-circle text-orange-600 text-xl"></i>
+            <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <i class="fas fa-exclamation-circle text-yellow-600 text-xl"></i>
             </div>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">MIDDLE</p>
-            <p class="text-2xl font-bold text-orange-600" id="redlist-count-middle">0</p>
+            <p class="text-sm font-medium text-gray-600">イエロー（30%以上）</p>
+            <p class="text-2xl font-bold text-yellow-600" id="redlist-count-middle">0</p>
           </div>
         </div>
       </div>
@@ -15313,7 +15319,7 @@ async function renderRedListPage() {
             </div>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">LOW</p>
+            <p class="text-sm font-medium text-gray-600">グリーン（30%未満）</p>
             <p class="text-2xl font-bold text-yellow-600" id="redlist-count-low">0</p>
           </div>
         </div>
@@ -15745,8 +15751,12 @@ async function loadRedListCurrentData() {
     ]);
     if (!state.current()) return;
     if (response.data.success) {
+      const jobNotice = document.getElementById('action-point-job-status');
+      if (jobNotice) jobNotice.textContent = '全項目各1Pt。60%以上レッド／30%以上イエロー／30%未満グリーン。未取得・対象外は分母から除外。' +
+        (response.data.evaluation_job?.running ? ' 評価中です。完了まで自動で再取得します。' : response.data.evaluation_job?.result?.failed ? ' 評価に失敗しました。再実行してください。' : response.data.evaluation_job?.result?.errors ? ' 一部の生徒の評価に失敗しました。再実行してください。' : '');
+      if (response.data.evaluation_job?.running) setTimeout(() => { if (state.current()) loadRedListCurrentData(); }, 10000);
       currentRedListData = response.data.data.filter(item =>
-        item.rank === 'high' || item.rank === 'middle' || item.rank === 'low' || item.ex_rank === true
+        item.action_points || item.rank === 'high' || item.rank === 'middle' || item.rank === 'low' || item.ex_rank === true
       );
       renderRedListCurrentList();
       updateRedListStats();
@@ -15764,37 +15774,25 @@ async function loadRedListCurrentData() {
 }
 
 async function updateRedListData() {
+  const button = document.getElementById('action-point-update-button');
+  const root = document.getElementById('content');
+  const token = sessionToken;
+  const active = () => currentPage === 'red-list' && sessionToken === token && document.getElementById('content') === root && root?.contains(button);
+  if (!button || !active() || button.disabled) return;
+  const originalHTML = button.innerHTML;
+  button.disabled = true;
+  button.textContent = '評価開始中...';
   try {
-    const button = event.target.closest('button');
-    const originalHTML = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>更新中...';
-    
-    const response = await axios.post(`${API_BASE}/api/red-list/update`, {}, {
-      headers: { 'Authorization': `Bearer ${sessionToken}` }
-    });
-    
+    const response = await axios.post(`${API_BASE}/api/red-list/update`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    if (!active()) return;
     if (response.data.success) {
-      // Reload current data
       await loadRedListCurrentData();
-      
-      // Show success notification
-      const notification = document.createElement('div');
-      notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-      notification.innerHTML = '<i class="fas fa-check-circle mr-2"></i>レッドリストを更新しました';
-      document.body.appendChild(notification);
-      
-      setTimeout(() => {
-        notification.remove();
-      }, 3000);
+      if (active()) showNotification(response.data.data.running ? '評価を開始しました。処理中も他の画面を利用できます。' : 'アクションポイントを更新しました', 'success');
     }
-  } catch (error) {
-    console.error('Error updating red list:', error);
-    alert('レッドリストの更新に失敗しました');
+  } catch {
+    if (active()) showNotification('アクションポイントの更新に失敗しました', 'error');
   } finally {
-    const button = event.target.closest('button');
-    button.disabled = false;
-    button.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>データ更新';
+    if (active()) { button.disabled = false; button.innerHTML = originalHTML; }
   }
 }
 
@@ -15813,7 +15811,7 @@ function renderRedListCurrentList() {
   }
   
   // Sort by total_score desc
-  currentRedListData.sort((a, b) => b.total_score - a.total_score);
+  currentRedListData.sort((a, b) => (b.action_points?.ratio ?? -1) - (a.action_points?.ratio ?? -1) || b.total_score - a.total_score);
   
   container.innerHTML = currentRedListData.map(item => renderRedListStudentCard(item, false)).join('');
 }
@@ -15853,15 +15851,20 @@ function renderRedListStudentCard(item, isHistory) {
     rankText = 'LOW';
   }
 
+  if (item.action_points) {
+    const style = actionPointStyle(item.action_points);
+    rankColor = style.color; rankText = style.label;
+  }
+
   // EXランク（HighよりさらにHighの上）
-  const isEx = item.ex_rank === true || item.final_ex_rank === true;
+  const isEx = !item.action_points && (item.ex_rank === true || item.final_ex_rank === true);
   
   const score = item.total_score || item.final_score || 0;
   const yearMonth = item.year_month;
   const consecutiveMonths = item.consecutive_months || 1;
 
   // ── 経過日数計算 ──────────────────────────────────
-  // ① レッドリストに追加されてから何日経過したか（created_at基準）
+  // ① アクションポイントに追加されてから何日経過したか（created_at基準）
   let addedDaysAgo = null;
   if (item.created_at) {
     const addedDate = new Date(item.created_at);
@@ -15908,7 +15911,7 @@ function renderRedListStudentCard(item, isHistory) {
   const rescheduleScore = item.reschedule_score || 0;
   const reservationScore = item.reservation_score || 0;
   
-  const scoreBreakdown = `
+  const scoreBreakdown = item.action_points ? renderActionPointSummary(item.action_points) : `
     <div class="mt-2 text-xs">
       <button data-red-list-read-action="score" data-red-list-student-id="${escapeHtml(String(item.student_id)).replace(/"/g, '&quot;')}"
               class="text-blue-600 hover:text-blue-800" 
@@ -16075,11 +16078,11 @@ function updateRedListStats() {
   const rankField = isHistory ? 'final_rank' : 'rank';
   const exField   = isHistory ? 'final_ex_rank' : 'ex_rank';
 
-  const ex     = data.filter(item => item[exField] === true).length;
+  const ex     = data.filter(item => !item.action_points || item.action_points.ratio == null).length;
   const high   = data.filter(item => item[rankField] === 'high').length;
   const middle = data.filter(item => item[rankField] === 'middle').length;
-  const low    = data.filter(item => item[rankField] === 'low').length;
-  const resolved = 0; // TODO: Count resolved status
+  const low    = data.filter(item => item.action_points ? item.action_points.rank === 'none' : item[rankField] === 'low').length;
+  const resolved = data.filter(item => item.correspondence_status === '対応済み').length;
   
   const exEl = document.getElementById('redlist-count-ex');
   if (exEl) exEl.textContent = ex;
@@ -16313,7 +16316,7 @@ function renderRedListHistoryList() {
       <div class="text-center py-12">
         <i class="fas fa-check-circle text-6xl text-green-400 mb-4"></i>
         <p class="text-xl font-medium text-gray-600">該当する生徒はいません</p>
-        <p class="text-sm text-gray-500 mt-2">この月のレッドリストデータがありません</p>
+        <p class="text-sm text-gray-500 mt-2">この月のアクションポイントデータがありません</p>
       </div>
     `;
     return;
@@ -16326,7 +16329,7 @@ function renderRedListHistoryList() {
 
 
 // ═══════════════════════════════════════════════════════════════
-//  レッドリスト Discord 送信ログ表示
+//  アクションポイント Discord 送信ログ表示
 // ═══════════════════════════════════════════════════════════════
 
 /** カード内の送信履歴ミニ表示 */
@@ -16387,13 +16390,14 @@ function exportRedListCsv() {
     return;
   }
 
+  const actionColumns = [...new Set(data.flatMap(item => (item.action_points?.items || []).map(rule => rule.key)))];
   // CSV ヘッダー
   const headers = [
     '生徒名',
     '学籍番号',
     'EXランク',
     'ランク',
-    'レッドリストスコア',
+    'アクションポイントスコア',
     '対応状況',
     '担当者',
     '継続月数',
@@ -16403,6 +16407,8 @@ function exportRedListCsv() {
     'Discord送信履歴（最終送信日時）',
     'Discord送信履歴（タイトル）',
     'Discord送信者',
+    '加点割合(%)', '評価済み項目数',
+    ...actionColumns.map(key => data.flatMap(item => item.action_points?.items || []).find(rule => rule.key === key)?.label || key),
   ];
 
   const rows = data.map(item => {
@@ -16471,6 +16477,9 @@ function exportRedListCsv() {
       lastSentAt,
       lastTitle,
       lastSender,
+      item.action_points?.ratio == null ? '' : (item.action_points.ratio * 100).toFixed(1),
+      item.action_points?.evaluated ?? '',
+      ...actionColumns.map(key => { const rule = item.action_points?.items.find(rule => rule.key === key); return rule?.status === 'evaluated' ? rule.point : rule?.status === 'exempt' ? '対象外' : '未取得'; }),
     ];
   });
 
@@ -20267,4 +20276,27 @@ async function deleteLessonContent(num) {
   } catch (err) {
     showNotification('削除に失敗しました', 'error');
   }
+}
+
+function actionPointStyle(result) {
+  return result.ratio == null ? { color: 'bg-gray-100 text-gray-600', label: '判定不可' } :
+    result.rank === 'high' ? { color: 'bg-red-100 text-red-700', label: 'レッド' } :
+    result.rank === 'middle' ? { color: 'bg-yellow-100 text-yellow-700', label: 'イエロー' } :
+    { color: 'bg-green-100 text-green-700', label: 'グリーン' };
+}
+function renderActionPointSummary(result) {
+  const esc = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
+  const style = actionPointStyle(result);
+  const percent = result.ratio == null ? '－' : `${(result.ratio * 100).toFixed(1)}%`;
+  const rows = (result.items || []).map(item => {
+    const status = item.status === 'evaluated' ? `${item.point}Pt` : item.status === 'exempt' ? '対象外' : '未取得・判定不能';
+    const evidence = (item.evidence || []).map(incident => {
+      const links = (incident.links || []).filter(link => /^https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+$/.test(link))
+        .map(link => `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">メッセージ</a>`).join(' / ');
+      return `<p class="mt-1">${esc(incident.reason)} ${links}</p>`;
+    }).join('');
+    return `<div class="border-t py-2"><strong>${esc(item.label)}：${esc(status)}</strong><p>基準：${esc(item.criterion)}</p><p>${esc(item.reason)}</p>${evidence}</div>`;
+  }).join('');
+  return `<details class="text-xs text-left"><summary class="cursor-pointer rounded p-2 ${style.color}">${style.label} ${percent}（${esc(result.total)}Pt／評価済み${esc(result.evaluated)}項目） ▾</summary>
+    <div class="bg-white text-gray-800 border rounded p-3 shadow max-h-96 overflow-auto min-w-64"><p>各項目1Pt。60%以上レッド／30%以上イエロー／30%未満グリーン。未取得・対象外は分母から除外。</p><p>評価日時：${esc(result.evaluated_at)}</p>${rows}</div></details>`;
 }

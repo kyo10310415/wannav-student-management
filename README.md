@@ -1237,3 +1237,7 @@ Drive未検出の404エラーは生徒ID・日付を含めない固定文へ変�
 ## 固定終了計画R01・R02（2026-10-30）
 
 休会一覧の外部Sheet由来名・ID・期間/日付と、配信対象previewの保存名・学籍番号・担当Tutorを、既存studentDisplayTextで表示します。値や権限・API payloadは変えず、HTML記号を文字として扱います。合成データの正常/空/cache fallbackで検証し、実休会更新やDiscord送信はしていません。
+
+## アクションポイント
+
+生徒の評価基準・動画教材DB連携・月末担当Tutor履歴・運用手順は [アクションポイントの仕様](docs/action-points.md) を参照してください。

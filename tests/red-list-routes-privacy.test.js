@@ -56,10 +56,10 @@ test('all nineteen red-list API error boundaries hide upstream data', async () =
 
 test('red-list reads, bulk and individual updates retain their successful contracts', async () => {
   const f = await fixture();
-  assert.deepEqual(await (await f.app.request('/')).json(), { success: true, data: [{ student_id: marker }], count: 1 });
+  assert.deepEqual(await (await f.app.request('/')).json(), { success: true, data: [{ student_id: marker }], count: 1, evaluation_job: null });
   assert.equal((await (await f.app.request('/update', json({ yearMonth: '2026-10' }))).json()).data.updated, 2);
   assert.equal((await (await f.app.request('/update/fixture', json({ yearMonth: '2026-10' }))).json()).data.total_score, 3);
-  assert.deepEqual(f.updates, [['2026-10'], ['fixture', '2026-10']]);
+  assert.deepEqual(f.updates, [['2026-10', { background: true }], ['fixture', '2026-10']]);
   assert.equal((await (await f.app.request('/fixture')).json()).data.student_id, marker);
   safe(f);
 });

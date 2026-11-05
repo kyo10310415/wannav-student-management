@@ -1,4 +1,4 @@
-import { updateAllRedLists } from '../services/redListService.js';
+import { updateAllRedLists } from '../services/actionPointService.js';
 
 /**
  * Daily red list update job

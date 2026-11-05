@@ -21,7 +21,7 @@ async function fixture({ failAt = 0, dailyFail = false } = {}) {
   for (const file of ['redListDaily', 'redListMonthly']) {
     const source = (await readFile(new URL('../src/jobs/' + file + '.js', import.meta.url), 'utf8'))
       .replace("import { query } from '../db/connection.js';", 'const { query } = deps;')
-      .replace("import { updateAllRedLists } from '../services/redListService.js';", 'const { updateAllRedLists } = deps;');
+      .replace("import { updateAllRedLists } from '../services/actionPointService.js';", 'const { updateAllRedLists } = deps;');
     const key = 'redJobPrivacyFixture' + sequence++;
     globalThis[key] = deps;
     try { Object.assign(api, await import(`data:text/javascript;base64,${Buffer.from(`const deps = globalThis[${JSON.stringify(key)}]; const { console, Date } = deps;\n${source}`).toString('base64')}`)); }
