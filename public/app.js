@@ -15100,7 +15100,11 @@ function updateRedListDisplay(studentId, redList, capturedCell) {
   if (!cell || !root?.contains(cell) || cell.dataset.studentId !== String(studentId)) return;
   
   if (redList?.action_points) {
-    cell.innerHTML = renderActionPointSummary(redList.action_points);
+    studentActionPointDetails.set(cell, { studentId, result: redList.action_points, token: sessionToken, actorId: currentUser?.id, role: currentUser?.role });
+    const style = actionPointStyle(redList.action_points);
+    const result = redList.action_points;
+    const label = result.ratio == null ? style.label : `${style.label} ${(result.ratio * 100).toFixed(1)}%（${result.total}Pt／評価済み${result.evaluated}項目）`;
+    cell.innerHTML = `<button type="button" data-action-point-detail-open class="rounded p-2 text-xs text-left ${style.color}" aria-haspopup="dialog">${escapeHtml(label)} ▾</button>`;
     return;
   }
   if (redList && !redList.action_points && redList.total_score == null) { cell.innerHTML = '<span class="text-gray-400 text-xs">未評価</span>'; return; }
@@ -20301,7 +20305,8 @@ function actionPointStyle(result) {
     result.rank === 'middle' ? { color: 'bg-yellow-100 text-yellow-700', label: 'イエロー' } :
     { color: 'bg-green-100 text-green-700', label: 'グリーン' };
 }
-function renderActionPointSummary(result) {
+const studentActionPointDetails = new WeakMap();
+function renderActionPointSummary(result, { expanded = false, modal = false } = {}) {
   const esc = value => escapeHtml(String(value ?? '')).replace(/"/g, '&quot;');
   const style = actionPointStyle(result);
   const percent = result.ratio == null ? '－' : `${(result.ratio * 100).toFixed(1)}%`;
@@ -20314,8 +20319,32 @@ function renderActionPointSummary(result) {
     }).join('');
     return `<div class="border-t py-2"><strong>${esc(item.label)}：${esc(status)}</strong><p>基準：${esc(item.criterion)}</p><p>${esc(item.reason)}</p>${evidence}</div>`;
   }).join('');
-  return `<details class="text-xs text-left"><summary class="cursor-pointer rounded p-2 ${style.color}">${style.label} ${percent}（${esc(result.total)}Pt／評価済み${esc(result.evaluated)}項目） ▾</summary>
-    <div class="bg-white text-gray-800 border rounded p-3 shadow max-h-96 overflow-auto min-w-64"><p>各項目1Pt。60%以上レッド／30%以上イエロー／30%未満グリーン。未取得・対象外は分母から除外。</p><p>評価日時：${esc(result.evaluated_at)}</p>${rows}</div></details>`;
+  return `<details ${expanded ? 'open' : ''} class="${modal ? 'text-sm leading-6' : 'text-xs'} text-left"><summary class="cursor-pointer rounded p-2 ${style.color}">${style.label} ${percent}（${esc(result.total)}Pt／評価済み${esc(result.evaluated)}項目） ▾</summary>
+    <div class="bg-white text-gray-800 border rounded p-3 shadow ${modal ? 'w-full' : 'max-h-96 overflow-auto min-w-64'}"><p>各項目1Pt。60%以上レッド／30%以上イエロー／30%未満グリーン。未取得・対象外は分母から除外。</p><p>評価日時：${esc(result.evaluated_at)}</p>${rows}</div></details>`;
+}
+
+let studentActionPointDetailTrigger = null;
+function closeStudentActionPointDetails() {
+  document.getElementById('student-action-point-detail-modal')?.remove();
+  if (document.getElementById('content')?.contains(studentActionPointDetailTrigger)) studentActionPointDetailTrigger.focus();
+  studentActionPointDetailTrigger = null;
+}
+function openStudentActionPointDetails(button) {
+  const root = document.getElementById('content');
+  const cell = button.closest('.red-list-loading');
+  const cached = cell && studentActionPointDetails.get(cell);
+  if (!root?.contains(button) || currentPage !== 'students' || !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role) ||
+    !cached || cached.token !== sessionToken || cached.actorId !== currentUser?.id || cached.role !== currentUser?.role || cached.studentId !== cell.dataset.studentId) return;
+  const student = students.find(row => row.student_id === cached.studentId);
+  if (!student) return;
+  closeStudentActionPointDetails();
+  studentActionPointDetailTrigger = button;
+  const modal = document.createElement('div');
+  modal.id = 'student-action-point-detail-modal';
+  modal.className = 'fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4';
+  modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="student-action-point-detail-title" class="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[85vh] flex flex-col"><header class="flex items-center justify-between gap-3 p-4 border-b"><h3 id="student-action-point-detail-title" class="font-bold text-base">${escapeHtml(String(student.name || cached.studentId))}：アクションポイント</h3><button type="button" data-action-point-detail-close class="px-3 py-2 rounded bg-gray-100 text-sm flex-shrink-0">閉じる</button></header><div class="p-4 overflow-y-auto">${renderActionPointSummary(cached.result, { expanded: true, modal: true })}</div></section>`;
+  root.appendChild(modal);
+  modal.querySelector('[data-action-point-detail-close]').focus();
 }
 
 function getFilteredActionPointData(data) {

@@ -52,3 +52,15 @@ function handleActionPointTrendClick(event) {
   if (students.some(row => row.student_id === studentId)) return openStudentActionPointTrend(studentId);
 }
 document.addEventListener('click', handleActionPointTrendClick);
+
+function handleStudentActionPointDetailClick(event) {
+  const button = event.target?.closest?.('button[data-action-point-detail-open], button[data-action-point-detail-close]');
+  if (!button || button.disabled || !document.getElementById('content')?.contains(button) || currentPage !== 'students' ||
+    !sessionToken || !['admin', 'leader', 'crew'].includes(currentUser?.role)) return;
+  if (button.hasAttribute('data-action-point-detail-close')) closeStudentActionPointDetails();
+  else openStudentActionPointDetails(button);
+}
+document.addEventListener('click', handleStudentActionPointDetailClick);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('content')?.contains(document.getElementById('student-action-point-detail-modal'))) closeStudentActionPointDetails();
+});
