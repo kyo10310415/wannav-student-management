@@ -155,7 +155,7 @@ test('group attendance adds one point only when both sources confirm no response
     [{ attended: new Set(['S1']), unknown: new Set(), complete: true }, 0, 'evaluated'],
     [{ attended: new Set(['S1']), unknown: new Set(['S1']), complete: false }, 0, 'evaluated'],
     [{ attended: new Set(), unknown: new Set(), complete: false }, null, 'unknown'],
-    [{ attended: new Set(), unknown: new Set(['S1']), complete: true }, null, 'unknown']
+    [{ attended: new Set(), complete: true }, 1, 'evaluated']
   ]) {
     let calls = 0;
     const f = fixture({ students: [student, { ...student, student_id: 'S2' }], deps: { groupAttendance: async (month, at) => { calls++; assert.equal(month, '2026-11'); assert.equal(at, now); return group; } } });

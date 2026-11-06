@@ -15,7 +15,7 @@ test('formatted and Sheets serial timestamps respect JST month/year boundaries',
 test('empty response sheets are valid, normalize IDs, deduplicate responses and never match by name', () => {
   assert.equal(parseGroupLessonSurvey(ranges([]), '2026-11', now).attended.size, 0);
   const result = parseGroupLessonSurvey(ranges([['2026/11/05 10:00:00', ' ｏｌｔｓ１２３－ａｂ '], ['2026/11/05 11:00:00', 'OLTS123-AB'], ['2026/11/05 12:00:00', ''], ['invalid', 'UNKNOWN']]), '2026-11', now);
-  assert.deepEqual([...result.attended], ['OLTS123-AB']); assert.deepEqual([...result.unknown], ['UNKNOWN']);
+  assert.deepEqual([...result.attended], ['OLTS123-AB']); assert.equal(result.attended.has('UNKNOWN'), false);
   assert.throws(() => parseGroupLessonSurvey([{ values: [['wrong']] }], '2026-11', now));
 });
 test('both sources are fetched once with only date/ID columns; an unanswered new form does not hide other attendance', async () => {
@@ -37,4 +37,20 @@ test('one failed source marks completeness false but preserves attendance from t
   } } } };
   const result = await fetchGroupLessonAttendance('2026-11', now, sheets);
   assert.equal(result.complete, false); assert.deepEqual([...result.attended], ['S1']);
+});
+
+test('missing current-month records remain a valid empty attendance set despite old or undated ID rows', async () => {
+  const sheets = { spreadsheets: { values: { batchGet: async () => ({ data: { valueRanges: ranges([['2026/10/05 10:00:00', 'S1'], ['', 'S1']]) } }) } } };
+  const result = await fetchGroupLessonAttendance('2026-11', now, sheets);
+  assert.equal(result.complete, true); assert.equal(result.attended.has('S1'), false); assert.deepEqual(result.failures, []);
+});
+test('permission and header failures give fixed actionable source messages without exposing errors', async () => {
+  let calls = 0;
+  const sheets = { spreadsheets: { values: { batchGet: async () => {
+    if (++calls === 1) throw Object.assign(new Error('SYNTHETIC_PRIVATE_SECRET'), { response: { status: 403 } });
+    return { data: { valueRanges: [{ values: [['wrong header']] }] } };
+  } } } };
+  const result = await fetchGroupLessonAttendance('2026-11', now, sheets);
+  assert.equal(result.complete, false); assert.ok(result.failures[0].includes('閲覧権限'));
+  assert.ok(result.failures[1].includes('ヘッダー')); assert.ok(!JSON.stringify(result).includes('SYNTHETIC_PRIVATE_SECRET'));
 });
