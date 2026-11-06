@@ -92,8 +92,8 @@ export function createActionPointService(deps = {}) {
         set('attendance', completed < 2, `前月 ${completed}/2回`, started ? 'evaluated' : 'exempt');
         const groupId = normalizeAttendanceStudentId(student.student_id);
         if (group?.attended.has(groupId)) set('group_attendance', false, '当月の対象アンケートに回答あり（参加）');
-        else if (group?.complete && !group.unknown.has(groupId)) set('group_attendance', true, '当月はいずれの対象アンケートにも回答なし（不参加）');
-        else set('group_attendance', false, 'アンケートの取得失敗・日時不明のため参加有無を確定できません', 'unknown');
+        else if (group?.complete) set('group_attendance', true, '両アンケートに該当学籍番号の当月レコードなし（不参加）');
+        else set('group_attendance', false, group?.failures?.length ? group.failures.join('／') : 'アンケートを取得できませんでした。サービスアカウントの設定・共有権限を確認してください', 'unknown');
         if (answers) {
           const answer = answerMap.get(`${id}:${p.month}`);
           const value = Number(answer?.satisfaction_score);
