@@ -4,6 +4,7 @@ import { fetchStudentBroadcastInfo, getSheets } from './sheetsService.js';
 import { ACTION_RULES, actionMonth, actionPeriods, summarizeActionPoints } from './actionPointRules.js';
 import { readLearningActivity, readActionConversation, evaluateActionConversation, readSocialActivity } from './actionPointSources.js';
 import { ensureActionPointSchema } from './actionPointSchema.js';
+import { fetchGroupLessonAttendance, normalizeAttendanceStudentId } from './groupLessonAttendanceService.js';
 
 const normalize = value => String(value || '').trim().toUpperCase();
 const monthOf = value => String(value || '').replace(/\//g, '-').replace(/^(\d{4})-(\d)$/, '$1-0$2');
@@ -18,6 +19,7 @@ export function createActionPointService(deps = {}) {
   const conversation = deps.conversation || readActionConversation;
   const grade = deps.grade || evaluateActionConversation;
   const social = deps.social || readSocialActivity;
+  const groupAttendance = deps.groupAttendance || fetchGroupLessonAttendance;
   const satisfaction = deps.satisfaction || (async () => {
     const id = process.env.GOOGLE_CACHE_SHEET_ID || process.env.GOOGLE_SHEET_ID;
     if (!id) throw new Error('Cache is not configured');
@@ -62,8 +64,8 @@ export function createActionPointService(deps = {}) {
     const snapshots = (await db('SELECT student_id, tutor_name FROM action_point_tutor_snapshots WHERE year_month = $1', [p.previous])).rows;
     const previous = (await db('SELECT student_id, payload, updated_at FROM action_point_results WHERE year_month = $1', [p.month])).rows;
     const legacyLocks = (await db('SELECT student_id, reservation_locked, reservation_score FROM red_list WHERE year_month = $1 AND reservation_locked = TRUE', [p.month])).rows;
-    const [answers, uses, people, views] = await Promise.all([
-      safeRead(satisfaction), safeRead(wanami), safeRead(contacts), safeRead(learning)
+    const [answers, uses, people, views, group] = await Promise.all([
+      safeRead(satisfaction), safeRead(wanami), safeRead(contacts), safeRead(learning), safeRead(() => groupAttendance(p.month, now))
     ]);
     const index = rows => new Map((rows || []).map(row => [normalize(row.student_id || row.studentId), row]));
     const reportMap = index(reports), reservationMap = index(reservations), snapshotMap = index(snapshots), oldMap = index(previous);
@@ -88,6 +90,10 @@ export function createActionPointService(deps = {}) {
         set('absence', Number(report.absence) > 0, `当月 ${report.absence}回`);
         set('reschedule', Number(report.reschedule) > 0, `当月 ${report.reschedule}回`);
         set('attendance', completed < 2, `前月 ${completed}/2回`, started ? 'evaluated' : 'exempt');
+        const groupId = normalizeAttendanceStudentId(student.student_id);
+        if (group?.attended.has(groupId)) set('group_attendance', false, '当月の対象アンケートに回答あり（参加）');
+        else if (group?.complete && !group.unknown.has(groupId)) set('group_attendance', true, '当月はいずれの対象アンケートにも回答なし（不参加）');
+        else set('group_attendance', false, 'アンケートの取得失敗・日時不明のため参加有無を確定できません', 'unknown');
         if (answers) {
           const answer = answerMap.get(`${id}:${p.month}`);
           const value = Number(answer?.satisfaction_score);
