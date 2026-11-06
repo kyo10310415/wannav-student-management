@@ -13,7 +13,7 @@ test('month-end captures current saved evaluations without external reads and ne
   const date = new Date('2026-11-30T14:59:00Z');
   assert.deepEqual(await service.snapshot(date), { saved: 3 });
   assert.equal(calls[0].params[0], '2026-11'); assert.equal(calls[0].params[1], date);
-  assert.equal(calls[0].params[2].ratio, null); assert.equal(calls[0].params[2].items.length, 15);
+  assert.equal(calls[0].params[2].ratio, null); assert.equal(calls[0].params[2].items.length, 16);
   assert.match(calls[0].sql, /ON CONFLICT \(student_id,year_month\) DO NOTHING/);
   assert.match(calls[0].sql, /s.name,s.status,s.contract_plan,s.homeroom_tutor/);
   assert.doesNotMatch(calls[0].sql, /\b(?:DELETE|UPDATE)\b/);

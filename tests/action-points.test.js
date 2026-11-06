@@ -8,9 +8,9 @@ import { createActionPointService } from '../src/services/actionPointService.js'
 const now = new Date('2026-11-12T03:00:00Z');
 const student = { student_id: 'S1', lesson_start_date: '2025-01-01', homeroom_tutor: 'B' };
 const item = (key, point, status = 'evaluated') => ({ key, point, status });
-test('15 unique criteria exclude group attendance and merge survey; exact 30/60 percent boundaries', () => {
-  assert.equal(ACTION_RULES.length, 15);
-  assert.equal(new Set(ACTION_RULES.map(r => r.key)).size, 15);
+test('16 unique criteria include group attendance and merge survey; exact 30/60 percent boundaries', () => {
+  assert.equal(ACTION_RULES.length, 16);
+  assert.equal(new Set(ACTION_RULES.map(r => r.key)).size, 16);
   for (const [total, denominator, rank] of [[0, 10, 'none'], [2, 10, 'none'], [3, 10, 'middle'], [5, 10, 'middle'], [6, 10, 'high'], [1, 3, 'middle'], [2, 3, 'high']]) {
     const result = summarizeActionPoints(Array.from({ length: denominator }, (_, i) => item(String(i), i < total ? 1 : 0)).concat(item('unknown', 1, 'unknown'), item('exempt', 1, 'exempt')));
     assert.equal(result.rank, rank); assert.equal(result.total, total); assert.equal(result.evaluated, denominator);
@@ -42,6 +42,7 @@ function fixture(overrides = {}) {
       { student_id: 'S1', year_month: '2026/11', timestamp: '2026-11-10', satisfaction_score: 9 }],
     wanami: async () => [['invalid date'], ['2026-10-10', ...Array(13).fill(''), 'S1']],
     contacts: async () => [], learning: async () => [{ student_id: 'S1', last_watched_at: '2026-11-11' }],
+    groupAttendance: async () => ({ attended: new Set(), unknown: new Set(), complete: false }),
     social: async () => ({}), ...overrides.deps
   };
   return { service: createActionPointService(deps), writes, sqlCalls, setOld: value => { old = value; } };
@@ -89,7 +90,7 @@ test('migration preserves an existing current-month reservation lock and does no
   const service = createActionPointService({ query: async () => ({ rows: [{ student_id: 'S1', total_score: 10, rank: 'high', action_points: null }] }) });
   const [row] = await service.getAll('2026-11');
   assert.equal(row.rank, 'unknown'); assert.equal(row.total_score, 0); assert.equal(row.action_points.evaluated, 0);
-  assert.equal(row.action_points.items.length, 15);
+  assert.equal(row.action_points.items.length, 16);
 });
 test('a fully fetched empty chat adds only frequency risk; AI failure never adds quality/dependency risk', async () => {
   for (const messages of [[], [{ id: '1', authorId: '123', at: '2026-11-11' }, { id: '2', authorId: '123', at: '2026-11-10' }]]) {
@@ -146,4 +147,20 @@ test('action detail UI escapes untrusted AI reasons and rejects non-Discord evid
   const html = context.renderActionPointSummary({ ratio: 0.6, rank: 'high', total: 6, evaluated: 10, items: [{ label: '<img>', criterion: '<script>', reason: '<svg>', evidence: [{ reason: '<iframe>', links: ['javascript:alert(1)', 'https://discord.com/channels/1/2/3'] }] }] });
   assert.ok(html.includes('レッド')); assert.ok(html.includes('60.0%')); assert.ok(!html.includes('<svg>'));
   assert.ok(!html.includes('javascript:')); assert.ok(html.includes('https://discord.com/channels/1/2/3'));
+});
+
+test('group attendance adds one point only when both sources confirm no response; either positive response wins', async () => {
+  for (const [group, point, status] of [
+    [{ attended: new Set(), unknown: new Set(), complete: true }, 1, 'evaluated'],
+    [{ attended: new Set(['S1']), unknown: new Set(), complete: true }, 0, 'evaluated'],
+    [{ attended: new Set(['S1']), unknown: new Set(['S1']), complete: false }, 0, 'evaluated'],
+    [{ attended: new Set(), unknown: new Set(), complete: false }, null, 'unknown'],
+    [{ attended: new Set(), unknown: new Set(['S1']), complete: true }, null, 'unknown']
+  ]) {
+    let calls = 0;
+    const f = fixture({ students: [student, { ...student, student_id: 'S2' }], deps: { groupAttendance: async (month, at) => { calls++; assert.equal(month, '2026-11'); assert.equal(at, now); return group; } } });
+    await f.service.updateAll(null, now);
+    const metric = f.writes[0].params[9].items.find(item => item.key === 'group_attendance');
+    assert.equal(metric.point, point); assert.equal(metric.status, status); assert.equal(calls, 1);
+  }
 });
