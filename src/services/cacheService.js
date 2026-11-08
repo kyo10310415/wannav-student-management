@@ -210,7 +210,7 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'レッスン満足度データ!A2:G', // タイムスタンプ, 年月, 生徒名, Tutor名, 満足度, 理由, 学籍番号
+      range: 'レッスン満足度データ!G2:G', // 回答数の集計には学籍番号のみ必要
     });
 
     const rows = response.data.values || [];
@@ -230,7 +230,7 @@ export async function fetchSurveyResponsesFromCache(spreadsheetId) {
     const responseCountMap = {};
     
     rows.forEach((row, index) => {
-      const rawStudentId = row[6]; // G列: 学籍番号
+      const rawStudentId = row[0]; // G列のみ取得: 学籍番号
       if (rawStudentId && rawStudentId.toString().trim() !== '') {
         const normalizedId = normalizeStudentId(rawStudentId);
         

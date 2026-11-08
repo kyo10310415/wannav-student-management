@@ -11,7 +11,8 @@ async function fixture({ rows = [], fail = false, clientFail = false } = {}) {
   class FixedDate extends Date { constructor(...args) { super(...(args.length ? args : ['2026-10-26T06:00:00Z'])); } }
   const get = async params => {
     calls.push(params); if (fail) throw failure();
-    return { data: { values: rows, properties: { title: marker }, sheets: [{ properties: { title: marker, sheetId: 4, index: 0, gridProperties: { rowCount: 10, columnCount: 25 } } }] } };
+    const values = params.range === 'レッスン満足度データ!G2:G' ? rows.map(row => row.slice(6, 7)) : rows;
+    return { data: { values, properties: { title: marker }, sheets: [{ properties: { title: marker, sheetId: 4, index: 0, gridProperties: { rowCount: 10, columnCount: 25 } } }] } };
   };
   const deps = { Date: FixedDate, getSheets: () => {
     if (clientFail) throw failure(); return { spreadsheets: { get, values: { get } } };
@@ -92,7 +93,8 @@ test('survey count, current month and history preserve normalization, duplicate 
   assert.deepEqual(await f.api.fetchSurveyResponsesFromCache(marker), { [normalized]: 3 });
   assert.deepEqual(await f.api.fetchCurrentMonthSurveyResponses(marker), new Set([normalized]));
   assert.deepEqual(await f.api.fetchMonthlyResponseHistory(marker), new Map([[normalized, new Set(['2026/10', '2026/9'])]]));
-  assert.ok(f.calls.every(call => call.spreadsheetId === marker && call.range === 'レッスン満足度データ!A2:G')); safe(f);
+  assert.ok(f.calls.every(call => call.spreadsheetId === marker));
+  assert.deepEqual(f.calls.map(call => call.range), ['レッスン満足度データ!G2:G', 'レッスン満足度データ!A2:G', 'レッスン満足度データ!A2:G']); safe(f);
 });
 
 test('completion, extension and skill results retain filtering, duplicate overwrites and source columns', async () => {
