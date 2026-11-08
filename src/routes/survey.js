@@ -13,10 +13,13 @@ const app = new Hono();
 // Cache for survey response counts (1 hour for faster updates)
 let surveyResponseCache = null;
 let surveyResponseCacheTime = null;
+let surveyResponseFetch = null;
 
 // Cache for current month responders (1 hour)
 let currentMonthRespondersCache = null;
 let currentMonthRespondersCacheTime = null;
+let currentMonthRespondersFetch = null;
+let surveyCacheGeneration = 0;
 
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (was 24 hours)
 
@@ -235,15 +238,25 @@ async function getSurveyResponseCounts() {
     return {};
   }
   
-  try {
-    surveyResponseCache = await fetchSurveyResponsesFromCache(cacheSpreadsheetId);
-    surveyResponseCacheTime = now;
-    console.log(`[Survey] Survey response counts fetched and cached for ${Object.keys(surveyResponseCache).length} students`);
-    return surveyResponseCache;
-  } catch (error) {
-    console.error('[Survey] Error fetching survey response counts:');
-    return surveyResponseCache || {}; // Return old cache if available
+  // Share a cold/expired cache fetch across simultaneous student requests.
+  if (!surveyResponseFetch) {
+    const generation = surveyCacheGeneration;
+    surveyResponseFetch = Promise.resolve().then(async () => {
+      try {
+        const counts = await fetchSurveyResponsesFromCache(cacheSpreadsheetId);
+        if (generation === surveyCacheGeneration) {
+          surveyResponseCache = counts;
+          surveyResponseCacheTime = Date.now();
+        }
+        console.log(`[Survey] Survey response counts fetched and cached for ${Object.keys(counts).length} students`);
+        return counts;
+      } catch (error) {
+        console.error('[Survey] Error fetching survey response counts:');
+        return surveyResponseCache || {};
+      }
+    }).finally(() => { surveyResponseFetch = null; });
   }
+  return surveyResponseFetch;
 }
 
 /**
@@ -265,15 +278,24 @@ async function getCurrentMonthResponders() {
     return new Set();
   }
   
-  try {
-    currentMonthRespondersCache = await fetchCurrentMonthSurveyResponses(cacheSpreadsheetId);
-    currentMonthRespondersCacheTime = now;
-    console.log(`[Survey] Current month responders fetched and cached: ${currentMonthRespondersCache.size} students`);
-    return currentMonthRespondersCache;
-  } catch (error) {
-    console.error('[Survey] Error fetching current month responders:');
-    return currentMonthRespondersCache || new Set(); // Return old cache if available
+  if (!currentMonthRespondersFetch) {
+    const generation = surveyCacheGeneration;
+    currentMonthRespondersFetch = Promise.resolve().then(async () => {
+      try {
+        const responders = await fetchCurrentMonthSurveyResponses(cacheSpreadsheetId);
+        if (generation === surveyCacheGeneration) {
+          currentMonthRespondersCache = responders;
+          currentMonthRespondersCacheTime = Date.now();
+        }
+        console.log(`[Survey] Current month responders fetched and cached: ${responders.size} students`);
+        return responders;
+      } catch (error) {
+        console.error('[Survey] Error fetching current month responders:');
+        return currentMonthRespondersCache || new Set();
+      }
+    }).finally(() => { currentMonthRespondersFetch = null; });
   }
+  return currentMonthRespondersFetch;
 }
 
 /**
@@ -1429,6 +1451,8 @@ app.post('/reset-failed-notifications', async (c) => {
  */
 app.post('/clear-cache', async (c) => {
   try {
+    // An older in-flight request must not repopulate a manually cleared cache.
+    surveyCacheGeneration++;
     surveyResponseCache = null;
     surveyResponseCacheTime = null;
     currentMonthRespondersCache = null;
