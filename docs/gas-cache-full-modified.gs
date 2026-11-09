@@ -303,6 +303,10 @@ function fetchStudentsFromNotion() {
         break;
       }
       
+      if (!Array.isArray(data.results) || typeof data.has_more !== 'boolean' || (data.has_more && !data.next_cursor)) {
+        throw new Error('Notion API returned an incomplete page response');
+      }
+
       allResults = allResults.concat(data.results);
       hasMore = data.has_more;
       startCursor = data.next_cursor;
@@ -317,6 +321,10 @@ function fetchStudentsFromNotion() {
     }
   }
   
+  if (hasMore) {
+    throw new Error('Notionデータを全件取得できなかったため、既存キャッシュを保持して同期を中止しました。');
+  }
+
   return allResults.map(page => {
     const props = page.properties;
     return {
@@ -453,6 +461,10 @@ function fetchTutorsFromNotion() {
         break;
       }
       
+      if (!Array.isArray(data.results) || typeof data.has_more !== 'boolean' || (data.has_more && !data.next_cursor)) {
+        throw new Error('Notion API returned an incomplete page response');
+      }
+
       allResults = allResults.concat(data.results);
       hasMore = data.has_more;
       startCursor = data.next_cursor;
@@ -467,6 +479,10 @@ function fetchTutorsFromNotion() {
     }
   }
   
+  if (hasMore) {
+    throw new Error('Notionデータを全件取得できなかったため、既存キャッシュを保持して同期を中止しました。');
+  }
+
   return allResults.map(page => {
     const props = page.properties;
     const email = getPropertyValue(props['メールアドレス']);

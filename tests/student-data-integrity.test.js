@@ -43,6 +43,28 @@ for (const path of ['gas-notion-cache-sync.js', 'docs/gas-cache-full-modified.gs
   });
 }
 
+for (const path of ['gas-notion-cache-sync.js', 'docs/gas-cache-full-modified.gs']) {
+  for (const name of ['fetchStudentsFromNotion', 'fetchTutorsFromNotion']) {
+    test(`${path}: ${name} rejects failed or incomplete pagination before cache replacement`, async () => {
+      const source = await readFile(new URL('../' + path, import.meta.url), 'utf8');
+      for (const secondPage of [{ object: 'error', message: 'synthetic failure' },
+        { results: [], has_more: true }, { has_more: false }, { results: [] }, new Error('synthetic network failure')]) {
+        let requests = 0;
+        const context = vm.createContext({ NOTION_STUDENT_DB_ID: 'synthetic', NOTION_STUDENT_API_TOKEN: 'synthetic',
+          NOTION_TUTOR_DB_ID: 'synthetic', NOTION_TUTOR_API_TOKEN: 'synthetic', Logger: { log() {} }, Utilities: { sleep() {} },
+          UrlFetchApp: { fetch: () => {
+            const page = ++requests === 1 ? { results: [{ id: 'synthetic', properties: {} }], has_more: true, next_cursor: 'cursor' } : secondPage;
+            if (page instanceof Error) throw page;
+            return { getContentText: () => JSON.stringify(page) };
+          } } });
+        vm.runInContext(extractFunction(source, 'getPropertyValue') + '\n' + extractFunction(source, name), context);
+        assert.throws(() => context[name](), /全件取得できなかった/);
+        assert.equal(requests, 2);
+      }
+    });
+  }
+}
+
 async function syncFixture(students) {
   const writes = [];
   const deps = { Hono, process: { env: { GOOGLE_CACHE_SHEET_ID: 'synthetic' } }, console: { log() {}, warn() {}, error() {} },
