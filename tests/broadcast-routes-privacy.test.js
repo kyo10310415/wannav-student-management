@@ -1,3 +1,4 @@
+import { optimizeBroadcastImage } from '../src/services/broadcastImageService.js';
 import { limitBroadcastImageUpload } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ async function fixture({ role = 'crew', fail = [], serviceError, returnedJob = j
   const logs = [], calls = [], queries = [];
   const rawError = () => serviceError || Object.assign(new Error(marker), { config: { url: marker }, response: { data: marker } });
   const wrap = (name, value) => async (...args) => { calls.push({ name, args }); if (fail.includes(name)) throw rawError(); return value; };
-  const deps = { Hono, limitBroadcastImageUpload, console: Object.fromEntries(['log', 'warn', 'error'].map(level => [level, (...args) => logs.push(inspect(args))])),
+  const deps = { optimizeBroadcastImage, Hono, limitBroadcastImageUpload, console: Object.fromEntries(['log', 'warn', 'error'].map(level => [level, (...args) => logs.push(inspect(args))])),
     getTargetStudents: wrap('targets', [student]), enqueueBroadcast: wrap('enqueue', { jobId: 'fixture-job', broadcastId: 1, total: 1 }),
     getBroadcastJobStatus: wrap('status', returnedJob), getLatestRecoverableBroadcastJob: wrap('recoverable', returnedJob),
     reconcileStaleBroadcastJobs: wrap('reconcile', undefined), resumeBroadcastJob: wrap('resume', returnedJob), acknowledgeBroadcastJob: wrap('acknowledge', returnedJob),
@@ -118,7 +119,7 @@ test('image upload and retrieval keep bytes, owner, type and headers without met
     assert.equal(response.status, fail.length ? 500 : 200);
     if (!fail.length) {
       const insert = f.queries.find(call => call.sql.includes('INSERT INTO broadcast_images'));
-      assert.equal(insert.params[1], marker + '.png'); assert.equal(insert.params[2], 'image/png'); assert.deepEqual(insert.params[4], fixturePng); assert.equal(insert.params[5], email);
+      assert.equal(insert.params[1], marker + '.webp'); assert.equal(insert.params[2], 'image/webp'); assert.ok(insert.params[4].length < fixturePng.length); assert.equal(insert.params[3], insert.params[4].length); assert.equal(insert.params[5], email);
       const image = await f.app.request('/images/fixture', { headers: auth }); assert.deepEqual(Buffer.from(await image.arrayBuffer()), fixturePng); assert.equal(image.headers.get('Content-Type'), 'image/png');
     } else assert.equal((await response.json()).error, 'Broadcast operation failed');
     safe(f);

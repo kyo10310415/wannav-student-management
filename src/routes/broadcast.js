@@ -15,6 +15,7 @@ import {
 } from '../services/broadcastService.js';
 import { query } from '../db/connection.js';
 import { limitBroadcastImageUpload } from '../security/uploadBodyLimit.js';
+import { optimizeBroadcastImage } from '../services/broadcastImageService.js';
 
 // Images are now stored in database (broadcast_images table)
 // No need for in-memory storage
@@ -532,6 +533,7 @@ app.post('/upload-image', limitBroadcastImageUpload, async (c) => {
     const buffer = Buffer.from(arrayBuffer);
     const contentType = broadcastInlineImageType(buffer);
     if (!contentType) return c.json({ success: false, error: 'Invalid image content' }, 400);
+    const image = await optimizeBroadcastImage(buffer, file.name, contentType);
     
     // Generate unique image ID
     const imageId = `img_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -542,7 +544,7 @@ app.post('/upload-image', limitBroadcastImageUpload, async (c) => {
     await query(
       `INSERT INTO broadcast_images (image_id, filename, content_type, file_size, image_data, uploaded_by)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [imageId, file.name, contentType, buffer.length, buffer, user.email]
+      [imageId, image.filename, image.contentType, image.buffer.length, image.buffer, user.email]
     );
     
     console.log('[Broadcast] Image stored successfully');
@@ -550,7 +552,7 @@ app.post('/upload-image', limitBroadcastImageUpload, async (c) => {
     return c.json({
       success: true,
       imageId: imageId,
-      filename: file.name
+      filename: image.filename
     });
   } catch (error) {
     console.error('Error storing image:');
