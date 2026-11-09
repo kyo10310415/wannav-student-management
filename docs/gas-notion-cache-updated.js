@@ -225,9 +225,9 @@ function getPropertyValue(properties, propertyName, propertyType) {
   
   switch (propertyType) {
     case 'title':
-      return prop.title && prop.title.length > 0 ? prop.title[0].plain_text : '';
+      return prop.title?.map(part => part.plain_text ?? '').join('') || '';
     case 'rich_text':
-      return prop.rich_text && prop.rich_text.length > 0 ? prop.rich_text[0].plain_text : '';
+      return prop.rich_text?.map(part => part.plain_text ?? '').join('') || '';
     case 'select':
       return prop.select ? prop.select.name : '';
     case 'multi_select':
