@@ -175,9 +175,9 @@ function getPropertyValue(property) {
 
   switch (property.type) {
     case 'title':
-      return property.title?.[0]?.plain_text || null;
+      return property.title?.map(part => part.plain_text ?? '').join('') || null;
     case 'rich_text':
-      return property.rich_text?.[0]?.plain_text || null;
+      return property.rich_text?.map(part => part.plain_text ?? '').join('') || null;
     case 'number':
       return property.number;
     case 'select':

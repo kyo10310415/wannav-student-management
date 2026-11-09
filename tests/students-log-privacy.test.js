@@ -68,7 +68,7 @@ test('sync preserves partial counts, preferred stats/date fields, text mapping a
   } });
   const response = await f.app.request('/sync');
   assert.deepEqual(await response.json(), { success: true, message: 'Synced 1 students from cache (1 errors, 1 skipped, 0 deleted)',
-    count: 1, errors: 1, skipped: 1, deleted: 0, lastCacheSync: marker });
+    count: 1, errors: 1, skipped: 1, duplicateStudentIds: 0, deleted: 0, lastCacheSync: marker });
   const insert = f.queries.find(call => call.sql.includes('INSERT INTO students'));
   assert.equal(insert.params[6], 9); assert.equal(insert.params[21], 1);
   assert.equal(insert.params[22], '2026-01-01'); assert.equal(insert.params[23], 6); assert.equal(insert.params[24], 2);

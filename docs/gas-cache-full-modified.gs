@@ -327,7 +327,7 @@ function fetchStudentsFromNotion() {
       contract_plan: getPropertyValue(props['契約プラン']),
       character_name: getPropertyValue(props['キャラクター名']),
       homeroom_tutor: getPropertyValue(props['担任Tutor']),
-      notion_url: getPropertyValue(props['Notion URL']) || getPropertyValue(props['NotionURL']) || '',
+      notion_url: page.url || `https://www.notion.so/${page.id.replace(/-/g, '')}`,
       discord_url: '', // Will be filled from Discord destination spreadsheet
       youtube_channel_id: getPropertyValue(props['YTチャンネルID']) || '', // YouTube ID追加
       x_account_id: getPropertyValue(props['X ID（@は無し）']) || ''    // X ID追加
@@ -788,9 +788,9 @@ function getPropertyValue(property) {
   
   switch (property.type) {
     case 'title':
-      return property.title.length > 0 ? property.title[0].plain_text : null;
+      return property.title?.map(part => part.plain_text ?? '').join('') || null;
     case 'rich_text':
-      return property.rich_text.length > 0 ? property.rich_text[0].plain_text : null;
+      return property.rich_text?.map(part => part.plain_text ?? '').join('') || null;
     case 'number':
       return property.number;
     case 'select':

@@ -184,10 +184,23 @@ app.get('/sync', async (c) => {
       // Continue without lesson stats
     }
     
-    // Filter out students without student_id
+    // A cache row must not choose a canonical Notion page by arrival order.
+    // Preserve existing DB data until duplicated IDs are resolved at the source.
+    const studentIdCounts = new Map();
+    for (const student of students) {
+      if (student.student_id) {
+        studentIdCounts.set(student.student_id, (studentIdCounts.get(student.student_id) || 0) + 1);
+      }
+    }
+    const duplicateStudentIdCount = [...studentIdCounts.values()].filter(count => count > 1).length;
+    if (duplicateStudentIdCount) {
+      console.warn(`Skipping ${duplicateStudentIdCount} duplicated student IDs; preserving existing DB records`);
+    }
+
+    // Filter out students without student_id and every row of a duplicated ID.
     const skippedStudents = [];
     const validStudents = students.filter(student => {
-      if (!student.student_id) {
+      if (!student.student_id || studentIdCounts.get(student.student_id) > 1) {
         skippedStudents.push({
           name: student.name || 'Unknown',
           status: student.status,
@@ -225,6 +238,12 @@ app.get('/sync', async (c) => {
         const textType = studentTextTypeSourceAvailable
           ? (studentTextTypeMap.get(normalizedStudentId) || '旧')
           : null;
+
+        // The canonical URL belongs to the fetched page, not an editable URL field.
+        const pageId = String(student.notion_page_id || '').replace(/-/g, '');
+        const notionUrl = /^[0-9a-f]{32}$/i.test(pageId)
+          ? `https://www.notion.so/${pageId.toLowerCase()}`
+          : student.notion_url;
         
         await query(
           `INSERT INTO students 
@@ -276,7 +295,7 @@ app.get('/sync', async (c) => {
             student.homeroom_tutor,
             lessonProgress,
             student.notion_page_id,
-            student.notion_url,
+            notionUrl,
             student.discord_url,
             student.payment_status_last_month,
             student.payment_status_current_month,
@@ -326,6 +345,7 @@ app.get('/sync', async (c) => {
       count: successCount,
       errors: errorCount,
       skipped: skippedStudents.length,
+      duplicateStudentIds: duplicateStudentIdCount,
       deleted: deletedCount,
       lastCacheSync: syncMeta?.lastSync
     });
