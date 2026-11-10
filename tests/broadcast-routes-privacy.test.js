@@ -1,3 +1,4 @@
+// Valid synthetic 64x32 RGBA PNG; replaces legacy fixture rejected by current libpng.
 import { optimizeBroadcastImage } from '../src/services/broadcastImageService.js';
 import { limitBroadcastImageUpload } from '../src/security/uploadBodyLimit.js';
 import test from 'node:test';
@@ -10,7 +11,7 @@ const marker = 'SYNTHETIC_BROADCAST_ROUTE_PRIVATE';
 const email = 'fixture@example.test';
 const job = { job_id: 'fixture-job', broadcast_id: 1, status: 'needs_review', total: '2', sent: '1', failed: '0', unknown_count: '1', pending: '0',
   is_test: false, updated_at: 'fixture-time', last_error: marker, unknown_recipients: [{ student_id: marker }], created_by: email };
-const fixturePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+const fixturePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAbklEQVRogeXOMQEAIAzAsMqZMIQgBamTkYMjf5rz7s/SAS0d0NIBLR3Q0gEtHdDSAS0d0NIBLR3Q0gEtHdDSAS0d0NIBLR3Q0gEtHdDSAS0d0NIBLR3Q0gEtHdDSAS0d0NIBLR3Q0gEtHdDSAW0BpxNgxGQwr6oAAAAASUVORK5CYII=', 'base64');
 const student = { student_id: marker, name: marker, homeroom_tutor: marker };
 const auth = { Authorization: 'Bearer fixture-session' };
 const request = (body, method = 'POST') => ({ method, headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
