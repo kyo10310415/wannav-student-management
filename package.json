@@ -34,7 +34,7 @@
     "node-cron": "^3.0.3",
     "openai": "^6.45.0",
     "pg": "^8.13.1",
-    "sharp": "0.34.5"
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2"
