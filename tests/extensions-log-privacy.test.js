@@ -22,6 +22,7 @@ async function fixture({ configured = true, fail, empty = false } = {}) {
     queryExtension: async sql => { calls.push({ stage: 'extension', sql }); failAt('extension-query'); return { rows: empty ? [] : extensions }; },
     getPool: () => { failAt('main-pool'); return { query: async sql => { calls.push({ stage: 'main', sql }); failAt('main-query'); return { rows: empty ? [] : students }; } }; } };
   const source = (await readFile(new URL('../src/routes/extensions.js', import.meta.url), 'utf8'))
+    .replace("import { fetchMonthlyExtensionTargets } from '../services/extensionTargetsService.js';", 'const fetchMonthlyExtensionTargets = async () => { throw new Error("unavailable"); };')
     .replace("import { Hono } from 'hono';", 'const Hono = deps.Hono;')
     .replace("import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';", 'const { queryExtension, getExtensionPool } = deps;')
     .replace("import { getPool } from '../db/connection.js';", 'const getPool = deps.getPool;');

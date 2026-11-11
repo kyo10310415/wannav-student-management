@@ -12,7 +12,7 @@ function fixture() {
   const roots = { 'student-table-body': { innerHTML: '' } };
   const context = { URL, escapeHtml, currentMonth: date, getFilteredStudents: () => [student], lessonStats: { [student.student_id]: 1 }, lessonDates: { [student.student_id]: [lesson] }, getLessonCountColor: () => '', getLessonCountBadgeColor: () => '', getTutorDisplayName: value => value, renderStudentTextTypeBadge: () => '<span>旧</span>', getLessonProgressClass: () => '', getResultOverallColor: () => '', calculateContinuedMonths: () => 1, isFirstLessonOfMonth: () => false, getPreviousMonth: () => '2026-09', document: { getElementById: id => roots[id] }, lessonReportStatus: {} };
   vm.createContext(context);
-  for (const name of ['studentDisplayText','studentDisplayAttribute','studentDisplayLink','formatYouTubeUrl','formatXUrl','getLessonProgressDisplay','getLessonReportButton','renderStudentRows','renderTodayStudentRows','renderStudentTable']) vm.runInContext(extract(name), context);
+  for (const name of ['studentDisplayText','studentDisplayAttribute','studentDisplayLink','formatYouTubeUrl','formatXUrl','getLessonProgressDisplay','getLessonReportButton','renderStudentRows','renderTodayExtensionTargets','renderTodayStudentRows','renderStudentTable']) vm.runInContext(extract(name), context);
   return { context, student, lesson, date, roots };
 }
 test('real reservation and daily renderers escape stored text, title and identifier attributes', () => {

@@ -1,9 +1,17 @@
 import { Hono } from 'hono';
+import { fetchMonthlyExtensionTargets } from '../services/extensionTargetsService.js';
 import { queryExtension, getExtensionPool } from '../db/extensionConnection.js';
 import { getPool } from '../db/connection.js';
 import { aggregateExtensionStats, EXTENSION_ROUNDS } from '../services/extensionStatsService.js';
 
 const app = new Hono();
+app.get('/monthly-targets', async c => {
+  try { return c.json(await fetchMonthlyExtensionTargets()); }
+  catch {
+    console.error('[Extensions] Monthly target lookup failed');
+    return c.json({ success: false, error: '今月の延長審査・ヒアリング対象を取得できませんでした。' }, 503);
+  }
+});
 
 // Only fixed, code-defined column names are interpolated; no request input is used.
 const extensionColumns = EXTENSION_ROUNDS.flatMap(({ round }) => [
