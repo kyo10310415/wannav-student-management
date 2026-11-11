@@ -5163,6 +5163,11 @@ async function renderTodayLessonsPage() {
   // Load lesson report status for display date
   const displayDateStr = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, '0')}-${String(displayDate.getDate()).padStart(2, '0')}`;
   await loadLessonReportStatus(displayDateStr);
+  let monthlyExtensionTargets = null;
+  try {
+    const response = await axios.get(`${API_BASE}/api/extensions/monthly-targets`);
+    if (response.data.success) monthlyExtensionTargets = new Map(response.data.data.map(row => [row.studentId, row]));
+  } catch { /* Keep lessons visible when the extension app is unavailable. */ }
   const displayDay = displayDate.getDate();
   
   console.log(`Display date: ${displayMonth}/${displayDay}`);
@@ -5290,7 +5295,7 @@ async function renderTodayLessonsPage() {
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            ${renderTodayStudentRows(dayStudents, displayDate)}
+            ${renderTodayStudentRows(dayStudents, displayDate, monthlyExtensionTargets)}
           </tbody>
         </table>
       </div>
@@ -5368,7 +5373,15 @@ function isFirstLessonOfMonth(studentId, currentDate) {
   return lessonCountThisMonth === 1;
 }
 
-function renderTodayStudentRows(dayStudents, displayDate) {
+function renderTodayExtensionTargets(studentId, targets) {
+  if (targets === null) return '<span class="text-xs text-gray-500">今月の審査・ヒアリング対象情報未取得</span>';
+  return ['examination', 'hearing'].map(kind => {
+    const rounds = (targets.get(studentId)?.[kind] || []).filter(n => Number.isInteger(n) && n >= 1 && n <= 10);
+    return rounds.length ? `<span class="inline-flex px-2 py-1 text-xs font-bold rounded-full ${kind === 'examination' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}">今月${kind === 'examination' ? '延長審査' : 'ヒアリング'}対象（${rounds.join('・')}回目）</span>` : '';
+  }).join('');
+}
+
+function renderTodayStudentRows(dayStudents, displayDate, monthlyExtensionTargets = null) {
   if (dayStudents.length === 0) {
     return `
       <tr>
@@ -5423,6 +5436,7 @@ function renderTodayStudentRows(dayStudents, displayDate) {
         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
           <div class="flex items-center gap-2">
             <span>${studentDisplayText(student.name || '-')}</span>
+            ${renderTodayExtensionTargets(student.student_id, monthlyExtensionTargets)}
             ${isFirstLesson ? `
               <span class="inline-flex items-center px-2 py-1 text-xs font-bold rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg animate-pulse">
                 <i class="fas fa-star mr-1"></i>本日リザルトお伝え
