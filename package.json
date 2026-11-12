@@ -40,7 +40,7 @@
     "@types/node": "^22.10.2"
   },
   "engines": {
-    "node": ">=22.23.4 <23"
+    "node": ">=22.23.5 <23"
   },
   "overrides": {
     "gaxios": {
