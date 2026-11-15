@@ -56,6 +56,7 @@ import { checkStampRallyAchievements } from './services/stampRallyService.js';
 // Jobs
 import sendLessonReportReminder from './jobs/lessonReportReminder.js';
 import sendDailyReportReminder from './jobs/dailyReportReminder.js';
+import { sendExtensionLessonReminders } from './jobs/extensionLessonReminder.js';
 import { sendSurveyReminderNotifications } from './jobs/surveyReminderNotification.js';
 import { dailyRedListUpdate } from './jobs/redListDaily.js';
 import { monthlyRedListReset } from './jobs/redListMonthly.js';
@@ -76,6 +77,8 @@ cron.schedule('*/5 * * * *', () => {
 });
 
 const app = new Hono();
+// First delivery at 10:00 JST, then catch late reservations / missed runs until midnight.
+cron.schedule('0 10-23 * * *', () => sendExtensionLessonReminders(), { timezone: 'Asia/Tokyo' });
 
 // Middleware
 app.use('*', browserSecurityHeaders);
