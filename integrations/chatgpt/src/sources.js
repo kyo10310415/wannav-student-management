@@ -43,7 +43,7 @@ export class Sources {
           Authorization: "Bearer " + config.token,
           Accept: "application/json",
         },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(45000),
         redirect: "error",
       });
     } catch {
