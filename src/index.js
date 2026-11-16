@@ -68,10 +68,15 @@ import { browserSecurityHeaders } from './security/browserHeaders.js';
 import { configureInternalApi, internalFetch } from './security/internalApi.js';
 import { query, getPool } from './db/connection.js';
 import chatgptReader from '../chatgpt-readonly/reader.cjs';
+import { provisionOAuth } from '../chatgpt-readonly/provision-oauth.js';
 import { catalog as chatgptCatalog } from '../chatgpt-readonly/central-catalog.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 import { recoverPendingBroadcastJobs } from './services/broadcastService.js';
 import { startDiscordReplyMonitor, checkDiscordReplyAlerts } from './services/discordReplyMonitor.js';
+
+const chatgptProvisionedOAuth = process.env.CHATGPT_PROVISION_OAUTH === 'true'
+  ? await provisionOAuth({pool:getPool(),password:process.env.CHATGPT_OAUTH_RUNTIME_PASSWORD,connectionString:process.env.DATABASE_URL})
+  : null;
 
 startDiscordReplyMonitor();
 cron.schedule('*/5 * * * *', () => {
@@ -90,6 +95,7 @@ app.all('/integrations/chatgpt/v1/*', async c => {
   catch { return c.json({error:'Invalid query'},400); }
   const result=await readChatgpt({method:c.req.method,authorization:c.req.header('authorization'),
     path:c.req.path.slice('/integrations/chatgpt/v1'.length),input});
+  if (result.status === 200 && c.req.path.endsWith('/catalog') && chatgptProvisionedOAuth) result.body.provisionedOAuth = chatgptProvisionedOAuth;
   c.header('Cache-Control','no-store');return c.json(result.body,result.status);
 });
 

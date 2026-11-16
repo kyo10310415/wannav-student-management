@@ -111,3 +111,13 @@ OAuthのrevoke endpointで接続の認可単位を失効できます。管理者
 各ソースリポジトリでは`npm run test:chatgpt`。5リポジトリを同じ親ディレクトリにcloneした環境では、`WANNAV_SOURCE_ROOT=<親ディレクトリ> npm run test:contracts`で原本のテーブル定義から隔離DBを作り、固定SQLを検証できます（Node 24のnode:sqliteを使用）。支払い管理では追加の実SQL試験で既存の月別合成・MAU/ARPUとの整合を検証します。
 
 本番Google認証、ChatGPT Proの実接続、本番DB・Sheets上の件数・履歴網羅性は、設定後の受け入れ確認が必要です。
+
+## 初回配置の補助手順
+
+承認済みの既存中央DBに専用ロールを作る場合、中央管理サービスに`CHATGPT_PROVISION_OAUTH=true`と48文字以上のランダムな`CHATGPT_OAUTH_RUNTIME_PASSWORD`を明示設定して一度起動できます。`chatgpt-readonly/provision-oauth.js`はトランザクション内で専用ロール`wannav_chatgpt_oauth`と認証スキーマを用意し、認証テーブル以外の生徒テーブルを読めないことを検証します。既存の無関係な同名ロールは変更せず拒否します。通常起動では実行しません。
+
+初回設定中だけ、中央管理の認証済みcatalogに接続先の非秘密メタデータを添付します。共通サーバーには新ロールの接続情報だけを設定し、既存DB管理者のパスワードは渡しません。確認後は`CHATGPT_PROVISION_OAUTH=false`に戻し、中央管理側の一時パスワード環境変数は空にします。
+
+Google OAuthの設定前に接続先URLを確保する場合、共通サービスを`SETUP_MODE=true`で起動できます。この状態では`/health`が`configuration_required / dataAccessEnabled:false`を返し、MCP・OAuth・その他すべてのパスは503です。Google認証情報・DB・許可済みredirect URIを設定してから`SETUP_MODE=false`に切り替えます。設定モードのliveは、ChatGPTとの接続完了を意味しません。
+
+今回の配置先はSingapore、`0.5c-512mb`（現在の基本料金は月7米ドル）です。既存の延長管理はOregonのため、ソースAPIは各サービスの公開HTTPS originと専用トークンを使います。データ取得用にサービスを新たに公開したり、既存の認証を解除したりしません。Google Cloudプロジェクトは`student-management-487812`です。

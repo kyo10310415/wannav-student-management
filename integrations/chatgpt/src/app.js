@@ -2,6 +2,7 @@ import express from "express";
 import { rateLimit } from "express-rate-limit";
 import {
   mcpAuthRouter,
+  createOAuthMetadata,
   getOAuthProtectedResourceMetadataUrl,
 } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
@@ -37,6 +38,46 @@ export function createApp({ provider, sources, origin, production = true }) {
         "WannaV read-only data reference. Open the corresponding ID using the authenticated MCP fetch tool. No student data is exposed on this page.",
       ),
   );
+  const issuer = new URL(origin).href;
+  // RFC 9207 lets ChatGPT use its documented stable OAuth callback.
+  app.get("/.well-known/oauth-authorization-server", (_req, res) =>
+    res.set("Access-Control-Allow-Origin", "*").json({
+      ...createOAuthMetadata({
+        provider,
+        issuerUrl: new URL(origin),
+        scopesSupported: ["read"],
+      }),
+      authorization_response_iss_parameter_supported: true,
+    }),
+  );
+  app.use((req, res, next) => {
+    if (req.path === "/authorize" || req.path === "/oauth/consent") {
+      const redirect = res.redirect.bind(res);
+      res.redirect = (statusOrUrl, location) => {
+        const value = typeof statusOrUrl === "number" ? location : statusOrUrl;
+        let updated = value;
+        try {
+          const target = new URL(value);
+          if (
+            provider.redirectUris.some((raw) => {
+              const approved = new URL(raw);
+              return (
+                approved.origin === target.origin &&
+                approved.pathname === target.pathname
+              );
+            })
+          ) {
+            target.searchParams.set("iss", issuer);
+            updated = target.href;
+          }
+        } catch {}
+        return typeof statusOrUrl === "number"
+          ? redirect(statusOrUrl, updated)
+          : redirect(updated);
+      };
+    }
+    next();
+  });
   app.use(
     mcpAuthRouter({
       provider,

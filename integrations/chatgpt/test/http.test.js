@@ -90,6 +90,7 @@ test("real HTTP OAuth, S256 PKCE, consent, MCP SDK discovery/search/fetch; write
     origin + "/.well-known/oauth-authorization-server",
   ).then((r) => r.json());
   assert.ok(metadata.authorization_endpoint);
+  assert.equal(metadata.authorization_response_iss_parameter_supported, true);
   assert.ok(metadata.registration_endpoint);
   const register = await fetch(origin + "/register", {
     method: "POST",
@@ -151,6 +152,24 @@ test("real HTTP OAuth, S256 PKCE, consent, MCP SDK discovery/search/fetch; write
   assert.equal(accepted.status, 302);
   const target = new URL(accepted.headers.get("location"));
   assert.equal(target.searchParams.get("state"), "chatgpt-state");
+  assert.equal(target.searchParams.get("iss"), metadata.issuer);
+  const rejected = await fetch(
+    origin +
+      "/authorize?" +
+      new URLSearchParams({
+        client_id: client.client_id,
+        redirect_uri: "https://chatgpt.example/callback",
+        response_type: "code",
+        scope: "write",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      }),
+    { redirect: "manual" },
+  );
+  assert.equal(
+    new URL(rejected.headers.get("location")).searchParams.get("iss"),
+    metadata.issuer,
+  );
   const tokenBody = {
     client_id: client.client_id,
     grant_type: "authorization_code",
