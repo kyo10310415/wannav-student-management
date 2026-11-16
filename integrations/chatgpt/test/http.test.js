@@ -136,6 +136,7 @@ test("real HTTP OAuth, S256 PKCE, consent, MCP SDK discovery/search/fetch; write
     { headers: { Cookie: cookie } },
   );
   assert.equal(callback.status, 200);
+  assert.equal(callback.headers.get("referrer-policy"), "strict-origin");
   const page = await callback.text();
   assert.ok(page.includes("更新・通知はできません"));
   const consent = /name="consent" value="([^"]+)"/.exec(page)[1];
