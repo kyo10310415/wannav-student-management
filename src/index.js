@@ -66,7 +66,9 @@ import { monthlyFunnelSnapshot } from './jobs/funnelMonthlySnapshot.js';
 import { installApiAccess } from './security/apiAccess.js';
 import { browserSecurityHeaders } from './security/browserHeaders.js';
 import { configureInternalApi, internalFetch } from './security/internalApi.js';
-import { query } from './db/connection.js';
+import { query, getPool } from './db/connection.js';
+import chatgptReader from '../chatgpt-readonly/reader.cjs';
+import { catalog as chatgptCatalog } from '../chatgpt-readonly/central-catalog.js';
 import { minutesAutoGenerate } from './jobs/minutesAutoGenerate.js';
 import { recoverPendingBroadcastJobs } from './services/broadcastService.js';
 import { startDiscordReplyMonitor, checkDiscordReplyAlerts } from './services/discordReplyMonitor.js';
@@ -79,6 +81,17 @@ cron.schedule('*/5 * * * *', () => {
 const app = new Hono();
 // First delivery at 10:00 JST, then catch late reservations / missed runs until midnight.
 cron.schedule('0 10-23 * * *', () => sendExtensionLessonReminders(), { timezone: 'Asia/Tokyo' });
+
+// Dedicated route: never bypasses or reuses the business API session.
+const readChatgpt = chatgptReader.createReader({ catalog: chatgptCatalog, pool: { connect: () => getPool().connect() } });
+app.all('/integrations/chatgpt/v1/*', async c => {
+  let input;
+  try { const raw=c.req.query('request'); if(raw!==undefined){if(raw.length>8000)throw new Error();input=JSON.parse(raw)} }
+  catch { return c.json({error:'Invalid query'},400); }
+  const result=await readChatgpt({method:c.req.method,authorization:c.req.header('authorization'),
+    path:c.req.path.slice('/integrations/chatgpt/v1'.length),input});
+  c.header('Cache-Control','no-store');return c.json(result.body,result.status);
+});
 
 // Middleware
 app.use('*', browserSecurityHeaders);

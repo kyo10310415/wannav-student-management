@@ -1,0 +1,46 @@
+# Separate Blueprint. Does not modify the existing central-management service.
+services:
+  - type: web
+    name: wannav-chatgpt-readonly
+    runtime: node
+    branch: main
+    rootDir: integrations/chatgpt
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.22.3
+      - key: PUBLIC_URL
+        sync: false
+      - key: AUTH_DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: CHATGPT_REDIRECT_URIS
+        sync: false
+      - key: CENTRAL_URL
+        sync: false
+      - key: CENTRAL_TOKEN
+        sync: false
+      - key: EXTENSION_URL
+        sync: false
+      - key: EXTENSION_TOKEN
+        sync: false
+      - key: EP_URL
+        sync: false
+      - key: EP_TOKEN
+        sync: false
+      - key: SALES_URL
+        sync: false
+      - key: SALES_TOKEN
+        sync: false
+      - key: PAYMENT_URL
+        sync: false
+      - key: PAYMENT_TOKEN
+        sync: false

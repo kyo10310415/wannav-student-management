@@ -1,0 +1,32 @@
+name: ChatGPT read-only integration
+on:
+  pull_request:
+    paths: ['integrations/chatgpt/**', 'chatgpt-readonly/**', '.github/workflows/chatgpt-readonly.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mcp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/chatgpt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: integrations/chatgpt/.node-version
+          cache: npm
+          cache-dependency-path: integrations/chatgpt/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:chatgpt

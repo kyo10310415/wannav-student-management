@@ -1,0 +1,65 @@
+{
+  "students": {
+    "title": "中央管理：現在の生徒情報",
+    "sql": "SELECT student_id,name,status,contract_plan,homeroom_tutor,updated_at FROM students",
+    "fields": {
+      "student_id": "text",
+      "name": "text",
+      "status": "text",
+      "contract_plan": "text",
+      "homeroom_tutor": "text",
+      "updated_at": "text"
+    },
+    "order": ["student_id"],
+    "history": "current"
+  },
+  "lesson_reports": {
+    "title": "中央管理：レッスン実施・欠席履歴",
+    "sql": "SELECT id,student_id,to_char(lesson_date,'YYYY-MM-DD') AS lesson_date,lesson_result,lesson_number,tutor_name,reported_at,updated_at FROM lesson_reports",
+    "fields": {
+      "id": "number",
+      "student_id": "text",
+      "lesson_date": "text",
+      "lesson_result": "text",
+      "lesson_number": "text",
+      "tutor_name": "text",
+      "reported_at": "text",
+      "updated_at": "text"
+    },
+    "order": ["id"],
+    "history": "event"
+  },
+  "reservations": {
+    "title": "中央管理：予約（実施記録ではない）",
+    "sql": "SELECT id,student_id,tutor_name,lesson_date,title,updated_at FROM lessons",
+    "fields": {
+      "id": "number",
+      "student_id": "text",
+      "tutor_name": "text",
+      "lesson_date": "text",
+      "title": "text",
+      "updated_at": "text"
+    },
+    "order": ["id"],
+    "history": "current"
+  },
+  "tutor_snapshots": {
+    "title": "中央管理：Tutor満足度・回収率の週次保存値",
+    "sql": "SELECT id,to_char(snapshot_date,'YYYY-MM-DD') AS snapshot_date,tutor_notion_name,split_part(year_month,'/',1)||'-'||lpad(split_part(year_month,'/',2),2,'0') AS year_month,active_student_count,satisfaction_count,satisfaction_avg,satisfaction_value,collection_rate,satisfaction_score,created_at FROM tutor_weekly_snapshots",
+    "fields": {
+      "snapshot_date": "text",
+      "tutor_notion_name": "text",
+      "year_month": "text",
+      "created_at": "text",
+      "id": "number",
+      "active_student_count": "number",
+      "satisfaction_count": "number",
+      "satisfaction_avg": "number",
+      "satisfaction_value": "number",
+      "collection_rate": "number",
+      "satisfaction_score": "number"
+    },
+    "order": ["id"],
+    "history": "snapshot"
+  }
+}
