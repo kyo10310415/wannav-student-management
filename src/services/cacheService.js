@@ -168,14 +168,14 @@ export async function fetchProgressFromCache(spreadsheetId) {
 /**
  * Fetch satisfaction data from cache spreadsheet
  */
-export async function fetchSatisfactionFromCache(spreadsheetId) {
+export async function fetchSatisfactionFromCache(spreadsheetId, requestOptions) {
   try {
     const sheets = getSheetsClient();
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: 'レッスン満足度データ!A2:L',
-    });
+    }, requestOptions);
 
     const rows = response.data.values || [];
     console.log(`Fetched ${rows.length} satisfaction records from cache spreadsheet`);

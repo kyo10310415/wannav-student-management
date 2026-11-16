@@ -121,3 +121,5 @@ OAuthのrevoke endpointで接続の認可単位を失効できます。管理者
 Google OAuthの設定前に接続先URLを確保する場合、共通サービスを`SETUP_MODE=true`で起動できます。この状態では`/health`が`configuration_required / dataAccessEnabled:false`を返し、MCP・OAuth・その他すべてのパスは503です。Google認証情報・DB・許可済みredirect URIを設定してから`SETUP_MODE=false`に切り替えます。設定モードのliveは、ChatGPTとの接続完了を意味しません。
 
 今回の配置先はSingapore、`0.5c-512mb`（現在の基本料金は月7米ドル）です。既存の延長管理はOregonのため、ソースAPIは各サービスの公開HTTPS originと専用トークンを使います。データ取得用にサービスを新たに公開したり、既存の認証を解除したりしません。Google Cloudプロジェクトは`student-management-487812`です。
+
+満足度の大量行を扱うソースでは、同時に進行するSheets取得を1本にまとめ、30秒の取得上限を指定します。フィルターを適用してから必要な行だけを加工し、1万件を超える結果は集計しません。元のシートや既存画面の処理は変更せず、共通サーバーの通信上限は45秒です。Google側の障害・大量データによるタイムアウトでは、取得失敗を明示します。
