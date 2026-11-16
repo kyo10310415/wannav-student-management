@@ -20,6 +20,8 @@ jobs:
           cache-dependency-path: integrations/chatgpt/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
   source:
     runs-on: ubuntu-latest
     steps:

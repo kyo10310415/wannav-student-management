@@ -172,6 +172,13 @@ export class GoogleOAuthProvider {
       expires(300),
     );
     res
+      // Chrome sends Origin:null on form POST when this page uses no-referrer.
+      // strict-origin keeps CSRF checks without disclosing callback query values.
+      .set("Referrer-Policy", "strict-origin")
+      .set(
+        "Content-Security-Policy",
+        `default-src 'none'; form-action 'self' ${new URL(pending.redirectUri).origin}; base-uri 'none'; frame-ancestors 'none'`,
+      )
       .type("html")
       .send(
         `<!doctype html><html lang="ja"><meta charset="utf-8"><title>WannaV 分析接続</title><h1>WannaV 分析接続</h1><p>${escape(user.email)} として ${escape(pending.clientName)} に、中央管理・延長管理・EP・売上・支払い管理の閲覧・検索・分析を許可します。</p><p>社内共通の閲覧範囲です。生徒名や個別記録を含みます。更新・通知はできません。</p><form method="post" action="/oauth/consent"><input type="hidden" name="consent" value="${consent}"><button name="decision" value="allow">読み取りを許可</button><button name="decision" value="deny">キャンセル</button></form></html>`,

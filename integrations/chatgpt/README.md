@@ -123,3 +123,5 @@ Google OAuthの設定前に接続先URLを確保する場合、共通サービ�
 今回の配置先はSingapore、`0.5c-512mb`（現在の基本料金は月7米ドル）です。既存の延長管理はOregonのため、ソースAPIは各サービスの公開HTTPS originと専用トークンを使います。データ取得用にサービスを新たに公開したり、既存の認証を解除したりしません。Google Cloudプロジェクトは`student-management-487812`です。
 
 満足度の大量行を扱うソースでは、同時に進行するSheets取得を1本にまとめ、30秒の取得上限を指定します。フィルターを適用してから必要な行だけを加工し、1万件を超える結果は集計しません。元のシートや既存画面の処理は変更せず、共通サーバーの通信上限は45秒です。Google側の障害・大量データによるタイムアウトでは、取得失敗を明示します。
+
+ブラウザーでのOAuth同意送信は`npx playwright install chromium`後に`npm run test:browser`で確認できます。Googleの通信先と回答は模擬し、Chromium自身が生成するOrigin・Cookie・Refererを使います。同意画面はReferrer-Policyをstrict-originに限定し、送信元チェックを保ったままコールバックのクエリ値をRefererへ含めません。
