@@ -1,0 +1,26 @@
+{
+  "name": "wannav-chatgpt-readonly",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js",
+    "db:migrate": "node src/migrate.js",
+    "test:contracts": "node scripts/verify-source-contracts.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "google-auth-library": "^10.5.0",
+    "pg": "^8.16.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16"
+  }
+}
