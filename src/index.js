@@ -1,3 +1,4 @@
+import {installVnetTalents} from './integrations/vnetTalents.js';
 import 'dotenv/config';
 import { autoLessonReport } from './jobs/autoLessonReport.js';
 import { snapshotMonthlyActionPoints } from './services/actionPointHistoryService.js';
@@ -84,6 +85,7 @@ cron.schedule('*/5 * * * *', () => {
 });
 
 const app = new Hono();
+installVnetTalents(app,{db:query});
 // First delivery at 10:00 JST, then catch late reservations / missed runs until midnight.
 cron.schedule('0 10-23 * * *', () => sendExtensionLessonReminders(), { timezone: 'Asia/Tokyo' });
 
