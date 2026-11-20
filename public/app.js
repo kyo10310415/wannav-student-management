@@ -17283,6 +17283,8 @@ let handoverSortDirection = 'asc';
 // 新規割り振りタブ用
 let handoverActiveTab = 'handover';   // 'handover' | 'new'
 let newAssignStudents = [];
+let proAssignStudents = [];
+let proAssignReadGeneration = 0;
 let newAssignMonth = 'next';          // 'current' | 'next'
 let newAssignTargetMonth = '';
 let newAssignFilterAssigned = 'all';
@@ -17385,6 +17387,7 @@ async function renderHandoverPage() {
   }
 
   _renderHandoverLayout();
+  if (handoverActiveTab === 'pro') handoverSwitchTab('pro');
 }
 
 function _renderHandoverLayout() {
@@ -17432,6 +17435,7 @@ function _renderHandoverLayout() {
               <i class="fas fa-user-plus mr-1"></i>新規割り振り
               ${newAssignStudents.length > 0 ? `<span class="ml-1 inline-block px-1.5 py-0.5 rounded-full text-xs font-bold bg-orange-500 text-white">${newAssignStudents.length}</span>` : ''}
             </button>
+            <button id="handover-tab-pro" data-handover-read-action="tab" data-handover-tab="pro" class="px-4 py-2 text-sm font-semibold text-purple-700">PROプラン割り振り</button>
           </div>
 
           <!-- Filters (引き継ぎ管理タブ) -->
@@ -17520,6 +17524,12 @@ function _renderHandoverLayout() {
               <tbody id="handover-table-body">
                 ${_renderHandoverRows()}
               </tbody>
+            </table>
+            <table id="pro-assign-table" class="w-full text-sm ${handoverActiveTab === 'pro' ? '' : 'hidden'}">
+              <thead class="bg-purple-50"><tr>
+                ${['学籍番号', '生徒名', 'レッスン進捗', '担当Tutor', '継続月数', '希望カリキュラム', '引き継ぎ先Tutor', 'リンク'].map(label => `<th class="px-4 py-3 text-left whitespace-nowrap">${label}</th>`).join('')}
+              </tr></thead>
+              <tbody id="pro-assign-table-body"><tr><td colspan="8" class="p-6 text-center">タブを選択して読み込んでください</td></tr></tbody>
             </table>
             <!-- 新規割り振りテーブル -->
             <table id="new-assign-table" class="w-full text-sm ${handoverActiveTab === 'new' ? '' : 'hidden'}">
@@ -17635,10 +17645,10 @@ function _getHandoverFiltered() {
   return data;
 }
 
-function _renderHandoverRows() {
-  const data = _getHandoverFiltered();
+function _renderHandoverRows(overrideData, view = 'handover') {
+  const data = overrideData || _getHandoverFiltered();
   if (data.length === 0) {
-    return `<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">
+    return `<tr><td colspan="${view === 'pro' ? 8 : 9}" class="px-4 py-8 text-center text-gray-400">
       <i class="fas fa-inbox text-3xl mb-2"></i><p>対象生徒がいません</p>
     </td></tr>`;
   }
@@ -17699,12 +17709,11 @@ function _renderHandoverRows() {
         </td>
         <td class="px-4 py-3 text-gray-700">${escapeHtml(assignedDisplay)}</td>
         <td class="px-4 py-3">${continuedMonthsBadge}</td>
-        <td class="px-4 py-3 text-center">${expectedProgressDisplay}</td>
-        <td class="px-4 py-3 text-center">${expectedSectionDisplay}</td>
+        ${view === 'pro' ? `<td class="px-4 py-3"><div class="w-56 max-h-28 overflow-y-auto whitespace-normal break-words" tabindex="0" aria-label="希望カリキュラム">${(s.desired_curricula || []).map(text => `<div>${escapeHtml(text)}</div>`).join('') || '<span class="text-gray-400">未回答</span>'}</div></td>` : `<td class="px-4 py-3 text-center">${expectedProgressDisplay}</td><td class="px-4 py-3 text-center">${expectedSectionDisplay}</td>`}
         <td class="px-4 py-3">
           <select
             class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-            data-handover-entry="assignment" data-handover-entry-view="handover" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
+            data-handover-entry="assignment" data-handover-entry-view="${view}" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}" ${view === 'pro' && s.can_assign === false ? 'disabled title="中央管理の生徒情報同期が必要です"' : ''}
           >
             <option value="">— 未設定 —</option>
             ${tutorOptions.replace(
@@ -17717,7 +17726,7 @@ function _renderHandoverRows() {
           <div class="flex items-center gap-2">
             ${notionLink}${discordLink}
             <button
-              data-handover-entry="copy" data-handover-entry-view="handover" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
+              data-handover-entry="copy" data-handover-entry-view="${view}" data-handover-entry-id="${studentDisplayAttribute(s.student_id)}"
               class="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition text-xs font-medium"
               title="コピー"
             >
@@ -17734,8 +17743,8 @@ function handoverEntryStudent(control) {
   if (!control || control.disabled || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) ||
       currentPage !== 'handover' || !document.getElementById('content')?.contains(control)) return null;
   const view = control.dataset.handoverEntryView;
-  if (!['handover', 'new'].includes(view) || view !== handoverActiveTab) return null;
-  const data = view === 'handover' ? _getHandoverFiltered() : _getNewAssignFiltered();
+  if (!['handover', 'new', 'pro'].includes(view) || view !== handoverActiveTab) return null;
+  const data = view === 'pro' ? proAssignStudents : view === 'handover' ? _getHandoverFiltered() : _getNewAssignFiltered();
   return data.find(student => String(student.student_id) === control.dataset.handoverEntryId) || null;
 }
 function handleHandoverEntryClick(event) {
@@ -17747,6 +17756,7 @@ function handleHandoverEntryChange(event) {
   const control = event.target?.closest?.('select[data-handover-entry="assignment"]');
   const student = handoverEntryStudent(control);
   if (!student || (control.value !== '' && !handoverTutorSidebar.some(tutor => tutor.tutor_name === control.value))) return;
+  if (control.dataset.handoverEntryView === 'pro') return saveHandoverAssignment(student.student_id, control.value, 'pro', control);
   return control.dataset.handoverEntryView === 'handover'
     ? handoverUpdateAssignment(student.student_id, control.value, control)
     : newAssignUpdateAssignment(student.student_id, control.value, control);
@@ -17911,10 +17921,42 @@ function handoverSwitchTab(tab) {
   const tableNew      = document.getElementById('new-assign-table');
   if (tableHandover) tableHandover.classList.toggle('hidden', tab !== 'handover');
   if (tableNew)      tableNew.classList.toggle('hidden', tab !== 'new');
+  const tablePro = document.getElementById('pro-assign-table');
+  if (tablePro) tablePro.classList.toggle('hidden', tab !== 'pro');
+  const tabPro = document.getElementById('handover-tab-pro');
+  if (tabPro) tabPro.classList.toggle('bg-purple-100', tab === 'pro');
+  const exportButton = document.getElementById('handover-export-btn');
+  if (exportButton) exportButton.classList.toggle('hidden', tab === 'pro');
 
   // Footer
   const footer = document.getElementById('handover-count-footer');
   if (footer) footer.innerHTML = tab === 'handover' ? _handoverCountLabel() : _newAssignCountLabel();
+  if (tab === 'pro') loadProAssignmentTab();
+}
+
+async function loadProAssignmentTab() {
+  const root = document.getElementById('content'), tbody = document.getElementById('pro-assign-table-body');
+  if (!tbody || !sessionToken || !['admin', 'leader'].includes(currentUser?.role)) return;
+  const token = sessionToken, userId = currentUser.id, role = currentUser.role, generation = ++proAssignReadGeneration;
+  const current = () => generation === proAssignReadGeneration && sessionToken === token && currentUser?.id === userId && currentUser?.role === role && currentPage === 'handover' && handoverActiveTab === 'pro' && document.getElementById('content') === root && document.getElementById('pro-assign-table-body') === tbody;
+  proAssignStudents = [];
+  const footer = document.getElementById('handover-count-footer');
+  if (footer) footer.textContent = 'PRO割り振り対象を取得中...';
+  tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center">PRO割り振り対象・希望カリキュラムを取得中...</td></tr>';
+  try {
+    const res = await axios.get(`${API_BASE}/api/handover/pro-assignments`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!current()) return;
+    if (!res.data.success) throw new Error('PRO assignment lookup failed');
+    proAssignStudents = res.data.data || [];
+    tbody.innerHTML = _renderHandoverRows(proAssignStudents, 'pro');
+    const footer = document.getElementById('handover-count-footer');
+    if (footer) footer.textContent = `PRO割り振り対象: ${proAssignStudents.length}名（前月Pro延長審査が延長／永久会員ページの来月PRO開始予定）`;
+  } catch {
+    if (current()) {
+      tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-red-600">データ取得に失敗しました。延長管理との連携とフォームの共有設定を確認してください。<button data-handover-read-action="tab" data-handover-tab="pro" class="ml-3 underline">再試行</button></td></tr>';
+      if (footer) footer.textContent = 'PRO割り振り対象を取得できませんでした';
+    }
+  }
 }
 
 // ── Filter & sort handlers (引き継ぎ管理タブ) ──
@@ -18169,7 +18211,7 @@ const handoverAssignmentWrites = new Set();
 let handoverSidebarReadGeneration = 0;
 async function saveHandoverAssignment(studentId, tutorName, view, control) {
   const root = document.getElementById('content');
-  const list = view === 'handover' ? handoverStudents : newAssignStudents;
+  const list = view === 'pro' ? proAssignStudents : view === 'handover' ? handoverStudents : newAssignStudents;
   const student = list.find(row => row.student_id === studentId);
   if (!root || !sessionToken || !['admin', 'leader'].includes(currentUser?.role) || currentPage !== 'handover' ||
       handoverActiveTab !== view || !student || (control && (control.disabled || !root.contains(control)))) return;
@@ -18181,7 +18223,7 @@ async function saveHandoverAssignment(studentId, tutorName, view, control) {
   if (handoverAssignmentWrites.has(key)) return;
   const current = () => sessionToken === token && currentUser?.id === userId && currentUser?.role === role &&
     currentPage === 'handover' && handoverActiveTab === view && document.getElementById('content') === root &&
-    (view === 'handover' ? handoverStudents : newAssignStudents) === list && list.includes(student) && student.student_id === studentId &&
+    (view === 'pro' ? proAssignStudents : view === 'handover' ? handoverStudents : newAssignStudents) === list && list.includes(student) && student.student_id === studentId &&
     newAssignMonth === month && newAssignTargetMonth === targetMonth &&
     [handoverFilterAssigned, handoverFilterHandover, newAssignFilterAssigned, newAssignFilterHandover].every((value, i) => value === filters[i]) &&
     document.getElementById('handover-sidebar-list') === sidebar && document.getElementById('handover-count-footer') === footer &&
@@ -18194,6 +18236,16 @@ async function saveHandoverAssignment(studentId, tutorName, view, control) {
     if (!current()) return;
     if (!res.data.success) throw new Error('Assignment rejected');
     student.handover_tutor_name = tutorName || '';
+    for (const rows of [handoverStudents, newAssignStudents, ...(view === 'pro' ? [proAssignStudents] : [])]) {
+      const matching = rows.find(s => s.student_id === studentId);
+      if (matching) matching.handover_tutor_name = tutorName || '';
+    }
+    if (view === 'pro') {
+      const handoverBody = document.getElementById('handover-table-body');
+      const newBody = document.getElementById('new-assign-table-body');
+      if (handoverBody) handoverBody.innerHTML = _renderHandoverRows();
+      if (newBody) newBody.innerHTML = _renderNewAssignRows();
+    }
     const label = view === 'handover' ? '引き継ぎ先' : '割り振り先';
     showNotification(tutorName ? `${label}を「${studentDisplayText(tutorName)}」に設定しました` : `${label}をリセットしました`, 'success');
     const generation = ++handoverSidebarReadGeneration;
@@ -18203,7 +18255,7 @@ async function saveHandoverAssignment(studentId, tutorName, view, control) {
       handoverTutorSidebar = sidebarRes.data.data || [];
       if (sidebar) sidebar.innerHTML = _renderHandoverSidebar();
     } catch { if (!current() || generation !== handoverSidebarReadGeneration) return; }
-    if (current() && footer) footer.innerHTML = view === 'handover' ? _handoverCountLabel() : _newAssignCountLabel();
+    if (current() && footer) footer.innerHTML = view === 'pro' ? `PRO割り振り対象: ${proAssignStudents.length}名` : view === 'handover' ? _handoverCountLabel() : _newAssignCountLabel();
   } catch {
     if (current()) { console.error('[Handover] Assignment update failed'); showNotification('保存に失敗しました', 'error'); }
   } finally {

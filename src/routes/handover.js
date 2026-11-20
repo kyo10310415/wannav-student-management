@@ -1,9 +1,17 @@
 import { Hono } from 'hono';
+import { loadProAssignments } from '../services/proAssignmentService.js';
 import { query } from '../db/connection.js';
 import { google } from 'googleapis';
 import { getNewAssignmentMonthWindow, isValidNewAssignmentMonth } from '../services/handoverMonthService.js';
 
 const app = new Hono();
+app.get('/pro-assignments', async c => {
+  try { return c.json(await loadProAssignments()); }
+  catch {
+    console.error('[Handover] PRO assignment lookup failed');
+    return c.json({ success: false, error: 'PRO割り振り対象または希望カリキュラムを取得できませんでした。延長管理との連携とフォームの共有設定を確認してください。' }, 503);
+  }
+});
 
 /**
  * GET /api/handover/students
@@ -100,6 +108,7 @@ app.put('/students/:studentId/assignment', async (c) => {
       [studentId, handover_tutor_name || null]
     );
 
+    loadProAssignments.clear();
     return c.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error("[Handover] Error updating assignment:");
