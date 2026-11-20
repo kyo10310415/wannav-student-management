@@ -9,7 +9,7 @@ const rawError = () => Object.assign(new Error(marker), { config: { url: marker,
 let sequence = 0;
 async function fixture(overrides = {}) {
   const logs = [], queries = [], googleCalls = [];
-  const deps = { Hono, getNewAssignmentMonthWindow, isValidNewAssignmentMonth,
+  const deps = { Hono, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, loadProAssignments: Object.assign(async () => ({ success: true, data: [] }), { clear() {} }),
     query: async (...args) => { queries.push(args); return { rows: [], rowCount: 0 }; },
     process: { env: { GOOGLE_CREDENTIALS_JSON: '{}', HANDOVER_EXPORT_SHEET_ID: marker } },
     google: { auth: { GoogleAuth: class { constructor(options) { googleCalls.push(['auth', options]); } async getClient() { return 'synthetic-auth'; } } },
@@ -23,7 +23,7 @@ async function fixture(overrides = {}) {
   const key = 'handoverPrivacyFixture' + sequence++;
   globalThis[key] = deps;
   try {
-    const prefix = `const { Hono, query, google, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, process, console } = globalThis[${JSON.stringify(key)}];\n`;
+    const prefix = `const { Hono, query, google, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, loadProAssignments, process, console } = globalThis[${JSON.stringify(key)}];\n`;
     const app = (await import(`data:text/javascript;base64,${Buffer.from(prefix + source).toString('base64')}`)).default;
     return { app, logs, queries, googleCalls };
   } finally { delete globalThis[key]; }

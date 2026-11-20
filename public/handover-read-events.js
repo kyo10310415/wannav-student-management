@@ -12,7 +12,7 @@ function handleHandoverReadClick(event) {
   switch (control.dataset.handoverReadAction) {
     case 'reload': return renderHandoverPage();
     case 'tab':
-      if (['handover', 'new'].includes(control.dataset.handoverTab)) return handoverSwitchTab(control.dataset.handoverTab);
+      if (['handover', 'new', 'pro'].includes(control.dataset.handoverTab)) return handoverSwitchTab(control.dataset.handoverTab);
       return;
     case 'sort':
       if (['student_id', 'name', 'lesson_progress', 'homeroom_tutor', 'expected_progress'].includes(control.dataset.handoverColumn)) return handoverSort(control.dataset.handoverColumn);
