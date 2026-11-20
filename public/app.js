@@ -17926,7 +17926,7 @@ function handoverSwitchTab(tab) {
   const tabPro = document.getElementById('handover-tab-pro');
   if (tabPro) tabPro.classList.toggle('bg-purple-100', tab === 'pro');
   const exportButton = document.getElementById('handover-export-btn');
-  if (exportButton) exportButton.classList.toggle('hidden', tab === 'pro');
+  if (exportButton) exportButton.classList.remove('hidden');
 
   // Footer
   const footer = document.getElementById('handover-count-footer');
