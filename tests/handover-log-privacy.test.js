@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { inspect } from 'node:util';
 import { Hono } from 'hono';
+import { classifyHandoverExport, buildHandoverExportLists, HANDOVER_EXPORT_HEADER } from '../src/services/handoverExportService.js';
 import { getNewAssignmentMonthWindow, isValidNewAssignmentMonth } from '../src/services/handoverMonthService.js';
 const marker = 'SYNTHETIC_HANDOVER_PRIVATE';
 const rawError = () => Object.assign(new Error(marker), { config: { url: marker, headers: { Authorization: marker } }, detail: marker });
 let sequence = 0;
 async function fixture(overrides = {}) {
   const logs = [], queries = [], googleCalls = [];
-  const deps = { Hono, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, loadProAssignments: Object.assign(async () => ({ success: true, data: [] }), { clear() {} }),
+  const deps = { classifyHandoverExport, buildHandoverExportLists, HANDOVER_EXPORT_HEADER, Hono, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, loadProAssignments: Object.assign(async () => ({ success: true, data: [] }), { clear() {} }),
     query: async (...args) => { queries.push(args); return { rows: [], rowCount: 0 }; },
     process: { env: { GOOGLE_CREDENTIALS_JSON: '{}', HANDOVER_EXPORT_SHEET_ID: marker } },
     google: { auth: { GoogleAuth: class { constructor(options) { googleCalls.push(['auth', options]); } async getClient() { return 'synthetic-auth'; } } },
@@ -23,7 +24,7 @@ async function fixture(overrides = {}) {
   const key = 'handoverPrivacyFixture' + sequence++;
   globalThis[key] = deps;
   try {
-    const prefix = `const { Hono, query, google, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, loadProAssignments, process, console } = globalThis[${JSON.stringify(key)}];\n`;
+    const prefix = `const { classifyHandoverExport, buildHandoverExportLists, HANDOVER_EXPORT_HEADER, Hono, query, google, getNewAssignmentMonthWindow, isValidNewAssignmentMonth, loadProAssignments, process, console } = globalThis[${JSON.stringify(key)}];\n`;
     const app = (await import(`data:text/javascript;base64,${Buffer.from(prefix + source).toString('base64')}`)).default;
     return { app, logs, queries, googleCalls };
   } finally { delete globalThis[key]; }
@@ -93,10 +94,10 @@ test('Google export preserves tutor sheets, student rows, formatting, columns an
   const body = await response.json(); assert.equal(body.success, true); assert.equal(body.sheetCount, 2);
   assert.equal(body.spreadsheetId, marker); assert.equal(body.spreadsheetUrl, `https://docs.google.com/spreadsheets/d/${marker}`);
   const writes = f.googleCalls.find(call => call[0] === 'values')[1];
-  assert.equal(writes.resource.valueInputOption, 'USER_ENTERED');
-  for (const value of writes.resource.data) assert.deepEqual(value.values, [['生徒名', '担当Tutor', '引き継ぎ先Tutor', 'Notionリンク', 'Discordリンク'], [marker, marker, marker, marker, marker]]);
+  assert.equal(writes.resource.valueInputOption, 'RAW');
+  for (const value of writes.resource.data) assert.deepEqual(value.values, buildHandoverExportLists([{ ...row, type: '引き継ぎ' }]).values);
   const formatting = f.googleCalls.filter(call => call[0] === 'batchUpdate')[1][1].resource.requests;
-  assert.equal(formatting.filter(r => r.updateDimensionProperties).length, 10);
+  assert.equal(formatting.filter(r => r.updateDimensionProperties).length, 14);
   assert.equal(formatting.filter(r => r.updateSheetProperties).length, 2); safe(f);
 });
 
@@ -108,4 +109,18 @@ test('Google exceptions and malformed credentials remain private without live AP
     const response = await f.app.request('/export', json({})); assert.equal(response.status, 500);
     assert.deepEqual(await response.json(), { success: false, error: 'Invalid credentials format' }); assert.equal(f.googleCalls.length, 0); safe(f);
   }
+});
+
+test('PRO source failure aborts before adding sheets, rather than exporting only two categories', async () => {
+  const f = await fixture({ loadProAssignments: Object.assign(async () => { throw rawError(); }, { clear() {} }) });
+  assert.equal((await f.app.request('/export', json({}))).status, 500);
+  assert.equal(f.googleCalls.some(call => ['batchUpdate', 'values'].includes(call[0])), false);
+  safe(f);
+});
+
+test('no assigned recipients returns a clear error without creating empty sheets', async () => {
+  const f = await fixture();
+  const response = await f.app.request('/export', json({}));
+  assert.equal(response.status, 400);
+  assert.equal(f.googleCalls.some(call => ['batchUpdate', 'values'].includes(call[0])), false);
 });

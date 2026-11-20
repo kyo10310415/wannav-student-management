@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { loadProAssignments } from '../services/proAssignmentService.js';
+import { classifyHandoverExport, buildHandoverExportLists, HANDOVER_EXPORT_HEADER } from '../services/handoverExportService.js';
 import { query } from '../db/connection.js';
 import { google } from 'googleapis';
 import { getNewAssignmentMonthWindow, isValidNewAssignmentMonth } from '../services/handoverMonthService.js';
@@ -458,11 +459,11 @@ app.post('/export', async (c) => {
       ORDER BY ha.handover_tutor_name ASC, s.homeroom_tutor ASC, s.student_id ASC
     `);
 
-    // 全データを統合
-    const allRows = [
-      ...handoverResult.rows.map(r => ({ ...r, type: '引き継ぎ管理' })),
-      ...newAssignResult.rows.map(r => ({ ...r, type: '新規割り振り' })),
-    ];
+    // PRO eligibility is authoritative; fail the export rather than publish incomplete lists.
+    loadProAssignments.clear();
+    const proResult = await loadProAssignments();
+    const allRows = classifyHandoverExport(handoverResult.rows, newAssignResult.rows, proResult.data);
+    if (!allRows.length) return c.json({ success: false, error: '割り振り先を設定した対象生徒がいません。' }, 400);
 
     // Tutor名一覧を収集
     const receiveeTutors = [...new Set(allRows.map(r => r.handover_tutor_name).filter(Boolean))].sort();
@@ -484,20 +485,27 @@ app.post('/export', async (c) => {
     // シート名: "YYYYMMDD_HHmm_Tutor名_受取" 形式
     const sheetDefs = [];
     for (const tutor of allTutors) {
-      const recvTitle = `${tsPrefix}_${tutor}_受取`;
-      const sendTitle = `${tsPrefix}_${tutor}_送出`;
+      const safeTutor = tutor.replace(/[:\\/?*\[\]]/g, '_').slice(0, 65);
+      const uniqueTitle = suffix => {
+        const base = `${tsPrefix}_${safeTutor}_${suffix}`;
+        let title = base, n = 2;
+        while (existingTitles.has(title)) title = `${base}_${n++}`;
+        existingTitles.add(title);
+        return title;
+      };
+      const recvTitle = uniqueTitle('受取');
+      const sendTitle = uniqueTitle('送出');
       sheetDefs.push({ title: recvTitle, type: 'receive', tutorName: tutor });
       sheetDefs.push({ title: sendTitle, type: 'send',    tutorName: tutor });
     }
 
     // --- シートを一括追加 ---
     const addRequests = sheetDefs
-      .filter(def => !existingTitles.has(def.title))
       .map(def => ({
         addSheet: {
           properties: {
             title: def.title,
-            gridProperties: { rowCount: 100, columnCount: 10 },
+            gridProperties: { rowCount: Math.max(100, allRows.length + 15), columnCount: 10 },
           },
         },
       }));
@@ -515,7 +523,7 @@ app.post('/export', async (c) => {
     })).filter(s => s.sheetId != null);
 
     // --- 各シートにデータ書き込み ---
-    const HEADER = ['生徒名', '担当Tutor', '引き継ぎ先Tutor', 'Notionリンク', 'Discordリンク'];
+    const HEADER = HANDOVER_EXPORT_HEADER;
 
     const valueData    = [];
     const formatReqs   = [];
@@ -525,16 +533,11 @@ app.post('/export', async (c) => {
         ? allRows.filter(r => r.handover_tutor_name === sheet.tutorName)
         : allRows.filter(r => r.homeroom_tutor      === sheet.tutorName);
 
-      const sheetValues = [HEADER, ...rows.map(r => [
-        r.name                || '',
-        r.homeroom_tutor      || '',
-        r.handover_tutor_name || '',
-        r.notion_url          || '',
-        r.discord_url         || '',
-      ])];
+      const lists = buildHandoverExportLists(rows);
+      const sheetValues = lists.values;
 
       valueData.push({
-        range: `'${sheet.title}'!A1`,
+        range: `'${sheet.title.replace(/'/g, "''")}'!A1`,
         values: sheetValues,
       });
 
@@ -543,9 +546,9 @@ app.post('/export', async (c) => {
         ? { red: 0.24, green: 0.52, blue: 0.78 }
         : { red: 0.18, green: 0.62, blue: 0.45 };
 
-      formatReqs.push({
+      for (const headerRow of [...lists.sectionRows, ...lists.headerRows]) formatReqs.push({
         repeatCell: {
-          range: { sheetId: sheet.sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 5 },
+          range: { sheetId: sheet.sheetId, startRowIndex: headerRow, endRowIndex: headerRow + 1, startColumnIndex: 0, endColumnIndex: HEADER.length },
           cell: {
             userEnteredFormat: {
               backgroundColor: headerColor,
@@ -556,16 +559,16 @@ app.post('/export', async (c) => {
         },
       });
 
-      // 1行目を凍結
+      // Freeze the first category label and its header.
       formatReqs.push({
         updateSheetProperties: {
-          properties: { sheetId: sheet.sheetId, gridProperties: { frozenRowCount: 1 } },
+          properties: { sheetId: sheet.sheetId, gridProperties: { frozenRowCount: 2 } },
           fields: 'gridProperties.frozenRowCount',
         },
       });
 
-      // 列幅 (生徒名=140, 担当=130, 引継先=130, Notion=250, Discord=250)
-      [140, 130, 130, 250, 250].forEach((w, i) => {
+      // Keep curriculum width fixed and wrap the comma-separated answers as separate lines.
+      [140, 130, 130, 250, 250, 170, 250].forEach((w, i) => {
         formatReqs.push({
           updateDimensionProperties: {
             range: { sheetId: sheet.sheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 },
@@ -574,12 +577,16 @@ app.post('/export', async (c) => {
           },
         });
       });
+      formatReqs.push({ repeatCell: {
+        range: { sheetId: sheet.sheetId, startColumnIndex: 6, endColumnIndex: 7 },
+        cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.wrapStrategy',
+      } });
     }
 
     // 一括書き込み
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
-      resource: { valueInputOption: 'USER_ENTERED', data: valueData },
+      resource: { valueInputOption: 'RAW', data: valueData },
     });
 
     // 一括フォーマット
