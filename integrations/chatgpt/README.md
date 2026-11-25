@@ -1,6 +1,6 @@
 # WannaV ChatGPT 読み取り専用接続（Pro向け）
 
-5システムを横断する閲覧・検索・分析用の独立MCPサーバーです。中央管理と同じリポジトリに置き、Renderでは別Web Serviceに配置します。OpenAI APIキーは不要です。ChatGPT側の利用枠とRenderの実行費用は別です。
+6システムを横断する閲覧・検索・分析用の独立MCPサーバーです。中央管理と同じリポジトリに置き、Renderでは別Web Serviceに配置します。OpenAI APIキーは不要です。ChatGPT側の利用枠とRenderの実行費用は別です。
 
 ## 構成と接続範囲
 
@@ -20,19 +20,20 @@ ChatGPT Pro（Web） → このサーバー `/mcp` → 各システムの `/inte
 | ep        | WannaV_EP / main                       | 生徒、学習進捗、日別利用、EP満足度回答                          |
 | sales     | wannav-sales / main                    | 報告行、既存定義で重複除去した面接・成約等のイベント            |
 | payment   | payment-management / codex/initial-app | 対象月の支払い統合一覧、既存定義のMAU・ARPU                     |
+| evaluation | vtuber-school-evaluation / main | 生徒、月次プロレベル・YouTube・X評価、保存済みAnalytics |
 
 ## 配置手順
 
 以下は配置のための手順です。リポジトリの変更だけでは本番接続は完了しません。
 
-1. 5リポジトリの変更を確認し、それぞれ上記の本番ブランチへ反映します。各ソースには`chatgpt-readonly/`と起動ファイルの小さな変更があります。
+1. 6リポジトリの変更を確認し、それぞれ上記の本番ブランチへ反映します。各ソースには`chatgpt-readonly/`と起動ファイルの小さな変更があります。
 2. パスワードマネージャーなどで**サービスごとに異なる**32文字以上のランダムトークンを生成。各既存Renderサービスの`CHATGPT_READ_TOKEN`と、共通サーバーの対応する`CENTRAL_TOKEN`等に同じ値を安全に設定します。値をチャット・ログ・コマンド履歴に出さないでください。
 3. 共通サーバーのRender Web Serviceを作成します。Blueprintパスは`integrations/chatgpt/render.yaml`。既存のルート`render.yaml`は変更しません。ソースコードが配置されたブランチを指定し、サービスのリージョン・実行プランを確認します。新サービスURLを`PUBLIC_URL`へ設定します。
 4. OAuth用PostgreSQLを用意します。既存中央DBに専用スキーマ・専用ロールを用意することも可能ですが、既存業務テーブルの権限は付与しません。`AUTH_DATABASE_URL`はこの認証ストアだけを指します。管理者が接続先と差分を確認し、**一度だけ明示的に**`npm run db:migrate`を実行します。起動時の自動DDLはありません。実行ロールには`chatgpt_oauth.records`のSELECT/INSERT/UPDATE/DELETEとスキーマUSAGEが必要です。
 5. Google Cloudで社内用のWeb OAuthクライアントを用意します。リダイレクトURIに`https://<MCPサービス>/oauth/google/callback`を登録。`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`はRenderで設定します。クライアントの同意画面・公開範囲は社内利用に合わせます。
 6. 各`*_URL`には該当システムのHTTPS origin（パスなし）を設定します。Sheets満足度は中央管理の既存`GOOGLE_CACHE_SHEET_ID`または`GOOGLE_SHEET_ID`と認証設定を利用します。追加のGoogle書き込み権限は不要です。
 7. ChatGPTの接続設定で表示される**正確なOAuth callback URI**を`CHATGPT_REDIRECT_URIS`へ設定します。任意のURLを登録可能にせず、表示値のみ許可します。初期設定で登録が拒否された場合は、callbackを確認して設定後に再試行します。クライアントID/secretを手動指定する方式でも、登録済みOAuthクライアントを使う必要があります。
-8. ソース5サービスと共通サーバーを配置します。`/health`はプロセスの生存確認です。データ取得可能性はMCPの`fetch("catalog")`と各データの試験で確認してください。
+8. ソース6サービスと共通サーバーを配置します。`/health`はプロセスの生存確認です。データ取得可能性はMCPの`fetch("catalog")`と各データの試験で確認してください。
 9. ChatGPT ProのWeb画面でカスタムMCP接続を追加し、endpointに`https://<MCPサービス>/mcp`、認証にOAuthを指定。Googleで社内ログインし、読み取りに同意します。UI名・利用可否はアカウントへの提供状況によって異なります。[公式接続案内](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)を確認してください。Proは読み取り接続を対象とし、無料・Plusは今回の検証対象外です。
 10. 接続したツールを会話で選び、「WannaVの利用できるデータを確認して」「学籍番号○○の情報を各システムで確認して」「保存済みの先月と今月の延長率を比較して」と質問します。集計値と既存画面を照合してから社内展開します。
 
@@ -125,3 +126,11 @@ Google OAuthの設定前に接続先URLを確保する場合、共通サービ�
 満足度の大量行を扱うソースでは、同時に進行するSheets取得を1本にまとめ、30秒の取得上限を指定します。フィルターを適用してから必要な行だけを加工し、1万件を超える結果は集計しません。元のシートや既存画面の処理は変更せず、共通サーバーの通信上限は45秒です。Google側の障害・大量データによるタイムアウトでは、取得失敗を明示します。
 
 ブラウザーでのOAuth同意送信は`npx playwright install chromium`後に`npm run test:browser`で確認できます。Googleの通信先と回答は模擬し、Chromium自身が生成するOrigin・Cookie・Refererを使います。同意画面はReferrer-Policyをstrict-originに限定し、送信元チェックを保ったままコールバックのクエリ値をRefererへ含めません。
+
+## 評価システムの追加
+
+評価システム`vtuber-school-evaluation`を`evaluation`ソースとして接続します。`EVALUATION_URL`とサービス専用の`EVALUATION_TOKEN`をRenderの既存環境変数に追加してください。同じツール・同じOAuth接続を利用し、新しい公開ツールやサービスは作りません。設定値は既存の他ソースの値と置き換えず、個別にマージします。
+
+`evaluation.prolevel`・`evaluation.youtube`・`evaluation.x`は`month=YYYY-MM`必須です。保存結果のみを読み取り、再採点・新規SNS取得はしません。ランクはS〜Dの順序尺度で、独自の数値換算をしません。SNSの`status`が`stored`以外なら指標・ランクは未取得です。`evaluation.months`はプロレベル月次シートの一覧、`evaluation.analytics`は期間別に保存されたYouTube指標です。期間の重複や平均指標の単純加算に注意します。
+
+例：`{"dataset":"evaluation.prolevel","month":"2026-11","groupBy":["overall_grade"],"metrics":[{"as":"students","op":"distinct","field":"student_id"}]}`。`central.students`の担当Tutor等と学籍番号で結合できますが、現在の情報を過去の担当として扱いません。

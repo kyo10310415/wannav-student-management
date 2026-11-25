@@ -46,3 +46,7 @@ services:
         sync: false
       - key: PAYMENT_TOKEN
         sync: false
+      - key: EVALUATION_URL
+        value: https://vtuber-school-evaluation.onrender.com
+      - key: EVALUATION_TOKEN
+        sync: false
