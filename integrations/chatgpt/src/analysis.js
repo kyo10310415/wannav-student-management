@@ -10,7 +10,7 @@ export const querySchema = z
   .object({
     dataset: z
       .string()
-      .regex(/^(central|extension|ep|sales|payment)\.[a-z_]+$/),
+      .regex(/^(central|extension|ep|sales|payment|evaluation)\.[a-z_]+$/),
     filters: z
       .array(
         z
@@ -36,7 +36,7 @@ export const querySchema = z
       .object({
         dataset: z
           .string()
-          .regex(/^(central|extension|ep|sales|payment)\.[a-z_]+$/),
+          .regex(/^(central|extension|ep|sales|payment|evaluation)\.[a-z_]+$/),
         fields: z.array(z.string().max(80)).min(1).max(10),
         prefix: z
           .string()

@@ -1,4 +1,4 @@
-const sourceNames = ["central", "extension", "ep", "sales", "payment"];
+const sourceNames = ["central", "extension", "ep", "sales", "payment", "evaluation"];
 export function sourceConfiguration(env) {
   return Object.fromEntries(
     sourceNames.map((name) => {

@@ -144,3 +144,9 @@ test("SQL, unknown fields, write plans and prototype paths are rejected", async 
     /Unknown field/,
   );
 });
+
+test('evaluation monthly results are queryable and join to central student metadata by student ID',async()=>{
+ const datasets={'evaluation.prolevel':{fields:{student_id:'text',month:'text',overall_grade:'text'},requiresMonth:true},'central.students':{fields:{student_id:'text',homeroom_tutor:'text'}}};
+ const source={query:async(name,params)=>{if(name==='evaluation.prolevel'){assert.equal(params.month,'2026-11');return {rows:[{student_id:'A',month:'2026-11',overall_grade:'B'}],truncated:false,history:'snapshot'}}return {rows:[{student_id:'A',homeroom_tutor:'fixture tutor'}],truncated:false,history:'current'}}};
+ const result=await executeQuery(source,{datasets},{dataset:'evaluation.prolevel',month:'2026-11',join:{dataset:'central.students',fields:['homeroom_tutor']}});assert.equal(result.rows[0].student_homeroom_tutor,'fixture tutor');assert.equal(result.rows[0].overall_grade,'B');assert.equal(result.provenance[1].history,'current');
+});
